@@ -5,7 +5,7 @@ October 14, 2026 · Application 0.1.0 · Model v5.2-port-1
 ## Completed locally
 
 - TypeScript compilation, ESLint, production build and publication-file scan passed.
-- 26 automated domain/database tests passed, including grade boundaries, invalid settings, actual-only fallback, negative/zero scores, consistency, replacement eligibility, trend denominator zero, normalized-index independence, canonical hashing, account isolation, RPC-only writes, revision conflicts, retries and deletion.
+- 29 automated domain/database tests passed, including grade boundaries, invalid settings, actual-only fallback, negative/zero scores, consistency, replacement eligibility, trend denominator zero, normalized-index independence, canonical hashing, account isolation, RPC-only writes, revision conflicts, retries, deletion, server payload validation and invalid completed-game records.
 - 29,456 comparisons against saved native Excel results passed across 1,052 players. These cover actual/recent/projected/expected PPG, consistency loss, Value PPG, baselines, VORP, linear indices, ranks, ADP edge, workload/regression, gems and trends.
 - Real V5.2 XLSX import passed source validation and cached-result comparison.
 - 870 additional comparisons passed across all nine fantasy teams’ position grades and 25 native Excel trade cases covering every package size from one to five on either side. Legal rosters, drop/add IDs, surplus requirements, points requirements, expected/value gains, waiver gains and downside totals matched.

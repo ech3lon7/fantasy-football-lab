@@ -1,7 +1,12 @@
 import { it, expect } from "vitest";
 import { fixture } from "./fixtures";
 import { evaluate } from "../src/domain/valuation";
-import { contentHash, fromTables, preflight } from "../src/import/workbook";
+import {
+  contentHash,
+  fromTables,
+  preflight,
+  validateSources,
+} from "../src/import/workbook";
 import { evaluateTrade } from "../src/domain/trades";
 it("makes actual influence grow with completed games", async () => {
   const d = await fixture(),
@@ -114,3 +119,15 @@ it("hashes canonical content independently of JSON key order", async () => {
 });
 it("rejects invalid ZIP data before attempting to parse", () =>
   expect(() => preflight(new Uint8Array([1, 2, 3]))).toThrow("ZIP"));
+it("does not convert a missing completed-game score into zero", async () => {
+  const d = await fixture();
+  d.tables.ModelHistory[0].Points = null;
+  validateSources(d);
+  expect(evaluate(d, d.settings).byId.get("1")!.value).toBeNull();
+});
+it("does not count a future or nonparticipation record as a completed game", async () => {
+  const d = await fixture();
+  d.tables.ModelHistory[0].Week = 7;
+  validateSources(d);
+  expect(evaluate(d, d.settings).byId.get("1")!.historyComplete).toBe(false);
+});

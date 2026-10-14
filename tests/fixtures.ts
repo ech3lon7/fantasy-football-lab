@@ -10,7 +10,7 @@ import { fromTables } from "../src/import/workbook";
 export async function fixture(scores = [20, 20, 20, 20, 20]) {
   const ctx: Row = {
     Season: 2026,
-    CurrentWeek: 6,
+    CurrentWeek: Math.max(6, scores.length + 1),
     FinalWeek: 17,
     TeamCount: 2,
     RefreshUTC: new Date().toISOString(),

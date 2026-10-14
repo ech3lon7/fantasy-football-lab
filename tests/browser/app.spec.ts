@@ -25,12 +25,18 @@ test("onboarding, file boundary and responsive navigation", async ({
   });
   expect(errors).toEqual([]);
 });
-test('public configuration rejects administrative credentials',async({page})=>{
-  await page.goto('./#/data');
-  await page.getByLabel('Project URL',{exact:true}).fill('https://exampleproject.supabase.co');
-  await page.getByLabel('Publishable key',{exact:true}).fill('sb_secret_example');
-  await page.getByRole('button',{name:'Save public configuration'}).click();
-  await expect(page.getByRole('alert')).toContainText('never a secret key');
+test("public configuration rejects administrative credentials", async ({
+  page,
+}) => {
+  await page.goto("./#/data");
+  await page
+    .getByLabel("Project URL", { exact: true })
+    .fill("https://exampleproject.supabase.co");
+  await page
+    .getByLabel("Publishable key", { exact: true })
+    .fill("sb_secret_example");
+  await page.getByRole("button", { name: "Save public configuration" }).click();
+  await expect(page.getByRole("alert")).toContainText("never a secret key");
 });
 test("real workbook import, screens, roster and trade flow", async ({
   page,
@@ -40,8 +46,10 @@ test("real workbook import, screens, roster and trade flow", async ({
     "Private workbook path is supplied only locally.",
   );
   const errors: string[] = [];
-  const posts:string[]=[];
-  page.on('request',r=>{if(r.method()==='POST')posts.push(r.url());});
+  const posts: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST") posts.push(r.url());
+  });
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("./");
   await page
@@ -95,7 +103,7 @@ test("real workbook import, screens, roster and trade flow", async ({
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('.sidebar')).toBeHidden();
+  await expect(page.locator(".sidebar")).toBeHidden();
   await page.screenshot({
     path: "test-results/trade-mobile.png",
     fullPage: true,
@@ -107,11 +115,13 @@ test("real workbook import, screens, roster and trade flow", async ({
   ).toBe(true);
   expect(errors).toEqual([]);
   expect(posts).toEqual([]);
-  if(process.env.OFFLINE_TEST==='true'){
-    await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
+  if (process.env.OFFLINE_TEST === "true") {
+    await page.waitForFunction(() => !!navigator.serviceWorker.controller);
     await page.context().setOffline(true);
     await page.reload();
-    await expect(page.getByRole('heading',{name:'Surplus exchange',exact:true})).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Surplus exchange", exact: true }),
+    ).toBeVisible();
     await page.context().setOffline(false);
   }
 });

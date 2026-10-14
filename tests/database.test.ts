@@ -14,7 +14,7 @@ const state = {
 const dataset = {
   schemaVersion: 1,
   adapterVersion: "v5.2",
-  modelVersion: "test",
+  modelVersion: "v5.2-port-1",
   hash: "a".repeat(64),
   importedAt: new Date().toISOString(),
   sourceUTC: null,
@@ -151,4 +151,27 @@ it("enforces state revision and dataset revision separately", async () => {
     "select state_revision from public.get_fantasy_workspace()",
   );
   expect(Number(rows.rows[0].state_revision)).toBe(1);
+});
+it("rejects missing schemas and invalid model settings at the server boundary", async () => {
+  await as(b);
+  const missing: Partial<typeof dataset> = { ...dataset };
+  delete missing.schemaVersion;
+  await expect(
+    db.query("select public.replace_fantasy_dataset(0,$1,$2)", [
+      crypto.randomUUID(),
+      missing,
+    ]),
+  ).rejects.toThrow(/INVALID_DATASET_SCHEMA/);
+  await expect(
+    db.query("select public.update_fantasy_state(1,0,$1,$2)", [
+      crypto.randomUUID(),
+      { ...state, settings: { ...defaults, PriorGames: 0 } },
+    ]),
+  ).rejects.toThrow(/INVALID_SETTING_RANGE/);
+  await expect(
+    db.query("select public.update_fantasy_state(1,0,$1,$2)", [
+      crypto.randomUUID(),
+      { ...state, settings: { ...defaults, GradeB: -0.9 } },
+    ]),
+  ).rejects.toThrow(/INVALID_GRADE_ORDER/);
 });

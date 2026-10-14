@@ -24,11 +24,24 @@ drop policy if exists fantasy_read_own on public.fantasy_workspaces;
 create policy fantasy_read_own on public.fantasy_workspaces for select to authenticated using ((select auth.uid())=user_id);
 
 create or replace function public.validate_fantasy_state(p_state jsonb) returns void language plpgsql set search_path='' as $$
-declare item record;
+declare item record; value numeric; previous numeric; grade_key text;
+required text[]:=array['PriorGames','RecentWeight','ConsistencyCoefficient','ConsistencyCap','MinConsistencyGames','MinOpportunity','CarriesPerTD','TargetsPerTD','Premium','FairBandPct','ExcellentPct','StealPct','BadLossPct','HorribleLossPct','GemMinGames','GemMinGap','GemMinGapPct','GemMinPriorGames','GemTrendFloor','GemTrendPctFloor','GemWRTargets','GemWRShare','GemTETargets','GemTEShare','GemRBOpportunities','GemRBRushShare','GemRBTargetShare','ReserveCutoff','GradeDMinus','GradeD','GradeDPlus','GradeCMinus','GradeC','GradeCPlus','GradeBMinus','GradeB','GradeBPlus','GradeAMinus','GradeA','GradeAPlus'];
 begin
  if p_state is null or jsonb_typeof(p_state)<>'object' or octet_length(p_state::text)>65536 or not(p_state?'preferredTeam' and p_state?'settings' and p_state?'draft' and p_state?'filters') then raise exception 'INVALID_STATE';end if;
  if jsonb_typeof(p_state->'settings')<>'object' or jsonb_typeof(p_state->'draft')<>'object' or jsonb_typeof(p_state->'filters')<>'object' then raise exception 'INVALID_STATE';end if;
- for item in select * from jsonb_each(p_state->'settings') loop if jsonb_typeof(item.value)<>'number' then raise exception 'INVALID_SETTING';end if;end loop;
+ if not ((p_state->'settings') ?& required) then raise exception 'MISSING_SETTING';end if;
+ for item in select * from jsonb_each(p_state->'settings') loop
+  if not(item.key=any(required)) or jsonb_typeof(item.value)<>'number' then raise exception 'INVALID_SETTING';end if;
+  value=(item.value::text)::numeric;
+  if value>100 or value<(case when item.key like 'Grade%' then -1 else 0 end) then raise exception 'INVALID_SETTING_RANGE';end if;
+  if (item.key like 'Grade%' or item.key like '%Pct%' or item.key like '%Share' or item.key=any(array['RecentWeight','ConsistencyCoefficient','ConsistencyCap','ReserveCutoff'])) and value>1 then raise exception 'INVALID_SETTING_RANGE';end if;
+  if item.key=any(array['PriorGames','CarriesPerTD','TargetsPerTD']) and value<=0 then raise exception 'INVALID_SETTING_RANGE';end if;
+  if item.key=any(array['MinConsistencyGames','GemMinGames','GemMinPriorGames']) and (value<1 or value>17 or value<>trunc(value)) then raise exception 'INVALID_SETTING_RANGE';end if;
+ end loop;
+ foreach grade_key in array array['GradeDMinus','GradeD','GradeDPlus','GradeCMinus','GradeC','GradeCPlus','GradeBMinus','GradeB','GradeBPlus','GradeAMinus','GradeA','GradeAPlus'] loop value=(p_state->'settings'->>grade_key)::numeric;if previous is not null and value<=previous then raise exception 'INVALID_GRADE_ORDER';end if;previous=value;end loop;
+ if not ((p_state#>>'{settings,FairBandPct}')::numeric>0 and (p_state#>>'{settings,FairBandPct}')::numeric<(p_state#>>'{settings,ExcellentPct}')::numeric and (p_state#>>'{settings,ExcellentPct}')::numeric<(p_state#>>'{settings,StealPct}')::numeric and (p_state#>>'{settings,FairBandPct}')::numeric<(p_state#>>'{settings,BadLossPct}')::numeric and (p_state#>>'{settings,BadLossPct}')::numeric<(p_state#>>'{settings,HorribleLossPct}')::numeric) then raise exception 'INVALID_GRADE_ORDER';end if;
+ if jsonb_typeof(p_state->'preferredTeam')<>'string' then raise exception 'INVALID_STATE';end if;
+ for item in select * from jsonb_each(p_state->'filters') loop if jsonb_typeof(item.value)<>'string' then raise exception 'INVALID_FILTER';end if;end loop;
  if not((p_state->'settings')?'Premium') or (p_state#>>'{settings,Premium}')::numeric not between .25 and .35 then raise exception 'INVALID_PREMIUM';end if;
  if coalesce(jsonb_typeof(p_state#>'{draft,give}'),'')<>'array' or coalesce(jsonb_typeof(p_state#>'{draft,get}'),'')<>'array' or coalesce(jsonb_typeof(p_state#>'{draft,teamA}'),'')<>'string' or coalesce(jsonb_typeof(p_state#>'{draft,teamB}'),'')<>'string' then raise exception 'INVALID_DRAFT';end if;
  if jsonb_array_length(p_state#>'{draft,give}')>5 or jsonb_array_length(p_state#>'{draft,get}')>5 then raise exception 'INVALID_DRAFT';end if;
@@ -57,7 +70,7 @@ begin
  if p_request_id is null or p_dataset is null or jsonb_typeof(p_dataset)<>'object' or octet_length(p_dataset::text)>10485760 then raise exception 'INVALID_DATASET';end if;
  if old.last_dataset_request_id=p_request_id then if old.dataset=p_dataset then return old;else raise exception 'REQUEST_ID_REUSED';end if;end if;
  if old.dataset_revision<>p_expected_revision then raise exception 'CONFLICT_DATASET';end if;
- if coalesce(p_dataset->>'schemaVersion','')<>'1' or coalesce(p_dataset->>'adapterVersion','')<>'v5.2' or coalesce(jsonb_typeof(p_dataset->'tables'),'')<>'object' or coalesce(length(p_dataset->>'hash'),0)<>64 then raise exception 'INVALID_DATASET_SCHEMA';end if;
+ if not(p_dataset ?& array['schemaVersion','adapterVersion','modelVersion','hash','importedAt','sourceUTC','tables','settings','issues']) or coalesce(p_dataset->>'schemaVersion','')<>'1' or coalesce(p_dataset->>'adapterVersion','')<>'v5.2' or coalesce(p_dataset->>'modelVersion','')<>'v5.2-port-1' or coalesce(jsonb_typeof(p_dataset->'tables'),'')<>'object' or coalesce(p_dataset->>'hash','')!~'^[a-f0-9]{64}$' then raise exception 'INVALID_DATASET_SCHEMA';end if;
  foreach table_name in array allowed loop
   if coalesce(jsonb_typeof(p_dataset->'tables'->table_name),'')<>'array' then raise exception 'INVALID_TABLE';end if;
   if jsonb_array_length(p_dataset->'tables'->table_name)>(case when table_name='ModelHistory' then 40000 else 10000 end) then raise exception 'TOO_MANY_ROWS';end if;

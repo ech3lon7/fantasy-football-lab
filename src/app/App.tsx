@@ -93,6 +93,7 @@ export default function App() {
   const client = useMemo(() => cloudClient(config), [config.url, config.key]),
     fileRef = useRef<HTMLInputElement>(null),
     importRef = useRef<Worker | null>(null),
+    importTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     saveQueue = useRef(Promise.resolve()),
     syncBusy = useRef(false);
   function commit(next: Workspace | null) {
@@ -253,39 +254,65 @@ export default function App() {
   }, [client, conflict]);
   function updateState(patch: Partial<Workspace["state"]>) {
     const current = wRef.current;
-    if (current)
+    if (current) {
       commit({
         ...current,
         state: { ...current.state, ...patch },
         pendingState: true,
         stateRequestId: crypto.randomUUID(),
       });
+      setSyncStatus(
+        current.owner === "local" ? "Local only" : "Changes pending",
+      );
+    }
   }
   async function importFile(file: File) {
     setError("");
+    if (file.size > 25 * 1024 * 1024) {
+      setError("Workbook exceeds 25 MiB.");
+      return;
+    }
     setBusy(true);
     setPreview(null);
     importRef.current?.terminate();
+    if (importTimer.current) clearTimeout(importTimer.current);
     const worker = new Worker(
       new URL("../workers/import.worker.ts", import.meta.url),
       { type: "module" },
     );
     importRef.current = worker;
     const id = crypto.randomUUID();
+    importTimer.current = setTimeout(() => {
+      worker.terminate();
+      setBusy(false);
+      setError("Import exceeded 30 seconds. Your current dataset is intact.");
+    }, 30000);
     worker.onmessage = (e) => {
       if (e.data.id !== id) return;
+      if (importTimer.current) clearTimeout(importTimer.current);
       setBusy(false);
       if (e.data.error) setError(e.data.error);
       else setPreview(e.data.result);
       worker.terminate();
     };
     worker.onerror = () => {
+      if (importTimer.current) clearTimeout(importTimer.current);
       setBusy(false);
       setError("Workbook could not be parsed. The existing dataset is intact.");
       worker.terminate();
     };
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    worker.postMessage({ id, bytes }, [bytes.buffer]);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (importRef.current === worker)
+        worker.postMessage({ id, bytes }, [bytes.buffer]);
+    } catch {
+      if (importTimer.current) clearTimeout(importTimer.current);
+      worker.terminate();
+      setBusy(false);
+      setError(
+        "Could not read the selected workbook. Your current dataset is intact.",
+      );
+    }
   }
   async function acceptImport(useImported = false) {
     if (!preview) return;
@@ -329,7 +356,9 @@ export default function App() {
       stateRequestId: crypto.randomUUID(),
     });
     setPreview(null);
-    setSyncStatus("Changes pending");
+    setSyncStatus(
+      wRef.current?.owner === "local" ? "Local only" : "Changes pending",
+    );
     location.hash = "#/overview";
   }
   async function signOut() {
@@ -489,6 +518,7 @@ export default function App() {
               <button
                 onClick={() => {
                   importRef.current?.terminate();
+                  if (importTimer.current) clearTimeout(importTimer.current);
                   setBusy(false);
                 }}
               >
@@ -674,6 +704,7 @@ export default function App() {
                     return;
                   }
                 }
+                await saveQueue.current;
                 await remove(w.owner);
                 commit(null);
                 setConflict(undefined);

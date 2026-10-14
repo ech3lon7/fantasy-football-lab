@@ -12,6 +12,7 @@ import {
   str,
   num,
   n,
+  sd,
 } from "../domain/contracts";
 import { evaluate } from "../domain/valuation";
 const xml = new XMLParser({
@@ -64,7 +65,7 @@ const canonical = (x: unknown): unknown =>
     : x && typeof x === "object"
       ? Object.fromEntries(
           Object.entries(x)
-            .sort(([a], [b]) => a.localeCompare(b))
+            .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
             .map(([k, v]) => [k, canonical(v)]),
         )
       : x;
@@ -118,6 +119,9 @@ export async function fromTables(
 export function validateSources(d: Dataset) {
   const t = d.tables,
     ctx = t.ModelContext[0];
+  for (const key of ["Season", "CurrentWeek", "FinalWeek"])
+    if (n(ctx?.[key]) === null || !Number.isInteger(ctx[key]))
+      throw Error(`Invalid league context: ${key}.`);
   if (
     t.ModelContext.length !== 1 ||
     !t.ModelTeams.length ||
@@ -206,6 +210,20 @@ export function validateSources(d: Dataset) {
   for (const h of d.tables.ModelHistory)
     if (h.HistoryStatus === "Valid") {
       const key = str(h.PlayerID);
+      if (
+        n(h.Points) === null ||
+        num(h.Games) <= 0 ||
+        h.Season !== ctx.Season ||
+        !Number.isInteger(h.Week) ||
+        num(h.Week) < 1 ||
+        num(h.Week) >= num(ctx.CurrentWeek)
+      ) {
+        const player = t.ModelPlayers.find((p) => str(p.PlayerID) === key);
+        if (player)
+          player.HistoryIssue =
+            "Invalid completed-game history or participation";
+        continue;
+      }
       histories.set(key, [...(histories.get(key) ?? []), h]);
     }
   for (const p of t.ModelPlayers) {
@@ -224,11 +242,22 @@ export function validateSources(d: Dataset) {
           scores.slice(-3).reduce((a, r) => a + num(r.Points), 0) /
           Math.min(3, count);
       if (
+        n(p.ActualPoints) === null ||
+        n(p.Actual_PPG) === null ||
+        n(p.Last3_PPG) === null ||
         Math.abs(total - num(p.ActualPoints)) > 1e-7 ||
         Math.abs(total / count - num(p.Actual_PPG)) > 1e-7 ||
         Math.abs(recent - num(p.Last3_PPG)) > 1e-7
       )
         p.HistoryIssue = "History scores differ from prepared aggregates";
+      if (
+        count > 1 &&
+        (n(p.ScoreSD) === null ||
+          Math.abs(
+            num(p.ScoreSD) - (sd(scores.map((r) => num(r.Points))) ?? 0),
+          ) > 1e-7)
+      )
+        p.HistoryIssue = "Scoring variability differs from verified history";
     }
   }
   const scheduled = new Set<string>();
