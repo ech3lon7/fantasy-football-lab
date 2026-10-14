@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.private/
+*.xlsx
+*.xls
+*.csv
+*.tgz
+playwright-report/
+test-results/
+*.tsbuildinfo
+.DS_Store

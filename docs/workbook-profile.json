@@ -1,0 +1,293 @@
+{
+  "tables": {
+    "ModelContext": {
+      "headers": [
+        "Season",
+        "CurrentWeek",
+        "FinalWeek",
+        "RefreshUTC",
+        "RefreshLocal",
+        "TeamCount",
+        "ScoringType",
+        "ReceptionPoints",
+        "PassingTDPoints",
+        "LineupCountsJSON",
+        "PositionLimitsJSON",
+        "ScoringItemsJSON",
+        "QBSlots",
+        "RBSlots",
+        "WRSlots",
+        "TESlots",
+        "KSlots",
+        "DSTSlots",
+        "FlexSlots",
+        "BenchSlots",
+        "IRSlots",
+        "QBLimit",
+        "RBLimit",
+        "WRLimit",
+        "TELimit",
+        "KLimit",
+        "DSTLimit"
+      ],
+      "ref": "A5:AA6"
+    },
+    "ModelPlayers": {
+      "headers": [
+        "PlayerID",
+        "Player",
+        "PositionID",
+        "Position",
+        "ProTeamID",
+        "NFLTeam",
+        "OnTeamID",
+        "InjuryStatus",
+        "Injured",
+        "Active",
+        "Droppable",
+        "PercentOwned",
+        "PercentStarted",
+        "PercentChange",
+        "ADP",
+        "PPRRank",
+        "PPRAuctionValue",
+        "EligibleSlotIDs",
+        "PositionalRanking",
+        "GamesPlayed",
+        "ActualPoints",
+        "Actual_PPG",
+        "Last3_PPG",
+        "ScoreSD",
+        "LastActualWeek",
+        "HistoryIssue",
+        "ESPN_Projected_Total",
+        "ESPN_Projected_Games",
+        "ESPN_Projected_PPG",
+        "Current_Week_Projection",
+        "Projected_Receptions",
+        "Season_Actual_Points",
+        "Season_Games",
+        "Current_Actual_Games",
+        "ProjectionRecords",
+        "RushAttempts",
+        "Targets",
+        "Receptions",
+        "RushTD",
+        "ReceivingTD",
+        "FantasyTeam",
+        "PlayerLabel",
+        "SourceRefreshUTC"
+      ],
+      "ref": "AF12:BV1064"
+    },
+    "ModelSchedule": {
+      "headers": [
+        "ProTeamID",
+        "NFLTeam",
+        "Week",
+        "ByeWeek",
+        "HasGame",
+        "OpponentID",
+        "Home",
+        "StatsOfficial",
+        "Opponent"
+      ],
+      "ref": "N12:V573"
+    },
+    "ModelRosters": {
+      "headers": [
+        "TeamID",
+        "PlayerID",
+        "LineupSlotID"
+      ],
+      "ref": "X12:Z165"
+    },
+    "ModelHistory": {
+      "headers": [
+        "PlayerID",
+        "Season",
+        "Week",
+        "Points",
+        "Games",
+        "RushAttempts",
+        "Targets",
+        "Receptions",
+        "RushTD",
+        "ReceivingTD",
+        "RecordCount",
+        "HistoryStatus",
+        "SourceRefreshUTC"
+      ],
+      "ref": "A12:M3387"
+    },
+    "ModelTeams": {
+      "headers": [
+        "TeamID",
+        "TeamName"
+      ],
+      "ref": "AB12:AC21"
+    }
+  },
+  "settings": {
+    "BadLossPct": {
+      "sheet": "Valuation_Detail",
+      "cell": "BO9"
+    },
+    "CarriesPerTD": {
+      "sheet": "Valuation_Detail",
+      "cell": "B12"
+    },
+    "ConsistencyCap": {
+      "sheet": "Valuation_Detail",
+      "cell": "B8"
+    },
+    "ConsistencyCoefficient": {
+      "sheet": "Valuation_Detail",
+      "cell": "B7"
+    },
+    "ExcellentPct": {
+      "sheet": "Valuation_Detail",
+      "cell": "BO7"
+    },
+    "FairBandPct": {
+      "sheet": "Valuation_Detail",
+      "cell": "BO6"
+    },
+    "GemMinGames": {
+      "sheet": "Valuation_Detail",
+      "cell": "HE5"
+    },
+    "GemMinGap": {
+      "sheet": "Valuation_Detail",
+      "cell": "HE6"
+    },
+    "GemMinGapPct": {
+      "sheet": "Valuation_Detail",
+      "cell": "HE7"
+    },
+    "GemMinPriorGames": {
+      "sheet": "Valuation_Detail",
+      "cell": "HE8"
+    },
+    "GemRBOpportunities": {
+      "sheet": "Valuation_Detail",
+      "cell": "HE15"
+    },
+    "GemRBRushShare": {
+      "sheet": "Valuation_Detail",
+      "cell": "HE16"
+    },
+    "GemRBTargetShare": {
+      "sheet": "Valuation_Detail",
+      "cell": "HE17"
+    },
+    "GemTEShare": {
+      "sheet": "Valuation_Detail",
+      "cell": "HE14"
+    },
+    "GemTETargets": {
+      "sheet": "Valuation_Detail",
+      "cell": "HE13"
+    },
+    "GemTrendFloor": {
+      "sheet": "Valuation_Detail",
+      "cell": "HE9"
+    },
+    "GemTrendPctFloor": {
+      "sheet": "Valuation_Detail",
+      "cell": "HE10"
+    },
+    "GemWRShare": {
+      "sheet": "Valuation_Detail",
+      "cell": "HE12"
+    },
+    "GemWRTargets": {
+      "sheet": "Valuation_Detail",
+      "cell": "HE11"
+    },
+    "HorribleLossPct": {
+      "sheet": "Valuation_Detail",
+      "cell": "BO10"
+    },
+    "MinConsistencyGames": {
+      "sheet": "Valuation_Detail",
+      "cell": "B9"
+    },
+    "MinOpportunity": {
+      "sheet": "Valuation_Detail",
+      "cell": "B11"
+    },
+    "Premium": {
+      "sheet": "Pillars_Valuation_Dashboard",
+      "cell": "H10"
+    },
+    "PriorGames": {
+      "sheet": "Valuation_Detail",
+      "cell": "B5"
+    },
+    "RecentWeight": {
+      "sheet": "Valuation_Detail",
+      "cell": "B6"
+    },
+    "StealPct": {
+      "sheet": "Valuation_Detail",
+      "cell": "BO8"
+    },
+    "TargetsPerTD": {
+      "sheet": "Valuation_Detail",
+      "cell": "B13"
+    },
+    "ReserveCutoff": {
+      "sheet": "Valuation_Detail",
+      "cell": "FY25"
+    },
+    "GradeDMinus": {
+      "sheet": "Valuation_Detail",
+      "cell": "FY7"
+    },
+    "GradeD": {
+      "sheet": "Valuation_Detail",
+      "cell": "FY8"
+    },
+    "GradeDPlus": {
+      "sheet": "Valuation_Detail",
+      "cell": "FY9"
+    },
+    "GradeCMinus": {
+      "sheet": "Valuation_Detail",
+      "cell": "FY10"
+    },
+    "GradeC": {
+      "sheet": "Valuation_Detail",
+      "cell": "FY11"
+    },
+    "GradeCPlus": {
+      "sheet": "Valuation_Detail",
+      "cell": "FY12"
+    },
+    "GradeBMinus": {
+      "sheet": "Valuation_Detail",
+      "cell": "FY13"
+    },
+    "GradeB": {
+      "sheet": "Valuation_Detail",
+      "cell": "FY14"
+    },
+    "GradeBPlus": {
+      "sheet": "Valuation_Detail",
+      "cell": "FY15"
+    },
+    "GradeAMinus": {
+      "sheet": "Valuation_Detail",
+      "cell": "FY16"
+    },
+    "GradeA": {
+      "sheet": "Valuation_Detail",
+      "cell": "FY17"
+    },
+    "GradeAPlus": {
+      "sheet": "Valuation_Detail",
+      "cell": "FY18"
+    }
+  }
+}
