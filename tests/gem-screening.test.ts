@@ -4,6 +4,7 @@ import { evaluate, type Player } from "../src/domain/valuation";
 import {
   decodeGemFilters,
   defaultGemDraft,
+  gemSignals,
   encodeGemFilters,
   risingGemDraft,
   screenGems,
@@ -198,4 +199,28 @@ it("reports corrupt saved queries and missing selected teams", () => {
     "1",
   );
   expect(validateGemDraft(bad.draft, ["1"]).query).toBeNull();
+});
+
+// Rising rostered RBs remain searchable even without a gem/opportunity classification.
+it("screens an owned No gem signal RB with +15.42 trend when pool and signals are unrestricted", () => {
+  const rb = player("900", {
+    name: "Synthetic rising RB",
+    pos: "RB",
+    owner: "8",
+    gem: "No gem signal",
+    trendDelta: 15.416666666666668,
+    index: 8.22,
+  });
+  const draft = { ...defaultGemDraft("1"), position: "RB", trendMin: "2" };
+  expect(
+    screenGems([rb], validateGemDraft(draft, ["1", "8"]).query!).matches,
+  ).toHaveLength(0);
+  const broad = validateGemDraft(
+    { ...draft, pool: "All", signals: [...gemSignals] },
+    ["1", "8"],
+  ).query!;
+  expect(screenGems([rb], broad).matches.map((r) => r.player.id)).toEqual([
+    "900",
+  ]);
+  expect(broad.trendMin).toBe(2);
 });

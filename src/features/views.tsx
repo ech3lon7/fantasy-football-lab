@@ -718,6 +718,11 @@ export function GemView({
   const result = query
     ? screenGems(m.players, query)
     : { matches: [], incomplete: [] };
+  // Explain categorical exclusions without silently changing a numeric search.
+  const hiddenBySignalsOrPool = query
+    ? screenGems(m.players, { ...query, pool: "All", signals: [...gemSignals] })
+        .matches.length - result.matches.length
+    : 0;
   const advancedCount =
     gemThresholds.filter((f) => f.advanced && restored.draft[f.key] !== "")
       .length +
@@ -996,6 +1001,11 @@ export function GemView({
                 Clear signals
               </button>
             </div>
+            {/* A rising player need not have a gem label or be available on waivers. */}
+            <p>
+              Trend and gem labels are independent. To search by numbers across
+              all teams, choose All player pool and Select all signals.
+            </p>
           </fieldset>
           {/* Use current control styles; extra thresholds remain discoverable when collapsed. */}
           <div className="toolbar">
@@ -1189,6 +1199,29 @@ export function GemView({
               title={`${result.matches.length} players to investigate`}
               note="Confirmed matches meet every active filter. Scoring gaps and season workload evidence; no extra valuation bonus."
             >
+              {/* Offer an explicit broader pool while preserving every numeric condition. */}
+              {hiddenBySignalsOrPool > 0 && (
+                <div className="notice warning gem-query">
+                  {hiddenBySignalsOrPool} additional player
+                  {hiddenBySignalsOrPool === 1 ? "" : "s"} would match your
+                  other filters but are hidden by the selected signals or player
+                  pool.
+                  <div className="button-row">
+                    <button
+                      className="button"
+                      onClick={() =>
+                        replace({
+                          ...restored.draft,
+                          pool: "All",
+                          signals: [...gemSignals],
+                        })
+                      }
+                    >
+                      Search all players and signals
+                    </button>
+                  </div>
+                </div>
+              )}
               {!query.signals.length && (
                 <p>Select at least one signal and Apply.</p>
               )}

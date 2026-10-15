@@ -32,6 +32,8 @@ async function seed(page: Page, filters: Record<string, string> = {}) {
       RushTD: 0,
     });
   const patterns = [
+    // Reproduce a rostered, rising RB that the default gem labels do not classify.
+    { id: 1, scores: [6, 6, 21, 21, 21], projection: 15, targets: 0 },
     { id: 2, scores: [8, 8, 16, 16, 16], projection: 8, targets: 200 },
     { id: 106, scores: [6, 6, 12, 12, 12], projection: 15, targets: 200 },
     { id: 108, scores: [6, 6, 12, 12], projection: 6, targets: 200 },
@@ -318,4 +320,43 @@ test("malformed saved gem filters require an explicit recovery", async ({
     .click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(page.getByRole("status")).toContainText("confirmed matches");
+});
+
+// The diagnostic makes otherwise-matching RBs accessible without dropping their thresholds.
+test("rising RB search explains signal/pool exclusions and explicitly includes them", async ({
+  page,
+}) => {
+  await seed(page);
+  await page
+    .getByRole("combobox", { name: "Position", exact: true })
+    .selectOption("RB");
+  await page.getByLabel("Minimum trend PPG", { exact: true }).fill("2");
+  await page
+    .getByRole("button", { name: "Apply filters", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("0 confirmed matches");
+  await expect(page.getByText(/1 additional player would match/)).toBeVisible();
+  await page
+    .getByRole("button", {
+      name: "Search all players and signals",
+      exact: true,
+    })
+    .click();
+  await expect(page.getByRole("status")).toContainText("1 confirmed matches");
+  await expect(
+    page.getByRole("link", { name: /Synthetic 1 RB/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "No gem signal", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Minimum trend PPG", { exact: true }),
+  ).toHaveValue("2");
+  await expect(
+    page.getByRole("combobox", { name: "Position", exact: true }),
+  ).toHaveValue("RB");
+  await page.screenshot({
+    path: "test-results/rising-rb-filter.png",
+    fullPage: true,
+  });
 });
