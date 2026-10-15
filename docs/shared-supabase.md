@@ -21,4 +21,4 @@ The fantasy migration is installed in the selected Trainwise project (`nmsdzunsl
 
 Hosted PostgreSQL checks passed for fantasy initialization, dataset/state updates, idempotent retries, revision conflicts, direct-write denial, and cross-account read isolation. Synthetic changes were rolled back. The public Auth settings endpoint confirmed email/password login is enabled; anonymous RPC access was denied. Local checks include 32 tests and the real-workbook browser workflow.
 
-The public URL and anon key are set in GitHub repository build variables. Authentication redirect additions are prepared for user confirmation. Actual user sign-in and cross-device sync remain to be exercised with the user's Trainwise account; database tests do not substitute for that browser acceptance check.
+The public URL and anon key are set in GitHub repository build variables. Both exact Fantasy authentication redirects were saved and verified after user approval on October 14, 2026. The existing site URL was preserved. Actual user sign-in and cross-device sync remain to be exercised with the user's Trainwise account; database tests do not substitute for that browser acceptance check.
