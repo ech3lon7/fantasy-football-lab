@@ -360,3 +360,52 @@ test("rising RB search explains signal/pool exclusions and explicitly includes t
     fullPage: true,
   });
 });
+
+// Restore the exact empty-signal state reported by the user and verify numeric-only screening.
+test("cleared saved signals permit rising RBs and survive Apply and reload", async ({
+  page,
+}) => {
+  await seed(page, {
+    gemFilterVersion: "1",
+    gemSignals: "[]",
+    gemPool: "Available",
+    gemPos: "RB / WR / TE",
+    gemTrendMin: "2",
+  });
+  await expect(
+    page.getByText(/Applied search: Any signal AND Pool: Available/),
+  ).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("1 confirmed matches");
+  await page
+    .getByRole("combobox", { name: "Player pool", exact: true })
+    .selectOption("All");
+  await page
+    .getByRole("combobox", { name: "Position", exact: true })
+    .selectOption("RB");
+  await page
+    .getByRole("button", { name: "Apply filters", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("1 confirmed matches");
+  await expect(
+    page.getByRole("link", { name: /Synthetic 1 RB/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "No gem signal", exact: true }),
+  ).toBeVisible();
+  // The trend's accessible name describes direction; verify its displayed number in the row.
+  await expect(
+    page
+      .getByRole("row")
+      .filter({ has: page.getByRole("link", { name: /Synthetic 1 RB/ }) }),
+  ).toContainText("+15.00");
+  await page.reload();
+  await expect(
+    page.getByText(/Applied search: Any signal AND Pool: All AND Position: RB/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Synthetic 1 RB/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Minimum trend PPG", { exact: true }),
+  ).toHaveValue("2");
+});

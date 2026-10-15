@@ -1001,10 +1001,11 @@ export function GemView({
                 Clear signals
               </button>
             </div>
-            {/* A rising player need not have a gem label or be available on waivers. */}
+            {/* Clearing signal choices permits numeric-only searches, including saved ones. */}
             <p>
-              Trend and gem labels are independent. To search by numbers across
-              all teams, choose All player pool and Select all signals.
+              No signal selections means Any signal. Your numeric filters still
+              apply. Choose All player pool to include rostered players as well
+              as free agents.
             </p>
           </fieldset>
           {/* Use current control styles; extra thresholds remain discoverable when collapsed. */}
@@ -1221,9 +1222,6 @@ export function GemView({
                     </button>
                   </div>
                 </div>
-              )}
-              {!query.signals.length && (
-                <p>Select at least one signal and Apply.</p>
               )}
               {!result.matches.length && (
                 <p>

@@ -5,6 +5,7 @@ import {
   decodeGemFilters,
   defaultGemDraft,
   gemSignals,
+  gemQuerySummary,
   encodeGemFilters,
   risingGemDraft,
   screenGems,
@@ -108,8 +109,8 @@ it("preserves thin baselines and excludes nonpositive PPG advantages", () => {
   expect(screened.incomplete.map((r) => r.player.id)).toEqual(["4"]);
 });
 
-// Ownership, injury and signal choices remain mandatory even in missing-data mode.
-it("respects existing categorical filters and an explicit empty signal set", () => {
+// Empty signal choices lift only that restriction, preserving other categorical filters.
+it("respects ownership, injury and position when no signals are selected", () => {
   const rows = [
     player("1"),
     player("2", { owner: "2" }),
@@ -127,7 +128,9 @@ it("respects existing categorical filters and an explicit empty signal set", () 
       (r) => r.player.id,
     ),
   ).toEqual(["2"]);
-  expect(screenGems(rows, query({ signals: [] })).matches).toEqual([]);
+  expect(
+    screenGems(rows, query({ signals: [] })).matches.map((r) => r.player.id),
+  ).toEqual(["1", "2"]);
 });
 
 // Reject malformed drafts before they can replace the previously applied query.
@@ -223,4 +226,38 @@ it("screens an owned No gem signal RB with +15.42 trend when pool and signals ar
     "900",
   ]);
   expect(broad.trendMin).toBe(2);
+});
+
+// Reproduce the user's saved empty selection instead of requiring every label to be checked.
+it("treats cleared signals as Any signal and round-trips that meaning", () => {
+  const draft = {
+    ...defaultGemDraft("1"),
+    position: "RB",
+    trendMin: "2",
+    signals: [],
+  };
+  const q = validateGemDraft(draft, ["1"]).query!;
+  const rows = [
+    player("1", { gem: "No gem signal", trendDelta: 15.4166666667 }),
+    player("2", { gem: "TD caution", trendDelta: 2 }),
+    player("3", { trendDelta: 1.99 }),
+    player("4", { owner: "8", gem: "No gem signal", trendDelta: 15.42 }),
+  ];
+  expect(screenGems(rows, q).matches.map((r) => r.player.id)).toEqual([
+    "1",
+    "2",
+  ]);
+  expect(gemQuerySummary(q)).toContain(
+    "Any signal AND Pool: Available AND Position: RB AND Trend PPG ≥ 2",
+  );
+  const saved = encodeGemFilters(q);
+  expect(saved.gemSignal).toBe("All signals");
+  const restored = validateGemDraft(decodeGemFilters(saved, "1").draft, [
+    "1",
+  ]).query!;
+  expect(restored.signals).toEqual([]);
+  expect(screenGems(rows, restored).matches.map((r) => r.player.id)).toEqual([
+    "1",
+    "2",
+  ]);
 });

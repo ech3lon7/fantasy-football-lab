@@ -206,7 +206,7 @@ export function encodeGemFilters(q: GemQuery): Record<string, string> {
     gemSignal:
       signals.length === 1
         ? signals[0]
-        : signals.length === gemSignals.length
+        : signals.length === 0 || signals.length === gemSignals.length
           ? "All signals"
           : "Candidates and watches",
     gemAboveReplacement: String(q.aboveReplacement),
@@ -237,7 +237,10 @@ export function risingGemDraft(team: string): GemDraft {
 // Summaries use the same applied thresholds as filtering and keep units explicit.
 export function gemQuerySummary(q: GemQuery): string {
   return [
-    q.signals.length ? `(${q.signals.join(" OR ")})` : "No signals selected",
+    // Clearing signal choices means no signal restriction, including for saved searches.
+    q.signals.length && q.signals.length !== gemSignals.length
+      ? `(${q.signals.join(" OR ")})`
+      : "Any signal",
     `Pool: ${q.pool}${q.pool === "Selected team" ? ` ${q.team}` : ""}`,
     `Position: ${q.position}`,
     ...gemThresholds
@@ -255,8 +258,9 @@ export function screenGems(players: Player[], q: GemQuery) {
   const matches: GemResult[] = [],
     incomplete: GemResult[] = [];
   for (const p of players) {
+    // Empty signal selections leave numeric, ownership and position filters in force.
     if (
-      !q.signals.includes(p.gem) ||
+      (q.signals.length > 0 && !q.signals.includes(p.gem)) ||
       (q.pool === "Available" && p.owner !== "0") ||
       (q.pool === "Selected team" && p.owner !== q.team) ||
       (q.position !== "All" &&
