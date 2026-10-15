@@ -1211,6 +1211,38 @@ pre {
     padding: 19px;
   }
 }
+/* Keep new gem controls within the existing palette and flag invalid text inputs. */
+.gem-query,
+.gem-snapshot {
+  display: block;
+  overflow-wrap: anywhere;
+}
+/* Wrap evidence inside its table cell while keeping the exact numbers accessible. */
+.gem-evidence {
+  display: inline-block;
+  max-width: 380px;
+  white-space: normal;
+}
+/* Group signal checkboxes without letting the fieldset widen mobile layouts. */
+.gem-filters fieldset {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  margin: 0 0 16px;
+  min-width: 0;
+}
+/* Identify editable screener labels and values with the existing purple token. */
+.gem-filters .control > span,
+.gem-filters .control input,
+.gem-filters .control select,
+.gem-filters .check {
+  color: var(--purple);
+}
+/* Use warning shading for invalid input without changing metric font colors. */
+.gem-filters .control input[aria-invalid="true"] {
+  background: #fef0ed;
+  border-color: #f0c9c2;
+}
 @media (max-width: 780px) {
   .sidebar {
     transform: translateX(-100%);

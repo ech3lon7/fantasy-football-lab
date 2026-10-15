@@ -659,6 +659,8 @@ export default function App() {
               )}
               {page === "gems" && (
                 <GemView
+                  // Account changes must also discard another account's draft filters.
+                  key={w.owner}
                   m={model}
                   filters={w.state.filters}
                   onFilters={(patch) =>

@@ -2,6 +2,12 @@ import { beforeAll, afterAll, it, expect } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import fs from "node:fs/promises";
 import { defaults } from "../src/domain/contracts";
+// Filter serialization must remain accepted by the existing shared-project RPC.
+import {
+  encodeGemFilters,
+  risingGemDraft,
+  validateGemDraft,
+} from "../src/domain/gem-screening";
 const db = new PGlite();
 let fitnessBefore: unknown;
 async function fitnessSnapshot() {
@@ -223,4 +229,35 @@ it("preserves existing fitness data, policies, grants and functions across migra
   );
   expect(await fitnessSnapshot()).toEqual(fitnessBefore);
   await db.exec(await fs.readFile("supabase/preflight.sql", "utf8"));
+});
+
+// Round-trip new searches without a migration, dataset write, or unrelated state change.
+it("syncs applied gem filters through the existing state revision contract", async () => {
+  await as(b);
+  const current = (
+    await db.query<{
+      state: typeof state;
+      state_revision: number;
+      dataset_revision: number;
+    }>(
+      "select state,state_revision,dataset_revision from public.get_fantasy_workspace()",
+    )
+  ).rows[0];
+  const query = validateGemDraft(risingGemDraft("1"), ["1", "2"]).query!;
+  const filters = { unrelated: "retain-me", ...encodeGemFilters(query) };
+  await db.query("select public.update_fantasy_state($1,$2,$3,$4)", [
+    current.state_revision,
+    current.dataset_revision,
+    crypto.randomUUID(),
+    { ...current.state, filters },
+  ]);
+  const next = (
+    await db.query<{ state: typeof state; dataset_revision: number }>(
+      "select state,dataset_revision from public.get_fantasy_workspace()",
+    )
+  ).rows[0];
+  expect(next.state.filters).toEqual(filters);
+  expect(next.state.draft).toEqual(current.state.draft);
+  expect(next.state.settings).toEqual(current.state.settings);
+  expect(next.dataset_revision).toBe(current.dataset_revision);
 });

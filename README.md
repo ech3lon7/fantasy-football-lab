@@ -15,6 +15,12 @@ Actual PPG is recorded scoring; ESPN PPG is the season projection; Expected PPG 
 
 Green text identifies recorded facts, blue ESPN projections, pink model outputs and purple editable controls. The deal grade and bar separately use green/orange/red for favorability. All valuation and screening assumptions remain provisional without historical validation.
 
+## Gem Screener filters
+
+Select one or more signals (OR), enter numeric thresholds (AND), then choose **Apply filters**. For example: Gem candidate or Opportunity watch, trend ≥+2 PPG, surplus index 10–40, recent PPG ≥12. **Rising targets** applies that editable example and includes owned players as well as free agents.
+
+Trend compares the latest three played games with earlier games. Index bounds are inclusive and describe model surplus, not a market price. Blank thresholds are inactive; zero is a real value. **Advanced filters** adds games played, projection gap, above replacement, and a separate incomplete-evidence view. Matching evidence explains each result. **Reset screener** restores the original search defaults without changing model settings or other screens. Applied searches save locally and use the existing **Sync now** workflow for other devices; unapplied edits are not saved. These screening thresholds remain provisional.
+
 ## Development
 
 ```sh

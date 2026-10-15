@@ -1,0 +1,201 @@
+import { beforeAll, expect, it } from "vitest";
+import { fixture } from "./fixtures";
+import { evaluate, type Player } from "../src/domain/valuation";
+import {
+  decodeGemFilters,
+  defaultGemDraft,
+  encodeGemFilters,
+  risingGemDraft,
+  screenGems,
+  validateGemDraft,
+} from "../src/domain/gem-screening";
+
+// Use a genuine model-shaped synthetic player; these tests alter only screen inputs.
+let base: Player;
+beforeAll(async () => {
+  const d = await fixture();
+  base = {
+    ...evaluate(d, d.settings).players[0],
+    gem: "Gem candidate",
+    owner: "0",
+    trendDelta: 2,
+    index: 10,
+    recent: 12,
+    games: 5,
+    gap: 3,
+    uncertain: false,
+    value: 15,
+    baseline: 10,
+  };
+});
+const player = (id: string, patch: Partial<Player> = {}) => ({
+  ...base,
+  id,
+  ...patch,
+});
+const query = (patch = {}) =>
+  validateGemDraft({ ...risingGemDraft("1"), ...patch }, ["1", "2"]).query!;
+
+// The primary search uses OR for signals, AND for every threshold, and inclusive bounds.
+it("returns exactly the qualifying candidates and watches without mutating players", () => {
+  const players = [
+    player("1"),
+    player("2", { gem: "Opportunity watch", index: 40 }),
+    player("3", { gem: "Emerging" }),
+    player("4", { trendDelta: 1.99 }),
+    player("5", { index: 40.000001 }),
+    player("6", { recent: 11.999 }),
+    player("7", { games: 4 }),
+    player("8", { index: 9.99999 }),
+  ];
+  const before = structuredClone(players);
+  expect(screenGems(players, query()).matches.map((r) => r.player.id)).toEqual([
+    "1",
+    "2",
+  ]);
+  expect(players).toEqual(before);
+});
+
+// A known failure always excludes a row; missing evidence never turns into a match.
+it("separates missing active data and ignores missing inactive metrics", () => {
+  const rows = [
+    player("1", { trendDelta: null }),
+    player("2", { trendDelta: null, index: 90 }),
+    player("3", { gap: null }),
+  ];
+  const screened = screenGems(rows, query());
+  expect(screened.matches.map((r) => r.player.id)).toEqual(["3"]);
+  expect(screened.incomplete.map((r) => r.player.id)).toEqual(["1"]);
+  expect(screened.incomplete[0].missing[0]).toContain("Trend PPG unavailable");
+  expect(
+    screenGems(rows, query({ trendMin: "" })).matches.map((r) => r.player.id),
+  ).toEqual(["1", "3"]);
+});
+
+// Valid zeros and signed thresholds must not be confused with missing values.
+it("handles zero, negative, and nonfinite metrics without rounding", () => {
+  const q = query({
+    trendMin: "-2",
+    indexMin: "0",
+    recentMin: "0",
+    gamesMin: "",
+    gapMin: "-1",
+  });
+  const rows = [
+    player("1", { trendDelta: -2, index: 0, recent: 0, gap: -1 }),
+    player("2", { index: NaN }),
+    player("3", { trendDelta: -2.00001 }),
+  ];
+  expect(screenGems(rows, q).matches.map((r) => r.player.id)).toEqual(["1"]);
+  expect(screenGems(rows, q).incomplete.map((r) => r.player.id)).toEqual(["2"]);
+});
+
+// Above replacement is a PPG condition, not a positive-VORP or availability condition.
+it("preserves thin baselines and excludes nonpositive PPG advantages", () => {
+  const rows = [
+    player("1", {
+      vorp: 0,
+      baselineStatus: "CONDITIONAL - thin replacement pool",
+    }),
+    player("2", { value: 10 }),
+    player("3", { value: 9 }),
+    player("4", { baseline: null }),
+  ];
+  const screened = screenGems(rows, query({ aboveReplacement: true }));
+  expect(screened.matches.map((r) => r.player.id)).toEqual(["1"]);
+  expect(screened.matches[0].player.baselineStatus).toContain("CONDITIONAL");
+  expect(screened.incomplete.map((r) => r.player.id)).toEqual(["4"]);
+});
+
+// Ownership, injury and signal choices remain mandatory even in missing-data mode.
+it("respects existing categorical filters and an explicit empty signal set", () => {
+  const rows = [
+    player("1"),
+    player("2", { owner: "2" }),
+    player("3", { uncertain: true }),
+    player("4", { pos: "QB", trendDelta: null }),
+  ];
+  expect(
+    screenGems(
+      rows,
+      query({ pool: "Available", includeMissing: true }),
+    ).matches.map((r) => r.player.id),
+  ).toEqual(["1"]);
+  expect(
+    screenGems(rows, query({ pool: "Selected team", team: "2" })).matches.map(
+      (r) => r.player.id,
+    ),
+  ).toEqual(["2"]);
+  expect(screenGems(rows, query({ signals: [] })).matches).toEqual([]);
+});
+
+// Reject malformed drafts before they can replace the previously applied query.
+it("validates finite decimal input, index ranges, and whole-game counts", () => {
+  for (const raw of ["Infinity", "NaN", "0x10", "1e2", "two"])
+    expect(
+      validateGemDraft({ ...defaultGemDraft("1"), trendMin: raw }, ["1"]).query,
+    ).toBeNull();
+  for (const patch of [
+    { indexMin: "-1" },
+    { indexMax: "101" },
+    { indexMin: "40", indexMax: "10" },
+    { gamesMin: "1.5" },
+    { gamesMin: "18" },
+    { pool: "Selected team", team: "missing" },
+  ])
+    expect(
+      validateGemDraft({ ...defaultGemDraft("1"), ...patch }, ["1"]).query,
+    ).toBeNull();
+  expect(query({ trendMin: " +2.00 ", indexMax: "" }).trendMin).toBe(2);
+  expect(query({ indexMax: "" }).indexMax).toBeNull();
+});
+
+// Saved older searches retain their categories while new numeric criteria start blank.
+it("migrates legacy signals and round-trips only applied string-valued state", () => {
+  const legacy = decodeGemFilters(
+    {
+      gemSignal: "Opportunity watch",
+      gemPool: "Selected team",
+      gemTeam: "2",
+      gemPos: "WR",
+      gemInjured: "true",
+    },
+    "1",
+  );
+  expect(legacy.draft).toMatchObject({
+    signals: ["Opportunity watch"],
+    pool: "Selected team",
+    team: "2",
+    position: "WR",
+    injured: true,
+    trendMin: "",
+  });
+  const saved = encodeGemFilters(query());
+  expect(Object.values(saved).every((v) => typeof v === "string")).toBe(true);
+  expect(
+    validateGemDraft(decodeGemFilters(saved, "1").draft, ["1", "2"]).query,
+  ).toEqual(query());
+  expect(encodeGemFilters(query({ trendMin: "" })).gemTrendMin).toBe("");
+  expect(
+    decodeGemFilters({ gemSignal: "All signals" }, "1").draft.signals,
+  ).toHaveLength(9);
+});
+
+// Unsupported or malformed new state must require correction rather than broadening.
+it("reports corrupt saved queries and missing selected teams", () => {
+  const saved = encodeGemFilters(query());
+  expect(
+    decodeGemFilters({ ...saved, gemSignals: "not json" }, "1").issue,
+  ).not.toBe("");
+  expect(
+    decodeGemFilters({ ...saved, gemFilterVersion: "2" }, "1").issue,
+  ).not.toBe("");
+  expect(
+    decodeGemFilters({ ...saved, gemAboveReplacement: "maybe" }, "1").issue,
+  ).not.toBe("");
+  const bad = decodeGemFilters(
+    { ...saved, gemIndexMin: "80", gemIndexMax: "10" },
+    "1",
+  );
+  expect(validateGemDraft(bad.draft, ["1"]).query).toBeNull();
+});

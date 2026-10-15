@@ -63,6 +63,7 @@ export function DataTable<T>({
   initialSort,
   sortState,
   onSort,
+  tieBreaker,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -70,6 +71,8 @@ export function DataTable<T>({
   initialSort?: string;
   sortState?: { key: string; desc: boolean };
   onSort?: (s: { key: string; desc: boolean }) => void;
+  // Screens may opt into stable ties without changing other tables' ordering.
+  tieBreaker?: (a: T, b: T) => number;
 }) {
   const [localSort, setSort] = useState({
       key: initialSort ?? columns[0]?.key,
@@ -81,13 +84,14 @@ export function DataTable<T>({
   const ordered = [...rows].sort((a, b) => {
     const x = col.value(a),
       y = col.value(b);
-    if (x == null) return y == null ? 0 : 1;
+    // Keep unavailable values last; the screener also orders equal values by ID.
+    if (x == null) return y == null ? (tieBreaker?.(a, b) ?? 0) : 1;
     if (y == null) return -1;
     const v =
       typeof x === "number" && typeof y === "number"
         ? x - y
         : String(x).localeCompare(String(y));
-    return sort.desc ? -v : v;
+    return (sort.desc ? -v : v) || (tieBreaker?.(a, b) ?? 0);
   });
   return (
     <>

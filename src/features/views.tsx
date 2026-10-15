@@ -12,6 +12,7 @@ import {
 import {
   num,
   str,
+  cmpId,
   tableNames,
   settingsSchema,
   type Settings,
@@ -19,6 +20,20 @@ import {
   type Workspace,
 } from "../domain/contracts";
 import type { Model, Player } from "../domain/valuation";
+// The screener consumes existing model outputs through one shared filter contract.
+import {
+  defaultGemDraft,
+  decodeGemFilters,
+  encodeGemFilters,
+  gemQuerySummary,
+  gemSignals,
+  gemThresholds,
+  risingGemDraft,
+  screenGems,
+  validateGemDraft,
+  type GemDraft,
+  type GemResult,
+} from "../domain/gem-screening";
 import {
   lineup,
   horizon,
@@ -39,6 +54,7 @@ import {
   fmt,
   signed,
   pct,
+  type Column,
 } from "../ui/components";
 import { Panel, Select, TeamsOptions } from "../ui/layout";
 export function Welcome({ onImport }: { onImport: () => void }) {
@@ -665,6 +681,7 @@ function ScoreChart({
     </div>
   );
 }
+// Keep screener edits local until Apply, while existing app state owns saved queries.
 export function GemView({
   m,
   filters,
@@ -674,125 +691,531 @@ export function GemView({
   filters: Record<string, string>;
   onFilters: (p: Record<string, string>) => void;
 }) {
-  const pool = filters.gemPool ?? "Available",
-    team =
-      filters.gemTeam ??
-      str(
-        (
-          m.dataset.tables.ModelTeams.find(
-            (t) => t.TeamName === "Los Chilones",
-          ) ?? m.dataset.tables.ModelTeams[0]
-        ).TeamID,
-      ),
-    pos = filters.gemPos ?? "RB / WR / TE",
-    signal = filters.gemSignal ?? "Candidates and watches",
-    injured = filters.gemInjured === "true";
-  const setPool = (v: string) => onFilters({ gemPool: v }),
-    setTeam = (v: string) => onFilters({ gemTeam: v }),
-    setPos = (v: string) => onFilters({ gemPos: v }),
-    setSignal = (v: string) => onFilters({ gemSignal: v }),
-    setInjured = (v: boolean) => onFilters({ gemInjured: String(v) });
-  const rows = m.players.filter(
-    (p) =>
-      (pool === "All" ||
-        (pool === "Available" && p.owner === "0") ||
-        (pool === "Selected team" && p.owner === team)) &&
-      (pos === "All" ||
-        (pos === "RB / WR / TE" && ["RB", "WR", "TE"].includes(p.pos)) ||
-        p.pos === pos) &&
-      (signal === "All signals" ||
-        (signal === "Candidates and watches" && p.priority <= 4) ||
-        p.gem === signal) &&
-      (injured || !p.uncertain),
+  const teamIds = m.dataset.tables.ModelTeams.map((t) => str(t.TeamID));
+  const defaultTeam = str(
+    (
+      m.dataset.tables.ModelTeams.find((t) => t.TeamName === "Los Chilones") ??
+      m.dataset.tables.ModelTeams[0]
+    )?.TeamID,
   );
+  const restored = decodeGemFilters(filters, defaultTeam);
+  const savedKey = JSON.stringify(restored.draft);
+  const [edit, setEdit] = useState({ base: savedKey, draft: restored.draft });
+  const [pending, setPending] = useState<{
+    draft: GemDraft;
+    resetSort: boolean;
+  } | null>(null);
+  const [generation, setGeneration] = useState(0);
+  const draft = edit.draft;
+  const dirty = JSON.stringify(draft) !== savedKey;
+  const savedChanged =
+    edit.base !== savedKey && JSON.stringify(draft) !== edit.base;
+  const applied = validateGemDraft(restored.draft, teamIds);
+  const validation = validateGemDraft(draft, teamIds);
+  const appliedIssue =
+    restored.issue || Object.values(applied.errors).join(" ");
+  const query = appliedIssue ? null : applied.query;
+  const result = query
+    ? screenGems(m.players, query)
+    : { matches: [], incomplete: [] };
+  const advancedCount =
+    gemThresholds.filter((f) => f.advanced && restored.draft[f.key] !== "")
+      .length +
+    Number(restored.draft.aboveReplacement) +
+    Number(restored.draft.includeMissing);
+
+  // Adopt refreshed/synced saved filters only when doing so will not discard edits.
+  useEffect(() => {
+    setEdit((previous) =>
+      JSON.stringify(previous.draft) === previous.base
+        ? { base: savedKey, draft: restored.draft }
+        : previous,
+    );
+  }, [savedKey]);
+
+  // Apply a complete valid patch, including explicit clearing of old thresholds.
+  function apply(next: GemDraft, resetSort = false) {
+    const valid = validateGemDraft(next, teamIds).query;
+    if (!valid) return;
+    const patch = encodeGemFilters(valid);
+    const canonical = decodeGemFilters(patch, defaultTeam).draft;
+    setEdit({ base: JSON.stringify(canonical), draft: canonical });
+    setPending(null);
+    setGeneration((g) => g + 1);
+    onFilters({
+      ...patch,
+      ...(resetSort ? { gemSort: "priority", gemDirection: "desc" } : {}),
+    });
+  }
+
+  // Presets, reset, and chip removals ask before replacing unapplied local edits.
+  function replace(next: GemDraft, resetSort = false) {
+    if (dirty) setPending({ draft: next, resetSort });
+    else apply(next, resetSort);
+  }
+
+  // Numeric controls preserve raw text and expose field errors to keyboard readers.
+  function threshold(f: (typeof gemThresholds)[number]) {
+    const error = validation.errors[f.key];
+    return (
+      <label className="control" key={f.key}>
+        <span>{f.label}</span>
+        <input
+          type="text"
+          inputMode="decimal"
+          // Keep the accessible label stable when inline validation text appears.
+          aria-label={f.label}
+          value={draft[f.key]}
+          placeholder="Any"
+          aria-invalid={!!error}
+          aria-describedby={error ? `gem-${f.key}-error` : undefined}
+          onChange={(e) =>
+            setEdit({ ...edit, draft: { ...draft, [f.key]: e.target.value } })
+          }
+        />
+        {error && (
+          <small className="danger-text" id={`gem-${f.key}-error`}>
+            {error}
+          </small>
+        )}
+      </label>
+    );
+  }
+
+  // Reuse current metric renderers while adding search-specific evidence and warnings.
+  const playerMetrics: Column<Player>[] = [
+    playerColumns[0],
+    { key: "position", label: "Position", kind: "fact", value: (p) => p.pos },
+    {
+      key: "owner",
+      label: "Ownership / team",
+      kind: "fact",
+      value: (p) =>
+        p.owner === "0"
+          ? "Available / waivers"
+          : str(
+              m.dataset.tables.ModelTeams.find((t) => str(t.TeamID) === p.owner)
+                ?.TeamName,
+            ),
+    },
+    {
+      key: "priority",
+      label: "Signal",
+      kind: "model",
+      value: (p) => -p.priority,
+      render: (p) => <Signal text={p.gem} />,
+    },
+    playerColumns[8],
+    playerColumns[2],
+    playerColumns[6],
+    playerColumns[1],
+    playerColumns[3],
+    {
+      key: "gap",
+      label: "Projection gap PPG",
+      kind: "model",
+      value: (p) => p.gap,
+    },
+    {
+      key: "games",
+      label: "Games played",
+      kind: "fact",
+      value: (p) => p.games,
+    },
+    {
+      key: "replacementGap",
+      label: "Vs replacement PPG",
+      kind: "model",
+      value: (p) =>
+        p.value !== null && p.baseline !== null ? p.value - p.baseline : null,
+    },
+    {
+      key: "status",
+      label: "Injury / data / baseline",
+      kind: "fact",
+      value: (p) => `${p.injury}; ${p.status}; ${p.baselineStatus}`,
+    },
+    // Keep the existing forecast, adjusted value, baseline, gap percent and workload columns.
+    playerColumns[4],
+    playerColumns[5],
+    extendedColumns[16],
+    ...extendedColumns.slice(18, 22),
+    { key: "why", label: "Why flagged", value: (p) => p.explanation },
+  ];
+  const columns: Column<GemResult>[] = playerMetrics.map((c) => ({
+    ...c,
+    value: (r) => c.value(r.player),
+    render: c.render ? (r) => c.render!(r.player) : undefined,
+  }));
+  columns.splice(13, 0, {
+    key: "matching",
+    label: "Matching evidence",
+    value: (r) => [...r.missing, ...r.evidence].join(" - "),
+    render: (r) => (
+      // Round visible explanations while preserving exact comparisons in the tooltip.
+      <span
+        className="gem-evidence"
+        title={[...r.missing, ...r.evidence].join(" - ")}
+      >
+        {r.missing.length ? "Incomplete: " : "Matches: "}
+        {[...r.missing, ...r.evidence]
+          .join(" - ")
+          .replace(/[+-]?\d+\.\d+/g, (value) => fmt(Number(value)))}
+      </span>
+    ),
+  });
+
+  // Both sections share the applied sort; remounting resets only their visible batch.
+  function resultsTable(rows: GemResult[], section: string) {
+    return (
+      <DataTable
+        key={`${section}-${savedKey}-${m.dataset.hash}-${generation}`}
+        rows={rows}
+        columns={columns}
+        id={(r) => r.player.id}
+        initialSort="priority"
+        sortState={{
+          key: filters.gemSort ?? "priority",
+          desc: filters.gemDirection !== "asc",
+        }}
+        onSort={(s) =>
+          onFilters({ gemSort: s.key, gemDirection: s.desc ? "desc" : "asc" })
+        }
+        tieBreaker={(a, b) => cmpId(a.player.id, b.player.id)}
+      />
+    );
+  }
+
   return (
     <>
-      <div className="toolbar">
-        <Select label="Player pool" value={pool} change={setPool}>
-          {["Available", "All", "Selected team"].map((x) => (
-            <option key={x}>{x}</option>
-          ))}
-        </Select>
-        {pool === "Selected team" && (
-          <Select label="Team" value={team} change={setTeam}>
-            <TeamsOptions d={m.dataset} />
-          </Select>
-        )}
-        <Select label="Position" value={pos} change={setPos}>
-          {["RB / WR / TE", "All", "QB", "RB", "WR", "TE", "K", "D/ST"].map(
-            (x) => (
-              <option key={x}>{x}</option>
-            ),
-          )}
-        </Select>
-        <Select label="Signals" value={signal} change={setSignal}>
-          {[
-            "Candidates and watches",
-            "All signals",
-            "Gem candidate",
-            "Opportunity watch",
-            "Projection-gap watch",
-            "Emerging",
-            "TD caution",
-            "No gem signal",
-          ].map((x) => (
-            <option key={x}>{x}</option>
-          ))}
-        </Select>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={injured}
-            onChange={(e) => setInjured(e.target.checked)}
-          />{" "}
-          Include injured
-        </label>
-      </div>
-      <div className="notice">
-        Gem flags are a watchlist. Check value versus replacement and your
-        lineup benefit before adding. Trends use the latest three games versus
-        earlier games; five total games is still an early sample.
-      </div>
+      {/* Existing ownership/position controls and new signals share one Apply action. */}
       <Panel
-        title={`${rows.length} players to investigate`}
-        note="Scoring gaps and season workload evidence. No extra valuation bonus."
+        title="Gem filters"
+        note="OR between selected signals; AND between filter categories."
       >
-        <DataTable
-          rows={rows}
-          initialSort="priority"
-          sortState={{
-            key: filters.gemSort ?? "priority",
-            desc: filters.gemDirection !== "asc",
+        <form
+          className="gem-filters"
+          onSubmit={(e) => {
+            e.preventDefault();
+            apply(draft);
           }}
-          onSort={(s) =>
-            onFilters({ gemSort: s.key, gemDirection: s.desc ? "desc" : "asc" })
-          }
-          columns={[
-            playerColumns[0],
-            {
-              key: "priority",
-              label: "Priority",
-              kind: "model",
-              value: (p) => -p.priority,
-              render: (p) => <Signal text={p.gem} />,
-            },
-            playerColumns[8],
-            ...playerColumns.slice(1, 7),
-            ...extendedColumns.slice(16, 22),
-            {
-              key: "replacementGap",
-              label: "Vs replacement PPG",
-              kind: "model",
-              value: (p) =>
-                p.value !== null && p.baseline !== null
-                  ? p.value - p.baseline
-                  : null,
-            },
-            { key: "why", label: "Why flagged", value: (p) => p.explanation },
-          ]}
-          id={(p) => p.id}
-        />
+        >
+          <div className="toolbar">
+            <Select
+              label="Player pool"
+              value={draft.pool}
+              change={(pool) => setEdit({ ...edit, draft: { ...draft, pool } })}
+            >
+              {["Available", "All", "Selected team"].map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </Select>
+            {draft.pool === "Selected team" && (
+              <Select
+                label="Team"
+                value={draft.team}
+                change={(team) =>
+                  setEdit({ ...edit, draft: { ...draft, team } })
+                }
+              >
+                <option value="">Choose team</option>
+                <TeamsOptions d={m.dataset} />
+              </Select>
+            )}
+            <Select
+              label="Position"
+              value={draft.position}
+              change={(position) =>
+                setEdit({ ...edit, draft: { ...draft, position } })
+              }
+            >
+              {["RB / WR / TE", "All", "QB", "RB", "WR", "TE", "K", "D/ST"].map(
+                (x) => (
+                  <option key={x}>{x}</option>
+                ),
+              )}
+            </Select>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={draft.injured}
+                onChange={(e) =>
+                  setEdit({
+                    ...edit,
+                    draft: { ...draft, injured: e.target.checked },
+                  })
+                }
+              />
+              Include injured
+            </label>
+          </div>
+          <fieldset>
+            <legend>Signals - match any selected</legend>
+            <div className="toolbar">
+              {gemSignals.map((signal) => (
+                <label className="check" key={signal}>
+                  <input
+                    type="checkbox"
+                    checked={draft.signals.includes(signal)}
+                    onChange={(e) =>
+                      setEdit({
+                        ...edit,
+                        draft: {
+                          ...draft,
+                          signals: e.target.checked
+                            ? [...draft.signals, signal]
+                            : draft.signals.filter((s) => s !== signal),
+                        },
+                      })
+                    }
+                  />
+                  {signal}
+                </label>
+              ))}
+            </div>
+            <div className="button-row">
+              <button
+                className="subtle"
+                type="button"
+                onClick={() =>
+                  setEdit({
+                    ...edit,
+                    draft: { ...draft, signals: [...gemSignals] },
+                  })
+                }
+              >
+                Select all signals
+              </button>
+              <button
+                className="subtle"
+                type="button"
+                onClick={() =>
+                  setEdit({ ...edit, draft: { ...draft, signals: [] } })
+                }
+              >
+                Clear signals
+              </button>
+            </div>
+          </fieldset>
+          {/* Use current control styles; extra thresholds remain discoverable when collapsed. */}
+          <div className="toolbar">
+            {gemThresholds.filter((f) => !f.advanced).map(threshold)}
+          </div>
+          <p>
+            Trend = latest three played-game PPG minus earlier-game PPG. Surplus
+            index = the app's trade/value index, normalized remaining-season
+            surplus, not a market price.
+          </p>
+          <details>
+            <summary>Advanced filters ({advancedCount} applied)</summary>
+            <div className="toolbar">
+              {gemThresholds.filter((f) => f.advanced).map(threshold)}
+            </div>
+            <p>
+              Projection gap compares actual season PPG with ESPN's season
+              projected PPG, not this week's matchup projection.
+            </p>
+            <div className="toolbar">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={draft.aboveReplacement}
+                  onChange={(e) =>
+                    setEdit({
+                      ...edit,
+                      draft: { ...draft, aboveReplacement: e.target.checked },
+                    })
+                  }
+                />
+                Above replacement only
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={draft.includeMissing}
+                  onChange={(e) =>
+                    setEdit({
+                      ...edit,
+                      draft: { ...draft, includeMissing: e.target.checked },
+                    })
+                  }
+                />
+                Show players with missing filter data
+              </label>
+            </div>
+          </details>
+          {Object.entries(validation.errors)
+            .filter(([key]) => !gemThresholds.some((f) => f.key === key))
+            .map(([key, error]) => (
+              <p className="danger-text" key={key}>
+                {error}
+              </p>
+            ))}
+          {dirty && (
+            <p className="warning-text">
+              Unapplied changes - results still use saved filters.
+            </p>
+          )}
+          {savedChanged && (
+            <div className="notice warning">
+              Saved filters changed while you were editing. Continue editing, or{" "}
+              <button
+                type="button"
+                onClick={() =>
+                  setEdit({ base: savedKey, draft: restored.draft })
+                }
+              >
+                Load saved filters
+              </button>
+              .
+            </div>
+          )}
+          <div className="button-row">
+            <button className="button primary" disabled={!validation.query}>
+              Apply filters
+            </button>
+            <button
+              className="button"
+              type="button"
+              onClick={() =>
+                replace(defaultGemDraft(restored.draft.team), true)
+              }
+            >
+              Reset screener
+            </button>
+            <button
+              className="button"
+              type="button"
+              onClick={() => replace(risingGemDraft(restored.draft.team))}
+            >
+              Rising targets
+            </button>
+          </div>
+          <p>
+            Rising targets is an editable example search, not a validated
+            cutoff.
+          </p>
+        </form>
+        {/* Resolve destructive-to-draft actions locally without changing cloud conflict handling. */}
+        {pending && (
+          <div className="notice warning" role="alert">
+            This action replaces unapplied edits.
+            <div className="button-row">
+              <button
+                className="button"
+                onClick={() => apply(pending.draft, pending.resetSort)}
+              >
+                Discard edits and continue
+              </button>
+              <button className="button" onClick={() => setPending(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </Panel>
+      {/* Saved-query summaries and removable chips never silently relax a search. */}
+      {appliedIssue ? (
+        <div className="notice danger" role="alert">
+          {appliedIssue} Correct the controls and Apply, or Reset screener.
+        </div>
+      ) : (
+        query && (
+          <>
+            <div className="notice gem-query">
+              <b>Applied search:</b> {gemQuerySummary(query)}
+              <div className="button-row">
+                {query.signals.map((s) => (
+                  <button
+                    className="subtle"
+                    key={s}
+                    onClick={() =>
+                      replace({
+                        ...restored.draft,
+                        signals: query.signals.filter((x) => x !== s),
+                      })
+                    }
+                    aria-label={`Remove signal ${s}`}
+                  >
+                    {s} x
+                  </button>
+                ))}
+                {gemThresholds
+                  .filter((f) => query[f.key] !== null)
+                  .map((f) => (
+                    <button
+                      className="subtle"
+                      key={f.key}
+                      onClick={() =>
+                        replace({ ...restored.draft, [f.key]: "" })
+                      }
+                      aria-label={`Remove ${f.label}`}
+                    >
+                      {f.metric} {query[f.key]} x
+                    </button>
+                  ))}
+                {query.aboveReplacement && (
+                  <button
+                    className="subtle"
+                    onClick={() =>
+                      replace({ ...restored.draft, aboveReplacement: false })
+                    }
+                  >
+                    Remove above replacement x
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="notice gem-snapshot">
+              Gem flags are a watchlist. Check replacement value and lineup
+              benefit before adding. Trends use the latest three games versus
+              earlier games; five total games is still an early sample. Source
+              refresh:{" "}
+              <span className="fact">
+                {m.dataset.sourceUTC
+                  ? new Date(m.dataset.sourceUTC).toLocaleString()
+                  : "Unavailable"}
+              </span>
+              . Filters do not refresh ESPN.
+            </div>
+            <p role="status" aria-live="polite">
+              {result.matches.length} confirmed matches
+              {query.includeMissing
+                ? `; ${result.incomplete.length} with incomplete evidence`
+                : ""}
+              .
+            </p>
+            <Panel
+              title={`${result.matches.length} players to investigate`}
+              note="Confirmed matches meet every active filter. Scoring gaps and season workload evidence; no extra valuation bonus."
+            >
+              {!query.signals.length && (
+                <p>Select at least one signal and Apply.</p>
+              )}
+              {!result.matches.length && (
+                <p>
+                  No players meet every active filter. Remove a threshold above
+                  or Reset screener.
+                </p>
+              )}
+              {resultsTable(result.matches, "matches")}
+            </Panel>
+            {/* Unavailable evidence remains separate from confirmed matches and retains warnings. */}
+            {query.includeMissing && (
+              <Panel
+                title={`${result.incomplete.length} players with incomplete evidence`}
+                note="Cannot confirm these players meet every filter."
+              >
+                <div className="notice warning">
+                  Missing active metrics are listed in Matching evidence. Known
+                  failures are excluded.
+                </div>
+                {resultsTable(result.incomplete, "incomplete")}
+              </Panel>
+            )}
+          </>
+        )
+      )}
     </>
   );
 }
