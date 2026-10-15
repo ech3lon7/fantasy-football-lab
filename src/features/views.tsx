@@ -1520,7 +1520,13 @@ export function Account({
     setAuthBusy(true);
     try {
       const { error } = signup
-        ? await client.auth.signUp({ email: login, password })
+        ? await client.auth.signUp({
+            email: login,
+            password,
+            options: {
+              emailRedirectTo: location.origin + import.meta.env.BASE_URL,
+            },
+          })
         : await client.auth.signInWithPassword({ email: login, password });
       if (error) throw error;
       setPassword("");
@@ -1594,7 +1600,7 @@ export function Account({
       </Panel>
       <Panel
         title="Supabase synchronization"
-        note="Use a dedicated fantasy table, even when sharing the Trainwise project."
+        note="Uses Trainwise’s Supabase project with separate fantasy storage."
       >
         {!config.url && (
           <div className="notice warning">
@@ -1602,6 +1608,11 @@ export function Account({
             migration. Local import and analysis already work.
           </div>
         )}
+        <p>
+          Sign in with your Trainwise account once this project is configured.
+          Fantasy keeps its own login session and workspace. Signing out here
+          leaves your Trainwise sessions active.
+        </p>
         <details open={!config.url}>
           <summary>Project configuration</summary>
           <p>

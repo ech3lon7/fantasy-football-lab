@@ -21,6 +21,9 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
       - run: npx playwright install --with-deps chromium
       - name: Browser smoke test
         run: |

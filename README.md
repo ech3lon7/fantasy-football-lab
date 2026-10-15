@@ -40,13 +40,15 @@ These harnesses require private reference JSON in the ignored `.private` directo
 
 Local import and analysis work without Supabase. To enable cross-device synchronization:
 
-1. Select a Supabase project. If sharing Trainwise’s project, retain all Trainwise objects and use the separate fantasy objects supplied here.
+1. Use Trainwise’s existing Supabase project. Retain all Trainwise objects and use the separate fantasy objects supplied here. See [shared-project deployment](docs/shared-supabase.md).
 2. Apply `supabase/migrations/001_workspace.sql` in that project’s SQL editor or controlled migration workflow.
-3. Enable the selected email/password auth configuration and add the actual Pages URL as an allowed authentication/reset redirect.
+3. Retain Trainwise’s authentication settings and site URL. Append the Fantasy Pages URL to allowed confirmation/reset redirects.
 4. In **Data & account**, enter the project URL and **publishable** key. Never enter a secret/service-role key.
 5. Sign in and choose **Sync now**. On first sync, explicitly choose whether to initialize/keep this device’s current dataset or use an existing cloud workspace.
 
 The public project URL/key can alternatively be set using the variables in `.env.example`. Administrative credentials belong only in a secure migration environment.
+
+GitHub Actions reads the public build settings from repository variables `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. These values are public browser configuration, not administrative credentials. Each app has its own session store; Fantasy signs out only its current session, preserving Trainwise sessions.
 
 Cloud storage holds one row per user. Replacements use revisions and request IDs; stale devices show a conflict instead of silently replacing newer data. Managed database backup retention is separate from application import history.
 

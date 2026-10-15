@@ -29,6 +29,7 @@ import {
   getConfig,
   putConfig,
   cloudClient,
+  signOutFantasy,
   pull,
   sync,
   Conflict,
@@ -61,10 +62,15 @@ const nav = [
 const labels: Record<string, string> = Object.fromEntries(
   nav.map(([key, label]) => [key, label]),
 );
+function readRoute() {
+  return location.hash.startsWith("#/")
+    ? location.hash.slice(2) || "overview"
+    : "overview";
+}
 function useRoute() {
-  const [route, set] = useState(location.hash.slice(2) || "overview");
+  const [route, set] = useState(readRoute);
   useEffect(() => {
-    const fn = () => set(location.hash.slice(2) || "overview");
+    const fn = () => set(readRoute());
     window.addEventListener("hashchange", fn);
     return () => window.removeEventListener("hashchange", fn);
   }, []);
@@ -364,7 +370,14 @@ export default function App() {
   async function signOut() {
     const owner = wRef.current?.owner;
     await saveQueue.current;
-    if (client) await client.auth.signOut();
+    if (client) {
+      try {
+        await signOutFantasy(client);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        return;
+      }
+    }
     if (owner) await remove(owner);
     commit(null);
     setModel(null);

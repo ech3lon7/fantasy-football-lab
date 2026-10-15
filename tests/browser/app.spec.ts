@@ -29,6 +29,12 @@ test("public configuration rejects administrative credentials", async ({
   page,
 }) => {
   await page.goto("./#/data");
+  const configuration = page.locator("details").filter({
+    has: page.getByText("Project configuration", { exact: true }),
+  });
+  if ((await configuration.getAttribute("open")) === null) {
+    await page.getByText("Project configuration", { exact: true }).click();
+  }
   await page
     .getByLabel("Project URL", { exact: true })
     .fill("https://exampleproject.supabase.co");

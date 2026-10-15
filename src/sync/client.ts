@@ -41,12 +41,19 @@ export function cloudClient(c: CloudConfig): SupabaseClient | null {
   return c.url && c.key
     ? createClient(c.url, c.key, {
         auth: {
+          // GitHub Pages apps share an origin; keep Fantasy's session separate.
+          storageKey: `fantasy-lab-${new URL(c.url).hostname}-auth`,
           persistSession: true,
           autoRefreshToken: true,
           detectSessionInUrl: true,
         },
       })
     : null;
+}
+export async function signOutFantasy(client: SupabaseClient) {
+  // The default global scope would also revoke Trainwise's sessions.
+  const { error } = await client.auth.signOut({ scope: "local" });
+  if (error) throw error;
 }
 export class Conflict extends Error {
   constructor(public remote: Workspace | null) {

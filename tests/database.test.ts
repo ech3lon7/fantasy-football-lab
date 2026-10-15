@@ -3,6 +3,32 @@ import { PGlite } from "@electric-sql/pglite";
 import fs from "node:fs/promises";
 import { defaults } from "../src/domain/contracts";
 const db = new PGlite();
+let fitnessBefore: unknown;
+async function fitnessSnapshot() {
+  return {
+    tables: (
+      await db.query(
+        "select relname, relacl::text, relrowsecurity from pg_class where relname like 'fitness_%' order by relname",
+      )
+    ).rows,
+    policies: (
+      await db.query(
+        "select * from pg_policies where tablename like 'fitness_%' order by tablename,policyname",
+      )
+    ).rows,
+    functions: (
+      await db.query(
+        "select pg_get_functiondef(oid) as definition from pg_proc where proname='apply_fitness_sync_change'",
+      )
+    ).rows,
+    data: (
+      await db.query(
+        "select * from public.fitness_sync_records order by record_id",
+      )
+    ).rows,
+    snapshots: (await db.query("select * from public.fitness_snapshots")).rows,
+  };
+}
 const a = "11111111-1111-4111-8111-111111111111",
   b = "22222222-2222-4222-8222-222222222222";
 const state = {
@@ -39,6 +65,19 @@ beforeAll(async () => {
     "create schema auth;create role anon;create role authenticated;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth to authenticated,anon;grant execute on function auth.uid() to authenticated,anon;",
   );
   await db.query("insert into auth.users values($1),($2)", [a, b]);
+  // Synthetic existing app objects, including its policies, grants and data.
+  await db.exec(`
+    create table public.fitness_snapshots(id integer primary key, payload jsonb);
+    create table public.fitness_sync_records(user_id uuid, record_id text primary key, payload jsonb);
+    alter table public.fitness_sync_records enable row level security;
+    grant select,insert,update on public.fitness_sync_records to authenticated;
+    create policy fitness_sync_records_select_own on public.fitness_sync_records
+      for select to authenticated using(auth.uid()=user_id);
+    create function public.apply_fitness_sync_change() returns text language sql as $$select 'synthetic sentinel'::text$$;
+    insert into public.fitness_snapshots values(1,'{"synthetic":true}');
+    insert into public.fitness_sync_records values('${a}','synthetic-record','{"synthetic":true}');
+  `);
+  fitnessBefore = await fitnessSnapshot();
   const sql = await fs.readFile(
     "supabase/migrations/001_workspace.sql",
     "utf8",
@@ -174,4 +213,14 @@ it("rejects missing schemas and invalid model settings at the server boundary", 
       { ...state, settings: { ...defaults, GradeB: -0.9 } },
     ]),
   ).rejects.toThrow(/INVALID_GRADE_ORDER/);
+});
+it("preserves existing fitness data, policies, grants and functions across migration and fantasy writes", async () => {
+  await db.exec("reset role");
+  expect(await fitnessSnapshot()).toEqual(fitnessBefore);
+  // Reapplying the fantasy migration must also leave the existing app intact.
+  await db.exec(
+    await fs.readFile("supabase/migrations/001_workspace.sql", "utf8"),
+  );
+  expect(await fitnessSnapshot()).toEqual(fitnessBefore);
+  await db.exec(await fs.readFile("supabase/preflight.sql", "utf8"));
 });
