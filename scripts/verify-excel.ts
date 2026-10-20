@@ -3,7 +3,8 @@ import { fromTables, importWorkbook } from "../src/import/workbook";
 import { evaluate } from "../src/domain/valuation";
 const raw = JSON.parse(await fs.readFile(".private/reference.json", "utf8"));
 const d = await fromTables(raw.tables, raw.settings);
-const m = evaluate(d, raw.settings);
+// The source workbook parity check stays independent of the app's newer role-evidence labels.
+const m = evaluate(d, raw.settings, { workbookMode: true });
 const mapping = {
   GamesPlayed: "games",
   ActualPPG: "actual",

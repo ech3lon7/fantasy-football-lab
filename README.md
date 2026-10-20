@@ -58,6 +58,12 @@ GitHub Actions reads the public build settings from repository variables `VITE_S
 
 Cloud storage holds one row per user. Replacements use revisions and request IDs; stale devices show a conflict instead of silently replacing newer data. Managed database backup retention is separate from application import history.
 
+## Opportunity evidence
+
+Use **Gem screener** to combine the new **Role-growth watch** and **Scoring breakout watch** signals with existing labels. Advanced filters include recent carries, recent targets, role increase per game and sourced route participation. Player details and roster tables show independent signals together.
+
+In **Model & audit**, inspect exploratory role-model errors, optionally apply a clearly labeled forecast scenario, import source-dated player-week/market CSV evidence, or select an injury return-week scenario. The original forecast remains the default. Advanced xFP, WOPR, routes and market references remain unavailable until valid source data is supplied; CSV columns and units are described in the app. Supplemental evidence is replaced as one current set and follows the existing account sync.
+
 ## Hosting
 
 GitHub Actions verifies the source, builds the static application, runs browser smoke tests and deploys GitHub Pages from `main`. Repository base path is `/fantasy-football-lab/`. The offline shell caches only application assets; datasets use account-scoped IndexedDB. Dataset updates require importing refreshed Excel; the app does not directly query ESPN or execute trades.

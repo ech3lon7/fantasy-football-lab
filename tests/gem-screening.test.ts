@@ -182,7 +182,7 @@ it("migrates legacy signals and round-trips only applied string-valued state", (
   expect(encodeGemFilters(query({ trendMin: "" })).gemTrendMin).toBe("");
   expect(
     decodeGemFilters({ gemSignal: "All signals" }, "1").draft.signals,
-  ).toHaveLength(9);
+  ).toHaveLength(gemSignals.length);
 });
 
 // Unsupported or malformed new state must require correction rather than broadening.

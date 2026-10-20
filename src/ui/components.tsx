@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { Player } from "../domain/valuation";
+import { playerSignals } from "../domain/valuation";
 export const fmt = (x: unknown, digits = 2) =>
   typeof x === "number" && Number.isFinite(x)
     ? x.toLocaleString(undefined, {
@@ -46,6 +47,16 @@ export function Trend({ p }: { p: Player }) {
       aria-label={`${p.arrow === "↑" ? "Up" : p.arrow === "↓" ? "Down" : p.arrow === "→" ? "Stable" : "Unavailable"} scoring trend`}
     >
       {p.arrow} <span className="fact">{signed(p.trendDelta)}</span>
+    </span>
+  );
+}
+// Render independent evidence together so a caution cannot hide a rising role.
+export function PlayerSignals({ p }: { p: Player }) {
+  return (
+    <span>
+      {playerSignals(p).map((text) => (
+        <Signal key={text} text={text} />
+      ))}
     </span>
   );
 }
@@ -202,7 +213,7 @@ export const playerColumns: Column<Player>[] = [
     label: "Gem signal",
     kind: "model",
     value: (p) => p.gem,
-    render: (p) => <Signal text={p.gem} />,
+    render: (p) => <PlayerSignals p={p} />,
   },
   {
     key: "trend",
@@ -342,6 +353,73 @@ export const extendedColumns: Column<Player>[] = [
     value: (p) => `${p.status}; ${p.baselineStatus}`,
   },
   { key: "id", label: "Player ID", kind: "fact", value: (p) => p.id },
+  // New evidence follows the existing columns so established column selections keep their order.
+  {
+    key: "recentCarries",
+    label: "Recent carries / game",
+    kind: "fact",
+    value: (p) => p.opportunity.recentCarries,
+  },
+  {
+    key: "recentTargets",
+    label: "Recent targets / game",
+    kind: "fact",
+    value: (p) => p.opportunity.recentTargets,
+  },
+  {
+    key: "recentReceptions",
+    label: "Recent catches / game",
+    kind: "fact",
+    value: (p) => p.opportunity.recentReceptions,
+  },
+  {
+    key: "roleChange",
+    label: "Role increase / game",
+    kind: "fact",
+    value: (p) => p.opportunity.delta,
+  },
+  {
+    key: "roleForecast",
+    label: "Experimental role forecast PPG",
+    kind: "model",
+    value: (p) => p.roleForecast,
+  },
+  {
+    key: "usageXFP",
+    label: "Usage-based xFP / game",
+    kind: "model",
+    value: (p) => p.opportunity.usageXFP,
+  },
+  {
+    key: "fpoe",
+    label: "FPOE / game",
+    kind: "model",
+    value: (p) => p.opportunity.fpoe,
+  },
+  {
+    key: "wopr",
+    label: "Recent mean WOPR",
+    kind: "model",
+    value: (p) => p.opportunity.wopr,
+  },
+  {
+    key: "marketRank",
+    label: "Current ROS overall rank",
+    kind: "model",
+    value: (p) => p.opportunity.market?.ROSOverallRank ?? null,
+  },
+  {
+    key: "marketValue",
+    label: "External trade value",
+    kind: "model",
+    value: (p) => p.opportunity.market?.TradeValue ?? null,
+  },
+  {
+    key: "returnWeek",
+    label: "Return-week scenario",
+    kind: "model",
+    value: (p) => p.opportunity.returnWeek,
+  },
 ];
 export function Legend() {
   return (

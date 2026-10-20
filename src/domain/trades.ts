@@ -1,5 +1,6 @@
 import { type Model } from "./valuation";
 import { type Draft, sum } from "./contracts";
+import { marketStatus } from "./opportunity";
 import {
   roster,
   makeLegal,
@@ -114,6 +115,33 @@ export function evaluateTrade(m: Model, d: Draft, withWaivers = true) {
   )
     uncertainty.push("Stale or unavailable source timestamp");
   if (m.dataset.issues.length) uncertainty.push("Source data warnings");
+  if (m.evidenceIssue) uncertainty.push(m.evidenceIssue);
+  if (m.roleScenarioWeight > 0)
+    uncertainty.push("Experimental role forecast scenario active");
+  // Provider prices remain a separate, source-compatible market reference, never a replacement for VORP.
+  const references = selected.map((id) => m.byId.get(id)!.opportunity.market);
+  const marketComplete = references.every((r) => r?.TradeValue !== undefined);
+  const sources = new Set(references.filter(Boolean).map((r) => r!.Source));
+  const marketUsable =
+    marketComplete &&
+    sources.size === 1 &&
+    references.every((r) => !marketStatus(r).startsWith("Stale"));
+  const market = {
+    status: !marketComplete
+      ? "Unavailable — import trade values for every selected player"
+      : sources.size !== 1
+        ? "Unavailable — market sources differ"
+        : !marketUsable
+          ? "Conditional — market reference is stale"
+          : "Comparable current provider reference",
+    source: sources.size === 1 ? [...sources][0] : "",
+    outgoing: marketUsable
+      ? sum(d.give.map((id) => m.byId.get(id)!.opportunity.market!.TradeValue!))
+      : null,
+    incoming: marketUsable
+      ? sum(d.get.map((id) => m.byId.get(id)!.opportunity.market!.TradeValue!))
+      : null,
+  };
   function impact(before: string[], after: string[], post: string[]) {
     const pre = horizon(m, before),
       trade = horizon(m, after),
@@ -186,6 +214,7 @@ export function evaluateTrade(m: Model, d: Draft, withWaivers = true) {
     dropCost,
     legality,
     uncertainty,
+    market,
     initialA,
     initialB,
     legalA: a.ids,

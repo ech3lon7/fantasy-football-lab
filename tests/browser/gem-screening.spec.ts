@@ -138,6 +138,75 @@ async function seed(page: Page, filters: Record<string, string> = {}) {
   ).toBeVisible();
 }
 
+// Exercise the real CSV UI, persisted source evidence and the opt-in forecast scenario across screens.
+test("sourced usage and market evidence survives reload and remains separate from forecasts", async ({
+  page,
+}) => {
+  await seed(page);
+  await page.goto("./#/model");
+  const timestamp = new Date().toISOString();
+  const csv = [
+    "PlayerID,Week,Source,AsOfUTC,UsageXFP,RouteParticipation,TargetShare,AirYardsShare,TradeValue,MarketFormat,ReturnWeek",
+    ...[3, 4, 5].map(
+      (w) => `1,${w},Synthetic usage,${timestamp},12,0.7,0.2,0.3,,,`,
+    ),
+    `1,6,Synthetic market,${timestamp},,,,,50,redraft-1qb-ppr,9`,
+    `2,6,Synthetic market,${timestamp},,,,,60,redraft-1qb-ppr,`,
+  ].join("\n");
+  await page
+    .getByLabel("Import supplemental evidence CSV", { exact: true })
+    .setInputFiles({
+      name: "synthetic-evidence.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv),
+    });
+  await expect(
+    page.getByText("Saved 5 player-week evidence rows for this snapshot.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.goto("./#/player/1");
+  const role = page.locator("section").filter({
+    has: page.getByRole("heading", {
+      name: "Role and opportunity",
+      exact: true,
+    }),
+  });
+  await expect(role.getByText("12.00", { exact: true })).toBeVisible();
+  await expect(role.getByText("0.51", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Synthetic market ·/)).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(/Synthetic market ·/)).toBeVisible();
+  await page.goto("./#/model");
+  await page
+    .getByLabel("Experimental role forecast weight (0–1)", { exact: true })
+    .fill("0.25");
+  await page
+    .getByRole("button", { name: "Apply role scenario", exact: true })
+    .click();
+  await expect(
+    page.getByText(/Experimental role forecast scenario: 25%/),
+  ).toBeVisible();
+  await page.goto("./#/players");
+  await expect(
+    page.getByText(/Experimental role forecast scenario: 25%/),
+  ).toBeVisible();
+  await page.goto("./#/model");
+  await expect(
+    page.getByLabel("Experimental role forecast weight (0–1)", { exact: true }),
+  ).toHaveValue("0.25");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/opportunity-model-mobile.png",
+    fullPage: true,
+  });
+});
+
 // Exercise a complete user search, validation, missing evidence and saved-query restoration.
 test("gem search combines signals and thresholds, persists applied state and separates unknowns", async ({
   page,
@@ -347,7 +416,8 @@ test("rising RB search explains signal/pool exclusions and explicitly includes t
     page.getByRole("link", { name: /Synthetic 1 RB/ }),
   ).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: "No gem signal", exact: true }),
+    // Rising scoring now has its own label even when the old gem conditions fail.
+    page.getByRole("cell", { name: "Scoring breakout watch", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByLabel("Minimum trend PPG", { exact: true }),
@@ -390,7 +460,7 @@ test("cleared saved signals permit rising RBs and survive Apply and reload", asy
     page.getByRole("link", { name: /Synthetic 1 RB/ }),
   ).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: "No gem signal", exact: true }),
+    page.getByRole("cell", { name: "Scoring breakout watch", exact: true }),
   ).toBeVisible();
   // The trend's accessible name describes direction; verify its displayed number in the row.
   await expect(

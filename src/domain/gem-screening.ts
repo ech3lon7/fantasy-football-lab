@@ -1,4 +1,5 @@
 import type { Player } from "./valuation";
+import { playerSignals } from "./valuation";
 
 // These choices preserve existing gem classifications and add no valuation rules.
 export const gemSignals = [
@@ -11,8 +12,40 @@ export const gemSignals = [
   "Limited history",
   "Projection only",
   "Data issue",
+  "Role-growth watch",
+  "Scoring breakout watch",
 ] as const;
+// Candidate defaults include independent role and scoring watches as well as the original classifications.
+const candidateSignals = [...gemSignals.slice(0, 4), ...gemSignals.slice(-2)];
 export const gemThresholds = [
+  {
+    key: "roleMin",
+    label: "Minimum role increase / game",
+    metric: "Role increase / game",
+    stored: "gemRoleMin",
+    advanced: true,
+  },
+  {
+    key: "targetsMin",
+    label: "Minimum recent targets / game",
+    metric: "Recent targets / game",
+    stored: "gemTargetsMin",
+    advanced: true,
+  },
+  {
+    key: "carriesMin",
+    label: "Minimum recent carries / game",
+    metric: "Recent carries / game",
+    stored: "gemCarriesMin",
+    advanced: true,
+  },
+  {
+    key: "routesMin",
+    label: "Minimum route participation (0–1)",
+    metric: "Route participation",
+    stored: "gemRoutesMin",
+    advanced: true,
+  },
   {
     key: "trendMin",
     label: "Minimum trend PPG",
@@ -80,7 +113,7 @@ export function defaultGemDraft(team: string): GemDraft {
     pool: "Available",
     team,
     position: "RB / WR / TE",
-    signals: [...gemSignals.slice(0, 4)],
+    signals: [...candidateSignals],
     injured: false,
     aboveReplacement: false,
     includeMissing: false,
@@ -90,6 +123,10 @@ export function defaultGemDraft(team: string): GemDraft {
     recentMin: "",
     gamesMin: "",
     gapMin: "",
+    roleMin: "",
+    targetsMin: "",
+    carriesMin: "",
+    routesMin: "",
   };
 }
 
@@ -114,6 +151,12 @@ export function validateGemDraft(d: GemDraft, teams: string[]) {
       (value < 0 || value > 100)
     )
       errors[f.key] = "Use a value from 0 to 100.";
+    else if (
+      value !== null &&
+      f.key === "routesMin" &&
+      (value < 0 || value > 1)
+    )
+      errors[f.key] = "Use a share from 0 to 1.";
     else if (
       value !== null &&
       f.key === "gamesMin" &&
@@ -173,6 +216,12 @@ export function decodeGemFilters(saved: Record<string, string>, team: string) {
       )
         throw Error();
       draft.signals = [...new Set(selected)] as string[];
+      // Upgrade the old default candidate bundle; explicit narrower saved selections stay unchanged.
+      if (
+        draft.signals.length === 4 &&
+        gemSignals.slice(0, 4).every((s) => draft.signals.includes(s))
+      )
+        draft.signals = [...candidateSignals];
       for (const f of gemThresholds) draft[f.key] = saved[f.stored] ?? "";
       for (const k of [
         "gemAboveReplacement",
@@ -225,7 +274,7 @@ export function risingGemDraft(team: string): GemDraft {
   return {
     ...defaultGemDraft(team),
     pool: "All",
-    signals: [...gemSignals.slice(0, 2)],
+    signals: [...gemSignals.slice(0, 2), ...gemSignals.slice(-2)],
     trendMin: "2",
     indexMin: "10",
     indexMax: "40",
@@ -260,7 +309,8 @@ export function screenGems(players: Player[], q: GemQuery) {
   for (const p of players) {
     // Empty signal selections leave numeric, ownership and position filters in force.
     if (
-      (q.signals.length > 0 && !q.signals.includes(p.gem)) ||
+      (q.signals.length > 0 &&
+        !playerSignals(p).some((s) => q.signals.includes(s))) ||
       (q.pool === "Available" && p.owner !== "0") ||
       (q.pool === "Selected team" && p.owner !== q.team) ||
       (q.position !== "All" &&
@@ -270,10 +320,14 @@ export function screenGems(players: Player[], q: GemQuery) {
       (!q.injured && p.uncertain)
     )
       continue;
-    const evidence = [p.gem],
+    const evidence = playerSignals(p),
       missing: string[] = [];
     let failed = false;
     const values: Record<Threshold, number | null> = {
+      roleMin: p.opportunity.delta,
+      targetsMin: p.opportunity.recentTargets,
+      carriesMin: p.opportunity.recentCarries,
+      routesMin: p.opportunity.routes,
       trendMin: p.trendDelta,
       indexMin: p.index,
       indexMax: p.index,

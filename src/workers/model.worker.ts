@@ -1,14 +1,22 @@
 import { evaluate, type Model } from "../domain/valuation";
 import { teamsAssessment } from "../domain/lineups";
 import { evaluateTrade } from "../domain/trades";
+import { evidenceKey, roleScenarioKey } from "../domain/opportunity";
 let model: Model | undefined,
   key = "";
 self.onmessage = (e: MessageEvent) => {
-  const { id, dataset, settings, draft, type } = e.data;
+  const { id, dataset, settings, draft, type, filters } = e.data;
   try {
-    const next = dataset.hash + JSON.stringify(settings);
+    // Supplemental references participate in cache identity but do not alter the imported workbook contract.
+    const evidence = filters?.[evidenceKey];
+    const roleWeight = filters?.[roleScenarioKey];
+    const next =
+      dataset.hash +
+      JSON.stringify(settings) +
+      (evidence ?? "") +
+      (roleWeight ?? "0");
     if (next !== key) {
-      model = evaluate(dataset, settings);
+      model = evaluate(dataset, settings, { evidence, roleWeight });
       key = next;
     }
     if (type === "trade")

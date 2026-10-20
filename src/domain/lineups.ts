@@ -84,6 +84,8 @@ export function available(m: Model, p: Player, w: number, downside = false) {
   return (
     scheduled(m, p, w) &&
     !(w === m.current && p.out) &&
+    // Imported return weeks are explicit conditional scenarios, never inferred missed-game estimates.
+    !(p.opportunity.returnWeek !== null && w < p.opportunity.returnWeek) &&
     !(downside && p.uncertain)
   );
 }

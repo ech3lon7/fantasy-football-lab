@@ -355,7 +355,8 @@ export async function importWorkbook(bytes: Uint8Array) {
     settingValues[key] = wb.Sheets[loc.sheet]?.[loc.cell]?.v;
   const settings = settingsSchema.parse(settingValues),
     dataset = await fromTables(tables, settings),
-    model = evaluate(dataset, settings);
+    // Validate cached Excel outputs under their source contract; app evidence intentionally evolves separately.
+    model = evaluate(dataset, settings, { workbookMode: true });
   const detail = wb.Sheets.Valuation_Detail,
     parity: string[] = [];
   const metrics: Record<string, keyof (typeof model.players)[number]> = {

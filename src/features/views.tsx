@@ -20,6 +20,11 @@ import {
   type Workspace,
 } from "../domain/contracts";
 import type { Model, Player } from "../domain/valuation";
+import {
+  evidenceKey,
+  roleScenarioKey,
+  marketStatus,
+} from "../domain/opportunity";
 // The screener consumes existing model outputs through one shared filter contract.
 import {
   defaultGemDraft,
@@ -48,6 +53,7 @@ import {
   Metric,
   Signal,
   Trend,
+  PlayerSignals,
   DataTable,
   playerColumns,
   extendedColumns,
@@ -156,7 +162,10 @@ export function Overview({
       ? ls.reduce((a, l) => a + l.expected, 0) / ls.length
       : null,
     watch = players.filter(
-      (p) => p.regression === "BUY LOW" || p.priority <= 4,
+      (p) =>
+        p.regression === "BUY LOW" ||
+        p.priority <= 4 ||
+        p.opportunity.signals.length > 0,
     ),
     needs = grades.filter((g) =>
       ["Need upgrade", "Shortage"].includes(g.balance),
@@ -257,7 +266,7 @@ export function Overview({
                   </small>
                 </div>
                 <div>
-                  <Signal text={p.gem} />
+                  <PlayerSignals p={p} />
                   <Trend p={p} />
                 </div>
               </a>
@@ -535,7 +544,7 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
           </p>
         </div>
         <Signal text={p.injury} />
-        <Signal text={p.gem} />
+        <PlayerSignals p={p} />
         <Trend p={p} />
       </div>
       <div className="metric-grid">
@@ -637,6 +646,139 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
           </p>
         </Panel>
       </div>
+      {/* Role evidence remains independent of scoring labels and has its own source and sample window. */}
+      <Panel title="Role and opportunity" note={p.opportunity.source}>
+        <div className="metric-grid">
+          <Metric
+            label="Recent opportunities / game"
+            value={fmt(p.opportunity.recentRate)}
+            kind="fact"
+          />
+          <Metric
+            label="Earlier opportunities / game"
+            value={fmt(p.opportunity.priorRate)}
+            kind="fact"
+          />
+          <Metric
+            label="Role increase / game"
+            value={signed(p.opportunity.delta)}
+            kind="fact"
+          />
+          <Metric
+            label="Experimental role forecast PPG"
+            value={fmt(p.roleForecast)}
+            kind={p.roleForecast === null ? "muted" : "model"}
+          />
+        </div>
+        <p>
+          {p.opportunity.recentGames} recent played games versus{" "}
+          {p.opportunity.priorGames} earlier games. RB opportunities are carries
+          plus targets; receiving and rushing work are shown separately for PPR
+          evaluation. QB role trends cover rushing; passing attempts can be
+          supplied as player-week evidence.
+        </p>
+        <div className="metric-grid">
+          <Metric
+            label="Recent carries / game"
+            value={fmt(p.opportunity.recentCarries)}
+            kind={p.opportunity.recentCarries === null ? "muted" : "fact"}
+          />
+          <Metric
+            label="Recent targets / game"
+            value={fmt(p.opportunity.recentTargets)}
+            kind={p.opportunity.recentTargets === null ? "muted" : "fact"}
+          />
+          <Metric
+            label="Recent catches / game"
+            value={fmt(p.opportunity.recentReceptions)}
+            kind={p.opportunity.recentReceptions === null ? "muted" : "fact"}
+          />
+          <Metric
+            label="Recent pass attempts / game"
+            value={fmt(p.opportunity.recentPassAttempts)}
+            kind={p.opportunity.recentPassAttempts === null ? "muted" : "fact"}
+          />
+          <Metric
+            label="Original blended forecast PPG"
+            value={fmt(p.blendedExpected)}
+          />
+          <Metric
+            label="Usage-based xFP / game"
+            value={fmt(p.opportunity.usageXFP)}
+            kind={p.opportunity.usageXFP === null ? "muted" : "model"}
+          />
+          <Metric
+            label="FPOE / game"
+            value={signed(p.opportunity.fpoe)}
+            kind={p.opportunity.fpoe === null ? "muted" : "model"}
+          />
+          <Metric
+            label="Recent mean WOPR"
+            value={fmt(p.opportunity.wopr)}
+            kind={p.opportunity.wopr === null ? "muted" : "model"}
+          />
+          <Metric
+            label="Recent snap share"
+            value={pct(p.opportunity.snapShare)}
+            kind={p.opportunity.snapShare === null ? "muted" : "fact"}
+          />
+          <Metric
+            label="Recent route participation"
+            value={pct(p.opportunity.routes)}
+            kind={p.opportunity.routes === null ? "muted" : "fact"}
+          />
+          <Metric
+            label="Carries inside 5 / game"
+            value={fmt(p.opportunity.rushInside5)}
+            kind={p.opportunity.rushInside5 === null ? "muted" : "fact"}
+          />
+          <Metric
+            label="Red-zone targets / game"
+            value={fmt(p.opportunity.redZoneTargets)}
+            kind={p.opportunity.redZoneTargets === null ? "muted" : "fact"}
+          />
+        </div>
+        <p>{p.opportunity.supplementalStatus}</p>
+        <p>
+          Blended Expected PPG is a forecast. Usage-based xFP describes
+          completed opportunities; FPOE is actual scoring minus that xFP over
+          the same games. Role forecasts affect value only through the explicit
+          scenario weight. See Model &amp; audit for held-out errors and source
+          imports.
+        </p>
+      </Panel>
+      <Panel
+        title="Current market reference"
+        note={marketStatus(p.opportunity.market)}
+      >
+        <div className="metric-grid">
+          <Metric
+            label="ROS overall rank"
+            value={fmt(p.opportunity.market?.ROSOverallRank)}
+            kind={p.opportunity.market?.ROSOverallRank == null ? "muted" : "model"}
+          />
+          <Metric
+            label="External trade value"
+            value={fmt(p.opportunity.market?.TradeValue)}
+            kind={p.opportunity.market?.TradeValue == null ? "muted" : "model"}
+          />
+        </div>
+        {p.opportunity.market && (
+          <p>
+            {p.opportunity.market.Source} · {p.opportunity.market.AsOfUTC}. This
+            reference is separate from the linear surplus index and draft ADP.
+          </p>
+        )}
+        {p.uncertain && (
+          <p>
+            Availability is conditional.{" "}
+            {p.opportunity.returnWeek === null
+              ? "Return date unknown; inspect the downside scenario."
+              : `User-selected return scenario: Week ${p.opportunity.returnWeek}.`}{" "}
+            Set a sourced scenario in Model &amp; audit.
+          </p>
+        )}
+      </Panel>
       <Panel
         title={`${p.pos} replacement pool`}
         note={`${pool.eligible} eligible available players · ${pool.status}. Waiver claims are not guaranteed.`}
@@ -808,7 +950,7 @@ export function GemView({
       label: "Signal",
       kind: "model",
       value: (p) => -p.priority,
-      render: (p) => <Signal text={p.gem} />,
+      render: (p) => <PlayerSignals p={p} />,
     },
     playerColumns[8],
     playerColumns[2],
@@ -845,6 +987,8 @@ export function GemView({
     playerColumns[5],
     extendedColumns[16],
     ...extendedColumns.slice(18, 22),
+    // Role, usage and market evidence follow the existing screener metrics.
+    ...extendedColumns.slice(-11),
     { key: "why", label: "Why flagged", value: (p) => p.explanation },
   ];
   const columns: Column<GemResult>[] = playerMetrics.map((c) => ({
@@ -1337,9 +1481,20 @@ export function TradeView({
       dataset: m.dataset,
       settings: m.settings,
       draft,
+      // The trade worker uses the same supplemental sources and return scenarios as the player screens.
+      filters: {
+        [evidenceKey]: m.evidenceRaw,
+        [roleScenarioKey]: String(m.roleScenarioWeight),
+      },
     });
     return () => worker.terminate();
-  }, [m.dataset.hash, JSON.stringify(m.settings), JSON.stringify(draft)]);
+  }, [
+    m.dataset.hash,
+    JSON.stringify(m.settings),
+    JSON.stringify(draft),
+    m.evidenceRaw,
+    m.roleScenarioWeight,
+  ]);
   function side(isA: boolean) {
     const team = isA ? draft.teamA : draft.teamB,
       ids = isA ? draft.give : draft.get,
@@ -1574,6 +1729,25 @@ export function TradeView({
               </div>
             </Panel>
           </div>
+          {/* Current provider references are kept distinct from model surplus and lineup gains. */}
+          <Panel title="Market reference" note={r.market.status}>
+            <div className="metric-grid two">
+              <Metric
+                label="Outgoing external value"
+                value={fmt(r.market.outgoing)}
+              />
+              <Metric
+                label="Incoming external value"
+                value={fmt(r.market.incoming)}
+              />
+            </div>
+            <p>
+              {r.market.source || "No complete comparable source supplied."}{" "}
+              Provider units differ from surplus points. These sums do not apply
+              the consolidation premium and do not predict whether a manager
+              will accept.
+            </p>
+          </Panel>
           <Panel
             title="Requirements and conditions"
             note="Package requirements are separate from the deal grade."

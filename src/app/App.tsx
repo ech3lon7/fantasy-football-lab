@@ -23,6 +23,8 @@ import {
   type Dataset,
 } from "../domain/contracts";
 import type { Model } from "../domain/valuation";
+import { evidenceKey, roleScenarioKey } from "../domain/opportunity";
+import { EvidenceSettings } from "../features/EvidenceSettings";
 import type { PositionGrade } from "../domain/lineups";
 import { load, save, remove } from "../storage/workspace";
 import {
@@ -209,9 +211,15 @@ export default function App() {
       type: "model",
       dataset: w.dataset,
       settings: w.state.settings,
+      filters: w.state.filters,
     });
     return () => worker.terminate();
-  }, [w?.dataset?.hash, JSON.stringify(w?.state.settings)]);
+  }, [
+    w?.dataset?.hash,
+    JSON.stringify(w?.state.settings),
+    w?.state.filters[evidenceKey],
+    w?.state.filters[roleScenarioKey],
+  ]);
   async function runSync(force = false) {
     const current = wRef.current;
     if (!client || !current || current.owner === "local") {
@@ -524,6 +532,18 @@ export default function App() {
               time. Refresh and save Excel, then import it again.
             </div>
           )}
+          {/* Scenario assumptions stay visible on every screen, including roster rankings. */}
+          {model && model.roleScenarioWeight > 0 && (
+            <div className="notice warning" role="status">
+              Experimental role forecast scenario:{" "}
+              {Math.round(model.roleScenarioWeight * 100)}% role model,{" "}
+              {Math.round((1 - model.roleScenarioWeight) * 100)}% original blend
+              where role data is usable. Change it in Model &amp; audit.
+            </div>
+          )}
+          {model?.evidenceIssue && (
+            <div className="notice warning">{model.evidenceIssue}</div>
+          )}
           {busy && (
             <div className="notice">
               Reading and validating locally. Your current dataset remains
@@ -677,10 +697,19 @@ export default function App() {
                 />
               )}
               {page === "model" && (
-                <ModelView
-                  m={model}
-                  change={(settings) => updateState({ settings })}
-                />
+                <>
+                  <EvidenceSettings
+                    m={model}
+                    filters={w.state.filters}
+                    change={(patch) =>
+                      updateState({ filters: { ...w.state.filters, ...patch } })
+                    }
+                  />
+                  <ModelView
+                    m={model}
+                    change={(settings) => updateState({ settings })}
+                  />
+                </>
               )}
             </>
           ) : null}

@@ -13,6 +13,16 @@ import {
   sd,
   quantile,
 } from "./contracts";
+import {
+  calibrateRole,
+  evidenceVersion,
+  playedHistory,
+  readEvidence,
+  workload,
+  type Workload,
+  type RoleCalibration,
+  type EvidenceInput,
+} from "./opportunity";
 export interface Player {
   id: string;
   name: string;
@@ -31,6 +41,7 @@ export interface Player {
   observed: number | null;
   weight: number;
   expected: number | null;
+  blendedExpected: number | null;
   penalty: number | null;
   value: number | null;
   historyComplete: boolean;
@@ -70,6 +81,8 @@ export interface Player {
   workloadSupport: boolean;
   status: string;
   explanation: string;
+  opportunity: Workload;
+  roleForecast: number | null;
 }
 export interface Pool {
   position: Position;
@@ -87,8 +100,27 @@ export interface Model {
   current: number;
   final: number;
   weeks: number[];
+  analysisVersion: string;
+  calibration: RoleCalibration[];
+  supplementalInput: EvidenceInput;
+  evidenceIssue: string;
+  evidenceRaw: string;
+  roleScenarioWeight: number;
 }
-export function evaluate(d: Dataset, s: Settings): Model {
+// Keep the primary classification and independent supporting signals available on every screen.
+export const playerSignals = (p: Player) => [
+  ...new Set([p.gem, ...p.opportunity.signals]),
+];
+// Workbook mode is used only to verify the unchanged Excel contract before app-specific evidence is added.
+export function evaluate(
+  d: Dataset,
+  s: Settings,
+  options: {
+    workbookMode?: boolean;
+    evidence?: string;
+    roleWeight?: string;
+  } = {},
+): Model {
   const ctx = d.tables.ModelContext[0],
     current = num(ctx.CurrentWeek),
     final = num(ctx.FinalWeek),
@@ -96,6 +128,21 @@ export function evaluate(d: Dataset, s: Settings): Model {
       { length: Math.max(0, final - current + 1) },
       (_, i) => current + i,
     );
+  const histories = playedHistory(d),
+    supplemental = readEvidence(options.evidence, d);
+  const calibration = options.workbookMode ? [] : calibrateRole(d, histories);
+  // Role influence is an explicit scenario; zero preserves the existing adaptive forecast.
+  const parsedWeight = Number(options.roleWeight ?? 0);
+  const roleScenarioWeight =
+    !options.workbookMode &&
+    Number.isFinite(parsedWeight) &&
+    parsedWeight >= 0 &&
+    parsedWeight <= 1
+      ? parsedWeight
+      : 0;
+  if (!Number.isFinite(parsedWeight) || parsedWeight < 0 || parsedWeight > 1)
+    supplemental.issue =
+      "Role forecast scenario weight must be between 0 and 1; the original blend is retained.";
   const schedules = new Map<string, Row[]>();
   for (const r of d.tables.ModelSchedule) {
     const key = str(r.ProTeamID);
@@ -128,7 +175,7 @@ export function evaluate(d: Dataset, s: Settings): Model {
           ? (1 - s.RecentWeight) * actual + s.RecentWeight * recent
           : null,
       weight = games / (games + s.PriorGames);
-    const expected = historyComplete
+    const blendedExpected = historyComplete
       ? projected !== null
         ? observed !== null
           ? weight * observed + (1 - weight) * projected
@@ -137,6 +184,15 @@ export function evaluate(d: Dataset, s: Settings): Model {
           ? observed
           : null
       : null;
+    const roleForecast =
+      calibration
+        .find((c) => c.position === str(r.Position))
+        ?.forecast.get(str(r.PlayerID)) ?? null;
+    const expected =
+      blendedExpected !== null && roleForecast !== null
+        ? (1 - roleScenarioWeight) * blendedExpected +
+          roleScenarioWeight * roleForecast
+        : blendedExpected;
     const penalty =
       expected === null
         ? null
@@ -162,19 +218,32 @@ export function evaluate(d: Dataset, s: Settings): Model {
           .filter((x) => num(x.Week) >= current && num(x.Week) <= final)
           .map((x) => num(x.HasGame)),
       );
+    const opportunity = workload(
+      r,
+      histories.get(str(r.PlayerID)) ?? [],
+      supplemental.input,
+      current,
+    );
     const pos = str(r.Position) as Position,
       opportunities =
-        pos === "RB"
-          ? num(r.RushAttempts) + num(r.Targets)
-          : ["WR", "TE"].includes(pos)
-            ? num(r.Targets)
-            : null,
+        !options.workbookMode && ["RB", "WR", "TE"].includes(pos)
+          ? opportunity.targets === null ||
+            (pos === "RB" && opportunity.carries === null)
+            ? null
+            : opportunity.targets + (pos === "RB" ? opportunity.carries! : 0)
+          : pos === "RB"
+            ? num(r.RushAttempts) + num(r.Targets)
+            : ["WR", "TE"].includes(pos)
+              ? num(r.Targets)
+              : null,
       td =
-        pos === "RB"
-          ? num(r.RushTD) + num(r.ReceivingTD)
-          : ["WR", "TE"].includes(pos)
-            ? num(r.ReceivingTD)
-            : null;
+        !options.workbookMode && ["RB", "WR", "TE"].includes(pos)
+          ? opportunity.touchdowns
+          : pos === "RB"
+            ? num(r.RushTD) + num(r.ReceivingTD)
+            : ["WR", "TE"].includes(pos)
+              ? num(r.ReceivingTD)
+              : null;
     const status =
       num(r.ProjectionRecords) > 1
         ? "Conflicting projections"
@@ -182,7 +251,7 @@ export function evaluate(d: Dataset, s: Settings): Model {
           ? "History incomplete / conflict"
           : expected === null
             ? "Insufficient data"
-            : injury !== "ACTIVE"
+            : injury !== "ACTIVE" || opportunity.returnWeek !== null
               ? "Conditional - injury availability"
               : games === 0
                 ? "Projection only"
@@ -207,24 +276,32 @@ export function evaluate(d: Dataset, s: Settings): Model {
       observed,
       weight,
       expected,
+      blendedExpected,
       penalty,
       value: expected !== null && penalty !== null ? expected - penalty : null,
       historyComplete,
       out,
-      uncertain: injury !== "ACTIVE",
+      uncertain: injury !== "ACTIVE" || opportunity.returnWeek !== null,
       irEligible: ["OUT", "INJURY_RESERVE", "IR"].includes(injury),
       slot: roster.get(str(r.PlayerID)) ?? 20,
       droppable: !!r.Droppable,
       remaining,
+      // A sourced, user-selected return scenario excludes weeks before that return; unknown returns stay conditional.
       available:
         remaining -
-        (out
-          ? sum(
-              ss
-                .filter((x) => num(x.Week) === current)
-                .map((x) => num(x.HasGame)),
+        sum(
+          ss
+            .filter(
+              (x) =>
+                num(x.Week) >= current &&
+                num(x.Week) <= final &&
+                (opportunity.returnWeek !== null
+                  ? num(x.Week) < opportunity.returnWeek ||
+                    (num(x.Week) === current && out)
+                  : out && num(x.Week) === current),
             )
-          : 0),
+            .map((x) => num(x.HasGame)),
+        ),
       bye: num(ss[0]?.ByeWeek),
       opponent:
         str(ss.find((x) => num(x.Week) === current)?.Opponent) || "Unknown",
@@ -241,12 +318,17 @@ export function evaluate(d: Dataset, s: Settings): Model {
       opportunities,
       td,
       xtd:
-        pos === "RB"
-          ? num(r.RushAttempts) / s.CarriesPerTD +
-            num(r.Targets) / s.TargetsPerTD
-          : ["WR", "TE"].includes(pos)
-            ? num(r.Targets) / s.TargetsPerTD
-            : null,
+        !options.workbookMode && ["RB", "WR", "TE"].includes(pos)
+          ? opportunities === null
+            ? null
+            : (pos === "RB" ? opportunity.carries! / s.CarriesPerTD : 0) +
+              opportunity.targets! / s.TargetsPerTD
+          : pos === "RB"
+            ? num(r.RushAttempts) / s.CarriesPerTD +
+              num(r.Targets) / s.TargetsPerTD
+            : ["WR", "TE"].includes(pos)
+              ? num(r.Targets) / s.TargetsPerTD
+              : null,
       tdRate: opportunities && td !== null ? td / opportunities : null,
       regression: "NEUTRAL - insufficient data",
       gem: "",
@@ -261,19 +343,54 @@ export function evaluate(d: Dataset, s: Settings): Model {
       workloadSupport: false,
       status,
       explanation: "",
+      opportunity,
+      roleForecast,
     };
   });
   const totals = new Map<string, { targets: number; rush: number }>();
+  const missingTeamTargets = new Set<string>(),
+    missingTeamRush = new Set<string>();
   for (const p of players) {
+    // Missing teammate counts make a share unknown rather than inflating its denominator coverage.
+    if (
+      p.games > 0 &&
+      ["RB", "WR", "TE"].includes(p.pos) &&
+      p.opportunity.targets === null
+    )
+      missingTeamTargets.add(p.nflId);
+    if (
+      p.games > 0 &&
+      ["QB", "RB", "WR", "TE"].includes(p.pos) &&
+      p.opportunity.carries === null
+    )
+      missingTeamRush.add(p.nflId);
     const t = totals.get(p.nflId) ?? { targets: 0, rush: 0 };
-    t.targets += num(p.raw.Targets);
-    t.rush += num(p.raw.RushAttempts);
+    // Share numerators and denominators use the same completed scoring window.
+    t.targets += options.workbookMode
+      ? num(p.raw.Targets)
+      : (p.opportunity.targets ?? 0);
+    t.rush += options.workbookMode
+      ? num(p.raw.RushAttempts)
+      : (p.opportunity.carries ?? 0);
     totals.set(p.nflId, t);
   }
   for (const p of players) {
     const t = totals.get(p.nflId)!;
-    p.targetShare = t.targets ? num(p.raw.Targets) / t.targets : null;
-    p.rushShare = t.rush ? num(p.raw.RushAttempts) / t.rush : null;
+    p.targetShare =
+      t.targets &&
+      (options.workbookMode ||
+        (p.opportunity.targets !== null && !missingTeamTargets.has(p.nflId)))
+        ? (options.workbookMode ? num(p.raw.Targets) : p.opportunity.targets!) /
+          t.targets
+        : null;
+    p.rushShare =
+      t.rush &&
+      (options.workbookMode ||
+        (p.opportunity.carries !== null && !missingTeamRush.has(p.nflId)))
+        ? (options.workbookMode
+            ? num(p.raw.RushAttempts)
+            : p.opportunity.carries!) / t.rush
+        : null;
   }
   const pools = positions.map((position) => {
     const all = players
@@ -285,6 +402,7 @@ export function evaluate(d: Dataset, s: Settings): Model {
           p.value !== null &&
           p.historyComplete &&
           p.injury === "ACTIVE" &&
+          (options.workbookMode || !p.uncertain) &&
           p.remaining > 0,
       )
       .sort((a, b) => b.value! - a.value! || cmpId(a.id, b.id));
@@ -458,6 +576,49 @@ export function evaluate(d: Dataset, s: Settings): Model {
                 : p.gem === "Data issue"
                   ? "Resolve incomplete history or unavailable model inputs."
                   : "No qualifying gem signal under the selected settings.";
+    // Independent evidence can coexist with a touchdown caution or projection-gap label.
+    if (!options.workbookMode && p.historyComplete && p.value !== null) {
+      const o = p.opportunity;
+      const minimum =
+        p.pos === "RB"
+          ? s.GemRBOpportunities
+          : p.pos === "WR"
+            ? s.GemWRTargets
+            : p.pos === "TE"
+              ? s.GemTETargets
+              : p.pos === "QB"
+                ? 3
+                : Infinity;
+      if (
+        o.recentGames === 3 &&
+        o.priorGames >= s.GemMinPriorGames &&
+        o.recentRate !== null &&
+        o.priorRate !== null &&
+        o.delta !== null &&
+        o.recentRate >= minimum &&
+        o.delta >= 2 &&
+        o.delta >= Math.abs(o.priorRate) * 0.2
+      )
+        o.signals.push("Role-growth watch");
+      if (
+        ["RB", "WR", "TE", "QB"].includes(p.pos) &&
+        p.games >= 3 + s.GemMinPriorGames &&
+        p.trendDelta !== null &&
+        p.trendDelta >= s.GemMinGap &&
+        p.recent !== null &&
+        p.projected !== null &&
+        p.recent >= p.projected
+      )
+        o.signals.push("Scoring breakout watch");
+      if (p.gem === "No gem signal" && o.signals.length) {
+        p.gem = o.signals[0];
+        p.priority = p.gem === "Role-growth watch" ? 2 : 3;
+        p.explanation =
+          p.gem === "Role-growth watch"
+            ? "Recent workload increased versus earlier played games. This is a role watch, not a forecast bonus."
+            : "Recent scoring improved versus earlier games and exceeds the season projection. Confirm the role before acting.";
+      }
+    }
   }
   return {
     players,
@@ -468,5 +629,11 @@ export function evaluate(d: Dataset, s: Settings): Model {
     current,
     final,
     weeks,
+    analysisVersion: options.workbookMode ? "v5.2-workbook" : evidenceVersion,
+    calibration,
+    supplementalInput: supplemental.input,
+    evidenceIssue: supplemental.issue,
+    evidenceRaw: options.evidence ?? "",
+    roleScenarioWeight,
   };
 }

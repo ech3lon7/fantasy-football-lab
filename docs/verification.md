@@ -1,5 +1,14 @@
 # Verification report
 
+## Opportunity evidence update October 20 2026
+
+- Domain/database/sync tests cover completed-game workload alignment, independent signals, same-window usage xFP/FPOE, market format and freshness, conditional return weeks, chronological role calibration, and opt-in forecast propagation.
+- Nine browser workflows passed with the production Pages path, including source CSV import, reload persistence, mobile layout, scenario controls, the real workbook import and all existing screener regressions.
+- 29,456 original native-Excel comparisons passed in explicit workbook mode, and the latest supplied XLSX passed import validation. 870 existing team/trade comparisons also passed under ordinary app analysis with role scenario weight zero.
+- An isolated browser using the supplied snapshot verified both role-growth and scoring-breakout labels for the previously disputed RB, successful RB role screening, and an actual forecast change when the role scenario was enabled. No browser errors were observed. Private screenshots remain ignored.
+- No original forecast or Value PPG changed at scenario weight zero in the inspected latest snapshot. Workload, xTD/regression and gem evidence intentionally use the corrected period and additional signals.
+- Exploratory current-snapshot role checks are not historical validation of the ESPN blend. Advanced usage and market fields require source data; unavailable values remain explicit. Supplemental state uses existing fantasy-only sync contracts and no database migration.
+
 October 14, 2026 · Application 0.1.0 · Model v5.2-port-1
 
 ## Completed locally

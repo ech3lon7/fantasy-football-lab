@@ -1,5 +1,7 @@
 # Feature mapping
 
+The October opportunity-evidence update intentionally extends the workbook's role and gem logic. Original Excel parity is checked in explicit workbook mode. Normal app analysis fixes the completed-game workload window and adds independent signals, role scenarios, sourced supplemental metrics and market references. See `model-contract.md` for the revised runtime behavior.
+
 | Workbook function | App owner | Screen | Verification |
 | --- | --- | --- | --- |
 | Six Model tables and context | import/workbook.ts | Data and account; Model and audit | Real XLSX import and source validation |
