@@ -1,4 +1,7 @@
 import { test, expect } from "@playwright/test";
+import packageInfo from "../../package.json" with { type: "json" };
+// Match the release's authoritative package metadata in browser acceptance checks.
+const { version } = packageInfo;
 test("onboarding, file boundary and responsive navigation", async ({
   page,
 }) => {
@@ -9,6 +12,8 @@ test("onboarding, file boundary and responsive navigation", async ({
     page.getByRole("heading", { name: "Your roster, in focus." }),
   ).toBeVisible();
   await expect(page.getByText("Turn your workbook")).toBeVisible();
+  // Verify the running bundle exposes its package release and build on every device.
+  await expect(page.locator("footer")).toContainText(`v${version} · Build`);
   await page.screenshot({
     path: "test-results/onboarding-desktop.png",
     fullPage: true,
@@ -19,6 +24,10 @@ test("onboarding, file boundary and responsive navigation", async ({
   await expect(
     page.getByRole("heading", { name: "Current dataset" }),
   ).toBeVisible();
+  await expect(page.locator("footer")).toContainText(`v${version} · Build`);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+  ).toBe(true);
   await page.screenshot({
     path: "test-results/account-mobile.png",
     fullPage: true,
@@ -94,6 +103,13 @@ test("real workbook import, screens, roster and trade flow", async ({
       page.getByText("Calculating the current snapshot…"),
     ).toHaveCount(0);
   }
+  // Audit details must identify the same release as the always-visible footer.
+  const appVersion = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "App version", exact: true }),
+  });
+  await expect(appVersion).toContainText(`v${version} · Build`);
+  await expect(appVersion).toContainText("Commit");
+  await expect(appVersion.locator("time")).toHaveAttribute("datetime", /Z$/);
   await page.getByRole("link", { name: "Trade analyzer", exact: true }).click();
   await page
     .getByLabel("Outgoing player 1", { exact: true })

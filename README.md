@@ -66,6 +66,8 @@ In **Model & audit**, inspect exploratory role-model errors, optionally apply a 
 
 ## Hosting
 
+The footer shows the installed app version and build number; **Model & audit → App version** adds the source commit and build time. The release version comes from `package.json` (currently 0.2.0); each GitHub deployment automatically stamps its workflow build number and commit. Local builds are labeled `Build local`. App versions are independent of workbook and model versions. Bump the package version with `npm version patch --no-git-tag-version` (or `minor`/`major`) when releasing a new version.
+
 GitHub Actions verifies the source, builds the static application, runs browser smoke tests and deploys GitHub Pages from `main`. Repository base path is `/fantasy-football-lab/`. The offline shell caches only application assets; datasets use account-scoped IndexedDB. Dataset updates require importing refreshed Excel; the app does not directly query ESPN or execute trades.
 
 See [architecture](docs/architecture.md), [implementation plan](docs/implementation-plan.md), [model contract](docs/model-contract.md) and [verification report](docs/verification.md).

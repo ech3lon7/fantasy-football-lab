@@ -1,6 +1,14 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
+import packageInfo from "./package.json" with { type: "json" };
+// Stamp the package release and a unique published build into the compiled app.
+const release = {
+  version: packageInfo.version,
+  build: process.env.GITHUB_RUN_NUMBER ?? "local",
+  commit: process.env.GITHUB_SHA?.slice(0, 7) ?? "local",
+  builtAt: new Date().toISOString(),
+};
 const offlineShell = () => ({
   name: "offline-shell",
   closeBundle() {
@@ -23,6 +31,12 @@ self.addEventListener('fetch',event=>{const url=new URL(event.request.url),scope
   },
 });
 export default defineConfig({
+  define: {
+    "import.meta.env.VITE_APP_VERSION": JSON.stringify(release.version),
+    "import.meta.env.VITE_APP_BUILD": JSON.stringify(release.build),
+    "import.meta.env.VITE_APP_COMMIT": JSON.stringify(release.commit),
+    "import.meta.env.VITE_APP_BUILT_AT": JSON.stringify(release.builtAt),
+  },
   plugins: [react(), offlineShell()],
   base: process.env.GITHUB_ACTIONS ? "/fantasy-football-lab/" : "/",
   test: { include: ["tests/**/*.test.ts"] },

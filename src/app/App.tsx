@@ -64,6 +64,13 @@ const nav = [
 const labels: Record<string, string> = Object.fromEntries(
   nav.map(([key, label]) => [key, label]),
 );
+// Report this running bundle's release rather than the workbook or calculation-model version.
+const appRelease = {
+  version: import.meta.env.VITE_APP_VERSION,
+  build: import.meta.env.VITE_APP_BUILD,
+  commit: import.meta.env.VITE_APP_COMMIT,
+  builtAt: import.meta.env.VITE_APP_BUILT_AT,
+};
 function readRoute() {
   return location.hash.startsWith("#/")
     ? location.hash.slice(2) || "overview"
@@ -698,6 +705,21 @@ export default function App() {
               )}
               {page === "model" && (
                 <>
+                  {/* Build details identify the installed app when diagnosing updates across devices. */}
+                  <Panel title="App version">
+                    <p>
+                      Fantasy Football Lab v{appRelease.version} · Build{" "}
+                      {appRelease.build} · Commit {appRelease.commit}
+                    </p>
+                    <p>
+                      Built{" "}
+                      <time dateTime={appRelease.builtAt}>
+                        {new Date(appRelease.builtAt).toLocaleString()}
+                      </time>
+                      . App version is separate from your imported workbook and
+                      model versions.
+                    </p>
+                  </Panel>
                   <EvidenceSettings
                     m={model}
                     filters={w.state.filters}
@@ -759,7 +781,11 @@ export default function App() {
           <Legend />
           <footer className="footer">
             Fantasy Football Lab{" "}
-            <span>Adaptive model · provisional assumptions · v0.1.0</span>
+            {/* Keep the running release visible on every screen, including mobile. */}
+            <span>
+              Adaptive model · provisional assumptions · v{appRelease.version} ·{" "}
+              Build {appRelease.build}
+            </span>
           </footer>
         </div>
       </main>
