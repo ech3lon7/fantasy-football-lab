@@ -160,10 +160,12 @@ test("sourced usage and market evidence survives reload and remains separate fro
       mimeType: "text/csv",
       buffer: Buffer.from(csv),
     });
+  // Wait for the persisted model result; recalculation can replace the transient save notice.
   await expect(
-    page.getByText("Saved 5 player-week evidence rows for this snapshot.", {
-      exact: true,
-    }),
+    page.getByText(
+      "5 current evidence rows. Imports replace this evidence set. Source files are not retained.",
+      { exact: true },
+    ),
   ).toBeVisible();
   await page.goto("./#/player/1");
   const role = page.locator("section").filter({
