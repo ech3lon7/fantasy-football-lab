@@ -60,13 +60,15 @@ Cloud storage holds one row per user. Replacements use revisions and request IDs
 
 ## Opportunity evidence
 
+Click player names to inspect stats without leaving your current screen. Details open beside the name on desktop and in a bottom sheet on mobile. Key scoring/value metrics appear first; expand the evaluation, workload, history or imported-field sections for more. In Trades, select a player and click the name shown beneath their selector. Escape, Close or an outside click dismisses the panel; **Open full player page** still navigates to the full profile. Ctrl/Cmd-click on a player link retains normal browser behavior.
+
 Use **Gem screener** to combine the new **Role-growth watch** and **Scoring breakout watch** signals with existing labels. Advanced filters include recent carries, recent targets, role increase per game and sourced route participation. Player details and roster tables show independent signals together.
 
 In **Model & audit**, inspect exploratory role-model errors, optionally apply a clearly labeled forecast scenario, import source-dated player-week/market CSV evidence, or select an injury return-week scenario. The original forecast remains the default. Advanced xFP, WOPR, routes and market references remain unavailable until valid source data is supplied; CSV columns and units are described in the app. Supplemental evidence is replaced as one current set and follows the existing account sync.
 
 ## Hosting
 
-The footer shows the installed app version and build number; **Model & audit → App version** adds the source commit and build time. The release version comes from `package.json` (currently 0.2.0); each GitHub deployment automatically stamps its workflow build number and commit. Local builds are labeled `Build local`. App versions are independent of workbook and model versions. Bump the package version with `npm version patch --no-git-tag-version` (or `minor`/`major`) when releasing a new version.
+The footer shows the installed app version and build number; **Model & audit → App version** adds the source commit and build time. The release version comes from `package.json` (currently 0.2.1); each GitHub deployment automatically stamps its workflow build number and commit. Local builds are labeled `Build local`. App versions are independent of workbook and model versions. Versions follow **major.moderate.minor**: first number for major app changes, second for moderate changes, third for minor changes. Player popovers are a minor change, so this update is 0.2.1. Use `npm version patch --no-git-tag-version` for minor changes, `npm version minor --no-git-tag-version` for moderate changes, or `npm version major --no-git-tag-version` for major changes.
 
 GitHub Actions verifies the source, builds the static application, runs browser smoke tests and deploys GitHub Pages from `main`. Repository base path is `/fantasy-football-lab/`. The offline shell caches only application assets; datasets use account-scoped IndexedDB. Dataset updates require importing refreshed Excel; the app does not directly query ESPN or execute trades.
 

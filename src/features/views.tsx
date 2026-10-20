@@ -63,6 +63,7 @@ import {
   type Column,
 } from "../ui/components";
 import { Panel, Select, TeamsOptions } from "../ui/layout";
+import { PlayerName } from "../ui/PlayerName";
 export function Welcome({ onImport }: { onImport: () => void }) {
   return (
     <>
@@ -258,7 +259,7 @@ export function Overview({
         >
           {watch.length ? (
             watch.slice(0, 6).map((p) => (
-              <a className="watch-row" href={`#/player/${p.id}`} key={p.id}>
+              <PlayerName p={p} className="watch-row" key={p.id}>
                 <div>
                   <b>{p.name}</b>
                   <small>
@@ -269,7 +270,7 @@ export function Overview({
                   <PlayerSignals p={p} />
                   <Trend p={p} />
                 </div>
-              </a>
+              </PlayerName>
             ))
           ) : (
             <p>No qualifying gem or BUY LOW signals on this snapshot.</p>
@@ -366,6 +367,16 @@ export function TeamView({
               key: "reserves",
               label: "Useful reserves",
               value: (r) => r.reserves.map((p) => p.name).join(", ") || "None",
+              // Reserve names share the same quick inspection as the main roster.
+              render: (r) =>
+                r.reserves.length
+                  ? r.reserves.map((p, i) => (
+                      <span key={p.id}>
+                        {i > 0 && ", "}
+                        <PlayerName p={p} />
+                      </span>
+                    ))
+                  : "None",
             },
             {
               key: "advice",
@@ -1528,40 +1539,51 @@ export function TradeView({
             placeholder="Filter player names…"
           />
         </label>
+        {/* Native options stay selectable; each chosen player gets a separate clickable name. */}
+        <p className="muted">
+          Select a player, then click their name below for stats.
+        </p>
         {Array.from({ length: 5 }, (_, i) => (
-          <div className="trade-select-row" key={i}>
-            <span>{i + 1}</span>
-            <select
-              aria-label={`${isA ? "Outgoing" : "Incoming"} player ${i + 1}`}
-              value={ids[i] ?? ""}
-              onChange={(e) => {
-                const next = [...ids];
-                next[i] = e.target.value;
-                choose(next.filter(Boolean));
-              }}
-            >
-              <option value="">Choose player</option>
-              {m.players
-                .filter(
-                  (p) =>
-                    p.owner === team &&
-                    (p.name.toLowerCase().includes(search.toLowerCase()) ||
-                      ids.includes(p.id)),
-                )
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} · {p.pos} · {fmt(p.index)} index
-                  </option>
-                ))}
-            </select>
-            {ids[i] && (
-              <button
-                className="subtle"
-                aria-label={`Remove ${m.byId.get(ids[i])?.name ?? ids[i]}`}
-                onClick={() => choose(ids.filter((_, j) => j !== i))}
+          <div className="trade-player-slot" key={i}>
+            <div className="trade-select-row">
+              <span>{i + 1}</span>
+              <select
+                aria-label={`${isA ? "Outgoing" : "Incoming"} player ${i + 1}`}
+                value={ids[i] ?? ""}
+                onChange={(e) => {
+                  const next = [...ids];
+                  next[i] = e.target.value;
+                  choose(next.filter(Boolean));
+                }}
               >
-                <X size={15} />
-              </button>
+                <option value="">Choose player</option>
+                {m.players
+                  .filter(
+                    (p) =>
+                      p.owner === team &&
+                      (p.name.toLowerCase().includes(search.toLowerCase()) ||
+                        ids.includes(p.id)),
+                  )
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} · {p.pos} · {fmt(p.index)} index
+                    </option>
+                  ))}
+              </select>
+              {ids[i] && (
+                <button
+                  className="subtle"
+                  aria-label={`Remove ${m.byId.get(ids[i])?.name ?? ids[i]}`}
+                  onClick={() => choose(ids.filter((_, j) => j !== i))}
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </div>
+            {m.byId.get(ids[i]) && (
+              <div className="trade-selected-player">
+                <PlayerName p={m.byId.get(ids[i])!} />
+              </div>
             )}
           </div>
         ))}
@@ -1602,7 +1624,15 @@ export function TradeView({
               : "bad",
     bar = r?.advantage ?? (r && r.outgoing === 0 && r.incoming > 0 ? 1 : 0),
     names = (ids: string[]) =>
-      ids.map((id) => m.byId.get(id)?.name ?? id).join(", ") || "None";
+      // Transaction suggestions can be inspected without navigating away from the draft.
+      ids.length
+        ? ids.map((id, i) => (
+            <span key={`${id}-${i}`}>
+              {i > 0 && ", "}
+              {m.byId.get(id) ? <PlayerName p={m.byId.get(id)!} /> : id}
+            </span>
+          ))
+        : "None";
   return (
     <>
       <div className="trade-builder">
@@ -1856,12 +1886,18 @@ export function TradeView({
               {r.a.weekly.map((w) => (
                 <p key={w.week}>
                   <b>Week {w.week}:</b>{" "}
-                  {w.ids
-                    .map(
-                      (id, i) =>
-                        `${w.slots[i]}: ${id ? m.byId.get(id)?.name : "Unfilled"}`,
-                    )
-                    .join(" · ")}
+                  {/* Preserve slot labels while making each selected starter inspectable. */}
+                  {w.ids.map((id, i) => (
+                    <span key={i}>
+                      {i > 0 && " · "}
+                      {w.slots[i]}:{" "}
+                      {id && m.byId.get(id) ? (
+                        <PlayerName p={m.byId.get(id)!} />
+                      ) : (
+                        "Unfilled"
+                      )}
+                    </span>
+                  ))}
                 </p>
               ))}
             </details>
@@ -2077,6 +2113,14 @@ export function ModelView({
                 p.candidates
                   .map((x) => `${x.name} (${x.id}): ${fmt(x.value)}`)
                   .join("; "),
+              // Replacement candidates expose the same stats as rostered players.
+              render: (p) =>
+                p.candidates.map((x, i) => (
+                  <span key={x.id}>
+                    {i > 0 && "; "}
+                    <PlayerName p={x} /> ({x.id}): {fmt(x.value)}
+                  </span>
+                )),
             },
             { key: "status", label: "Status", value: (p) => p.status },
           ]}

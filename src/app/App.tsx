@@ -39,6 +39,7 @@ import {
 } from "../sync/client";
 import { Legend } from "../ui/components";
 import { Panel } from "../ui/layout";
+import { PlayerPopoverProvider } from "../ui/PlayerPopover";
 import {
   Welcome,
   Overview,
@@ -405,7 +406,7 @@ export default function App() {
     stale =
       !!d && (!d.sourceUTC || Date.now() - Date.parse(d.sourceUTC) > 86400000),
     page = route.split("/")[0];
-  return (
+  const content = (
     <div className="app-shell">
       <aside className={`sidebar ${mobile ? "open" : ""}`}>
         <a className="brand" href="#/overview">
@@ -803,4 +804,6 @@ export default function App() {
       />
     </div>
   );
+  // Keep inspection state outside routed views so opening a card preserves each screen's draft.
+  return <PlayerPopoverProvider m={model}>{content}</PlayerPopoverProvider>;
 }

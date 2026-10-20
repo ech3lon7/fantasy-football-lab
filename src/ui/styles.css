@@ -1027,6 +1027,105 @@ dd {
   flex: 1;
   background: #f8faf3;
 }
+/* A separate name makes details accessible without changing native trade selection controls. */
+.trade-selected-player {
+  margin: -2px 0 13px 22px;
+  font-size: 12px;
+}
+.player-name {
+  color: var(--green);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+.player-name:hover {
+  text-decoration-style: solid;
+}
+/* Fixed portal surfaces escape table clipping and keep the underlying screen in place. */
+.player-popover {
+  position: fixed;
+  z-index: 120;
+  width: 460px;
+  max-width: calc(100vw - 24px);
+  padding: 20px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+  box-shadow: 0 12px 45px #152c2930;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.player-popover-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.player-popover-heading h2 {
+  margin-bottom: 3px;
+}
+.player-popover-heading button {
+  flex-shrink: 0;
+  min-width: 36px;
+  min-height: 36px;
+  display: grid;
+  place-items: center;
+}
+.player-popover-owner {
+  margin: 8px 0;
+}
+.player-popover-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.player-popover-metrics > div {
+  background: #f7f9f4;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 10px;
+}
+.player-popover-metrics dt {
+  font-size: 11px;
+}
+.player-popover-metrics dd {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 3px 0 0;
+}
+.player-popover .definition-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.player-popover-signals {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.player-popover .button {
+  margin-top: 16px;
+}
+/* Mobile sheets block background interaction and retain a scrollable, safe-area-aware detail surface. */
+.player-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 119;
+  background: #152c2966;
+}
+.player-popover[data-layout="sheet"] {
+  inset: auto 0 0;
+  width: 100%;
+  max-width: none;
+  max-height: 85dvh;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  border-radius: 16px 16px 0 0;
+}
 .trade-swap {
   position: absolute;
   left: calc(50% - 20px);

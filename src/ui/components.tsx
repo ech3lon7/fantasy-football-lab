@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import type { Player } from "../domain/valuation";
 import { playerSignals } from "../domain/valuation";
+import { PlayerName } from "./PlayerName";
 export const fmt = (x: unknown, digits = 2) =>
   typeof x === "number" && Number.isFinite(x)
     ? x.toLocaleString(undefined, {
@@ -179,12 +180,12 @@ export const playerColumns: Column<Player>[] = [
     kind: "fact",
     value: (p) => p.name,
     render: (p) => (
-      <a className="player-link" href={`#/player/${p.id}`}>
+      <PlayerName p={p} className="player-link">
         <b>{p.name}</b>
         <small>
           {p.pos} · {p.nfl}
         </small>
-      </a>
+      </PlayerName>
     ),
   },
   { key: "actual", label: "Actual PPG", kind: "fact", value: (p) => p.actual },
