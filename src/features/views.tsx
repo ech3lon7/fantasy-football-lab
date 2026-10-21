@@ -1,5 +1,7 @@
 import { GemEvidence } from "../ui/GemEvidence";
 import { StarterLineupEditor } from "./StarterLineupEditor";
+// Trade discovery delegates scoring to its own worker without changing the existing analyzer.
+import { TradeSearch } from "./TradeSearch";
 import { starterLineupsKey } from "../domain/starter-lineups";
 import { useState, useEffect } from "react";
 import {
@@ -1679,6 +1681,13 @@ export function TradeView({
         </div>
         {side(false)}
       </div>
+      {/* Search preserves the outgoing draft and loads only an explicitly selected counterparty/package. */}
+      <TradeSearch
+        m={m}
+        draft={draft}
+        lineupsRaw={lineupsRaw}
+        change={change}
+      />
       {pending && (
         <div className="notice" role="status">
           Evaluating both rosters and proposed transactions…

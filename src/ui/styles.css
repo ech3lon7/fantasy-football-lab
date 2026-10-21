@@ -1551,3 +1551,78 @@ pre {
   overflow-wrap: anywhere;
   vertical-align: top;
 }
+
+/* Search controls wrap on phones while retaining the existing editable-control appearance. */
+.trade-search-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.trade-search-offset {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.trade-search-offset > input {
+  width: 100%;
+  accent-color: var(--purple);
+}
+
+/* Background-search progress remains readable and honors reduced-motion preferences. */
+.trade-search-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.trade-search-progress small {
+  display: block;
+}
+.trade-search-spinner {
+  flex-shrink: 0;
+  animation: trade-search-spin 1s linear infinite;
+}
+@keyframes trade-search-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trade-search-spinner {
+    animation: none;
+  }
+}
+
+/* Results keep model values pink and expand warnings inside the horizontally scrollable table. */
+.trade-search-results {
+  min-width: 900px;
+}
+.trade-search-results th {
+  padding: 13px 12px;
+  font-size: 10px;
+}
+.trade-search-results td:first-child {
+  white-space: normal;
+  min-width: 180px;
+  max-width: 260px;
+  width: 220px;
+}
+.trade-search-results small {
+  display: block;
+}
+.trade-search-results td {
+  vertical-align: top;
+}
+.trade-search-results details {
+  min-width: 200px;
+  max-width: 360px;
+  white-space: normal;
+  margin-top: 8px;
+  padding-top: 8px;
+}
+.trade-search-results summary {
+  margin-bottom: 4px;
+}
+.trade-search-results details p {
+  margin: 8px 0;
+}

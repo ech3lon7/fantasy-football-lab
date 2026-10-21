@@ -165,3 +165,23 @@ export async function starterFixture() {
   );
   return fromTables(d.tables, d.settings);
 }
+
+// Supply enough synthetic, same-owner packages to exercise search pagination and all five receive counts.
+export async function tradeSearchFixture() {
+  const d = await starterFixture();
+  d.tables.ModelContext[0].BenchSlots = 20;
+  const base = d.tables.ModelPlayers.find((p) => p.PlayerID === 2)!;
+  const history = d.tables.ModelHistory.filter((h) => h.PlayerID === 2);
+  for (let i = 0; i < 10; i++) {
+    const id = 300 + i;
+    d.tables.ModelPlayers.push({
+      ...base,
+      PlayerID: id,
+      Player: `Search WR ${i}`,
+      InjuryStatus: i === 0 ? "QUESTIONABLE" : "ACTIVE",
+    });
+    d.tables.ModelHistory.push(...history.map((h) => ({ ...h, PlayerID: id })));
+    d.tables.ModelRosters.push({ PlayerID: id, TeamID: 2, LineupSlotID: 20 });
+  }
+  return fromTables(d.tables, d.settings);
+}

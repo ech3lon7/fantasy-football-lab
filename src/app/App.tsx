@@ -699,7 +699,9 @@ export default function App() {
               )}
               {page === "weekly" && <Weekly m={model} />}
               {page === "trades" && (
+                // Account changes reset temporary search results and terminate the previous account's worker.
                 <TradeView
+                  key={w.owner}
                   m={model}
                   draft={w.state.draft}
                   lineupsRaw={w.state.filters[starterLineupsKey]}
