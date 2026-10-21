@@ -528,13 +528,9 @@ export default function App() {
               <button
                 className="button"
                 onClick={async () => {
-                  const reg = await navigator.serviceWorker.getRegistration();
-                  navigator.serviceWorker.addEventListener(
-                    "controllerchange",
-                    () => location.reload(),
-                    { once: true },
-                  );
-                  reg?.waiting?.postMessage("SKIP_WAITING");
+                  // Finish queued IndexedDB writes before the explicit reload; recovery never clears workspace storage.
+                  await saveQueue.current;
+                  window.dispatchEvent(new Event("fantasy-app-recover"));
                 }}
               >
                 Reload app

@@ -22,11 +22,36 @@ const offlineShell = () => ({
     const version = `fantasy-lab-${Date.now()}`;
     fs.writeFileSync(
       "dist/sw.js",
-      `const CACHE=${JSON.stringify(version)},FILES=${JSON.stringify(names)};
-self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES))));
+      `// Scope this cache to this app path; keep earlier builds available to tabs still running them.
+const PREFIX='fantasy-lab-'+encodeURIComponent(self.registration.scope)+'-';
+const CACHE=PREFIX+${JSON.stringify(version)},FILES=${JSON.stringify(names)};
+self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES.map(file=>new Request(new URL(file,self.registration.scope),{cache:'reload'}))))));
 self.addEventListener('message',event=>{if(event.data==='SKIP_WAITING')self.skipWaiting()});
-self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('fantasy-lab-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
-self.addEventListener('fetch',event=>{const url=new URL(event.request.url),scope=new URL(self.registration.scope);if(event.request.method!=='GET'||url.origin!==scope.origin||!url.pathname.startsWith(scope.pathname)||(!url.pathname.endsWith('/')&&!FILES.some(f=>new URL(f,scope).pathname===url.pathname)))return;event.respondWith(caches.open(CACHE).then(cache=>cache.match(event.request)).then(cached=>cached||fetch(event.request)));});`,
+// Activation must not remove the old entry scripts or workers before existing tabs finish using them.
+self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
+self.addEventListener('fetch',event=>{
+  const url=new URL(event.request.url),scope=new URL(self.registration.scope);
+  if(event.request.method!=='GET'||url.origin!==scope.origin||!url.pathname.startsWith(scope.pathname))return;
+  // Fresh HTML discovers a deployment online; offline fallback stays paired with this build's cached assets.
+  if(event.request.mode==='navigate'&&(url.pathname===scope.pathname||url.pathname===scope.pathname+'index.html')){
+    event.respondWith(fetch(new Request(event.request,{cache:'no-store'})).then(response=>{
+      if(!response.ok)throw Error('Navigation unavailable');
+      return response;
+    }).catch(()=>caches.open(CACHE).then(cache=>cache.match(new URL('index.html',scope))).then(cached=>cached||Response.error())));
+    return;
+  }
+  if(!url.pathname.startsWith(scope.pathname+'assets/')&&!FILES.some(file=>new URL(file,scope).pathname===url.pathname))return;
+  // Check retained app caches for an older immutable asset before asking a server that may have removed it.
+  event.respondWith(caches.open(CACHE).then(cache=>cache.match(event.request)).then(async cached=>{
+    if(cached)return cached;
+    const keys=await caches.keys();
+    for(const key of keys.filter(key=>key.startsWith(PREFIX)||/^fantasy-lab-[0-9]+$/.test(key))){
+      const prior=await caches.open(key),match=await prior.match(event.request);
+      if(match)return match;
+    }
+    return fetch(event.request);
+  }));
+});`,
     );
   },
 });

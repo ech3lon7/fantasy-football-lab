@@ -1,2 +1,174 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="theme-color" content="#152c29"/><meta name="description" content="A personal fantasy football workspace for roster analysis, trades and player discovery."/><title>Fantasy Football Lab</title><link rel="icon" type="image/svg+xml" href="%BASE_URL%icon.svg"/><link rel="manifest" href="%BASE_URL%manifest.webmanifest"/></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#152c29" />
+    <meta
+      name="description"
+      content="A personal fantasy football workspace for roster analysis, trades and player discovery."
+    />
+    <title>Fantasy Football Lab</title>
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%icon.svg" />
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+  </head>
+  <body>
+    <!-- This independent startup card remains usable if the app's hashed JavaScript cannot load. -->
+    <section
+      id="app-startup"
+      aria-live="polite"
+      style="
+        max-width: 520px;
+        margin: 60px auto;
+        padding: 24px;
+        font:
+          15px/1.6 system-ui,
+          sans-serif;
+        color: #152c29;
+        background: #f5f7f0;
+        border-radius: 12px;
+      "
+    >
+      <h1 id="startup-title">Loading Fantasy Football Lab…</h1>
+      <div id="startup-recovery" hidden>
+        <p id="startup-message">
+          The app couldn't finish loading. A version update or interrupted
+          connection may have left older files in this tab.
+        </p>
+        <button
+          id="startup-reload"
+          type="button"
+          style="
+            padding: 12px 18px;
+            border: 0;
+            border-radius: 6px;
+            background: #152c29;
+            color: white;
+            font: inherit;
+            cursor: pointer;
+          "
+        >
+          Reload latest app
+        </button>
+        <p>
+          Your imported data, settings, trade draft and sign-in will be kept.
+        </p>
+      </div>
+      <noscript>Enable JavaScript in your browser to use the app.</noscript>
+    </section>
+    <div id="root"></div>
+    <script>
+      // Install startup protection before any hashed app script runs; never clear private browser storage.
+      (() => {
+        const startup = document.getElementById("app-startup");
+        const title = document.getElementById("startup-title");
+        const recovery = document.getElementById("startup-recovery");
+        const message = document.getElementById("startup-message");
+        const button = document.getElementById("startup-reload");
+        const base = new URL("%BASE_URL%", location.origin);
+        let ready = false,
+          recovering = false;
+        // A failed entry, render or timed-out startup produces a visible, actionable screen instead of an empty root.
+        const fail = () => {
+          startup.hidden = false;
+          recovery.hidden = false;
+          title.textContent = "App couldn't finish loading";
+        };
+        const timer = setTimeout(() => {
+          if (!ready) fail();
+        }, 12000);
+        window.addEventListener(
+          "error",
+          (event) => {
+            const asset = event.target;
+            if (!ready || (asset instanceof HTMLScriptElement && asset.src))
+              fail();
+          },
+          true,
+        );
+        window.addEventListener("unhandledrejection", (event) => {
+          if (
+            !ready ||
+            /dynamically imported module|module script|Loading chunk/i.test(
+              String(event.reason),
+            )
+          )
+            fail();
+        });
+        window.addEventListener("vite:preloadError", fail);
+        window.addEventListener("fantasy-app-failed", fail);
+        // Remove only our one-time cache-busting parameter after React has mounted successfully.
+        window.addEventListener("fantasy-app-ready", () => {
+          ready = true;
+          clearTimeout(timer);
+          startup.hidden = true;
+          const clean = new URL(location.href);
+          if (clean.searchParams.has("__fantasy_recover")) {
+            clean.searchParams.delete("__fantasy_recover");
+            history.replaceState(history.state, "", clean.href);
+          }
+        });
+        // Verify the deployed entry is reachable before replacing this app's worker; retain IndexedDB, cookies and localStorage.
+        const recover = async () => {
+          if (recovering) return;
+          recovering = true;
+          fail();
+          button.disabled = true;
+          message.textContent = "Checking the latest app files…";
+          const abort = new AbortController();
+          const timeout = setTimeout(() => abort.abort(), 10000);
+          try {
+            const check = new URL("index.html", base);
+            check.searchParams.set("__fantasy_recover", Date.now().toString());
+            const response = await fetch(check, {
+              cache: "no-store",
+              signal: abort.signal,
+            });
+            if (!response.ok) throw Error("Latest app unavailable");
+            const html = new DOMParser().parseFromString(
+              await response.text(),
+              "text/html",
+            );
+            const script = html.querySelector('script[type="module"][src]');
+            if (!html.getElementById("root") || !script)
+              throw Error("Incomplete deployment");
+            const entry = new URL(script.getAttribute("src"), check);
+            if (
+              entry.origin !== base.origin ||
+              !entry.pathname.startsWith(base.pathname)
+            )
+              throw Error("Unexpected app entry");
+            const asset = await fetch(entry, {
+              cache: "no-store",
+              signal: abort.signal,
+            });
+            if (
+              !asset.ok ||
+              /text\/html/i.test(asset.headers.get("content-type") || "")
+            )
+              throw Error("Entry unavailable");
+            if ("serviceWorker" in navigator) {
+              const registration =
+                await navigator.serviceWorker.getRegistration(base.href);
+              if (registration?.scope === base.href)
+                await registration.unregister();
+            }
+            const fresh = new URL(location.href);
+            fresh.searchParams.set("__fantasy_recover", Date.now().toString());
+            location.replace(fresh.href);
+          } catch {
+            message.textContent =
+              "The latest app isn't reachable yet. Check your connection or wait for deployment to finish, then try again. Your saved data is still here.";
+            button.disabled = false;
+            recovering = false;
+          } finally {
+            clearTimeout(timeout);
+          }
+        };
+        button.addEventListener("click", recover);
+        window.addEventListener("fantasy-app-recover", recover);
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
