@@ -1,3 +1,5 @@
+import { StarterLineupEditor } from "./StarterLineupEditor";
+import { starterLineupsKey } from "../domain/starter-lineups";
 import { GemEvidence } from "../ui/GemEvidence";
 import { useState, useEffect } from "react";
 import {
@@ -152,10 +154,14 @@ export function Overview({
   m,
   grades,
   team,
+  filters,
+  onFilters,
 }: {
   m: Model;
   grades: PositionGrade[];
   team: string;
+  filters: Record<string, string>;
+  onFilters: (patch: Record<string, string>) => void;
 }) {
   const ids = roster(m, team),
     players = ids.map((id) => m.byId.get(id)!),
@@ -282,17 +288,14 @@ export function Overview({
           </a>
         </Panel>
       </div>
-      <Panel
-        title="Your roster"
-        note="Click a player for the calculation behind their value."
-      >
-        <DataTable
-          rows={players}
-          columns={playerColumns}
-          id={(p) => p.id}
-          initialSort="index"
-        />
-      </Panel>
+      {/* Starter choices have a dedicated saved setting, leaving the existing roster and team grades unchanged. */}
+      <StarterLineupEditor
+        key={`${team}/${m.dataset.hash}/${filters[starterLineupsKey] ?? ""}`}
+        m={m}
+        team={team}
+        filters={filters}
+        change={onFilters}
+      />
     </>
   );
 }
@@ -770,7 +773,9 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
           <Metric
             label="ROS overall rank"
             value={fmt(p.opportunity.market?.ROSOverallRank)}
-            kind={p.opportunity.market?.ROSOverallRank == null ? "muted" : "model"}
+            kind={
+              p.opportunity.market?.ROSOverallRank == null ? "muted" : "model"
+            }
           />
           <Metric
             label="External trade value"
@@ -1482,10 +1487,12 @@ export function TradeView({
   m,
   draft,
   change,
+  lineupsRaw,
 }: {
   m: Model;
   draft: Draft;
   change: (d: Draft) => void;
+  lineupsRaw?: string;
 }) {
   const [result, setResult] = useState<TradeResult | null>(null),
     [pending, setPending] = useState(false),
@@ -1523,6 +1530,7 @@ export function TradeView({
       filters: {
         [evidenceKey]: m.evidenceRaw,
         [roleScenarioKey]: String(m.roleScenarioWeight),
+        [starterLineupsKey]: lineupsRaw ?? "",
       },
     });
     return () => worker.terminate();
@@ -1532,6 +1540,7 @@ export function TradeView({
     JSON.stringify(draft),
     m.evidenceRaw,
     m.roleScenarioWeight,
+    lineupsRaw,
   ]);
   function side(isA: boolean) {
     const team = isA ? draft.teamA : draft.teamB,
@@ -1740,52 +1749,99 @@ export function TradeView({
           </Panel>
           <div className="two-col">
             <Panel
-              title="Your lineup impact"
-              note="Trade plus required drops / IR; waiver benefit is separate."
+              title="Your direct starter impact"
+              note="Uses your marked starters. A bench-only departure costs zero direct starting points; trade value and coverage remain separate."
             >
               <div className="metric-grid two">
                 <Metric
                   label="Expected scoring gain / week"
+                  value={signed(r.directA.expectedPerWeek)}
+                />
+                <Metric
+                  label={`Expected gain through W${m.final}`}
+                  value={signed(r.directA.expected)}
+                />
+                <Metric
+                  label="Adjusted value gain / week"
+                  value={signed(r.directA.valuePerWeek)}
+                />
+                <Metric
+                  label="Direct expected gain this week"
+                  value={signed(r.directA.weekly[0]?.expectedGain ?? null)}
+                />
+              </div>
+              <p>
+                Lineup source: {r.directA.source}. Existing bench replacements:{" "}
+                {names(r.directA.replacements)}. Modeled incoming starters:{" "}
+                {names(r.directA.promotedIncoming)}.
+              </p>
+              {[...r.directA.errors, ...r.directA.warnings].map((issue) => (
+                <p className="notice warning" key={issue}>
+                  {issue}
+                </p>
+              ))}
+            </Panel>
+            <Panel
+              title="Other team’s direct starter impact"
+              note="Uses their imported or saved starters. Incoming scoring upgrades and named replacements are modeled."
+            >
+              <div className="metric-grid two">
+                <Metric
+                  label="Expected scoring gain / week"
+                  value={signed(r.directB.expectedPerWeek)}
+                />
+                <Metric
+                  label={`Expected gain through W${m.final}`}
+                  value={signed(r.directB.expected)}
+                />
+                <Metric
+                  label="Adjusted value gain / week"
+                  value={signed(r.directB.valuePerWeek)}
+                />
+                <Metric
+                  label="Direct expected gain this week"
+                  value={signed(r.directB.weekly[0]?.expectedGain ?? null)}
+                />
+              </div>
+              <p>
+                Lineup source: {r.directB.source}. Existing bench replacements:{" "}
+                {names(r.directB.replacements)}. Modeled incoming starters:{" "}
+                {names(r.directB.promotedIncoming)}.
+              </p>
+              {[...r.directB.errors, ...r.directB.warnings].map((issue) => (
+                <p className="notice warning" key={issue}>
+                  {issue}
+                </p>
+              ))}
+            </Panel>
+          </div>
+          {/* The former all-roster optimization remains separate for hypothetical future backup/bye coverage. */}
+          <details>
+            <summary>Modeled future coverage impact (includes bench)</summary>
+            <Panel
+              title="Optimized future lineups and coverage"
+              note="Assumes the app can start any available rostered player. This may include a benched QB during a bye; it is separate from your direct starter score."
+            >
+              <div className="metric-grid">
+                <Metric
+                  label="Your modeled coverage gain / week"
                   value={signed(r.a.expectedPerWeek)}
                 />
                 <Metric
-                  label={`Expected gain through W${m.final}`}
-                  value={signed(r.a.expected)}
-                />
-                <Metric
-                  label="Adjusted value gain / week"
-                  value={signed(r.a.valuePerWeek)}
-                />
-                <Metric
-                  label="Downside value gain total"
-                  value={signed(r.a.downside)}
-                />
-              </div>
-            </Panel>
-            <Panel
-              title="Other team’s lineup impact"
-              note="Evaluate whether the deal solves a need for both teams."
-            >
-              <div className="metric-grid two">
-                <Metric
-                  label="Expected scoring gain / week"
+                  label="Their modeled coverage gain / week"
                   value={signed(r.b.expectedPerWeek)}
                 />
                 <Metric
-                  label={`Expected gain through W${m.final}`}
-                  value={signed(r.b.expected)}
+                  label="Your downside value gain total"
+                  value={signed(r.a.downside)}
                 />
                 <Metric
-                  label="Adjusted value gain / week"
-                  value={signed(r.b.valuePerWeek)}
-                />
-                <Metric
-                  label="Downside value gain total"
+                  label="Their downside value gain total"
                   value={signed(r.b.downside)}
                 />
               </div>
             </Panel>
-          </div>
+          </details>
           {/* Current provider references are kept distinct from model surplus and lineup gains. */}
           <Panel title="Market reference" note={r.market.status}>
             <div className="metric-grid two">
@@ -1854,13 +1910,13 @@ export function TradeView({
             )}
           </Panel>
           <Panel
-            title="Weekly trade-only impact"
-            note="Average weekly gain divides total gain by every remaining fantasy scoring period. It is a model estimate, not ESPN’s matchup forecast."
+            title="Weekly direct starter impact"
+            note="Your marked starter group is held across the remaining weeks; byes and known availability still apply. Existing bench players enter only as named replacements for departing starters. Incoming players may improve starters. Expected PPG is a model estimate, not ESPN’s weekly forecast."
           >
             <DataTable
-              rows={r.a.weekly.map((w, i) => ({
+              rows={r.directA.weekly.map((w, i) => ({
                 ...w,
-                their: r.b.weekly[i].expectedGain,
+                their: r.directB.weekly[i].expectedGain,
               }))}
               id={(w) => str(w.week)}
               columns={[
@@ -1909,11 +1965,18 @@ export function TradeView({
               ]}
             />
             <details>
-              <summary>Inspect your selected lineups</summary>
-              {r.a.weekly.map((w) => (
+              <summary>Inspect your before/after starters</summary>
+              {r.directA.weekly.map((w) => (
                 <p key={w.week}>
                   <b>Week {w.week}:</b>{" "}
-                  {/* Preserve slot labels while making each selected starter inspectable. */}
+                  <span>
+                    Before:{" "}
+                    {w.beforeIds
+                      .map((id) => (id ? m.byId.get(id)?.name : "Unfilled"))
+                      .join(" · ")}
+                    . After:{" "}
+                  </span>
+                  {/* Keep every automatically selected incoming upgrade or replacement inspectable. */}
                   {w.ids.map((id, i) => (
                     <span key={i}>
                       {i > 0 && " · "}

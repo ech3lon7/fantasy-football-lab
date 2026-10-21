@@ -1,3 +1,4 @@
+import { starterLineupsKey } from "../domain/starter-lineups";
 import { gemRulesKey, gemContextKey } from "../domain/gems";
 import { GemSettings } from "../features/GemSettings";
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -674,6 +675,10 @@ export default function App() {
                   m={model}
                   grades={grades.get(w.state.preferredTeam) ?? []}
                   team={w.state.preferredTeam}
+                  filters={w.state.filters}
+                  onFilters={(patch) =>
+                    updateState({ filters: { ...w.state.filters, ...patch } })
+                  }
                 />
               )}
               {page === "teams" && (
@@ -712,6 +717,7 @@ export default function App() {
                 <TradeView
                   m={model}
                   draft={w.state.draft}
+                  lineupsRaw={w.state.filters[starterLineupsKey]}
                   change={(draft) => updateState({ draft })}
                 />
               )}

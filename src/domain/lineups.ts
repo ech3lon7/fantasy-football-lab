@@ -103,6 +103,7 @@ export function lineup(
   week: number,
   downside = false,
   healthy = false,
+  basis: "value" | "expected" = "value",
 ): Lineup {
   const ir = new Set(healthy ? [] : irAssignments(m, ids)),
     ctx = m.dataset.tables.ModelContext[0];
@@ -115,7 +116,13 @@ export function lineup(
         (healthy || available(m, p, week, downside)) &&
         (healthy || week !== m.current || !ir.has(p.id)),
     )
-    .sort((a, b) => b.value! - a.value! || cmpId(a.id, b.id));
+    // Direct starter scenarios rank scoring upgrades; legacy modeled lineups retain Value PPG ordering.
+    .sort(
+      (a, b) =>
+        (basis === "expected"
+          ? b.expected! - a.expected!
+          : b.value! - a.value!) || cmpId(a.id, b.id),
+    );
   const used = new Set<string>(),
     result: (string | null)[] = [],
     slots: string[] = [];

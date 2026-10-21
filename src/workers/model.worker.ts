@@ -1,3 +1,4 @@
+import { starterLineupsKey } from "../domain/starter-lineups";
 import { gemRulesKey, gemContextKey } from "../domain/gems";
 import { evaluate, type Model } from "../domain/valuation";
 import { teamsAssessment } from "../domain/lineups";
@@ -32,8 +33,17 @@ self.onmessage = (e: MessageEvent) => {
       });
       key = next;
     }
+    // Starter selections are request-specific analysis state; pass them through without changing cached player valuations.
     if (type === "trade")
-      self.postMessage({ id, result: evaluateTrade(model!, draft, true) });
+      self.postMessage({
+        id,
+        result: evaluateTrade(
+          model!,
+          draft,
+          true,
+          filters?.[starterLineupsKey],
+        ),
+      });
     else
       self.postMessage({
         id,

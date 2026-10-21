@@ -1,3 +1,4 @@
+import { directStarterImpact } from "./starter-lineups";
 import { type Model } from "./valuation";
 import { type Draft, sum } from "./contracts";
 import { marketStatus } from "./opportunity";
@@ -30,7 +31,12 @@ export function dealGrade(outgoing: number, incoming: number, m: Model) {
               ? "Excellent deal"
               : "Steal deal";
 }
-export function evaluateTrade(m: Model, d: Draft, withWaivers = true) {
+export function evaluateTrade(
+  m: Model,
+  d: Draft,
+  withWaivers = true,
+  lineupsRaw?: string,
+) {
   const errors: string[] = [];
   if (!d.teamA || !d.teamB || d.teamA === d.teamB)
     errors.push("Choose two different teams.");
@@ -227,6 +233,9 @@ export function evaluateTrade(m: Model, d: Draft, withWaivers = true) {
     addsB: postB.adds,
     irA: irAssignments(m, a.ids),
     irB: irAssignments(m, b.ids),
+    // Keep direct starter scoring separate from optimized future coverage.
+    directA: directStarterImpact(m, d.teamA, a.ids, d.get, lineupsRaw),
+    directB: directStarterImpact(m, d.teamB, b.ids, d.give, lineupsRaw),
     a: impact(initialA, a.ids, postA.ids),
     b: impact(initialB, b.ids, postB.ids),
   };

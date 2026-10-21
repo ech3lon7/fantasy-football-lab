@@ -110,3 +110,58 @@ export async function fixture(scores = [20, 20, 20, 20, 20]) {
     for (let i = 0; i < 3; i++) add(id++, pos, 0, [10, 10, 10, 10, 10], 10);
   return fromTables(tables, { ...defaults });
 }
+
+// Build a two-QB roster with explicit imported starters and a future bye, without touching real league data.
+export async function starterFixture() {
+  const d = await fixture();
+  const base = d.tables.ModelPlayers.find((p) => p.PlayerID === 102)!;
+  d.tables.ModelPlayers.push({
+    ...base,
+    PlayerID: 200,
+    Player: "Incoming QB",
+    OnTeamID: 2,
+  });
+  d.tables.ModelHistory.push(
+    ...d.tables.ModelHistory.filter((h) => h.PlayerID === 102).map((h) => ({
+      ...h,
+      PlayerID: 200,
+    })),
+  );
+  d.tables.ModelRosters.push({ PlayerID: 200, TeamID: 2, LineupSlotID: 0 });
+  for (const [id, name, score, slot] of [
+    [100, "Main QB", 20, 0],
+    [101, "Bench QB", 30, 20],
+  ] as const) {
+    const p = d.tables.ModelPlayers.find((r) => r.PlayerID === id)!;
+    Object.assign(p, {
+      Player: name,
+      OnTeamID: 1,
+      ActualPoints: score * 5,
+      Actual_PPG: score,
+      Last3_PPG: score,
+      ScoreSD: 0,
+      ESPN_Projected_PPG: score,
+      ESPN_Projected_Total: score * 17,
+    });
+    d.tables.ModelHistory.filter((h) => h.PlayerID === id).forEach((h) => {
+      h.Points = score;
+    });
+    d.tables.ModelRosters.push({ PlayerID: id, TeamID: 1, LineupSlotID: slot });
+  }
+  d.tables.ModelRosters.find((r) => r.PlayerID === 1)!.LineupSlotID = 2;
+  d.tables.ModelRosters.find((r) => r.PlayerID === 2)!.LineupSlotID = 4;
+  Object.assign(
+    d.tables.ModelPlayers.find((p) => p.PlayerID === 100)!,
+    { ProTeamID: 2, NFLTeam: "MAIN" },
+  );
+  d.tables.ModelSchedule.push(
+    ...d.tables.ModelSchedule.filter((s) => s.ProTeamID === 1).map((s) => ({
+      ...s,
+      ProTeamID: 2,
+      NFLTeam: "MAIN",
+      HasGame: s.Week === 8 ? 0 : 1,
+      ByeWeek: 8,
+    })),
+  );
+  return fromTables(d.tables, d.settings);
+}

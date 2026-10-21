@@ -191,6 +191,14 @@ Drop cost = sum of `max(0, baseline PPG) × dropped player’s available remaini
 
 Report scoring gains both as total points through the final fantasy week and per remaining fantasy week. The weekly denominator is the number of scoring periods in the horizon, including weeks with incomplete lineups. Label an average as “average modeled gain per remaining week”; it is not a guarantee of that gain every week or an ESPN weekly projection. Provide the weekly series alongside the average. Do not introduce new gain classifications until separately agreed.
 
+### User-managed starters (app 0.3.2)
+
+`starter-lineups.ts` stores per-team starter IDs, season/team identity, week, save date and roster-at-save under the existing string-valued `startingLineups` filter. This is analysis state, not an ESPN lineup update. The editor defaults to imported active slots (including QB slot 0), excludes bench/IR/missing slots, validates ownership, uniqueness and position/FLEX capacities, and supports explicit save/reset. Refresh retains still-valid overrides and warns about week/roster changes; removed starters or wrong season/team identity invalidate direct scoring until reviewed.
+
+The new `directA`/`directB` trade results anchor both sides to these marked starters. Existing bench departures cause zero direct scoring loss. Incoming scoring upgrades are admitted when they improve the current lineup or cover an actual departing starter's slot; other incoming reserves do not acquire hypothetical future starts. Existing reserves can be named replacements only when a marked starter actually leaves. Byes and known availability remain in force for the fixed starter group through the imported horizon. Expected PPG selects new direct scoring upgrades; adjusted value describes the same selected players. Null model data and invalid plans remain unavailable. Before/after starters, source and automatic incoming/replacement assumptions are visible.
+
+The original `a`/`b` Value PPG-selected horizon, injury downside, reserve depth and optional waiver gains remain separately labeled optimized future coverage. All legacy trade totals, deal grades and package-test formulas remain unchanged for Excel parity. The UI's direct starter headline/weekly table consumes `directA`/`directB`; core valuation/team grades do not depend on manual selections. Trade workers receive the saved setting on every request, so changing it invalidates displayed trade results without recomputing player values. Existing private state synchronization needs no database/schema migration.
+
 ### Deal grades and bar
 
 Let `a = (incoming surplus − outgoing surplus) / outgoing surplus`. Preserve imported grade thresholds; current defaults are:
