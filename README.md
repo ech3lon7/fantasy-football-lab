@@ -17,7 +17,7 @@ Green text identifies recorded facts, blue ESPN projections, pink model outputs 
 
 ## Gem Screener filters
 
-Choose signals (OR), or clear them for **Any signal**; enter numeric thresholds (AND), then choose **Apply filters**. For example: Gem candidate or Opportunity watch, trend ≥+2 PPG, surplus index 10–40, recent PPG ≥12. **Rising targets** applies that editable example and includes owned players as well as free agents. **Available** searches free agents; choose **All** to include rostered players.
+Choose signals (OR), or clear them for **Any signal**; enter numeric thresholds (AND), then choose **Apply filters**. For example: Gem or Watch, trend ≥+2 PPG, surplus index 10–40, recent PPG ≥12. **Rising targets** applies that editable example and includes owned players as well as free agents. **Available** searches free agents; choose **All** to include rostered players.
 
 Trend compares the latest three played games with earlier games. Index bounds are inclusive and describe model surplus, not a market price. Blank thresholds are inactive; zero is a real value. **Advanced filters** adds games played, projection gap, above replacement, and a separate incomplete-evidence view. Matching evidence explains each result. **Reset screener** restores the original search defaults without changing model settings or other screens. Applied searches save locally and use the existing **Sync now** workflow for other devices; unapplied edits are not saved. These screening thresholds remain provisional.
 
@@ -68,8 +68,17 @@ In **Model & audit**, inspect exploratory role-model errors, optionally apply a 
 
 ## Hosting
 
-The footer shows the installed app version and build number; **Model & audit → App version** adds the source commit and build time. The release version comes from `package.json` (currently 0.2.1); each GitHub deployment automatically stamps its workflow build number and commit. Local builds are labeled `Build local`. App versions are independent of workbook and model versions. Versions follow **major.moderate.minor**: first number for major app changes, second for moderate changes, third for minor changes. Player popovers are a minor change, so this update is 0.2.1. Use `npm version patch --no-git-tag-version` for minor changes, `npm version minor --no-git-tag-version` for moderate changes, or `npm version major --no-git-tag-version` for major changes.
+The footer shows the installed app version and build number; **Model & audit → App version** adds the source commit and build time. The release version comes from `package.json` (currently 0.3.0); each GitHub deployment automatically stamps its workflow build number and commit. Local builds are labeled `Build local`. App versions are independent of workbook and model versions. Versions follow **major.moderate.minor**: first number for major app changes, second for moderate changes, third for minor changes. Player popovers were the minor 0.2.1 change; the stricter Gem classification is the moderate 0.3.0 change. Use `npm version patch --no-git-tag-version` for minor changes, `npm version minor --no-git-tag-version` for moderate changes, or `npm version major --no-git-tag-version` for major changes.
 
 GitHub Actions verifies the source, builds the static application, runs browser smoke tests and deploys GitHub Pages from `main`. Repository base path is `/fantasy-football-lab/`. The offline shell caches only application assets; datasets use account-scoped IndexedDB. Dataset updates require importing refreshed Excel; the app does not directly query ESPN or execute trades.
 
 See [architecture](docs/architecture.md), [implementation plan](docs/implementation-plan.md), [model contract](docs/model-contract.md) and [verification report](docs/verification.md).
+
+## Evidence-backed Gems (0.3.0)
+
+**Gem** now means sustained developing workload plus current sourced support for an ongoing role. RB: last-three mean ≥18 carries+targets and every game ≥14; WR: mean ≥7 targets and every game ≥5; TE: mean ≥6 and every game ≥5. Growth versus the immediately preceding 2–3 played games must reach +3 for RB or +2 for WR/TE AND +25% (absolute gate only if prior work is zero). At least five played games are required. **Watch** is promising but unresolved; low projections and high scoring alone cannot qualify. No current sourced context means Watch, even if workload passes.
+
+1. Open **Gem screener**, choose **Breakout classification → Gem only / Gem + Watch / All classifications**, then Apply. Clearing signals still permits numeric-only searches. Older label selections require review and Apply; thresholds are kept.
+2. Click a player and expand **Why Gem? / Why Watch?** for every requirement, observed window, failure and source. The same table appears on the full profile. BUY LOW/SELL HIGH and scoring/role watches stay separate.
+3. In **Model & audit → Gem rules and role reviews**, select a player and supply outlook, named source/URL, source UTC timestamp, last played week reviewed and rationale. Or import the documented role-review CSV. Current reviews expire after seven days by default and must be renewed for each imported snapshot. Stale snapshots also cap classification at Watch. Sources are user-provided assertions, not an automatic verified news feed.
+4. **Adjust provisional Gem thresholds** exposes the small rule configuration. No new probability or GemScore is calculated. Valuations, scoring Trend PPG and trade calculations are unchanged.

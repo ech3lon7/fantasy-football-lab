@@ -18,7 +18,7 @@ beforeAll(async () => {
   const d = await fixture();
   base = {
     ...evaluate(d, d.settings).players[0],
-    gem: "Gem candidate",
+    gem: "Gem",
     owner: "0",
     trendDelta: 2,
     index: 10,
@@ -42,7 +42,7 @@ const query = (patch = {}) =>
 it("returns exactly the qualifying candidates and watches without mutating players", () => {
   const players = [
     player("1"),
-    player("2", { gem: "Opportunity watch", index: 40 }),
+    player("2", { gem: "Watch", index: 40 }),
     player("3", { gem: "Emerging" }),
     player("4", { trendDelta: 1.99 }),
     player("5", { index: 40.000001 }),
@@ -167,13 +167,14 @@ it("migrates legacy signals and round-trips only applied string-valued state", (
     "1",
   );
   expect(legacy.draft).toMatchObject({
-    signals: ["Opportunity watch"],
+    signals: ["Watch"],
     pool: "Selected team",
     team: "2",
     position: "WR",
     injured: true,
     trendMin: "",
   });
+  expect(legacy.issue).toContain("meanings changed");
   const saved = encodeGemFilters(query());
   expect(Object.values(saved).every((v) => typeof v === "string")).toBe(true);
   expect(
@@ -192,7 +193,7 @@ it("reports corrupt saved queries and missing selected teams", () => {
     decodeGemFilters({ ...saved, gemSignals: "not json" }, "1").issue,
   ).not.toBe("");
   expect(
-    decodeGemFilters({ ...saved, gemFilterVersion: "2" }, "1").issue,
+    decodeGemFilters({ ...saved, gemFilterVersion: "999" }, "1").issue,
   ).not.toBe("");
   expect(
     decodeGemFilters({ ...saved, gemAboveReplacement: "maybe" }, "1").issue,
@@ -210,7 +211,7 @@ it("screens an owned No gem signal RB with +15.42 trend when pool and signals ar
     name: "Synthetic rising RB",
     pos: "RB",
     owner: "8",
-    gem: "No gem signal",
+    gem: "No breakout signal",
     trendDelta: 15.416666666666668,
     index: 8.22,
   });
@@ -238,10 +239,10 @@ it("treats cleared signals as Any signal and round-trips that meaning", () => {
   };
   const q = validateGemDraft(draft, ["1"]).query!;
   const rows = [
-    player("1", { gem: "No gem signal", trendDelta: 15.4166666667 }),
+    player("1", { gem: "No breakout signal", trendDelta: 15.4166666667 }),
     player("2", { gem: "TD caution", trendDelta: 2 }),
     player("3", { trendDelta: 1.99 }),
-    player("4", { owner: "8", gem: "No gem signal", trendDelta: 15.42 }),
+    player("4", { owner: "8", gem: "No breakout signal", trendDelta: 15.42 }),
   ];
   expect(screenGems(rows, q).matches.map((r) => r.player.id)).toEqual([
     "1",

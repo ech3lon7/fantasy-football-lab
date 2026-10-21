@@ -215,13 +215,21 @@ Position grades compare average modeled starter Value PPG per configured slot th
 
 Preserve the current grade lower bounds: F below −35%; D− at −35%; D at −30%; D+ at −25%; C− at −20%; C at −15%; C+ at −10%; B− at −5%; B at 0%; B+ at +5%; A− at +10%; A at +15%; A+ at +25%. Missing player values or an unusable median prevent a definitive grade. Preserve the existing useful-reserve and limited-spare-value rules and their editable thresholds.
 
-Gem signals reproduce V5.2 without adding a valuation bonus:
+Legacy Gem signals below reproduce V5.2 only in `workbookMode` parity verification:
 
 - Supported candidate: at least four games, actual PPG ≥ projection +2 and ≥20% above a positive projection, recent PPG ≥ projection, plus workload support.
 - WR support: ≥6 targets/game and ≥18% team target share. TE: ≥5 and ≥10%. RB: ≥12 carries plus targets/game and either ≥30% rushing share or ≥10% target share.
 - Opportunity watch: workload support plus existing BUY LOW. Projection-gap watch: scoring support without sufficient modeled workload support. Emerging: promising evidence with fewer games. Existing SELL HIGH takes TD-caution precedence once the sample threshold is met.
 - Trend compares the latest three played games with all earlier played games, requiring at least two earlier games. Up/down requires both 1 PPG and 10% of the absolute earlier mean; exactly zero change is stable. Zero earlier mean makes percentage change unavailable. Preserve V5.2’s ten-decimal stabilization of the earlier mean.
 - Display small-sample warnings, missing-data states, injury status and value versus replacement. Workload shares describe the imported player pool’s NFL-team totals and are conditional if that coverage is incomplete.
+
+The app uses `breakout-1` in `src/domain/gems.ts`, independently of valuation. A Gem requires at least five verified played games, last-three workload mean/floor/growth gates, active availability and current sourced support for an ongoing role. Compare workload with the immediately preceding three games (two allowed at five total). RB gates are 18 carries+targets mean, 14 EACH-game floor and +3 growth; WR uses 7 targets mean, 5 floor and +2; TE uses 6, 5 and +2. Growth must also reach 25%, except that a zero prior workload requires only absolute growth and leaves the percentage unavailable. Existing scoring Trend PPG still compares last three against ALL earlier games.
+
+Watch means developing-role evidence is promising but a gate remains unresolved or inconsistent. No breakout signal includes unchanged established production. Missing/invalid played workload means insufficient data. QB/K/DST have no new breakout classifier. Independent projection-gap, role-growth, scoring-breakout and TD signals remain supporting information, never automatic Gem qualification or valuation bonuses.
+
+`gemBreakoutRules` and `gemRoleReviews` use bounded, versioned JSON in the existing private synced filters. No database/workbook schema change is needed. Role reviews have PlayerID, current Week, ThroughWeek (latest completed game reviewed), Outlook, Source, AsOfUTC and Reason. Ongoing, temporary and unclear outlooks are explicit assertions, not automatically verified news. Current support requires snapshot matching, coverage of the latest played game, a source at most seven days old and a snapshot at most 24 hours old. New imports invalidate old reviews. Injured same-team competition produces review prompts without inferring causation. Optional role-review CSV imports replace only this review set. Shared gate tables explain classification in the popover and full profile. Configuration remains provisional and adjustable; no breakout probability is claimed.
+
+Screener version 2 adds All classifications, Gem only and Gem + Watch. Independent signals retain OR matching; all categories and numeric thresholds use AND. Empty signal selections still allow numeric-only screening. Legacy labels migrate with a visible review requirement and preserve numeric thresholds. Cache and React recalculation identity include both classifier inputs. Valuation, trade math and the dataset model version stay unchanged.
 
 Carry forward buy-low/sell-high regression calculations, opportunity thresholds and xTD explanations from the workbook. They are supporting evidence, not added index bonuses. All pool, weight, grade, workload and premium assumptions remain provisional without historical validation.
 

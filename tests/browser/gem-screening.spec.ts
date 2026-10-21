@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { gemContextKey, gemVersion } from "../../src/domain/gems";
 import { execFileSync } from "node:child_process";
 import {
   initialState,
@@ -63,6 +64,20 @@ async function seed(page: Page, filters: Record<string, string> = {}) {
         Points,
         Games: 1,
         HistoryStatus: "Valid",
+        // Real weekly counts are required by the stricter breakout classifier.
+        Targets:
+          x.id === 2
+            ? i < 2
+              ? 2
+              : 8
+            : x.id === 106
+              ? i < 2
+                ? 3
+                : 6
+              : x.id === 108
+                ? 8
+                : 0,
+        RushAttempts: 0,
         SourceRefreshUTC: d.sourceUTC,
       }),
     );
@@ -102,7 +117,25 @@ async function seed(page: Page, filters: Record<string, string> = {}) {
     dataset,
     state: {
       ...initialState(dataset),
-      filters: { playersSearch: "retain-me", ...filters },
+      filters: {
+        playersSearch: "retain-me",
+        [gemContextKey]: JSON.stringify({
+          version: gemVersion,
+          datasetHash: dataset.hash,
+          rows: [
+            {
+              PlayerID: "2",
+              Week: 6,
+              ThroughWeek: 5,
+              Outlook: "Supported ongoing opportunity",
+              Source: "Synthetic role report",
+              AsOfUTC: new Date().toISOString(),
+              Reason: "Synthetic ongoing starting opportunity.",
+            },
+          ],
+        }),
+        ...filters,
+      },
     },
     datasetRevision: 0,
     stateRevision: 0,
@@ -217,8 +250,8 @@ test("gem search combines signals and thresholds, persists applied state and sep
   await page
     .getByRole("button", { name: "Clear signals", exact: true })
     .click();
-  await page.getByLabel("Gem candidate", { exact: true }).check();
-  await page.getByLabel("Opportunity watch", { exact: true }).check();
+  await page.getByLabel("Gem", { exact: true }).check();
+  await page.getByLabel("Watch", { exact: true }).check();
   await page
     .getByRole("combobox", { name: "Player pool", exact: true })
     .selectOption("All");
@@ -230,11 +263,9 @@ test("gem search combines signals and thresholds, persists applied state and sep
     .getByRole("button", { name: "Apply filters", exact: true })
     .click();
   await expect(page.getByRole("status")).toContainText("2 confirmed matches");
+  await expect(page.getByRole("cell", { name: /^Matches: Gem/ })).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: /^Matches: Gem candidate/ }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("cell", { name: /^Matches: Opportunity watch/ }),
+    page.getByRole("cell", { name: /^Matches: Watch/ }),
   ).toBeVisible();
 
   // Invalid drafts leave applied results unchanged and survive until corrected.
@@ -321,12 +352,9 @@ test("legacy gem filters, reset and pagination retain unrelated state", async ({
   page,
 }) => {
   await seed(page, { gemSignal: "Opportunity watch", gemPool: "All" });
-  await expect(
-    page.getByLabel("Opportunity watch", { exact: true }),
-  ).toBeChecked();
-  await expect(
-    page.getByLabel("Gem candidate", { exact: true }),
-  ).not.toBeChecked();
+  await expect(page.getByRole("alert")).toContainText("meanings changed");
+  await expect(page.getByLabel("Watch", { exact: true })).toBeChecked();
+  await expect(page.getByLabel("Gem", { exact: true })).not.toBeChecked();
   await page
     .getByRole("button", { name: "Reset screener", exact: true })
     .click();
@@ -383,7 +411,7 @@ test("legacy gem filters, reset and pagination retain unrelated state", async ({
 test("malformed saved gem filters require an explicit recovery", async ({
   page,
 }) => {
-  await seed(page, { gemFilterVersion: "2", gemSignals: '["Gem candidate"]' });
+  await seed(page, { gemFilterVersion: "999", gemSignals: '["Gem"]' });
   await expect(page.getByRole("alert")).toContainText("invalid or unsupported");
   await expect(page.getByRole("status")).toHaveCount(0);
   await page
@@ -419,7 +447,7 @@ test("rising RB search explains signal/pool exclusions and explicitly includes t
   ).toBeVisible();
   await expect(
     // Rising scoring now has its own label even when the old gem conditions fail.
-    page.getByRole("cell", { name: "Scoring breakout watch", exact: true }),
+    page.locator("td.model").filter({ hasText: "Scoring breakout watch" }),
   ).toBeVisible();
   await expect(
     page.getByLabel("Minimum trend PPG", { exact: true }),
@@ -462,7 +490,7 @@ test("cleared saved signals permit rising RBs and survive Apply and reload", asy
     page.getByRole("link", { name: /Synthetic 1 RB/ }),
   ).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: "Scoring breakout watch", exact: true }),
+    page.locator("td.model").filter({ hasText: "Scoring breakout watch" }),
   ).toBeVisible();
   // The trend's accessible name describes direction; verify its displayed number in the row.
   await expect(
@@ -480,4 +508,116 @@ test("cleared saved signals permit rising RBs and survive Apply and reload", asy
   await expect(
     page.getByLabel("Minimum trend PPG", { exact: true }),
   ).toHaveValue("2");
+});
+
+// Exercise review editing, worker invalidation, the shared popover evidence and the independent classification filter.
+test("Gem role reviews update every player surface and persist without changing value", async ({
+  page,
+}) => {
+  await seed(page);
+  await page
+    .getByRole("combobox", { name: "Player pool", exact: true })
+    .selectOption("All");
+  await page
+    .getByRole("combobox", { name: "Breakout classification", exact: true })
+    .selectOption("Gem only");
+  await page
+    .getByRole("button", { name: "Apply filters", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("1 confirmed matches");
+  await page.getByRole("link", { name: /Synthetic 2 WR/ }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByText("Why Gem?", { exact: true }).click();
+  await expect(
+    dialog.getByRole("table", { name: "Breakout evidence checks" }),
+  ).toContainText("SUPPORTED");
+  await page.screenshot({ path: "test-results/gem-evidence-desktop.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: /Synthetic 2 WR/ }).click();
+  await dialog.getByText("Why Gem?", { exact: true }).click();
+  await expect(dialog).toHaveAttribute("data-layout", "sheet");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({ path: "test-results/gem-evidence-mobile.png" });
+  await dialog.getByRole("link", { name: "Open full player page" }).click();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByText("Why Gem?", { exact: true }).click();
+  await expect(
+    page.getByRole("table", { name: "Breakout evidence checks" }),
+  ).toContainText("Synthetic role report");
+  await page.goto("./#/model");
+  await page
+    .getByRole("combobox", { name: "Role review player", exact: true })
+    .selectOption("2");
+  await page
+    .getByRole("combobox", { name: "Role outlook", exact: true })
+    .selectOption("Temporary opportunity");
+  await page
+    .getByRole("button", { name: "Save role review", exact: true })
+    .click();
+  await page.goto("./#/player/2");
+  await expect(page.getByText("Why Watch?", { exact: true })).toBeVisible();
+  await page.getByText("Why Watch?", { exact: true }).click();
+  await expect(
+    page.getByRole("table", { name: "Breakout evidence checks" }),
+  ).toContainText("Temporary opportunity");
+  await page.reload();
+  await expect(page.getByText("Why Watch?", { exact: true })).toBeVisible();
+  await page.goto("./#/gems");
+  await expect(page.getByRole("status")).toContainText("0 confirmed matches");
+  await page
+    .getByRole("combobox", { name: "Breakout classification", exact: true })
+    .selectOption("Gem + Watch");
+  await page
+    .getByRole("button", { name: "Apply filters", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("3 confirmed matches");
+  // A sourced CSV restores only the role-review collection, then a rule edit changes classification.
+  await page.goto("./#/model");
+  await page
+    .getByLabel("Import role reviews CSV", { exact: true })
+    .setInputFiles({
+      name: "role-reviews.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(
+        `PlayerID,Week,ThroughWeek,Outlook,Source,AsOfUTC,Reason\n2,6,5,Supported ongoing opportunity,Synthetic ongoing source,${new Date().toISOString()},Documented continuing opportunity`,
+      ),
+    });
+  // The import may remount this control while the worker replaces its model result.
+  await expect(async () => {
+    await page
+      .getByRole("combobox", { name: "Role review player", exact: true })
+      .selectOption("2");
+    await expect(
+      page.getByRole("combobox", { name: "Role outlook", exact: true }),
+    ).toHaveValue("Supported ongoing opportunity", { timeout: 1000 });
+  }).toPass({ timeout: 15000 });
+  await page.goto("./#/gems");
+  await page
+    .getByRole("combobox", { name: "Breakout classification", exact: true })
+    .selectOption("Gem only");
+  await page
+    .getByRole("button", { name: "Apply filters", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("1 confirmed matches");
+  await page.goto("./#/model");
+  await page
+    .getByText("Adjust provisional Gem thresholds", { exact: true })
+    .click();
+  const config = page.getByRole("textbox", {
+    name: "Gem rule configuration (JSON)",
+    exact: true,
+  });
+  const rules = JSON.parse(await config.inputValue());
+  rules.positions.WR.mean = 9;
+  await config.fill(JSON.stringify(rules));
+  await page
+    .getByRole("button", { name: "Apply Gem rules", exact: true })
+    .click();
+  await page.goto("./#/gems");
+  await expect(page.getByRole("status")).toContainText("0 confirmed matches");
 });

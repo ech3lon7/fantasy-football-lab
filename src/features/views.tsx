@@ -1,3 +1,4 @@
+import { GemEvidence } from "../ui/GemEvidence";
 import { useState, useEffect } from "react";
 import {
   Upload,
@@ -32,6 +33,7 @@ import {
   encodeGemFilters,
   gemQuerySummary,
   gemSignals,
+  gemClassifications,
   gemThresholds,
   risingGemDraft,
   screenGems,
@@ -558,6 +560,8 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
         <PlayerSignals p={p} />
         <Trend p={p} />
       </div>
+      {/* Shared breakout evidence preserves the existing evaluation figures below. */}
+      <GemEvidence p={p} />
       <div className="metric-grid">
         <Metric label="Actual season PPG" value={fmt(p.actual)} kind="fact" />
         <Metric
@@ -873,8 +877,12 @@ export function GemView({
     : { matches: [], incomplete: [] };
   // Explain categorical exclusions without silently changing a numeric search.
   const hiddenBySignalsOrPool = query
-    ? screenGems(m.players, { ...query, pool: "All", signals: [...gemSignals] })
-        .matches.length - result.matches.length
+    ? screenGems(m.players, {
+        ...query,
+        pool: "All",
+        signals: [...gemSignals],
+        classification: "All classifications",
+      }).matches.length - result.matches.length
     : 0;
   const advancedCount =
     gemThresholds.filter((f) => f.advanced && restored.draft[f.key] !== "")
@@ -1051,8 +1059,14 @@ export function GemView({
       {/* Existing ownership/position controls and new signals share one Apply action. */}
       <Panel
         title="Gem filters"
-        note="OR between selected signals; AND between filter categories."
+        note="Gem = sustained developing workload plus current sourced support. Watch = promising but unresolved. OR between signals; AND between categories."
       >
+        {/* Link unresolved context to the place where sourced reviews are maintained. */}
+        <p>
+          <a href="#/model">Model &amp; audit → Gem rules and role reviews</a>{" "}
+          manages current role evidence and adjustable thresholds. Unknown
+          context remains Watch.
+        </p>
         <form
           className="gem-filters"
           onSubmit={(e) => {
@@ -1082,6 +1096,18 @@ export function GemView({
                 <TeamsOptions d={m.dataset} />
               </Select>
             )}
+            {/* Classification is independent of supporting signals and numeric filters. */}
+            <Select
+              label="Breakout classification"
+              value={draft.classification}
+              change={(classification) =>
+                setEdit({ ...edit, draft: { ...draft, classification } })
+              }
+            >
+              {gemClassifications.map((v) => (
+                <option key={v}>{v}</option>
+              ))}
+            </Select>
             <Select
               label="Position"
               value={draft.position}
@@ -1158,9 +1184,9 @@ export function GemView({
             </div>
             {/* Clearing signal choices permits numeric-only searches, including saved ones. */}
             <p>
-              No signal selections means Any signal. Your numeric filters still
-              apply. Choose All player pool to include rostered players as well
-              as free agents.
+              No signal selections means Any signal. Classification and numeric
+              filters still apply. Choose All player pool to include rostered
+              players as well as free agents.
             </p>
           </fieldset>
           {/* Use current control styles; extra thresholds remain discoverable when collapsed. */}
@@ -1360,8 +1386,8 @@ export function GemView({
                 <div className="notice warning gem-query">
                   {hiddenBySignalsOrPool} additional player
                   {hiddenBySignalsOrPool === 1 ? "" : "s"} would match your
-                  other filters but are hidden by the selected signals or player
-                  pool.
+                  other filters but are hidden by the selected signals,
+                  classification or player pool.
                   <div className="button-row">
                     <button
                       className="button"
@@ -1370,6 +1396,7 @@ export function GemView({
                           ...restored.draft,
                           pool: "All",
                           signals: [...gemSignals],
+                          classification: "All classifications",
                         })
                       }
                     >
@@ -2040,6 +2067,12 @@ export function ModelView({
             {message}
           </p>
         )}
+        {/* Workbook Gem settings still govern legacy parity and supporting scoring/role watches. */}
+        <p>
+          Workbook settings beginning with Gem retain their legacy scoring,
+          trend and supporting-watch purposes. Primary Gem qualification uses
+          the separate Gem rules and role reviews above.
+        </p>
         <div className="settings-grid">
           {Object.entries(m.settings).map(([key, value]) => (
             <label className="control" key={key}>

@@ -23,6 +23,14 @@ import {
   type RoleCalibration,
   type EvidenceInput,
 } from "./opportunity";
+import {
+  assessGem,
+  readGemInputs,
+  gemVersion,
+  type GemAssessment,
+  type GemRules,
+  type RoleReview,
+} from "./gems";
 export interface Player {
   id: string;
   name: string;
@@ -70,6 +78,7 @@ export interface Player {
   tdRate: number | null;
   regression: string;
   gem: string;
+  breakout?: GemAssessment;
   priority: number;
   earlier: number | null;
   trendDelta: number | null;
@@ -106,6 +115,10 @@ export interface Model {
   evidenceIssue: string;
   evidenceRaw: string;
   roleScenarioWeight: number;
+  gemRules: GemRules;
+  roleReviews: RoleReview[];
+  gemIssue: string;
+  gemExpiresAt: number | null;
 }
 // Keep the primary classification and independent supporting signals available on every screen.
 export const playerSignals = (p: Player) => [
@@ -119,6 +132,8 @@ export function evaluate(
     workbookMode?: boolean;
     evidence?: string;
     roleWeight?: string;
+    gemRules?: string;
+    roleReviews?: string;
   } = {},
 ): Model {
   const ctx = d.tables.ModelContext[0],
@@ -130,6 +145,8 @@ export function evaluate(
     );
   const histories = playedHistory(d),
     supplemental = readEvidence(options.evidence, d);
+  // Gem evidence is isolated from the valuation settings and workbook parity path.
+  const gemInput = readGemInputs(d, options.gemRules, options.roleReviews);
   const calibration = options.workbookMode ? [] : calibrateRole(d, histories);
   // Role influence is an explicit scenario; zero preserves the existing adaptive forecast.
   const parsedWeight = Number(options.roleWeight ?? 0);
@@ -620,6 +637,23 @@ export function evaluate(
       }
     }
   }
+  // Replace only the app classification; retain projection/TD watches as independent supporting information.
+  if (!options.workbookMode)
+    for (const p of players) {
+      if (["Projection-gap watch", "TD caution"].includes(p.gem))
+        p.opportunity.signals.push(p.gem);
+      p.breakout = assessGem(
+        p,
+        histories.get(p.id) ?? [],
+        d,
+        gemInput.rules,
+        gemInput.reviews,
+        gemInput.issue,
+      );
+      p.gem = p.breakout.classification;
+      p.priority = p.gem === "Gem" ? 1 : p.gem === "Watch" ? 2 : 99;
+      p.explanation = p.breakout.explanation;
+    }
   return {
     players,
     byId: new Map(players.map((p) => [p.id, p])),
@@ -629,11 +663,17 @@ export function evaluate(
     current,
     final,
     weeks,
-    analysisVersion: options.workbookMode ? "v5.2-workbook" : evidenceVersion,
+    analysisVersion: options.workbookMode
+      ? "v5.2-workbook"
+      : `${evidenceVersion}/${gemVersion}`,
     calibration,
     supplementalInput: supplemental.input,
     evidenceIssue: supplemental.issue,
     evidenceRaw: options.evidence ?? "",
     roleScenarioWeight,
+    gemRules: gemInput.rules,
+    roleReviews: gemInput.reviews,
+    gemIssue: gemInput.issue,
+    gemExpiresAt: gemInput.expiresAt,
   };
 }

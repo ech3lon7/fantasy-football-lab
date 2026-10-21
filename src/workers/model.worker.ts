@@ -1,3 +1,4 @@
+import { gemRulesKey, gemContextKey } from "../domain/gems";
 import { evaluate, type Model } from "../domain/valuation";
 import { teamsAssessment } from "../domain/lineups";
 import { evaluateTrade } from "../domain/trades";
@@ -10,13 +11,25 @@ self.onmessage = (e: MessageEvent) => {
     // Supplemental references participate in cache identity but do not alter the imported workbook contract.
     const evidence = filters?.[evidenceKey];
     const roleWeight = filters?.[roleScenarioKey];
+    const gemRules = filters?.[gemRulesKey],
+      roleReviews = filters?.[gemContextKey];
     const next =
       dataset.hash +
       JSON.stringify(settings) +
       (evidence ?? "") +
-      (roleWeight ?? "0");
-    if (next !== key) {
-      model = evaluate(dataset, settings, { evidence, roleWeight });
+      (roleWeight ?? "0") +
+      JSON.stringify([gemRules ?? "", roleReviews ?? ""]);
+    // Expired context invalidates cached classifications even when persisted inputs have not changed.
+    if (
+      next !== key ||
+      (model?.gemExpiresAt && model.gemExpiresAt <= Date.now())
+    ) {
+      model = evaluate(dataset, settings, {
+        evidence,
+        roleWeight,
+        gemRules,
+        roleReviews,
+      });
       key = next;
     }
     if (type === "trade")

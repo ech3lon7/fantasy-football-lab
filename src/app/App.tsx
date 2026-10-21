@@ -1,3 +1,5 @@
+import { gemRulesKey, gemContextKey } from "../domain/gems";
+import { GemSettings } from "../features/GemSettings";
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
   LayoutDashboard,
@@ -106,6 +108,16 @@ export default function App() {
     [syncStatus, setSyncStatus] = useState("Local only"),
     [conflict, setConflict] = useState<Workspace | null | undefined>(undefined),
     [updateReady, setUpdateReady] = useState(false);
+  // An expiry tick refreshes stale Gem qualifications without requiring a reload or an edited setting.
+  const [gemClock, setGemClock] = useState(0);
+  useEffect(() => {
+    if (!model?.gemExpiresAt) return;
+    const timer = setTimeout(
+      () => setGemClock((tick) => tick + 1),
+      Math.max(1, model.gemExpiresAt - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [model?.gemExpiresAt]);
   const client = useMemo(() => cloudClient(config), [config.url, config.key]),
     fileRef = useRef<HTMLInputElement>(null),
     importRef = useRef<Worker | null>(null),
@@ -227,6 +239,9 @@ export default function App() {
     JSON.stringify(w?.state.settings),
     w?.state.filters[evidenceKey],
     w?.state.filters[roleScenarioKey],
+    w?.state.filters[gemRulesKey],
+    w?.state.filters[gemContextKey],
+    gemClock,
   ]);
   async function runSync(force = false) {
     const current = wRef.current;
@@ -721,6 +736,14 @@ export default function App() {
                       model versions.
                     </p>
                   </Panel>
+                  {/* Gem reviews and thresholds use the existing private settings persistence. */}
+                  <GemSettings
+                    m={model}
+                    filters={w.state.filters}
+                    change={(patch) =>
+                      updateState({ filters: { ...w.state.filters, ...patch } })
+                    }
+                  />
                   <EvidenceSettings
                     m={model}
                     filters={w.state.filters}

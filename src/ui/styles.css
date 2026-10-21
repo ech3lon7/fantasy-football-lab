@@ -1518,3 +1518,36 @@ pre {
     font-size: 10px;
   }
 }
+
+/* Gem review/configuration text areas share the established editable-control style. */
+.control textarea {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid #dbe2d5;
+  border-radius: 6px;
+  background: #fffdf1;
+  padding: 9px 11px;
+  color: var(--purple);
+  font: inherit;
+}
+/* Requirements describe configurable settings; recorded evidence and model conclusions keep their own colors. */
+.input-text {
+  color: var(--purple);
+}
+
+/* Breakout source explanations wrap in the compact popover without altering existing roster tables. */
+.gem-checks table {
+  table-layout: fixed;
+  min-width: 380px;
+}
+.gem-checks th,
+.gem-checks td {
+  position: static;
+  min-width: 0;
+  padding: 8px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}

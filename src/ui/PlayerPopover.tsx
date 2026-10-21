@@ -1,3 +1,4 @@
+import { GemEvidence } from "./GemEvidence";
 import {
   useCallback,
   useEffect,
@@ -321,6 +322,8 @@ function PlayerInspection({ p, m }: { p: Player; m: Model }) {
         <Signal text={p.regression} />
       </div>
       <p>{p.explanation}</p>
+      {/* The same gate-by-gate assessment also appears on the full profile. */}
+      <GemEvidence p={p} />
       <p
         className={
           p.historyComplete && p.value !== null ? "" : "notice warning"

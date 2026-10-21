@@ -94,7 +94,8 @@ it("allows role growth and touchdown caution together and supports role threshol
     h.RushTD = 3;
   const m = evaluate(d, d.settings),
     p = m.byId.get("1")!;
-  expect(p.gem).toBe("TD caution");
+  expect(playerSignals(p)).toContain("TD caution");
+  expect(p.gem).toBe("Watch");
   expect(playerSignals(p)).toContain("Role-growth watch");
   const q = validateGemDraft(
     {
