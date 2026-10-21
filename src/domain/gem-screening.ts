@@ -25,7 +25,7 @@ const candidateSignals = [
   "Role-growth watch",
   "Scoring breakout watch",
 ];
-// Legacy labels cannot imply the stricter Gem guarantee; migrate explicitly and request review.
+// Translate earlier labels automatically; numeric thresholds and cleared-signal searches retain their saved meaning.
 const legacySignals: Record<string, string> = {
   "Gem candidate": "Gem",
   "Opportunity watch": "Watch",
@@ -239,19 +239,13 @@ export function decodeGemFilters(saved: Record<string, string>, team: string) {
           (s) =>
             typeof s !== "string" ||
             (!gemSignals.includes(s as (typeof gemSignals)[number]) &&
-              !(
-                saved.gemFilterVersion === "1" &&
-                Object.hasOwn(legacySignals, s)
-              )),
+              !Object.hasOwn(legacySignals, s)),
         )
       )
         throw Error();
       draft.signals = [
         ...new Set((selected as string[]).map((s) => legacySignals[s] ?? s)),
       ];
-      if ((selected as string[]).some((s) => Object.hasOwn(legacySignals, s)))
-        issue =
-          "Saved signal meanings changed: Gem now requires sustained workload and a sourced ongoing role. Review selections and Apply; numeric thresholds are retained.";
       for (const f of gemThresholds) draft[f.key] = saved[f.stored] ?? "";
       for (const k of [
         "gemAboveReplacement",
@@ -269,13 +263,11 @@ export function decodeGemFilters(saved: Record<string, string>, team: string) {
   } else if (saved.gemSignal === "All signals") draft.signals = [...gemSignals];
   else if (Object.hasOwn(legacySignals, saved.gemSignal ?? "")) {
     draft.signals = [legacySignals[saved.gemSignal]];
-    issue =
-      "Saved signal meanings changed. Review the new Gem/Watch selection and Apply; other filters are retained.";
   } else if (
     gemSignals.includes(saved.gemSignal as (typeof gemSignals)[number])
   )
     draft.signals = [saved.gemSignal];
-  // Preserve numeric thresholds even when an old label needs explicit semantic review.
+  // Keep prior thresholds while translating labels automatically; valid imports never require a review or Apply step.
   for (const f of gemThresholds) draft[f.key] = saved[f.stored] ?? "";
   return { draft, issue };
 }

@@ -1,6 +1,6 @@
+import { GemEvidence } from "../ui/GemEvidence";
 import { StarterLineupEditor } from "./StarterLineupEditor";
 import { starterLineupsKey } from "../domain/starter-lineups";
-import { GemEvidence } from "../ui/GemEvidence";
 import { useState, useEffect } from "react";
 import {
   Upload,
@@ -563,7 +563,7 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
         <PlayerSignals p={p} />
         <Trend p={p} />
       </div>
-      {/* Shared breakout evidence preserves the existing evaluation figures below. */}
+      {/* Explain the automatic classification using the same domain gates shown in player popovers. */}
       <GemEvidence p={p} />
       <div className="metric-grid">
         <Metric label="Actual season PPG" value={fmt(p.actual)} kind="fact" />
@@ -1064,13 +1064,14 @@ export function GemView({
       {/* Existing ownership/position controls and new signals share one Apply action. */}
       <Panel
         title="Gem filters"
-        note="Gem = sustained developing workload plus current sourced support. Watch = promising but unresolved. OR between signals; AND between categories."
+        note="Automatic Gems require sustained workload, meaningful growth and active availability. Watch means promising evidence that does not yet pass every gate. OR between signals; AND between categories."
       >
-        {/* Link unresolved context to the place where sourced reviews are maintained. */}
+        {/* Classification uses the current imported snapshot with no manual role review or approval. */}
         <p>
-          <a href="#/model">Model &amp; audit → Gem rules and role reviews</a>{" "}
-          manages current role evidence and adjustable thresholds. Unknown
-          context remains Watch.
+          Every player is classified automatically from imported played-game
+          workload and availability. Missing news or role commentary never
+          blocks a Gem. Labels describe the imported snapshot; warnings identify
+          uncertainty.
         </p>
         <form
           className="gem-filters"
@@ -2130,12 +2131,6 @@ export function ModelView({
             {message}
           </p>
         )}
-        {/* Workbook Gem settings still govern legacy parity and supporting scoring/role watches. */}
-        <p>
-          Workbook settings beginning with Gem retain their legacy scoring,
-          trend and supporting-watch purposes. Primary Gem qualification uses
-          the separate Gem rules and role reviews above.
-        </p>
         <div className="settings-grid">
           {Object.entries(m.settings).map(([key, value]) => (
             <label className="control" key={key}>

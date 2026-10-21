@@ -35,11 +35,7 @@ export function GemEvidence({ p }: { p: Player }) {
                   {c.actual}
                 </td>
                 <td
-                  className={
-                    c.status === "PASS" || c.status === "SUPPORTED"
-                      ? "model"
-                      : "notice warning"
-                  }
+                  className={c.status === "PASS" ? "model" : "notice warning"}
                 >
                   {c.status}
                 </td>
@@ -56,7 +52,7 @@ export function GemEvidence({ p }: { p: Player }) {
           Their sum measures work, not equal fantasy scoring value.
         </p>
       )}
-      {assessment.prompts.map((prompt) => (
+      {assessment.warnings.map((prompt) => (
         <p className="notice warning" key={prompt}>
           {prompt}
         </p>
@@ -65,8 +61,10 @@ export function GemEvidence({ p }: { p: Player }) {
         Scoring Trend PPG still compares the last three played games with ALL
         earlier games. The workload growth above compares only the immediately
         preceding two or three. Scoring/projection gaps and touchdown cautions
-        are supporting signals, not Gem qualification gates. Rules are
-        provisional, not historically validated probabilities.
+        remain supporting signals. Gems are identified automatically; no manual
+        role review, approval or news entry is required. The data does not
+        establish whether the role is permanent. Rules are provisional, not
+        historically validated probabilities.
       </p>
     </details>
   );

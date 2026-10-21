@@ -174,7 +174,7 @@ it("migrates legacy signals and round-trips only applied string-valued state", (
     injured: true,
     trendMin: "",
   });
-  expect(legacy.issue).toContain("meanings changed");
+  expect(legacy.issue).toBe("");
   const saved = encodeGemFilters(query());
   expect(Object.values(saved).every((v) => typeof v === "string")).toBe(true);
   expect(

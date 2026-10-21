@@ -322,7 +322,7 @@ function PlayerInspection({ p, m }: { p: Player; m: Model }) {
         <Signal text={p.regression} />
       </div>
       <p>{p.explanation}</p>
-      {/* The same gate-by-gate assessment also appears on the full profile. */}
+      {/* Read-only automatic evidence matches the full player profile. */}
       <GemEvidence p={p} />
       <p
         className={
