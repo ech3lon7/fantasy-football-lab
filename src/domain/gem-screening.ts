@@ -10,6 +10,8 @@ export const gemSignals = [
   "No breakout signal",
   "Insufficient data",
   "Not applicable",
+  // Make decline explicitly selectable without changing default candidate signals or the existing rising preset.
+  "Reduced workload",
   "Role-growth watch",
   "Scoring breakout watch",
 ] as const;

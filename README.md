@@ -82,6 +82,8 @@ Open **Gem screener** and use **Breakout classification → Gem only / Gem + Wat
 
 Stale snapshots and injured same-team competition produce automatic warnings without a manual-confirmation veto. Labels describe the imported data, not verified permanent roles or guaranteed breakouts. Refreshing the workbook and importing it remains the source-update workflow; the app does not fetch ESPN or news automatically. Existing scoring/role watches, BUY LOW/SELL HIGH, valuations and trade calculations remain separate. Thresholds are provisional, not historically validated probabilities.
 
+**Reduced workload** is an independent automatic signal. Compare the last three played games with the immediately preceding 2–3: average workload must fall at least 20% AND 3 carries+targets/game for RBs or 2 targets/game for WR/TE. At least two recent games must each fall below the earlier average by that positional minimum. Five verified games and complete workload data are required. Select Reduced workload in the screener's Signals controls; details and popovers explain the evidence. Gem/Watch labels and scoring/trade values stay unchanged. Injury-shortened games remain included, so the signal does not establish a permanent role loss.
+
 ## Update recovery (0.3.1)
 
 Online navigation checks the current deployment; offline navigation uses a complete cached build. Activating an update keeps previous app assets so existing tabs can finish loading their version. Asset caches are scoped to the app path; private datasets remain in IndexedDB.

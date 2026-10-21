@@ -628,6 +628,9 @@ export function evaluate(
       if (["Projection-gap watch", "TD caution"].includes(p.gem))
         p.opportunity.signals.push(p.gem);
       p.breakout = assessGem(p, histories.get(p.id) ?? [], d);
+      // A declining workload is independent evidence; it does not replace Gem/Watch or alter any forecast or trade value.
+      if (p.breakout.reducedWorkload?.status === "PASS")
+        p.opportunity.signals.push("Reduced workload");
       p.gem = p.breakout.classification;
       p.priority = p.gem === "Gem" ? 1 : p.gem === "Watch" ? 2 : 99;
       p.explanation = p.breakout.explanation;

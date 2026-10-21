@@ -32,10 +32,11 @@ export function Metric({
     </div>
   );
 }
+// Reduced workload uses the existing caution appearance; other signal styling remains unchanged.
 export function Signal({ text }: { text: string }) {
   return (
     <span
-      className={`signal ${text === "Gem" || text === "Gem candidate" ? "candidate" : text === "Watch" || text === "Opportunity watch" || text === "BUY LOW" ? "watch" : /caution|SELL HIGH|issue|FAIL|UNAVAILABLE/.test(text) ? "caution" : /Emerging|Conditional|CONDITIONAL|Projection-gap/.test(text) ? "conditional" : ""}`}
+      className={`signal ${text === "Gem" || text === "Gem candidate" ? "candidate" : text === "Watch" || text === "Opportunity watch" || text === "BUY LOW" ? "watch" : /caution|SELL HIGH|issue|FAIL|UNAVAILABLE|Reduced workload/.test(text) ? "caution" : /Emerging|Conditional|CONDITIONAL|Projection-gap/.test(text) ? "conditional" : ""}`}
     >
       {text}
     </span>

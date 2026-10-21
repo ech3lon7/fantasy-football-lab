@@ -9,7 +9,11 @@ import {
 } from "../../src/domain/contracts";
 
 // Seed only this isolated test browser with a complete synthetic league snapshot.
-async function seed(page: Page, filters: Record<string, string> = {}) {
+async function seed(
+  page: Page,
+  filters: Record<string, string> = {},
+  reduced = false,
+) {
   // Run the existing fixture through tsx so its JSON imports need no production change.
   const d: Dataset = JSON.parse(
     execFileSync(
@@ -81,6 +85,11 @@ async function seed(page: Page, filters: Record<string, string> = {}) {
       }),
     );
   }
+  // Only the decline workflow receives an Amon-Ra-like workload; existing fixtures and scoring remain unchanged.
+  if (reduced)
+    d.tables.ModelHistory.filter((h) => h.PlayerID === 2).forEach((h, i) => {
+      h.Targets = [14, 13, 8, 11, 11][i];
+    });
   Object.assign(
     d.tables.ModelPlayers.find((p) => p.PlayerID === 107)!,
     { Targets: 10, ReceivingTD: 3 },
@@ -193,6 +202,48 @@ test("automatic Gems need no review, relabeling or Apply after saved-filter migr
       exact: true,
     }),
   ).toHaveCount(0);
+});
+
+// The independent decline signal filters automatically, survives reload, and exposes evidence in existing player views.
+test("sustained reduced workload is selectable, persistent and explained without changing the primary label", async ({
+  page,
+}) => {
+  await seed(
+    page,
+    {
+      gemFilterVersion: "2",
+      gemSignals: '["Reduced workload"]',
+      gemPool: "All",
+      gemPos: "WR",
+    },
+    true,
+  );
+  await expect(page.getByRole("status")).toContainText("1 confirmed matches");
+  await expect(
+    page.getByLabel("Reduced workload", { exact: true }),
+  ).toBeChecked();
+  await expect(
+    page.locator(".signal.caution").filter({ hasText: "Reduced workload" }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: /Synthetic 2 WR/ }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByText("Why No breakout signal?", { exact: true }).click();
+  await expect(
+    dialog.locator(".notice.warning").filter({ hasText: "Reduced workload." }),
+  ).toContainText("13.50 → 10.00");
+  await expect(dialog).toContainText(
+    "3/3 recent games meet the decline minimum",
+  );
+  await page.reload();
+  await expect(page.getByRole("status")).toContainText("1 confirmed matches");
+  await expect(
+    page.getByLabel("Reduced workload", { exact: true }),
+  ).toBeChecked();
+  await page.goto("./#/player/2");
+  await page.getByText("Why No breakout signal?", { exact: true }).click();
+  await expect(
+    page.locator(".notice.warning").filter({ hasText: "Reduced workload." }),
+  ).toContainText("-25.93%");
 });
 
 // Exercise the real CSV UI, persisted source evidence and the opt-in forecast scenario across screens.

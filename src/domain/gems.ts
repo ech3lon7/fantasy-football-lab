@@ -34,6 +34,7 @@ export interface GemAssessment {
   increase: number | null;
   growthPct: number | null;
   warnings: string[];
+  reducedWorkload: GemCheck | null;
 }
 
 // Every qualification gate uses imported played-game data; contextual uncertainty is reported separately.
@@ -57,6 +58,7 @@ export function assessGem(
     increase: null,
     growthPct: null,
     warnings: [],
+    reducedWorkload: null,
   };
   if (!gemPositions.includes(p.pos as (typeof gemPositions)[number]))
     return result;
@@ -101,6 +103,36 @@ export function assessGem(
   const unit = p.pos === "RB" ? "carries + targets" : "targets";
   const fmt = (value: number | null) =>
     value === null ? "unavailable" : value.toFixed(2);
+  // Flag sustained decline independently: average loss must meet both thresholds and occur in at least two recent games.
+  const declineMinimum = p.pos === "RB" ? 3 : 2;
+  // Compare totals across window lengths so exact 20% boundaries are not lost to division rounding.
+  const previousTotal = previous.reduce((total, value) => total + value, 0);
+  const recentTotal = recent.reduce((total, value) => total + value, 0);
+  const declineNumerator =
+    previousTotal * recent.length - recentTotal * previous.length;
+  const lowerGames =
+    previous.length >= 2 && result.previous !== null
+      ? recent.filter(
+          (value) =>
+            value * previous.length <=
+            previousTotal - declineMinimum * previous.length,
+        ).length
+      : 0;
+  const declining =
+    historyPass &&
+    usable &&
+    result.previous !== null &&
+    result.previous > 0 &&
+    result.increase !== null &&
+    declineNumerator >= declineMinimum * recent.length * previous.length &&
+    declineNumerator * 5 >= previousTotal * recent.length &&
+    lowerGames >= 2;
+  result.reducedWorkload = {
+    check: "Reduced workload",
+    required: `Average decline ≥ ${declineMinimum} ${unit}/game AND ≥ 20%; at least 2 of the last 3 games ≥ ${declineMinimum} below the earlier average; 5+ verified games`,
+    actual: `${fmt(result.previous)} → ${fmt(result.recent)} ${unit}/game; change ${fmt(result.increase)}; ${result.growthPct === null ? "percentage unavailable" : (result.growthPct * 100).toFixed(2) + "%"}; ${lowerGames}/3 recent games meet the decline minimum`,
+    status: !historyPass || !usable ? "UNKNOWN" : declining ? "PASS" : "FAIL",
+  };
   // The same explicit tests drive the label and the player-detail evidence table.
   result.checks = [
     {

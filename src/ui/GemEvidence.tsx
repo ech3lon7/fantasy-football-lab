@@ -44,6 +44,16 @@ export function GemEvidence({ p }: { p: Player }) {
           </tbody>
         </table>
       </div>
+      {/* Display the domain-computed decline evidence separately from the five Gem qualification checks. */}
+      {assessment.reducedWorkload?.status === "PASS" && (
+        <p className="notice warning">
+          <b className="model">Reduced workload.</b>{" "}
+          {assessment.reducedWorkload.actual}. Requirements:{" "}
+          {assessment.reducedWorkload.required}. Injury-shortened games remain
+          included; a reduction does not establish a permanent role change or
+          poor overall workload.
+        </p>
+      )}
       {p.pos === "RB" && (
         <p className="fact">
           Recent carries / game:{" "}
