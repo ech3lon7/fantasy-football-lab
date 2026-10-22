@@ -19,6 +19,9 @@ import type { Model, Player } from "./valuation";
 export interface UpgradeFilter {
   mode: "starter" | "depth" | "either";
   minimum: number;
+  // Optional counts retain the legacy any-one behavior for existing callers without count criteria.
+  requiredStarters?: number;
+  requiredBench?: number;
 }
 export interface UpgradeEvidence {
   offered: string;
@@ -192,7 +195,14 @@ export function tradeSearchContext(
     query.below,
     query.above,
     // Disabled controls do not affect existing searches; enabled changes invalidate old results.
-    query.upgrade ? [query.upgrade.mode, query.upgrade.minimum] : null,
+    query.upgrade
+      ? [
+          query.upgrade.mode,
+          query.upgrade.minimum,
+          query.upgrade.requiredStarters ?? null,
+          query.upgrade.requiredBench ?? null,
+        ]
+      : null,
     query.deficit ? [query.deficit.position, query.deficit.ceiling] : null,
     // Distinguish invalid numeric edits from valid unbounded limits so stale searches cannot revive.
     query.weekly
@@ -238,6 +248,23 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
     errors.push(
       "Choose a valid upgrade mode and a nonnegative Expected PPG advantage.",
     );
+  // Enabled count requirements must be achievable with distinct offered players; inactive groups do not consume offers.
+  if (q.upgrade) {
+    const counts = upgradeCounts(q.upgrade);
+    const explicit =
+      q.upgrade.requiredStarters !== undefined ||
+      q.upgrade.requiredBench !== undefined;
+    if (
+      ![counts.starter, counts.depth].every(
+        (value) => Number.isInteger(value) && value >= 0 && value <= 5,
+      ) ||
+      (explicit && counts.starter + counts.depth < 1) ||
+      counts.starter + counts.depth > q.give.length
+    )
+      errors.push(
+        "Upgrade minimums must be whole numbers from 0 to 5, require at least one upgrade, and total no more than the outgoing players.",
+      );
+  }
   // The ceiling applies to one explicitly selected position actually represented in the outgoing package.
   if (
     q.deficit &&
@@ -303,6 +330,40 @@ export function gradeAtOrBelow(grade: string, ceiling: string) {
   return rank >= 0 && limit >= 0 && rank <= limit;
 }
 
+// Interpret only active groups, preserving any-one qualification for older Either requests without explicit counts.
+export function upgradeCounts(filter: UpgradeFilter) {
+  return {
+    starter:
+      filter.mode === "depth"
+        ? 0
+        : (filter.requiredStarters ?? (filter.mode === "starter" ? 1 : 0)),
+    depth:
+      filter.mode === "starter"
+        ? 0
+        : (filter.requiredBench ?? (filter.mode === "depth" ? 1 : 0)),
+  };
+}
+
+// Counts and the selected deficit position must be satisfied by the same distinct-player assignment.
+function meetsUpgradeRequirements(
+  m: Model,
+  q: TradeSearchQuery,
+  edges: UpgradeEvidence[],
+) {
+  if (!q.upgrade) return true;
+  const required = upgradeCounts(q.upgrade);
+  return (
+    edges.length > 0 &&
+    edges.filter((edge) => edge.group === "starter").length >=
+      required.starter &&
+    edges.filter((edge) => edge.group === "depth").length >= required.depth &&
+    (!q.deficit ||
+      edges.some(
+        (edge) => m.byId.get(edge.offered)?.pos === q.deficit!.position,
+      ))
+  );
+}
+
 // Assign fixed offered players to distinct current opponents before any players leave in the trade.
 export function offeredUpgrades(
   m: Model,
@@ -346,8 +407,11 @@ export function offeredUpgrades(
     }
     return false;
   };
-  // At most five offered players means only 32 masks; each opponent is processed once to prohibit reuse.
-  let states: (UpgradeEvidence[] | undefined)[] = Array(1 << offered.length);
+  // Retain each starter-count alternative per offer mask so starter priority cannot discard a requested bench mix.
+  const width = offered.length + 1;
+  let states: (UpgradeEvidence[] | undefined)[] = Array(
+    (1 << offered.length) * width,
+  );
   states[0] = [];
   for (const opponent of opponents) {
     const group = starterIds.has(opponent.id) ? "starter" : "depth";
@@ -360,9 +424,11 @@ export function offeredUpgrades(
       continue;
     const next = [...states];
     // Read only the previous states so this opponent cannot be consumed by two offers in the same iteration.
-    for (let mask = 0; mask < states.length; mask++) {
-      const previous = states[mask];
+    for (let state = 0; state < states.length; state++) {
+      const previous = states[state];
       if (!previous) continue;
+      const mask = Math.floor(state / width),
+        starterCount = state % width;
       for (let i = 0; i < offered.length; i++) {
         const player = offered[i];
         if (mask & (1 << i) || player.pos !== opponent.pos) continue;
@@ -383,17 +449,25 @@ export function offeredUpgrades(
                 : `${starter.source} (bench)`,
           } satisfies UpgradeEvidence,
         ].sort(order);
-        const target = mask | (1 << i);
+        const target =
+          (mask | (1 << i)) * width +
+          starterCount +
+          Number(group === "starter");
         if (!next[target] || better(candidate, next[target]!))
           next[target] = candidate;
       }
     }
     states = next;
   }
-  // Unmatched offered players are allowed: the discovery filter still requires only one genuine upgrade.
-  return states.reduce<UpgradeEvidence[]>(
-    (best, candidate) =>
-      candidate && better(candidate, best) ? candidate : best,
+  // Prefer qualifying mixes, then retain existing starter/gain/ID priorities; partial results explain rejected teams in callers.
+  const candidates = states.filter(
+    (candidate): candidate is UpgradeEvidence[] => !!candidate,
+  );
+  const qualified = candidates.filter((candidate) =>
+    meetsUpgradeRequirements(m, q, candidate),
+  );
+  return (qualified.length ? qualified : candidates).reduce<UpgradeEvidence[]>(
+    (best, candidate) => (better(candidate, best) ? candidate : best),
     [],
   );
 }
@@ -447,15 +521,8 @@ export function findTradeMatches(
     const upgrades = q.upgrade
       ? offeredUpgrades(m, q, teamB, lineupsRaw)
       : undefined;
-    // When both filters are active, an unrelated-position upgrade cannot satisfy the selected deficit.
-    if (
-      upgrades &&
-      (!upgrades.length ||
-        (q.deficit &&
-          !upgrades.some(
-            (edge) => m.byId.get(edge.offered)?.pos === q.deficit!.position,
-          )))
-    ) {
+    // Reject missing comparisons and partial assignments unless every requested minimum and deficit-position rule passes.
+    if (upgrades && !meetsUpgradeRequirements(m, q, upgrades)) {
       stats.upgradeExcluded!++;
       stats.checked++;
       onProgress?.({ ...stats });

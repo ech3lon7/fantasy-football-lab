@@ -335,7 +335,16 @@ it("assigns five offers uniquely and respects unknown forecasts and actual bench
   expect(result).toHaveLength(5);
   expect(new Set(result.map((e) => e.compared)).size).toBe(5);
   expect(new Set(result.map((e) => e.offered)).size).toBe(5);
+  // The maximum five-offer requirement needs all four bench comparisons plus its distinct starter.
+  const counted = {
+    ...q,
+    below: 500,
+    above: 500,
+    upgrade: { ...q.upgrade!, requiredStarters: 1, requiredBench: 4 },
+  };
+  expect(findTradeMatches(m, counted).matches.length).toBeGreaterThan(0);
   m.byId.get("108")!.expected = null;
+  expect(findTradeMatches(m, counted).matches).toEqual([]);
   expect(offeredUpgrades(m, q, "2")).toHaveLength(4);
   expect(
     offeredUpgrades(
@@ -935,4 +944,256 @@ it("honors saved scoring lineups and keeps unavailable explanations distinct fro
   expect(() =>
     searchLineupDetails(m, { ...q, give: ["missing"] }, match),
   ).toThrow();
+});
+
+// Two offers must beat two different starters; missing comparison forecasts cannot fill the required count.
+it("requires at least the requested number of distinct starter upgrades", async () => {
+  const m = await assignmentModel();
+  m.byId.get("2")!.expected = 11;
+  m.byId.get("102")!.slot = 23;
+  m.dataset.tables.ModelRosters.find(
+    (row) => row.PlayerID === 102,
+  )!.LineupSlotID = 23;
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["1", "101"],
+    below: 500,
+    above: 500,
+    upgrade: {
+      mode: "starter",
+      minimum: 2,
+      requiredStarters: 2,
+      requiredBench: 0,
+    },
+  };
+  const found = findTradeMatches(m, q);
+  expect(found.matches.length).toBeGreaterThan(0);
+  expect(found.matches[0].upgrades).toHaveLength(2);
+  expect(
+    new Set(found.matches[0].upgrades!.map((edge) => edge.compared)).size,
+  ).toBe(2);
+  m.byId.get("102")!.expected = null;
+  const missing = findTradeMatches(m, q);
+  expect(missing.matches).toEqual([]);
+  expect(missing.stats.upgradeExcluded).toBe(1);
+  expect(
+    findTradeMatches(m, {
+      ...q,
+      upgrade: { ...q.upgrade!, requiredStarters: 1 },
+    }).matches.length,
+  ).toBeGreaterThan(0);
+});
+
+// Retain alternative group assignments so a two-starter preference cannot hide a feasible starter/bench combination.
+it("finds requested mixed and bench-only counts before applying starter-priority tie breaks", async () => {
+  const m = await assignmentModel();
+  Object.assign(m.byId.get("200")!, { pos: "WR", expected: 8, slot: 23 });
+  m.dataset.tables.ModelRosters.find(
+    (row) => row.PlayerID === 200,
+  )!.LineupSlotID = 23;
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["1", "101"],
+    below: 500,
+    above: 500,
+    upgrade: {
+      mode: "either",
+      minimum: 1,
+      requiredStarters: 1,
+      requiredBench: 1,
+    },
+  };
+  const mixed = findTradeMatches(m, q).matches[0].upgrades!;
+  expect(mixed.filter((edge) => edge.group === "starter")).toHaveLength(1);
+  expect(mixed.filter((edge) => edge.group === "depth")).toHaveLength(1);
+  expect(new Set(mixed.map((edge) => edge.offered)).size).toBe(2);
+  expect(new Set(mixed.map((edge) => edge.compared)).size).toBe(2);
+  const benchQuery = {
+    ...q,
+    upgrade: { ...q.upgrade!, requiredStarters: 0, requiredBench: 2 },
+  };
+  expect(findTradeMatches(m, benchQuery).matches).toEqual([]);
+  Object.assign(m.byId.get("104")!, {
+    owner: "2",
+    pos: "WR",
+    expected: 9,
+    slot: 20,
+  });
+  m.dataset.tables.ModelRosters.push({
+    PlayerID: 104,
+    TeamID: 2,
+    LineupSlotID: 20,
+  });
+  expect(
+    findTradeMatches(m, benchQuery).matches[0].upgrades!.filter(
+      (edge) => edge.group === "depth",
+    ),
+  ).toHaveLength(2);
+  // A minimum is not an exact count: the existing assignment still finds every eligible offer when feasible.
+  expect(
+    findTradeMatches(m, {
+      ...q,
+      upgrade: { ...q.upgrade!, requiredStarters: 1, requiredBench: 0 },
+    }).matches[0].upgrades!.filter((edge) => edge.group === "starter"),
+  ).toHaveLength(2);
+});
+
+// Validate only active group counts, fingerprint count edits, and keep old callers' any-one Either behavior.
+it("validates upgrade counts and keeps count changes separate from scoring and inactive filters", async () => {
+  const m = await upgradeModel();
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["1", "101"],
+    below: 500,
+    above: 500,
+    upgrade: {
+      mode: "either",
+      minimum: 1,
+      requiredStarters: 1,
+      requiredBench: 0,
+    },
+  };
+  for (const [requiredStarters, requiredBench] of [
+    [0, 0],
+    [2, 1],
+    [-1, 1],
+    [1.5, 0],
+    [NaN, 1],
+    [Infinity, 0],
+    [6, 0],
+  ])
+    expect(
+      tradeSearchBounds(m, {
+        ...q,
+        upgrade: { ...q.upgrade!, requiredStarters, requiredBench },
+      }).errors.join(),
+    ).toContain("Upgrade minimums");
+  for (const [requiredStarters, requiredBench] of [
+    [2, 0],
+    [1, 1],
+    [0, 1],
+  ]) {
+    const next = {
+      ...q,
+      upgrade: { ...q.upgrade!, requiredStarters, requiredBench },
+    };
+    expect(tradeSearchBounds(m, next).errors).toEqual([]);
+    expect(tradeSearchContext(m, next)).not.toBe(tradeSearchContext(m, q));
+  }
+  expect(
+    tradeSearchBounds(m, {
+      ...q,
+      upgrade: { ...q.upgrade!, mode: "starter", requiredBench: NaN },
+    }).errors,
+  ).toEqual([]);
+  const legacy: TradeSearchQuery = {
+    ...q,
+    give: ["100"],
+    upgrade: { mode: "either", minimum: 1 },
+  };
+  expect(findTradeMatches(m, legacy).matches.length).toBeGreaterThan(0);
+  expect(
+    findTradeMatches(m, {
+      ...legacy,
+      upgrade: { ...legacy.upgrade!, requiredStarters: 1, requiredBench: 0 },
+    }).matches,
+  ).toEqual([]);
+  expect(
+    findTradeMatches(m, {
+      ...legacy,
+      upgrade: { ...legacy.upgrade!, requiredStarters: 0, requiredBench: 1 },
+    }).matches.length,
+  ).toBeGreaterThan(0);
+});
+
+// The selected deficit position needs one qualifying edge, while the other required starter can upgrade another position.
+it("allows a counted package to meet a deficit with one upgrade and improve a different position too", async () => {
+  const m = await upgradeModel();
+  Object.assign(m.byId.get("1")!, { pos: "WR", expected: 20 });
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["1", "101"],
+    below: 500,
+    above: 500,
+    upgrade: {
+      mode: "starter",
+      minimum: 1,
+      requiredStarters: 2,
+      requiredBench: 0,
+    },
+    deficit: { position: "QB", ceiling: "A+" },
+  };
+  const matches = findTradeMatches(m, q).matches;
+  expect(matches.length).toBeGreaterThan(0);
+  expect(matches[0].upgrades).toMatchObject([
+    { offered: "1", compared: "2" },
+    { offered: "101", compared: "200" },
+  ]);
+});
+
+// Exhaustive small assignments independently check feasibility for every valid starter/bench quota combination.
+it("matches exhaustive assignment feasibility for every requested starter and bench count", async () => {
+  const m = await assignmentModel();
+  const offers = ["1", "101", "106"],
+    opponents = ["2", "200", "102"];
+  offers.forEach((id, i) =>
+    Object.assign(m.byId.get(id)!, {
+      owner: "1",
+      pos: "WR",
+      expected: 20 - i * 2,
+    }),
+  );
+  Object.assign(m.byId.get("200")!, { pos: "WR", expected: 15, slot: 23 });
+  m.dataset.tables.ModelRosters.find(
+    (row) => row.PlayerID === 200,
+  )!.LineupSlotID = 23;
+  m.byId.get("2")!.expected = 17;
+  m.byId.get("102")!.expected = 14;
+  const possibilities: { starter: number; bench: number }[] = [];
+  function enumerate(
+    i: number,
+    used: Set<string>,
+    starter: number,
+    bench: number,
+  ) {
+    if (i === offers.length) {
+      possibilities.push({ starter, bench });
+      return;
+    }
+    enumerate(i + 1, used, starter, bench);
+    for (const id of opponents) {
+      if (
+        used.has(id) ||
+        m.byId.get(offers[i])!.expected! - m.byId.get(id)!.expected! < 1
+      )
+        continue;
+      enumerate(
+        i + 1,
+        new Set([...used, id]),
+        starter + Number(id !== "102"),
+        bench + Number(id === "102"),
+      );
+    }
+  }
+  enumerate(0, new Set(), 0, 0);
+  for (let starter = 0; starter <= 3; starter++)
+    for (let bench = 0; bench <= 3 - starter; bench++) {
+      if (!starter && !bench) continue;
+      const q: TradeSearchQuery = {
+        ...query,
+        give: offers,
+        below: 500,
+        above: 500,
+        upgrade: {
+          mode: "either",
+          minimum: 1,
+          requiredStarters: starter,
+          requiredBench: bench,
+        },
+      };
+      const feasible = possibilities.some(
+        (value) => value.starter >= starter && value.bench >= bench,
+      );
+      expect(findTradeMatches(m, q).matches.length > 0).toBe(feasible);
+    }
 });

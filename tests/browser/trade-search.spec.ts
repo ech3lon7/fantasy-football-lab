@@ -291,6 +291,14 @@ test("positional-upgrade filter supports starter, depth, either and disabled beh
     await search
       .getByLabel("Upgrade target", { exact: true })
       .selectOption(mode);
+    if (mode === "either") {
+      await search
+        .getByLabel("Minimum starter upgrades", { exact: true })
+        .fill("0");
+      await search
+        .getByLabel("Minimum bench upgrades", { exact: true })
+        .fill("1");
+    }
     await search.getByRole("button", { name: "Search", exact: true }).click();
     await expect(
       search.getByText("13 index matches.", { exact: false }),
@@ -793,4 +801,103 @@ test("trade details show named weekly scoring replacements from the captured lin
     path: "test-results/trade-lineup-details-desktop.png",
   });
   expect(errors).toEqual([]);
+});
+
+// Required counts use distinct offers/opponents and both Either minimums in the actual search worker.
+test("upgrade counts require all requested starter and bench matches", async ({
+  page,
+}) => {
+  await seed(page, true, true);
+  await page
+    .getByLabel("Outgoing player 1", { exact: true })
+    .selectOption("400");
+  await page
+    .getByLabel("Outgoing player 2", { exact: true })
+    .selectOption("401");
+  const search = panel(page);
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("500");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("500");
+  await search
+    .getByLabel("Only show positional upgrades for the other team", {
+      exact: true,
+    })
+    .check();
+  await expect(
+    search.getByLabel("Minimum starter upgrades", { exact: true }),
+  ).toHaveValue("1");
+  await search
+    .getByLabel("Minimum starter upgrades", { exact: true })
+    .fill("2");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("0 index matches.", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    search.getByText(/Teams excluded by positional-upgrade filter: 1/),
+  ).toBeVisible();
+  await search
+    .getByLabel("Upgrade target", { exact: true })
+    .selectOption("either");
+  await search
+    .getByLabel("Minimum starter upgrades", { exact: true })
+    .fill("1");
+  await search.getByLabel("Minimum bench upgrades", { exact: true }).fill("1");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("13 index matches.", { exact: false }),
+  ).toBeVisible();
+  const row = search.locator("tbody tr").first();
+  await row.getByText("Trade details", { exact: true }).click();
+  await expect(row.getByText(/Starter upgrade:/)).toHaveCount(1);
+  await expect(row.getByText(/Depth upgrade:/)).toHaveCount(1);
+  await search.getByLabel("Minimum bench upgrades", { exact: true }).fill("2");
+  await expect(row.getByRole("button", { name: "Load trade" })).toBeDisabled();
+  await expect(
+    search.getByRole("button", { name: "Search", exact: true }),
+  ).toBeDisabled();
+  await search
+    .getByLabel("Minimum starter upgrades", { exact: true })
+    .fill("0");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("0 index matches.", { exact: false }),
+  ).toBeVisible();
+  // Invalid fractional, zero-total and oversized counts block requests, but disabling the filter ignores them.
+  await search.getByLabel("Minimum bench upgrades", { exact: true }).fill("0");
+  await expect(
+    search.getByRole("button", { name: "Search", exact: true }),
+  ).toBeDisabled();
+  await search
+    .getByLabel("Minimum bench upgrades", { exact: true })
+    .fill("1.5");
+  await expect(
+    search.getByText(
+      /Requires at least 0 starter upgrades and Unavailable bench upgrades/,
+    ),
+  ).toBeVisible();
+  await expect(
+    search.getByRole("button", { name: "Search", exact: true }),
+  ).toBeDisabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await search.screenshot({
+    path: "test-results/trade-upgrade-counts-mobile.png",
+  });
+  await search
+    .getByLabel("Only show positional upgrades for the other team", {
+      exact: true,
+    })
+    .uncheck();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("13 index matches.", { exact: false }),
+  ).toBeVisible();
 });

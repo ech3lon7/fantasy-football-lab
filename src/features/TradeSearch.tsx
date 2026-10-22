@@ -53,6 +53,10 @@ export function TradeSearch({
   const [upgradeOnly, setUpgradeOnly] = useState(false),
     [upgradeMode, setUpgradeMode] = useState<UpgradeFilter["mode"]>("starter"),
     [minimumUpgrade, setMinimumUpgrade] = useState("1");
+  // Keep single-role and mixed-role counts separate so switching targets preserves each input's meaning.
+  const [requiredUpgrades, setRequiredUpgrades] = useState("1"),
+    [requiredStarters, setRequiredStarters] = useState("1"),
+    [requiredBench, setRequiredBench] = useState("0");
   // Each team's weekly-point filter is optional; blank bounds remain unbounded and negative limits are allowed.
   const [ownWeekly, setOwnWeekly] = useState({
       enabled: false,
@@ -98,7 +102,24 @@ export function TradeSearch({
     below: parseOffset(below),
     above: parseOffset(above),
     upgrade: upgradeOnly
-      ? { mode: upgradeMode, minimum: parseOffset(minimumUpgrade) }
+      ? {
+          mode: upgradeMode,
+          minimum: parseOffset(minimumUpgrade),
+          requiredStarters:
+            upgradeMode === "depth"
+              ? 0
+              : parseOffset(
+                  upgradeMode === "either"
+                    ? requiredStarters
+                    : requiredUpgrades,
+                ),
+          requiredBench:
+            upgradeMode === "starter"
+              ? 0
+              : parseOffset(
+                  upgradeMode === "either" ? requiredBench : requiredUpgrades,
+                ),
+        }
       : undefined,
     deficit: deficitOnly
       ? { position: selectedPosition as Position, ceiling: deficitCeiling }
@@ -417,6 +438,29 @@ export function TradeSearch({
     );
   };
 
+  // Do not round an invalid fractional count into a different, apparently valid requirement in the help text.
+  const formatUpgradeCount = (value: number | undefined) =>
+    Number.isInteger(value) ? String(value) : "Unavailable";
+  // Count controls require distinct outgoing players, with zero permitted only for one side of an Either mix.
+  const upgradeCountControl = (
+    label: string,
+    value: string,
+    set: (value: string) => void,
+  ) => (
+    <label className="control">
+      <span>{label}</span>
+      <input
+        aria-label={label}
+        type="number"
+        min={upgradeMode === "either" ? 0 : 1}
+        max={draft.give.length}
+        step="1"
+        value={value}
+        onChange={(event) => set(event.target.value)}
+      />
+    </label>
+  );
+
   // Controls express raw index matching; premiums and fairness remain visible only as separate evaluation outputs.
   return (
     <Panel
@@ -483,6 +527,23 @@ export function TradeSearch({
                 <option value="either">Either</option>
               </select>
             </label>
+            {/* Single targets use one minimum; Either requires both independently selected group minimums. */}
+            {upgradeMode !== "depth" &&
+              upgradeCountControl(
+                "Minimum starter upgrades",
+                upgradeMode === "either" ? requiredStarters : requiredUpgrades,
+                upgradeMode === "either"
+                  ? setRequiredStarters
+                  : setRequiredUpgrades,
+              )}
+            {upgradeMode !== "starter" &&
+              upgradeCountControl(
+                "Minimum bench upgrades",
+                upgradeMode === "either" ? requiredBench : requiredUpgrades,
+                upgradeMode === "either"
+                  ? setRequiredBench
+                  : setRequiredUpgrades,
+              )}
             <label className="control">
               <span>Minimum Expected PPG upgrade</span>
               <input
@@ -499,15 +560,22 @@ export function TradeSearch({
       {upgradeOnly && (
         <p>
           <small>
-            At least one offered player, including your bench, must exceed the
-            same-position comparison by {fmt(query.upgrade?.minimum)} Expected
-            PPG. Each offered and opposing player can appear only once. Starter
-            uses same-position current starters (including FLEX); Depth uses
-            their actual same-position bench, excluding IR. Either maximizes
-            distinct starter upgrades first, then bench upgrades. Comparisons
-            use their roster before the trade, including players they may send
-            away. Missing forecasts/comparison players do not qualify; net trade
-            impact is shown separately.
+            Requires at least{" "}
+            {formatUpgradeCount(query.upgrade?.requiredStarters)} starter
+            upgrades and {formatUpgradeCount(query.upgrade?.requiredBench)}{" "}
+            bench upgrades. Each qualifying offered player, including your
+            bench, must exceed the same-position comparison by{" "}
+            {fmt(query.upgrade?.minimum)} Expected PPG. Each offered and
+            opposing player can appear only once. Starter uses same-position
+            current starters (including FLEX); Depth uses their actual
+            same-position bench, excluding IR. Either maximizes distinct starter
+            upgrades first, then bench upgrades, among assignments meeting both
+            minimums. Comparisons use their roster before the trade, including
+            players they may send away. Teams failing either minimum or lacking
+            enough usable comparisons are excluded. With the deficit filter
+            enabled, at least one assigned upgrade must match its position;
+            other upgrades may be at other positions. Net trade impact is shown
+            separately.
           </small>
         </p>
       )}

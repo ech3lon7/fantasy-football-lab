@@ -572,6 +572,41 @@ test("cleared saved signals permit rising RBs and survive Apply and reload", asy
       .getByRole("row")
       .filter({ has: page.getByRole("link", { name: /Synthetic 1 RB/ }) }),
   ).toContainText("+15.00");
+  // Apply updates the UI before its queued IndexedDB write finishes; reload only after the exact filters are durable.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const db = await new Promise<IDBDatabase>((resolve, reject) => {
+            const request = indexedDB.open("fantasy-football-lab", 1);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          });
+          try {
+            const workspace = await new Promise<Workspace | undefined>(
+              (resolve, reject) => {
+                const request = db
+                  .transaction("current")
+                  .objectStore("current")
+                  .get("local");
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+              },
+            );
+            return workspace?.state.filters;
+          } finally {
+            db.close();
+          }
+        }),
+      { message: "Applied Gem filters must reach IndexedDB before reload" },
+    )
+    .toMatchObject({
+      gemFilterVersion: "2",
+      gemSignals: "[]",
+      gemPool: "All",
+      gemPos: "RB",
+      gemTrendMin: "2",
+    });
   await page.reload();
   await expect(
     page.getByText(/Applied search: Any signal AND Pool: All AND Position: RB/),
