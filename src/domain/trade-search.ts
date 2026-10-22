@@ -1,4 +1,15 @@
-import { cmpId, n, str, sum, type Dataset, type Settings } from "./contracts";
+import {
+  cmpId,
+  n,
+  str,
+  sum,
+  positions,
+  type Position,
+  type Dataset,
+  type Settings,
+} from "./contracts";
+// Reuse existing league-relative positional grades rather than inventing a second grade formula.
+import { teamsAssessment } from "./lineups";
 import { evaluateTrade } from "./trades";
 // Positional fit uses the same saved/imported starter assignments as the existing analyzer.
 import { readStarterLineup } from "./starter-lineups";
@@ -18,14 +29,62 @@ export interface UpgradeEvidence {
   gain: number;
   source: string;
 }
-// Horizon limits filter the existing remaining-season point totals; null means no bound on that side.
-export interface HorizonRange {
+// Weekly limits filter existing average lineup gains; null means no bound on that side.
+export interface WeeklyRange {
   minimum: number | null;
   maximum: number | null;
 }
-export interface HorizonFilter {
-  own?: HorizonRange;
-  other?: HorizonRange;
+export interface WeeklyFilter {
+  own?: WeeklyRange;
+  other?: WeeklyRange;
+}
+// This order compares existing letter grades only; the grade calculation remains in teamsAssessment.
+export const positionGradeScale = [
+  "F",
+  "D−",
+  "D",
+  "D+",
+  "C−",
+  "C",
+  "C+",
+  "B−",
+  "B",
+  "B+",
+  "A−",
+  "A",
+  "A+",
+] as const;
+export interface DeficitFilter {
+  position: Position;
+  ceiling: string;
+}
+export interface DeficitEvidence extends DeficitFilter {
+  grade: string;
+  status: string;
+}
+// Fetch weekly slot explanations only on demand instead of retaining full lineups for every search match.
+export interface SearchLineupSide {
+  source: string;
+  replacements: string[];
+  incoming: string[];
+  benchOutgoing: string[];
+  issues: string[];
+  weekly: {
+    week: number;
+    before: number | null;
+    after: number | null;
+    gain: number | null;
+    changes: {
+      slot: string;
+      before: string | null;
+      after: string | null;
+      gain: number | null;
+    }[];
+  }[];
+}
+export interface SearchLineupDetails {
+  own: SearchLineupSide;
+  other: SearchLineupSide;
 }
 // Search contracts are temporary analysis state, never part of the synced workspace schema.
 export interface TradeSearchQuery {
@@ -35,7 +94,8 @@ export interface TradeSearchQuery {
   below: number;
   above: number;
   upgrade?: UpgradeFilter;
-  horizon?: HorizonFilter;
+  weekly?: WeeklyFilter;
+  deficit?: DeficitFilter;
 }
 export interface SearchMatch {
   key: string;
@@ -45,6 +105,7 @@ export interface SearchMatch {
   outgoing: number;
   difference: number;
   upgrades?: UpgradeEvidence[];
+  deficit?: DeficitEvidence;
 }
 export interface SearchRow extends SearchMatch {
   own: number | null;
@@ -69,7 +130,8 @@ export interface SearchStats {
   matched: number;
   scored: number;
   upgradeExcluded?: number;
-  horizonExcluded?: number;
+  weeklyExcluded?: number;
+  deficitExcluded?: number;
 }
 export interface SearchProgress {
   phase: "Finding matching packages" | "Evaluating trades" | "Sorting results";
@@ -87,7 +149,8 @@ export type SearchRequest =
       lineupsRaw?: string;
       query: TradeSearchQuery;
     }
-  | { type: "page"; id: string; context: string; offset: number };
+  | { type: "page"; id: string; context: string; offset: number }
+  | { type: "details"; id: string; context: string; key: string };
 export type SearchResponse = { id: string; context: string } & (
   | { type: "progress"; progress: SearchProgress }
   | {
@@ -98,6 +161,12 @@ export type SearchResponse = { id: string; context: string } & (
       stats: SearchStats;
     }
   | { type: "error"; message: string }
+  | {
+      type: "details";
+      key: string;
+      details?: SearchLineupDetails;
+      error?: string;
+    }
 );
 export const searchPageSize = 50;
 
@@ -124,9 +193,10 @@ export function tradeSearchContext(
     query.above,
     // Disabled controls do not affect existing searches; enabled changes invalidate old results.
     query.upgrade ? [query.upgrade.mode, query.upgrade.minimum] : null,
+    query.deficit ? [query.deficit.position, query.deficit.ceiling] : null,
     // Distinguish invalid numeric edits from valid unbounded limits so stale searches cannot revive.
-    query.horizon
-      ? [query.horizon.own, query.horizon.other].map((range) =>
+    query.weekly
+      ? [query.weekly.own, query.weekly.other].map((range) =>
           range
             ? [range.minimum, range.maximum].map((value) =>
                 value === null || Number.isFinite(value)
@@ -168,10 +238,20 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
     errors.push(
       "Choose a valid upgrade mode and a nonnegative Expected PPG advantage.",
     );
-  // Signed, inclusive horizon limits are independent for each team and validated only when enabled.
+  // The ceiling applies to one explicitly selected position actually represented in the outgoing package.
+  if (
+    q.deficit &&
+    (!positions.includes(q.deficit.position) ||
+      !q.give.some((id) => m.byId.get(id)?.pos === q.deficit!.position) ||
+      !positionGradeScale.some((grade) => grade === q.deficit!.ceiling))
+  )
+    errors.push(
+      "Choose an offered deficit position and a valid grade ceiling.",
+    );
+  // Signed, inclusive weekly limits are independent for each team and validated only when enabled.
   for (const [label, range] of [
-    ["Your", q.horizon?.own],
-    ["Their", q.horizon?.other],
+    ["Your", q.weekly?.own],
+    ["Their", q.weekly?.other],
   ] as const) {
     if (!range) continue;
     if (
@@ -179,13 +259,13 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
         (value) => value === null || Number.isFinite(value),
       )
     )
-      errors.push(`${label} horizon limits must be finite numbers or blank.`);
+      errors.push(`${label} weekly limits must be finite numbers or blank.`);
     else if (
       range.minimum !== null &&
       range.maximum !== null &&
       range.minimum > range.maximum
     )
-      errors.push(`${label} minimum horizon gain cannot exceed its maximum.`);
+      errors.push(`${label} minimum weekly gain cannot exceed its maximum.`);
   }
   const outgoing = sum(q.give.map((id) => m.byId.get(id)?.index ?? 0));
   const lower = outgoing - q.below,
@@ -195,15 +275,15 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
   return { errors, outgoing, lower, upper };
 }
 
-// Apply both teams' active bounds to authoritative totals, never per-week averages or unavailable-as-zero values.
-export function matchesHorizon(
-  row: Pick<SearchRow, "ownTotal" | "otherTotal">,
-  filter?: HorizonFilter,
+// Apply bounds to authoritative weekly averages; missing scoring never becomes zero.
+export function matchesWeekly(
+  row: Pick<SearchRow, "own" | "other">,
+  filter?: WeeklyFilter,
 ) {
   return (
     [
-      [row.ownTotal, filter?.own],
-      [row.otherTotal, filter?.other],
+      [row.own, filter?.own],
+      [row.other, filter?.other],
     ] as const
   ).every(([value, range]) => {
     if (!range || (range.minimum === null && range.maximum === null))
@@ -214,6 +294,13 @@ export function matchesHorizon(
       (range.maximum === null || value! <= range.maximum)
     );
   });
+}
+
+// Compare known letter grades inclusively; unavailable grades are not silently treated as F.
+export function gradeAtOrBelow(grade: string, ceiling: string) {
+  const rank = positionGradeScale.findIndex((value) => value === grade);
+  const limit = positionGradeScale.findIndex((value) => value === ceiling);
+  return rank >= 0 && limit >= 0 && rank <= limit;
 }
 
 // Assign fixed offered players to distinct current opponents before any players leave in the trade.
@@ -331,15 +418,44 @@ export function findTradeMatches(
     matched: 0,
     scored: 0,
     ...(q.upgrade ? { upgradeExcluded: 0 } : {}),
+    ...(q.deficit ? { deficitExcluded: 0 } : {}),
   };
+  // Compute the same grades displayed in Teams once, from the unchanged pre-trade snapshot.
+  const assessments = q.deficit ? teamsAssessment(m) : undefined;
   const matches: SearchMatch[] = [];
   let nodes = 0;
   for (const teamB of teams) {
+    const assessed = q.deficit
+      ? assessments
+          ?.get(teamB)
+          ?.find((row) => row.position === q.deficit!.position)
+      : undefined;
+    if (
+      q.deficit &&
+      (!assessed || !gradeAtOrBelow(assessed.grade, q.deficit.ceiling))
+    ) {
+      stats.deficitExcluded!++;
+      stats.checked++;
+      onProgress?.({ ...stats });
+      continue;
+    }
+    const deficit =
+      q.deficit && assessed
+        ? { ...q.deficit, grade: assessed.grade, status: assessed.status }
+        : undefined;
     // Fit is identical for every incoming package from this team, so check it once before enumeration/scoring.
     const upgrades = q.upgrade
       ? offeredUpgrades(m, q, teamB, lineupsRaw)
       : undefined;
-    if (upgrades && !upgrades.length) {
+    // When both filters are active, an unrelated-position upgrade cannot satisfy the selected deficit.
+    if (
+      upgrades &&
+      (!upgrades.length ||
+        (q.deficit &&
+          !upgrades.some(
+            (edge) => m.byId.get(edge.offered)?.pos === q.deficit!.position,
+          )))
+    ) {
       stats.upgradeExcluded!++;
       stats.checked++;
       onProgress?.({ ...stats });
@@ -366,6 +482,7 @@ export function findTradeMatches(
             outgoing: bounds.outgoing,
             difference: total - bounds.outgoing,
             ...(upgrades ? { upgrades } : {}),
+            ...(deficit ? { deficit } : {}),
           });
           stats.matched++;
         }
@@ -469,6 +586,62 @@ export function scoreTradeMatch(
     irA: r.irA,
     irB: r.irB,
   };
+}
+
+// Explain the exact evaluated lineups on demand; positional-fit assignments are not scoring replacements.
+export function searchLineupDetails(
+  m: Model,
+  q: TradeSearchQuery,
+  match: SearchMatch,
+  lineupsRaw?: string,
+): SearchLineupDetails {
+  const r = evaluateTrade(
+    m,
+    {
+      teamA: q.teamA,
+      teamB: match.teamB,
+      give: [...q.give],
+      get: [...match.get],
+    },
+    true,
+    lineupsRaw,
+  );
+  if (!r.valid) throw Error(r.errors.join(" "));
+  const side = (direct: typeof r.directA): SearchLineupSide => ({
+    source: direct.source,
+    replacements: direct.replacements,
+    incoming: direct.promotedIncoming,
+    benchOutgoing: direct.benchOutgoing,
+    issues: [...direct.errors, ...direct.warnings],
+    weekly: direct.weekly.map((week) => ({
+      week: week.week,
+      before: week.beforeExpected,
+      after: week.afterExpected,
+      gain: week.expectedGain,
+      // A player may move between WR/RB/TE and FLEX; show slot changes rather than inventing one-to-one swaps.
+      changes: week.slots.flatMap((slot, i) => {
+        const before = week.beforeIds[i] || null,
+          after = week.ids[i] || null;
+        if (before === after) return [];
+        const beforePoints = before ? n(m.byId.get(before)?.expected) : 0;
+        const afterPoints = after ? n(m.byId.get(after)?.expected) : 0;
+        return [
+          {
+            slot,
+            before,
+            after,
+            gain:
+              week.expectedGain === null ||
+              beforePoints === null ||
+              afterPoints === null
+                ? null
+                : afterPoints - beforePoints,
+          },
+        ];
+      }),
+    })),
+  });
+  return { own: side(r.directA), other: side(r.directB) };
 }
 
 // Sort every scored match globally, with unavailable scores after real losses and stable ID ties.

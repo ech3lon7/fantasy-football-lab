@@ -2,16 +2,20 @@ import { expect, it } from "vitest";
 import { starterFixture } from "./fixtures";
 import { evaluate } from "../src/domain/valuation";
 import { cmpId } from "../src/domain/contracts";
+import { teamsAssessment } from "../src/domain/lineups";
 import { evaluateTrade } from "../src/domain/trades";
 import { saveStarterLineup } from "../src/domain/starter-lineups";
 import {
+  gradeAtOrBelow,
+  positionGradeScale,
+  searchLineupDetails,
   compareSearchRows,
   findTradeMatches,
   scoreTradeMatch,
   tradeSearchBounds,
   tradeSearchContext,
   offeredUpgrades,
-  matchesHorizon,
+  matchesWeekly,
   type SearchRow,
   type TradeSearchQuery,
 } from "../src/domain/trade-search";
@@ -48,105 +52,102 @@ const query: TradeSearchQuery = {
   above: 5,
 };
 
-// Signed bounds are inclusive and both teams' enabled ranges must pass using the exact unrounded totals.
-it("filters total horizon gains with independent inclusive minimums and maximums", () => {
-  const row = { ownTotal: 20, otherTotal: -5 };
+// Signed bounds are inclusive and both teams' enabled ranges must pass using the exact unrounded averages.
+it("filters weekly gains with independent inclusive minimums and maximums", () => {
+  const row = { own: 20, other: -5 };
   expect(
-    matchesHorizon(row, {
+    matchesWeekly(row, {
       own: { minimum: 20, maximum: 20 },
       other: { minimum: -5, maximum: -5 },
     }),
   ).toBe(true);
-  expect(matchesHorizon(row, { own: { minimum: 20.001, maximum: null } })).toBe(
+  expect(matchesWeekly(row, { own: { minimum: 20.001, maximum: null } })).toBe(
     false,
   );
-  expect(matchesHorizon(row, { own: { minimum: null, maximum: 19.999 } })).toBe(
+  expect(matchesWeekly(row, { own: { minimum: null, maximum: 19.999 } })).toBe(
     false,
   );
   expect(
-    matchesHorizon(row, {
+    matchesWeekly(row, {
       own: { minimum: 0, maximum: null },
       other: { minimum: 0, maximum: null },
     }),
   ).toBe(false);
-  expect(matchesHorizon(row, { other: { minimum: null, maximum: -5 } })).toBe(
+  expect(matchesWeekly(row, { other: { minimum: null, maximum: -5 } })).toBe(
     true,
   );
   expect(
-    matchesHorizon(
-      { ownTotal: 0, otherTotal: 0 },
-      { own: { minimum: 0, maximum: 0 } },
-    ),
+    matchesWeekly({ own: 0, other: 0 }, { own: { minimum: 0, maximum: 0 } }),
   ).toBe(true);
 });
 
-// Unknown totals are excluded only for a bounded side; a blank range is not a fabricated zero requirement.
-it("preserves unavailable versus zero horizon gains and unbounded/disabled ranges", () => {
-  const row = { ownTotal: null, otherTotal: 0 };
-  expect(matchesHorizon(row)).toBe(true);
-  expect(matchesHorizon(row, { own: { minimum: null, maximum: null } })).toBe(
+// Unknown averages are excluded only for a bounded side; a blank range is not a fabricated zero requirement.
+it("preserves unavailable versus zero weekly gains and unbounded/disabled ranges", () => {
+  const row = { own: null, other: 0 };
+  expect(matchesWeekly(row)).toBe(true);
+  expect(matchesWeekly(row, { own: { minimum: null, maximum: null } })).toBe(
     true,
   );
-  expect(matchesHorizon(row, { own: { minimum: -100, maximum: null } })).toBe(
+  expect(matchesWeekly(row, { own: { minimum: -100, maximum: null } })).toBe(
     false,
   );
-  expect(matchesHorizon(row, { other: { minimum: 0, maximum: null } })).toBe(
+  expect(matchesWeekly(row, { other: { minimum: 0, maximum: null } })).toBe(
     true,
   );
   expect(
-    matchesHorizon(
-      { ownTotal: Infinity, otherTotal: 0 },
+    matchesWeekly(
+      { own: Infinity, other: 0 },
       { own: { minimum: 0, maximum: null } },
     ),
   ).toBe(false);
 });
 
 // Validate enabled limits and keep malformed numeric edits distinct from a valid unbounded search context.
-it("validates horizon ranges and invalidates searches on every active bound change", async () => {
+it("validates weekly ranges and invalidates searches on every active bound change", async () => {
   const m = await matchingModel();
   const q: TradeSearchQuery = {
     ...query,
-    horizon: { own: { minimum: -20, maximum: 5 } },
+    weekly: { own: { minimum: -20, maximum: 5 } },
   };
   expect(tradeSearchBounds(m, q).errors).toEqual([]);
   expect(
     tradeSearchBounds(m, {
       ...q,
-      horizon: { other: { minimum: 10, maximum: 5 } },
+      weekly: { other: { minimum: 10, maximum: 5 } },
     }).errors.join(),
-  ).toContain("Their minimum horizon gain");
+  ).toContain("Their minimum weekly gain");
   for (const value of [NaN, Infinity])
     expect(
       tradeSearchBounds(m, {
         ...q,
-        horizon: { own: { minimum: value, maximum: null } },
+        weekly: { own: { minimum: value, maximum: null } },
       }).errors.join(),
     ).toContain("finite numbers or blank");
   const first = tradeSearchContext(m, q);
-  for (const horizon of [
+  for (const weekly of [
     { own: { minimum: -19, maximum: 5 } },
     { own: { minimum: -20, maximum: 6 } },
     { other: { minimum: -20, maximum: 5 } },
   ])
-    expect(tradeSearchContext(m, { ...q, horizon })).not.toBe(first);
+    expect(tradeSearchContext(m, { ...q, weekly })).not.toBe(first);
   expect(
     tradeSearchContext(m, {
       ...q,
-      horizon: { own: { minimum: NaN, maximum: null } },
+      weekly: { own: { minimum: NaN, maximum: null } },
     }),
   ).not.toBe(
     tradeSearchContext(m, {
       ...q,
-      horizon: { own: { minimum: null, maximum: null } },
+      weekly: { own: { minimum: null, maximum: null } },
     }),
   );
-  expect(tradeSearchContext(m, { ...query, horizon: undefined })).toBe(
+  expect(tradeSearchContext(m, { ...query, weekly: undefined })).toBe(
     tradeSearchContext(m, query),
   );
 });
 
-// Verify full evaluator totals rather than per-week figures, while retaining the original matching set and scoring.
-it("screens authoritative horizon totals without changing index matching, weeks or scoring", async () => {
+// Verify existing evaluator weekly averages rather than horizon totals, while retaining the original matching set and scoring.
+it("screens authoritative weekly averages without changing index matching, weeks or scoring", async () => {
   const d = await starterFixture(),
     m = evaluate(d, d.settings);
   const q: TradeSearchQuery = {
@@ -158,8 +159,8 @@ it("screens authoritative horizon totals without changing index matching, weeks 
   const matches = findTradeMatches(m, q).matches;
   const filteredQuery = {
     ...q,
-    horizon: {
-      own: { minimum: 20, maximum: null },
+    weekly: {
+      own: { minimum: 2, maximum: null },
       other: { minimum: 0, maximum: null },
     },
   };
@@ -170,9 +171,9 @@ it("screens authoritative horizon totals without changing index matching, weeks 
   expect(qb.ownTotal).toBe(0);
   expect(wr.own).toBe(15);
   expect(wr.ownTotal).toBe(180);
-  expect(matchesHorizon(wr, filteredQuery.horizon)).toBe(true);
-  expect(matchesHorizon(qb, filteredQuery.horizon)).toBe(false);
-  expect(matchesHorizon(wr, { own: { minimum: null, maximum: 100 } })).toBe(
+  expect(matchesWeekly(wr, filteredQuery.weekly)).toBe(true);
+  expect(matchesWeekly(qb, filteredQuery.weekly)).toBe(false);
+  expect(matchesWeekly(wr, { own: { minimum: null, maximum: 10 } })).toBe(
     false,
   );
   for (const match of matches)
@@ -730,4 +731,208 @@ it("invalidates context for account, outgoing, model and starter changes", async
   expect(tradeSearchContext(m, query, "", "local")).toBe(first);
   m.settings.Premium = 0.35;
   expect(tradeSearchContext(m, query, "", "local")).not.toBe(first);
+});
+
+// Every grade boundary is inclusive, and missing grades cannot masquerade as severe deficits.
+it("compares existing grade ceilings inclusively without converting unavailable grades to F", () => {
+  for (const [i, grade] of positionGradeScale.entries())
+    for (const [j, ceiling] of positionGradeScale.entries())
+      expect(gradeAtOrBelow(grade, ceiling)).toBe(i <= j);
+  for (const unknown of ["n.a.", "", "Unavailable"])
+    expect(gradeAtOrBelow(unknown, "A+")).toBe(false);
+  expect(gradeAtOrBelow("F", "unknown")).toBe(false);
+});
+
+// The filter consumes pre-trade Team Rosters grades, with no changes to ownership, baselines or scoring.
+it("filters by the selected offered position using the existing team grade snapshot", async () => {
+  const d = await starterFixture(),
+    m = evaluate(d, d.settings);
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["101"],
+    below: 500,
+    above: 500,
+  };
+  const before = teamsAssessment(m);
+  const grade = before.get("2")!.find((row) => row.position === "QB")!;
+  expect(grade.grade).toBe("F");
+  const unfiltered = findTradeMatches(m, q);
+  const filtered = findTradeMatches(m, {
+    ...q,
+    deficit: { position: "QB", ceiling: "F" },
+  });
+  expect(filtered.matches.map((row) => row.get)).toEqual(
+    unfiltered.matches.map((row) => row.get),
+  );
+  expect(
+    filtered.matches.every(
+      (row) =>
+        row.deficit?.grade === grade.grade &&
+        row.deficit.status === grade.status,
+    ),
+  ).toBe(true);
+  expect(filtered.stats.deficitExcluded).toBe(0);
+  expect(teamsAssessment(m)).toEqual(before);
+  // This WR group exceeds C even though the same opponent's QB group qualifies.
+  m.byId.get("1")!.pos = "WR";
+  expect(
+    findTradeMatches(m, {
+      ...q,
+      give: ["1"],
+      deficit: { position: "WR", ceiling: "C" },
+    }).matches,
+  ).toEqual([]);
+  // No usable TE grade means no match, even at the most permissive ceiling.
+  m.byId.get("1")!.pos = "TE";
+  m.byId.get("1")!.value = 0;
+  const absent = findTradeMatches(m, {
+    ...q,
+    give: ["1"],
+    deficit: { position: "TE", ceiling: "A+" },
+  });
+  expect(absent.matches).toEqual([]);
+  expect(absent.stats.deficitExcluded).toBe(1);
+});
+
+// Editing either selected criterion invalidates results; unrepresented positions cannot start a search.
+it("validates deficit selections and fingerprints position and grade changes", async () => {
+  const d = await starterFixture(),
+    m = evaluate(d, d.settings);
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["1", "101"],
+    deficit: { position: "QB", ceiling: "C+" },
+  };
+  expect(tradeSearchBounds(m, q).errors).toEqual([]);
+  for (const deficit of [
+    { position: "RB", ceiling: "C+" },
+    { position: "QB", ceiling: "C" },
+  ] as const)
+    expect(tradeSearchContext(m, { ...q, deficit })).not.toBe(
+      tradeSearchContext(m, q),
+    );
+  for (const deficit of [
+    { position: "WR", ceiling: "C+" },
+    { position: "QB", ceiling: "n.a." },
+  ] as const)
+    expect(tradeSearchBounds(m, { ...q, deficit }).errors.join()).toContain(
+      "offered deficit position",
+    );
+  expect(tradeSearchBounds(m, { ...q, give: ["1"] }).errors.join()).toContain(
+    "offered deficit position",
+  );
+});
+
+// A qualifying upgrade at another offered position cannot satisfy a QB-specific deficit search.
+it("requires the qualifying positional upgrade to match the selected deficit position", async () => {
+  const d = await starterFixture(),
+    m = evaluate(d, d.settings);
+  Object.assign(m.byId.get("106")!, { owner: "1", expected: 20, slot: 20 });
+  m.dataset.tables.ModelRosters.push({
+    PlayerID: 106,
+    TeamID: 1,
+    LineupSlotID: 20,
+  });
+  m.byId.get("101")!.expected = 5;
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["101", "106"],
+    below: 500,
+    above: 500,
+    deficit: { position: "QB", ceiling: "C+" },
+    upgrade: { mode: "starter", minimum: 1 },
+  };
+  expect(offeredUpgrades(m, q, "2")).toMatchObject([
+    { offered: "106", compared: "2" },
+  ]);
+  expect(
+    findTradeMatches(m, { ...q, upgrade: undefined }).matches.length,
+  ).toBeGreaterThan(0);
+  const filtered = findTradeMatches(m, q);
+  expect(filtered.matches).toEqual([]);
+  expect(filtered.stats.upgradeExcluded).toBe(1);
+  m.byId.get("101")!.expected = 30;
+  expect(findTradeMatches(m, q).matches.length).toBeGreaterThan(0);
+});
+
+// Trace slot identities back to the evaluator and reconcile both weekly deltas and the displayed averages.
+it("explains actual replacements, byes and slot gains for both teams without altering scoring", async () => {
+  const d = await starterFixture(),
+    m = evaluate(d, d.settings);
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["100"],
+    below: 500,
+    above: 500,
+  };
+  const match = findTradeMatches(m, q).matches.find(
+    (row) => row.get[0] === "2",
+  )!;
+  const trace = searchLineupDetails(m, q, match);
+  expect(trace.own.source).toBe("Imported ESPN lineup");
+  expect(trace.own.replacements).toEqual(["101"]);
+  expect(trace.own.weekly[0].changes).toContainEqual({
+    slot: "QB",
+    before: "100",
+    after: "101",
+    gain: 10,
+  });
+  expect(trace.other.weekly[0].changes).toContainEqual({
+    slot: "QB",
+    before: "200",
+    after: "100",
+    gain: 10,
+  });
+  expect(
+    trace.own.weekly.find((week) => week.week === 8)!.changes,
+  ).toContainEqual({ slot: "QB", before: null, after: "101", gain: 30 });
+  const scored = scoreTradeMatch(m, q, match);
+  for (const [side, average] of [
+    [trace.own, scored.own],
+    [trace.other, scored.other],
+  ] as const) {
+    expect(
+      side.weekly.reduce((total, week) => total + week.gain!, 0) /
+        m.weeks.length,
+    ).toBeCloseTo(average!);
+    for (const week of side.weekly) {
+      expect(
+        week.changes.reduce((total, slot) => total + slot.gain!, 0),
+      ).toBeCloseTo(week.gain!);
+      expect(week.after! - week.before!).toBeCloseTo(week.gain!);
+    }
+  }
+});
+
+// Saved starters determine explanations too; bench departures and missing scores retain zero/null semantics.
+it("honors saved scoring lineups and keeps unavailable explanations distinct from zero", async () => {
+  const d = await starterFixture(),
+    m = evaluate(d, d.settings);
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["101"],
+    below: 500,
+    above: 500,
+  };
+  const match = findTradeMatches(m, q).matches.find(
+    (row) => row.get[0] === "200",
+  )!;
+  const bench = searchLineupDetails(m, q, match);
+  expect(bench.own.benchOutgoing).toEqual(["101"]);
+  expect(
+    bench.own.weekly.every(
+      (week) => week.gain === 0 && week.changes.length === 0,
+    ),
+  ).toBe(true);
+  const raw = saveStarterLineup(m, "1", ["1", "101"]);
+  const saved = searchLineupDetails(m, q, match, raw);
+  expect(saved.own.source).toBe("Saved app lineup");
+  expect(saved.own.replacements).toEqual(["100"]);
+  m.byId.get("100")!.expected = null;
+  const unknown = searchLineupDetails(m, q, match);
+  expect(unknown.own.weekly.every((week) => week.gain === null)).toBe(true);
+  expect(unknown.own.issues.length).toBeGreaterThan(0);
+  expect(() =>
+    searchLineupDetails(m, { ...q, give: ["missing"] }, match),
+  ).toThrow();
 });

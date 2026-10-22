@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
-import { str, type Draft } from "../domain/contracts";
+import { str, type Draft, type Position } from "../domain/contracts";
 import type { Model } from "../domain/valuation";
 import { readStarterLineup } from "../domain/starter-lineups";
 import {
+  positionGradeScale,
+  type SearchLineupDetails,
   tradeSearchBounds,
   tradeSearchContext,
   type SearchProgress,
@@ -12,7 +14,7 @@ import {
   type SearchRow,
   type SearchStats,
   type UpgradeFilter,
-  type HorizonRange,
+  type WeeklyRange,
 } from "../domain/trade-search";
 import { Panel } from "../ui/layout";
 import { PlayerName } from "../ui/PlayerName";
@@ -29,6 +31,8 @@ interface SearchJob {
   stats?: SearchStats;
   error?: string;
   paging?: boolean;
+  // Store only explanations explicitly opened in this completed search.
+  lineups?: Record<string, { details?: SearchLineupDetails; error?: string }>;
 }
 export function TradeSearch({
   m,
@@ -49,25 +53,38 @@ export function TradeSearch({
   const [upgradeOnly, setUpgradeOnly] = useState(false),
     [upgradeMode, setUpgradeMode] = useState<UpgradeFilter["mode"]>("starter"),
     [minimumUpgrade, setMinimumUpgrade] = useState("1");
-  // Each team's total-point filter is optional; blank bounds remain unbounded and negative limits are allowed.
-  const [ownHorizon, setOwnHorizon] = useState({
+  // Each team's weekly-point filter is optional; blank bounds remain unbounded and negative limits are allowed.
+  const [ownWeekly, setOwnWeekly] = useState({
       enabled: false,
       minimum: "0",
       maximum: "",
     }),
-    [otherHorizon, setOtherHorizon] = useState({
+    [otherWeekly, setOtherWeekly] = useState({
       enabled: false,
       minimum: "0",
       maximum: "",
     });
+  // Keep the selected offered position explicit when the outgoing package changes.
+  const [deficitOnly, setDeficitOnly] = useState(false),
+    [deficitPosition, setDeficitPosition] = useState(""),
+    [deficitCeiling, setDeficitCeiling] = useState("C+");
+  const offeredPositions = [
+    ...new Set(
+      draft.give.flatMap((id) => {
+        const position = m.byId.get(id)?.pos;
+        return position ? [position] : [];
+      }),
+    ),
+  ];
+  const selectedPosition = deficitPosition || offeredPositions[0] || "";
   const [job, setJob] = useState<SearchJob | null>(null);
   const active = useRef<{ worker: Worker; id: string; context: string } | null>(
     null,
   );
   // Preserve invalid/empty edits as invalid input, instead of Number("") silently becoming zero.
   const parseOffset = (text: string) => (text.trim() ? Number(text) : NaN);
-  // Keep blank horizon bounds distinct from invalid input and from a real numeric zero.
-  const horizonRange = (range: typeof ownHorizon): HorizonRange | undefined =>
+  // Keep blank weekly bounds distinct from invalid input and from a real numeric zero.
+  const weeklyRange = (range: typeof ownWeekly): WeeklyRange | undefined =>
     range.enabled
       ? {
           minimum: range.minimum.trim() ? Number(range.minimum) : null,
@@ -83,9 +100,12 @@ export function TradeSearch({
     upgrade: upgradeOnly
       ? { mode: upgradeMode, minimum: parseOffset(minimumUpgrade) }
       : undefined,
-    horizon:
-      ownHorizon.enabled || otherHorizon.enabled
-        ? { own: horizonRange(ownHorizon), other: horizonRange(otherHorizon) }
+    deficit: deficitOnly
+      ? { position: selectedPosition as Position, ceiling: deficitCeiling }
+      : undefined,
+    weekly:
+      ownWeekly.enabled || otherWeekly.enabled
+        ? { own: weeklyRange(ownWeekly), other: weeklyRange(otherWeekly) }
         : undefined,
   };
   const bounds = tradeSearchBounds(m, query);
@@ -142,6 +162,18 @@ export function TradeSearch({
               status: "error",
               error: message.message,
               paging: false,
+            };
+          // Detail replies enrich one expanded result without replacing rows or changing search status.
+          if (message.type === "details")
+            return {
+              ...previous,
+              lineups: {
+                ...previous.lineups,
+                [message.key]: {
+                  details: message.details,
+                  error: message.error,
+                },
+              },
             };
           // Reject out-of-order pages instead of duplicating or skipping rows.
           if (
@@ -251,6 +283,30 @@ export function TradeSearch({
     active.current.worker.postMessage(message);
   }
 
+  // Fetch actual weekly slot changes only when the matching result is opened.
+  function inspect(row: SearchRow) {
+    if (
+      !job ||
+      stale ||
+      job.status !== "complete" ||
+      active.current?.id !== job.id ||
+      job.lineups?.[row.key]
+    )
+      return;
+    setJob((previous) =>
+      previous
+        ? { ...previous, lineups: { ...previous.lineups, [row.key]: {} } }
+        : previous,
+    );
+    const request: SearchRequest = {
+      type: "details",
+      id: job.id,
+      context,
+      key: row.key,
+    };
+    active.current.worker.postMessage(request);
+  }
+
   // Reuse existing player inspection links for outgoing summaries and proposed roster transactions.
   const names = (ids: string[]) =>
     ids.length
@@ -296,20 +352,20 @@ export function TradeSearch({
   };
 
   // Numeric fields allow unbounded limits; moving a slider sets that bound without capping valid typed values.
-  const horizonControls = (
+  const weeklyControls = (
     label: "Your" | "Their",
-    range: typeof ownHorizon,
-    set: (range: typeof ownHorizon) => void,
+    range: typeof ownWeekly,
+    set: (range: typeof ownWeekly) => void,
   ) => {
     const values = [range.minimum, range.maximum]
       .map(Number)
       .filter(Number.isFinite);
-    const trackMinimum = Math.min(-100, ...values),
-      trackMaximum = Math.max(100, ...values);
+    const trackMinimum = Math.min(-10, ...values),
+      trackMaximum = Math.max(10, ...values);
     return (
       <div>
         <label className="check">
-          <span>Filter {label.toLowerCase()} horizon gain</span>
+          <span>Filter {label.toLowerCase()} weekly gain</span>
           <input
             type="checkbox"
             checked={range.enabled}
@@ -324,7 +380,7 @@ export function TradeSearch({
               <div className="trade-search-offset" key={bound}>
                 <label className="control">
                   <span>
-                    {label} {bound} horizon gain (total points)
+                    {label} {bound} weekly gain (points/week)
                   </span>
                   <input
                     type="number"
@@ -338,7 +394,7 @@ export function TradeSearch({
                 </label>
                 <input
                   type="range"
-                  aria-label={`${label} ${bound} horizon gain slider`}
+                  aria-label={`${label} ${bound} weekly gain slider`}
                   min={trackMinimum}
                   max={trackMaximum}
                   step="0.01"
@@ -455,18 +511,84 @@ export function TradeSearch({
           </small>
         </p>
       )}
-      {/* Screen the exact horizon totals shown in Trade details, independently for either or both teams. */}
-      {horizonControls("Your", ownHorizon, setOwnHorizon)}
-      {horizonControls("Their", otherHorizon, setOtherHorizon)}
-      {(ownHorizon.enabled || otherHorizon.enabled) && (
+      {/* Reuse existing league-relative team grades for one offered position. */}
+      <div className="trade-search-controls">
+        <label className="check">
+          <span>Only teams with a positional deficit</span>
+          <input
+            type="checkbox"
+            checked={deficitOnly}
+            onChange={(event) => {
+              // Freeze the initial position too, so changing offers cannot silently change the active criterion.
+              if (event.target.checked && !deficitPosition)
+                setDeficitPosition(selectedPosition);
+              setDeficitOnly(event.target.checked);
+            }}
+          />
+        </label>
+        {deficitOnly && (
+          <>
+            <label className="control">
+              <span>Deficit position</span>
+              <select
+                aria-label="Deficit position"
+                value={
+                  offeredPositions.includes(selectedPosition as Position)
+                    ? selectedPosition
+                    : ""
+                }
+                onChange={(event) => setDeficitPosition(event.target.value)}
+              >
+                <option value="" disabled>
+                  Select an offered position
+                </option>
+                {offeredPositions.map((position) => (
+                  <option key={position} value={position}>
+                    {position}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="control">
+              <span>Maximum position grade</span>
+              <select
+                aria-label="Maximum position grade"
+                value={deficitCeiling}
+                onChange={(event) => setDeficitCeiling(event.target.value)}
+              >
+                {positionGradeScale.map((grade) => (
+                  <option key={grade} value={grade}>
+                    {grade} or lower
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
+      </div>
+      {deficitOnly && (
         <p>
           <small>
-            Horizon gain is the total model expected starting-lineup points
-            gained/lost across Weeks {m.current}–{m.final}, as shown in Trade
-            details. Both enabled ranges must pass. Blank limits are unbounded;
-            moving a slider sets that limit. Negative limits are allowed.
-            Unavailable totals cannot pass an active bound. This does not change
-            the evaluation weeks.
+            Uses the other team's current roster grade from Team Rosters,
+            relative to this fantasy league. The ceiling is inclusive;
+            unavailable grades do not qualify. When positional upgrades are also
+            enabled, an upgrade must qualify at this selected position.
+          </small>
+        </p>
+      )}
+      {/* Screen existing average lineup gains independently for either or both teams. */}
+      {weeklyControls("Your", ownWeekly, setOwnWeekly)}
+      {weeklyControls("Their", otherWeekly, setOtherWeekly)}
+      {(ownWeekly.enabled || otherWeekly.enabled) && (
+        <p>
+          <small>
+            Weekly gain is the total model expected starting-lineup gain divided
+            by {m.weeks.length} remaining fantasy weeks (Weeks {m.current}–
+            {m.final}). It is an average lineup change, not a player's actual
+            PPG or ESPN's current-week projection. Both enabled ranges must
+            pass. Blank limits are unbounded; moving a slider sets that limit.
+            Negative limits are allowed. Unavailable gains cannot pass an active
+            bound. Evaluation weeks are unchanged.
           </small>
         </p>
       )}
@@ -606,8 +728,28 @@ export function TradeSearch({
                         {row.warnings.length > 0 && (
                           <Signal text="CONDITIONAL" />
                         )}
-                        <details>
+                        <details
+                          onToggle={(event) => {
+                            if (event.currentTarget.open) inspect(row);
+                          }}
+                        >
                           <summary>Trade details</summary>
+                          {/* Display the exact pre-trade grade that qualified this team. */}
+                          {row.deficit && (
+                            <p>
+                              Their {row.deficit.position} grade:{" "}
+                              <span className="model">{row.deficit.grade}</span>{" "}
+                              (required {row.deficit.ceiling} or lower).{" "}
+                              {row.deficit.status}
+                            </p>
+                          )}
+                          <p>
+                            Your weekly lineup gain:{" "}
+                            <span className="model">{scoring(row.own)}</span>{" "}
+                            points/week. Their weekly lineup gain:{" "}
+                            <span className="model">{scoring(row.other)}</span>{" "}
+                            points/week.
+                          </p>
                           {/* Show the exact qualifying comparison instead of implying a guaranteed net improvement or acceptance. */}
                           {row.upgrades?.map((upgrade) => (
                             <p key={`${upgrade.offered}-${upgrade.group}`}>
@@ -661,9 +803,105 @@ export function TradeSearch({
                             . Their horizon gain:{" "}
                             <span className="model">
                               {scoring(row.otherTotal)}
-                            </span>
-                            .
+                            </span>{" "}
+                            total expected points across {m.weeks.length} weeks.
                           </p>
+                          {/* Actual scoring replacements are separate from the positional-fit comparisons above. */}
+                          <p>
+                            <small>
+                              Positional upgrades describe fit before the trade.
+                              The scoring replacements below explain the modeled
+                              gains.
+                            </small>
+                          </p>
+                          {stale ? (
+                            <p>
+                              Search again to inspect current lineup changes.
+                            </p>
+                          ) : !job.lineups?.[row.key]?.details &&
+                            !job.lineups?.[row.key]?.error ? (
+                            <p role="status">Loading lineup changes…</p>
+                          ) : job.lineups?.[row.key]?.error ? (
+                            <p className="notice warning">
+                              {job.lineups[row.key].error}
+                            </p>
+                          ) : (
+                            (["own", "other"] as const).map((side) => {
+                              const detail =
+                                job.lineups![row.key].details![side];
+                              return (
+                                <div key={side}>
+                                  <p>
+                                    <strong>
+                                      {side === "own"
+                                        ? "Your scoring lineup"
+                                        : "Their scoring lineup"}
+                                    </strong>{" "}
+                                    · {detail.source}
+                                  </p>
+                                  <p>
+                                    Bench replacements:{" "}
+                                    {names(detail.replacements)}. Incoming in
+                                    scoring pool: {names(detail.incoming)}.{" "}
+                                    Outgoing bench players:{" "}
+                                    {names(detail.benchOutgoing)}.
+                                  </p>
+                                  {detail.issues.map((issue) => (
+                                    <p className="notice warning" key={issue}>
+                                      {issue}
+                                    </p>
+                                  ))}
+                                  <details>
+                                    <summary>
+                                      {side === "own" ? "Your" : "Their"} weekly
+                                      scoring replacements
+                                    </summary>
+                                    <p>
+                                      <small>
+                                        Same-slot before → after. Slot moves
+                                        (including FLEX) can produce multiple
+                                        rows; the weekly total includes all
+                                        changes and byes.
+                                      </small>
+                                    </p>
+                                    {detail.weekly.map((week) => (
+                                      <div key={week.week}>
+                                        <p>
+                                          <strong>Week {week.week}</strong>:{" "}
+                                          <span className="model">
+                                            {fmt(week.before)} →{" "}
+                                            {fmt(week.after)} (
+                                            {scoring(week.gain)})
+                                          </span>{" "}
+                                          expected points.
+                                        </p>
+                                        {week.changes.length ? (
+                                          week.changes.map((slot, i) => (
+                                            <p key={i}>
+                                              {slot.slot}:{" "}
+                                              {slot.before
+                                                ? names([slot.before])
+                                                : "Unfilled"}{" "}
+                                              →{" "}
+                                              {slot.after
+                                                ? names([slot.after])
+                                                : "Unfilled"}{" "}
+                                              ·{" "}
+                                              <span className="model">
+                                                {scoring(slot.gain)} points
+                                              </span>
+                                            </p>
+                                          ))
+                                        ) : (
+                                          <p>No scoring-slot changes.</p>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </details>
+                                </div>
+                              );
+                            })
+                          )}
                           <p>
                             Legality:{" "}
                             {row.legal === null
@@ -702,18 +940,25 @@ export function TradeSearch({
             </div>
             {job.total === 0 && (
               <p>
-                {job.stats?.horizonExcluded !== undefined
-                  ? "No packages match the index range, incoming count and active horizon-gain limits."
+                {query.weekly || query.deficit || query.upgrade
+                  ? "No packages match this index range, incoming count and active filters."
                   : "No packages match this index range and incoming count."}
               </p>
             )}
             {/* Report post-evaluation filtering separately from index/positional eligibility. */}
-            {job.stats?.horizonExcluded !== undefined && (
+            {job.stats?.weeklyExcluded !== undefined && (
               <p>
-                Trades excluded by horizon-gain limits:{" "}
-                {job.stats.horizonExcluded}. All {job.stats.scored}{" "}
+                Trades excluded by weekly-gain limits:{" "}
+                {job.stats.weeklyExcluded}. All {job.stats.scored}{" "}
                 index/positional matches were evaluated before filtering;
-                unavailable bounded totals are excluded.
+                unavailable bounded weekly gains are excluded.
+              </p>
+            )}
+            {/* Count excluded teams separately from evaluated-package weekly-gain exclusions. */}
+            {job.stats?.deficitExcluded !== undefined && (
+              <p>
+                Teams excluded by positional-deficit filter:{" "}
+                {job.stats.deficitExcluded}. Includes unavailable grades.
               </p>
             )}
             {/* Report filtering independently of missing-index and package-size exclusions. */}

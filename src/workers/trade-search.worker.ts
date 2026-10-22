@@ -1,9 +1,11 @@
-import { evaluate } from "../domain/valuation";
+import { evaluate, type Model } from "../domain/valuation";
 import {
   compareSearchRows,
   findTradeMatches,
   scoreTradeMatch,
-  matchesHorizon,
+  matchesWeekly,
+  searchLineupDetails,
+  type TradeSearchQuery,
   searchPageSize,
   type SearchRequest,
   type SearchResponse,
@@ -13,13 +15,57 @@ import {
 
 // Keep one completed search in this dedicated worker; cancellation terminates the whole worker.
 let retained:
-  | { id: string; context: string; rows: SearchRow[]; stats: SearchStats }
+  | {
+      id: string;
+      context: string;
+      rows: SearchRow[];
+      stats: SearchStats;
+      model: Model;
+      query: TradeSearchQuery;
+      lineupsRaw?: string;
+    }
   | undefined;
 const send = (message: SearchResponse) => self.postMessage(message);
 self.onmessage = (event: MessageEvent<SearchRequest>) => {
   const request = event.data;
   const { id, context } = request;
   try {
+    // Detail requests reuse the captured model/query and affect neither the completed ranking nor draft.
+    if (request.type === "details") {
+      if (!retained || retained.id !== id || retained.context !== context)
+        return;
+      try {
+        const row = retained.rows.find(
+          (candidate) => candidate.key === request.key,
+        );
+        if (!row)
+          throw Error("This trade is no longer in the completed search.");
+        send({
+          id,
+          context,
+          type: "details",
+          key: request.key,
+          details: searchLineupDetails(
+            retained.model,
+            retained.query,
+            row,
+            retained.lineupsRaw,
+          ),
+        });
+      } catch (error) {
+        send({
+          id,
+          context,
+          type: "details",
+          key: request.key,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Lineup details unavailable.",
+        });
+      }
+      return;
+    }
     // Page only a completed matching request; page size limits rendering, never search completeness.
     if (request.type === "page") {
       if (!retained || retained.id !== id || retained.context !== context)
@@ -83,8 +129,8 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
     );
     progress("Evaluating trades", stats, true);
     const rows: SearchRow[] = [];
-    // Horizon screening happens after each full evaluation; every index/positional match is still scored.
-    if (request.query.horizon) stats.horizonExcluded = 0;
+    // Weekly screening uses the evaluator's averages after every complete trade evaluation.
+    if (request.query.weekly) stats.weeklyExcluded = 0;
     // Every exact match receives the same authoritative evaluation as a manually entered trade.
     for (const match of matches) {
       const row = scoreTradeMatch(
@@ -93,14 +139,22 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
         match,
         request.lineupsRaw,
       );
-      if (matchesHorizon(row, request.query.horizon)) rows.push(row);
-      else stats.horizonExcluded = (stats.horizonExcluded ?? 0) + 1;
+      if (matchesWeekly(row, request.query.weekly)) rows.push(row);
+      else stats.weeklyExcluded = (stats.weeklyExcluded ?? 0) + 1;
       stats.scored++;
       progress("Evaluating trades", stats);
     }
     progress("Sorting results", stats, true);
     rows.sort(compareSearchRows);
-    retained = { id, context, rows, stats };
+    retained = {
+      id,
+      context,
+      rows,
+      stats,
+      model,
+      query: request.query,
+      lineupsRaw: request.lineupsRaw,
+    };
     send({
       id,
       context,

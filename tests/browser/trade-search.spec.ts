@@ -92,8 +92,8 @@ const panel = (page: Page) =>
     }),
   });
 
-// Screen full-season totals in the actual worker, combine both teams' bounds, and preserve the disabled path.
-test("horizon sliders filter exact totals for either or both teams without changing the horizon", async ({
+// Screen weekly averages in the actual worker, combine both teams' bounds, and preserve the disabled path.
+test("weekly sliders filter exact averages for either or both teams without changing the horizon", async ({
   page,
 }) => {
   await seed(page);
@@ -104,43 +104,43 @@ test("horizon sliders filter exact totals for either or both teams without chang
   await search
     .getByLabel("Above outgoing total (index points)", { exact: true })
     .fill("500");
-  const ownToggle = search.getByLabel("Filter your horizon gain", {
+  const ownToggle = search.getByLabel("Filter your weekly gain", {
     exact: true,
   });
-  const otherToggle = search.getByLabel("Filter their horizon gain", {
+  const otherToggle = search.getByLabel("Filter their weekly gain", {
     exact: true,
   });
   await expect(ownToggle).not.toBeChecked();
   await expect(otherToggle).not.toBeChecked();
   await ownToggle.check();
   await search
-    .getByLabel("Your minimum horizon gain (total points)", { exact: true })
-    .fill("20");
+    .getByLabel("Your minimum weekly gain (points/week)", { exact: true })
+    .fill("2");
   await expect(
-    search.getByLabel("Your minimum horizon gain slider", { exact: true }),
-  ).toHaveValue("20");
+    search.getByLabel("Your minimum weekly gain slider", { exact: true }),
+  ).toHaveValue("2");
   // Slider movement writes the exact numeric field, and typing negative/wider limits is never clamped.
   await search
-    .getByLabel("Your minimum horizon gain slider", { exact: true })
+    .getByLabel("Your minimum weekly gain slider", { exact: true })
     .focus();
   await page.keyboard.press("ArrowRight");
   await expect(
-    search.getByLabel("Your minimum horizon gain (total points)", {
+    search.getByLabel("Your minimum weekly gain (points/week)", {
       exact: true,
     }),
-  ).toHaveValue("20.01");
+  ).toHaveValue("2.01");
   await search
-    .getByLabel("Your minimum horizon gain (total points)", { exact: true })
-    .fill("20");
+    .getByLabel("Your minimum weekly gain (points/week)", { exact: true })
+    .fill("2");
   await search
-    .getByLabel("Your maximum horizon gain (total points)", { exact: true })
-    .fill("180");
+    .getByLabel("Your maximum weekly gain (points/week)", { exact: true })
+    .fill("15");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
     search.getByText("11 index matches.", { exact: false }),
   ).toBeVisible();
   await expect(
-    search.getByText(/Trades excluded by horizon-gain limits: 1/),
+    search.getByText(/Trades excluded by weekly-gain limits: 1/),
   ).toBeVisible();
   await expect(
     search.getByRole("link", { name: "Incoming QB", exact: true }),
@@ -149,25 +149,25 @@ test("horizon sliders filter exact totals for either or both teams without chang
   await first.getByText("Trade details", { exact: true }).click();
   await expect(first.getByText(/Your horizon gain:/)).toContainText("+180.00");
   await expect(first.locator("td").nth(2)).toHaveText("+15.00");
-  // Both sides must pass: existing bench replacements hold their gain at +240, below this +241 requirement.
+  // Both sides must pass: existing bench replacements hold their gain at +20/week, below this +21/week requirement.
   await otherToggle.check();
   await expect(
     first.getByRole("button", { name: "Load trade" }),
   ).toBeDisabled();
   await search
-    .getByLabel("Their minimum horizon gain (total points)", { exact: true })
-    .fill("241");
+    .getByLabel("Their minimum weekly gain (points/week)", { exact: true })
+    .fill("21");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
     search.getByText("0 index matches.", { exact: false }),
   ).toBeVisible();
   await ownToggle.uncheck();
   await search
-    .getByLabel("Their minimum horizon gain (total points)", { exact: true })
-    .fill("100");
+    .getByLabel("Their minimum weekly gain (points/week)", { exact: true })
+    .fill("10");
   await search
-    .getByLabel("Their maximum horizon gain (total points)", { exact: true })
-    .fill("240");
+    .getByLabel("Their maximum weekly gain (points/week)", { exact: true })
+    .fill("20");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
     search.getByText("12 index matches.", { exact: false }),
@@ -178,8 +178,8 @@ test("horizon sliders filter exact totals for either or both teams without chang
       .getByRole("link", { name: "Incoming QB", exact: true }),
   ).toBeVisible();
   await search
-    .getByLabel("Their maximum horizon gain (total points)", { exact: true })
-    .fill("239.99");
+    .getByLabel("Their maximum weekly gain (points/week)", { exact: true })
+    .fill("19.99");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
     search.getByText("0 index matches.", { exact: false }),
@@ -188,13 +188,13 @@ test("horizon sliders filter exact totals for either or both teams without chang
   await otherToggle.uncheck();
   await ownToggle.check();
   await search
-    .getByLabel("Your minimum horizon gain (total points)", { exact: true })
+    .getByLabel("Your minimum weekly gain (points/week)", { exact: true })
     .fill("-500");
   await search
-    .getByLabel("Your maximum horizon gain (total points)", { exact: true })
+    .getByLabel("Your maximum weekly gain (points/week)", { exact: true })
     .fill("500");
   await expect(
-    search.getByLabel("Your minimum horizon gain slider", { exact: true }),
+    search.getByLabel("Your minimum weekly gain slider", { exact: true }),
   ).toHaveAttribute("min", "-500");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
@@ -202,20 +202,20 @@ test("horizon sliders filter exact totals for either or both teams without chang
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  await search.screenshot({ path: "test-results/trade-horizon-mobile.png" });
+  await search.screenshot({ path: "test-results/trade-weekly-mobile.png" });
   await search
-    .getByLabel("Your minimum horizon gain (total points)", { exact: true })
+    .getByLabel("Your minimum weekly gain (points/week)", { exact: true })
     .fill("501");
   await expect(
     search.getByRole("button", { name: "Search", exact: true }),
   ).toBeDisabled();
   await expect(
-    search.getByText("Your minimum horizon gain cannot exceed its maximum.", {
+    search.getByText("Your minimum weekly gain cannot exceed its maximum.", {
       exact: true,
     }),
   ).toBeVisible();
   await search
-    .getByLabel("Your maximum horizon gain (total points)", { exact: true })
+    .getByLabel("Your maximum weekly gain (points/week)", { exact: true })
     .fill("");
   await expect(
     search.getByRole("button", { name: "Search", exact: true }),
@@ -226,7 +226,7 @@ test("horizon sliders filter exact totals for either or both teams without chang
     search.getByText("12 index matches.", { exact: false }),
   ).toBeVisible();
   await expect(
-    search.getByText(/Trades excluded by horizon-gain limits:/),
+    search.getByText(/Trades excluded by weekly-gain limits:/),
   ).toHaveCount(0);
   await expect(
     page.getByLabel("Outgoing player 1", { exact: true }),
@@ -629,4 +629,168 @@ test("large searches show progress and support cancel, restart and navigation", 
       { exact: true },
     ),
   ).toBeVisible();
+});
+
+// Combine the real worker's deficit controls with the same grades visible in Team Rosters.
+test("deficit filtering selects one offered position and invalidates changed grade searches", async ({
+  page,
+}) => {
+  await seed(page, false, true);
+  const search = panel(page);
+  await page
+    .getByLabel("Outgoing player 2", { exact: true })
+    .selectOption("400");
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("500");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("500");
+  const toggle = search.getByLabel("Only teams with a positional deficit", {
+    exact: true,
+  });
+  await expect(toggle).not.toBeChecked();
+  await toggle.check();
+  await expect(
+    search.getByLabel("Deficit position", { exact: true }),
+  ).toHaveValue("QB");
+  await expect(
+    search.getByLabel("Maximum position grade", { exact: true }),
+  ).toHaveValue("C+");
+  await search
+    .getByLabel("Maximum position grade", { exact: true })
+    .selectOption("F");
+  await search
+    .getByLabel("Only show positional upgrades for the other team", {
+      exact: true,
+    })
+    .check();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("12 index matches.", { exact: false }),
+  ).toBeVisible();
+  const row = search.locator("tbody tr").first();
+  await row.getByText("Trade details", { exact: true }).click();
+  await expect(row.getByText(/Their QB grade:/)).toContainText(
+    "F (required F or lower)",
+  );
+  await search
+    .getByLabel("Deficit position", { exact: true })
+    .selectOption("WR");
+  await expect(row.getByRole("button", { name: "Load trade" })).toBeDisabled();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("0 index matches.", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    search.getByText(/Teams excluded by positional-deficit filter: 1/),
+  ).toBeVisible();
+  await search
+    .getByLabel("Maximum position grade", { exact: true })
+    .selectOption("A+");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("12 index matches.", { exact: false }),
+  ).toBeVisible();
+  // Removing the explicitly chosen WR offer requires a new valid position instead of silently using QB.
+  await page.getByLabel("Outgoing player 2", { exact: true }).selectOption("");
+  await expect(
+    search.getByRole("button", { name: "Search", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    search.getByText(
+      "Choose an offered deficit position and a valid grade ceiling.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await toggle.uncheck();
+  await expect(
+    search.getByRole("button", { name: "Search", exact: true }),
+  ).toBeEnabled();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("12 index matches.", { exact: false }),
+  ).toBeVisible();
+});
+
+// Opening a match lazily explains both teams' actual slot changes, including bench promotions and bye weeks.
+test("trade details show named weekly scoring replacements from the captured lineups", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await seed(page);
+  await page
+    .getByLabel("Outgoing player 1", { exact: true })
+    .selectOption("100");
+  const search = panel(page);
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("500");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("500");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("12 index matches.", { exact: false }),
+  ).toBeVisible();
+  const row = search.locator("tbody tr").filter({
+    has: page.getByRole("link", { name: "Synthetic 2", exact: true }),
+  });
+  await row.getByText("Trade details", { exact: true }).click();
+  await expect(
+    row.getByText("Your scoring lineup", { exact: true }),
+  ).toBeVisible();
+  await expect(row.getByText(/Bench replacements: Bench QB/)).toBeVisible();
+  await expect(row.getByText(/Bench replacements: Search WR 0/)).toBeVisible();
+  await row
+    .getByText("Your weekly scoring replacements", { exact: true })
+    .click();
+  const own = row
+    .locator("details")
+    .filter({
+      has: page.locator("summary", {
+        hasText: "Your weekly scoring replacements",
+      }),
+    })
+    .last();
+  await expect(own.getByText(/QB: Main QB/).first()).toContainText("Bench QB");
+  await expect(own.getByText(/QB: Unfilled/)).toContainText("+30.00 points");
+  await row
+    .getByText("Their weekly scoring replacements", { exact: true })
+    .click();
+  const other = row
+    .locator("details")
+    .filter({
+      has: page.locator("summary", {
+        hasText: "Their weekly scoring replacements",
+      }),
+    })
+    .last();
+  await expect(other.getByText(/QB: Incoming QB/).first()).toContainText(
+    "Main QB",
+  );
+  await expect(other.getByText(/WR: Synthetic 2/).first()).toContainText(
+    "Search WR 0",
+  );
+  // Collapse the checked weekly rows before inspecting the compact scoring summaries.
+  await row
+    .getByText("Your weekly scoring replacements", { exact: true })
+    .click();
+  await row
+    .getByText("Their weekly scoring replacements", { exact: true })
+    .click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  // Capture the full details column at desktop width; mobile containment is asserted above.
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await row.locator("td").last().scrollIntoViewIfNeeded();
+  await row.locator("td").last().screenshot({
+    path: "test-results/trade-lineup-details-desktop.png",
+  });
+  expect(errors).toEqual([]);
 });
