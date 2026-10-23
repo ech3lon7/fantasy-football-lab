@@ -130,9 +130,8 @@ test("trade names inspect both players without changing the draft", async ({
   await page.screenshot({
     path: "test-results/player-popover-trade-desktop.png",
   });
-  await page
-    .getByRole("heading", { name: "Trade analyzer", exact: true })
-    .click();
+  // The larger card covers the page heading; click the viewport margin to exercise the same outside-dismiss behavior.
+  await page.mouse.click(5, 5);
   await expect(dialog).toHaveCount(0);
   await expect(incoming).toHaveValue("2");
   // Scrolling the original name out of view dismisses the detached card without altering the draft.

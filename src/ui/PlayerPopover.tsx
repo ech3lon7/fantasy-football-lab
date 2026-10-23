@@ -112,14 +112,12 @@ export function PlayerPopoverProvider({
         close(false);
         return;
       }
-      const width = Math.min(460, innerWidth - margin * 2);
-      const below = innerHeight - rect.bottom - gap - margin,
-        above = rect.top - gap - margin;
-      const down =
-        below >= Math.min(400, element.scrollHeight) || below >= above;
-      const room = Math.min(680, down ? below : above);
-      const maxHeight = room < 200 ? innerHeight - margin * 2 : room;
+      // Give desktop evidence tables the full available height instead of restricting them to one side of the name.
+      const width = Math.min(1040, innerWidth - margin * 2),
+        maxHeight = innerHeight - margin * 2;
       const height = Math.min(element.scrollHeight, maxHeight);
+      const below = rect.bottom + gap,
+        above = rect.top - gap - height;
       setPosition({
         width,
         maxHeight,
@@ -128,11 +126,11 @@ export function PlayerPopoverProvider({
           Math.min(rect.left, innerWidth - width - margin),
         ),
         top:
-          room < 200
-            ? margin
-            : down
-              ? rect.bottom + gap
-              : rect.top - gap - height,
+          below + height <= innerHeight - margin
+            ? below
+            : above >= margin
+              ? above
+              : Math.max(margin, innerHeight - height - margin),
       });
     }
     place();
