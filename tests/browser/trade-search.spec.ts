@@ -9,7 +9,12 @@ import { evaluate } from "../../src/domain/valuation";
 import { evaluateTrade } from "../../src/domain/trades";
 
 // Seed only synthetic data and a known bench outgoing player through the app's normal local workspace store.
-async function seed(page: Page, withDepth = false, withOffers = false) {
+async function seed(
+  page: Page,
+  withDepth = false,
+  withOffers = false,
+  bestRoster = false,
+) {
   const dataset: Dataset = JSON.parse(
     execFileSync(
       process.execPath,
@@ -26,6 +31,11 @@ async function seed(page: Page, withDepth = false, withOffers = false) {
            d.tables.ModelPlayers.push({...d.tables.ModelPlayers.find(p=>p.PlayerID===102), PlayerID:201,Player:'Depth QB',OnTeamID:2, ActualPoints:25, Actual_PPG:5, Last3_PPG:5, ESPN_Projected_PPG:5, ESPN_Projected_Total:85});
            d.tables.ModelHistory.push(...d.tables.ModelHistory.filter(h=>h.PlayerID===102).map(h=>({...h,PlayerID:201,Points:5})));
            d.tables.ModelRosters.push({PlayerID:201,TeamID:2,LineupSlotID:20});
+         }
+         // Only the best-roster workflow needs a benched QB stronger than their starter, keeping prior fixtures unchanged.
+         if(${bestRoster}) {
+           Object.assign(d.tables.ModelPlayers.find(p=>p.PlayerID===201),{ActualPoints:125,Actual_PPG:25,Last3_PPG:25,ESPN_Projected_PPG:25,ESPN_Projected_Total:425});
+           d.tables.ModelHistory.filter(h=>h.PlayerID===201).forEach(h=>{h.Points=25});
          }
          // Keep replacement free agents intact while adding two benched offers and two distinct comparison roles.
          if(${withOffers}) {
@@ -900,4 +910,96 @@ test("upgrade counts require all requested starter and bench matches", async ({
   await expect(
     search.getByText("13 index matches.", { exact: false }),
   ).toBeVisible();
+});
+
+// Verify the actual worker uses their benched best QB and counts distinct positions instead of repeated QB comparisons.
+test("best-at-position target compares the full roster and enforces distinct-position minimums", async ({
+  page,
+}) => {
+  await seed(page, true, false, true);
+  const search = panel(page);
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("500");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("500");
+  await search
+    .getByLabel("Only show positional upgrades for the other team", {
+      exact: true,
+    })
+    .check();
+  await search
+    .getByLabel("Minimum Expected PPG upgrade", { exact: true })
+    .fill("6");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("13 index matches.", { exact: false }),
+  ).toBeVisible();
+  await search
+    .getByLabel("Upgrade target", { exact: true })
+    .selectOption("best");
+  await expect(
+    search.getByLabel("Minimum positions upgraded", { exact: true }),
+  ).toHaveValue("1");
+  await expect(
+    search.getByRole("button", { name: "Load trade" }).first(),
+  ).toBeDisabled();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("0 index matches.", { exact: false }),
+  ).toBeVisible();
+  await search
+    .getByLabel("Minimum Expected PPG upgrade", { exact: true })
+    .fill("5");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("13 index matches.", { exact: false }),
+  ).toBeVisible();
+  const row = search.locator("tbody tr").first();
+  await row.getByText("Trade details", { exact: true }).click();
+  await expect(
+    row.getByText(/Best-at-position upgrade: Bench QB/),
+  ).toContainText("Depth QB (25.00)");
+  await expect(
+    row.getByText(/Best-at-position upgrade: Bench QB/),
+  ).toContainText("+5.00 Expected PPG");
+  await expect(row.getByText(/Starter upgrade:|Depth upgrade:/)).toHaveCount(0);
+  // A second QB offer does not create a second position or permit reusing their best QB.
+  await page
+    .getByLabel("Outgoing player 2", { exact: true })
+    .selectOption("100");
+  await search
+    .getByLabel("Minimum positions upgraded", { exact: true })
+    .fill("2");
+  await expect(
+    search.getByRole("button", { name: "Search", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    search.getByText(
+      "The best-at-position minimum cannot exceed the number of distinct offered positions.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await search
+    .getByLabel("Minimum positions upgraded", { exact: true })
+    .fill("1");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("13 index matches.", { exact: false }),
+  ).toBeVisible();
+  await row.getByText("Trade details", { exact: true }).click();
+  await expect(row.getByText(/Best-at-position upgrade:/)).toHaveCount(1);
+  await expect(
+    row.getByText(/No distinct qualifying upgrade for:/),
+  ).toContainText("Main QB");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await search.screenshot({
+    path: "test-results/trade-best-position-mobile.png",
+  });
 });

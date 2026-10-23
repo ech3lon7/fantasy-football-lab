@@ -17,16 +17,18 @@ import type { Model, Player } from "./valuation";
 
 // Optional discovery criteria never change valuations or the trade evaluator's inputs.
 export interface UpgradeFilter {
-  mode: "starter" | "depth" | "either";
+  mode: "starter" | "depth" | "either" | "best";
   minimum: number;
   // Optional counts retain the legacy any-one behavior for existing callers without count criteria.
   requiredStarters?: number;
   requiredBench?: number;
+  // Best-roster counts represent distinct positions, independent of starter/bench designation.
+  requiredBest?: number;
 }
 export interface UpgradeEvidence {
   offered: string;
   compared: string;
-  group: "starter" | "depth";
+  group: "starter" | "depth" | "best";
   offeredPPG: number;
   comparedPPG: number;
   gain: number;
@@ -201,6 +203,7 @@ export function tradeSearchContext(
           query.upgrade.minimum,
           query.upgrade.requiredStarters ?? null,
           query.upgrade.requiredBench ?? null,
+          query.upgrade.requiredBest ?? null,
         ]
       : null,
     query.deficit ? [query.deficit.position, query.deficit.ceiling] : null,
@@ -241,7 +244,7 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
   // Only enabled upgrade criteria are validated; disabled searches keep their previous behavior.
   if (
     q.upgrade &&
-    (!["starter", "depth", "either"].includes(q.upgrade.mode) ||
+    (!["starter", "depth", "either", "best"].includes(q.upgrade.mode) ||
       !Number.isFinite(q.upgrade.minimum) ||
       q.upgrade.minimum < 0)
   )
@@ -253,18 +256,28 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
     const counts = upgradeCounts(q.upgrade);
     const explicit =
       q.upgrade.requiredStarters !== undefined ||
-      q.upgrade.requiredBench !== undefined;
+      q.upgrade.requiredBench !== undefined ||
+      q.upgrade.requiredBest !== undefined;
     if (
-      ![counts.starter, counts.depth].every(
+      ![counts.starter, counts.depth, counts.best].every(
         (value) => Number.isInteger(value) && value >= 0 && value <= 5,
       ) ||
-      (explicit && counts.starter + counts.depth < 1) ||
-      counts.starter + counts.depth > q.give.length
+      (explicit && counts.starter + counts.depth + counts.best < 1) ||
+      counts.starter + counts.depth + counts.best > q.give.length
     )
       errors.push(
         "Upgrade minimums must be whole numbers from 0 to 5, require at least one upgrade, and total no more than the outgoing players.",
       );
   }
+  // One best-roster comparison exists per offered position, so duplicate-position offers cannot inflate this minimum.
+  if (
+    q.upgrade?.mode === "best" &&
+    upgradeCounts(q.upgrade).best >
+      new Set(q.give.map((id) => m.byId.get(id)?.pos).filter(Boolean)).size
+  )
+    errors.push(
+      "The best-at-position minimum cannot exceed the number of distinct offered positions.",
+    );
   // The ceiling applies to one explicitly selected position actually represented in the outgoing package.
   if (
     q.deficit &&
@@ -334,13 +347,14 @@ export function gradeAtOrBelow(grade: string, ceiling: string) {
 export function upgradeCounts(filter: UpgradeFilter) {
   return {
     starter:
-      filter.mode === "depth"
+      filter.mode === "depth" || filter.mode === "best"
         ? 0
         : (filter.requiredStarters ?? (filter.mode === "starter" ? 1 : 0)),
     depth:
-      filter.mode === "starter"
+      filter.mode === "starter" || filter.mode === "best"
         ? 0
         : (filter.requiredBench ?? (filter.mode === "depth" ? 1 : 0)),
+    best: filter.mode === "best" ? (filter.requiredBest ?? 1) : 0,
   };
 }
 
@@ -357,6 +371,7 @@ function meetsUpgradeRequirements(
     edges.filter((edge) => edge.group === "starter").length >=
       required.starter &&
     edges.filter((edge) => edge.group === "depth").length >= required.depth &&
+    edges.filter((edge) => edge.group === "best").length >= required.best &&
     (!q.deficit ||
       edges.some(
         (edge) => m.byId.get(edge.offered)?.pos === q.deficit!.position,
@@ -373,6 +388,44 @@ export function offeredUpgrades(
 ): UpgradeEvidence[] {
   if (!q.upgrade) return [];
   const filter = q.upgrade;
+  // Best-roster fit ignores lineup designations and includes IR; unknown forecasts invalidate only their position.
+  if (filter.mode === "best") {
+    const roster = m.players.filter((player) => player.owner === teamB);
+    const result: UpgradeEvidence[] = [];
+    for (const position of new Set(q.give.map((id) => m.byId.get(id)?.pos))) {
+      const peers = roster.filter((player) => player.pos === position);
+      if (!peers.length || peers.some((player) => n(player.expected) === null))
+        continue;
+      const best = [...peers].sort(
+        (a, b) => b.expected! - a.expected! || cmpId(a.id, b.id),
+      )[0];
+      // Choose one strongest qualifying offer per position; ties use PlayerID and never reuse their best player.
+      const offered = q.give
+        .map((id) => m.byId.get(id))
+        .filter(
+          (player): player is Player =>
+            !!player &&
+            player.pos === position &&
+            n(player.expected) !== null &&
+            player.expected! > best.expected! &&
+            player.expected! - best.expected! >= filter.minimum,
+        )
+        .sort((a, b) => b.expected! - a.expected! || cmpId(a.id, b.id))[0];
+      if (offered)
+        result.push({
+          offered: offered.id,
+          compared: best.id,
+          group: "best",
+          offeredPPG: offered.expected!,
+          comparedPPG: best.expected!,
+          gain: offered.expected! - best.expected!,
+          source: "Best roster Expected PPG (including bench and IR)",
+        });
+    }
+    return result.sort(
+      (a, b) => cmpId(a.offered, b.offered) || cmpId(a.compared, b.compared),
+    );
+  }
   const starter = readStarterLineup(m, teamB, lineupsRaw);
   // Actual starter/bench membership must be known; never infer bench status from an invalid plan or IR.
   if (starter.errors.length) return [];

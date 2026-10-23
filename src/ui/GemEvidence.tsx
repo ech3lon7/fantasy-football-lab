@@ -44,7 +44,7 @@ export function GemEvidence({ p }: { p: Player }) {
           </tbody>
         </table>
       </div>
-      {/* Display the domain-computed decline evidence separately from the five Gem qualification checks. */}
+      {/* Display the unchanged decline calculation separately from Gem's scoring/workload checks. */}
       {assessment.reducedWorkload?.status === "PASS" && (
         <p className="notice warning">
           <b className="model">Reduced workload.</b>{" "}
@@ -67,14 +67,23 @@ export function GemEvidence({ p }: { p: Player }) {
           {prompt}
         </p>
       ))}
+      {/* Explain the distinct windows without duplicating the domain's positional thresholds. */}
+      <p>
+        Gem requires both actual scoring and workload in the latest three played
+        games and the previous overlapping three-game window, starting after
+        four played games. Stable strong workload can qualify; growth and a
+        prior Watch label are not required. Watch and Reduced workload retain
+        their separate opportunity rules.
+      </p>
       <p>
         Scoring Trend PPG still compares the last three played games with ALL
-        earlier games. The workload growth above compares only the immediately
-        preceding two or three. Scoring/projection gaps and touchdown cautions
-        remain supporting signals. Gems are identified automatically; no manual
-        role review, approval or news entry is required. The data does not
-        establish whether the role is permanent. Rules are provisional, not
-        historically validated probabilities.
+        earlier games. Watch workload growth and Reduced workload compare only
+        the immediately preceding two or three. Scoring/projection gaps and
+        touchdown cautions remain supporting signals. Gems are identified
+        automatically; no manual role review, approval or news entry is
+        required. The data does not establish whether a player is undervalued or
+        the role is permanent. Rules remain provisional, not calibrated
+        individual success probabilities; TE evidence is weaker.
       </p>
     </details>
   );

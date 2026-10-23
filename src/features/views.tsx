@@ -1066,14 +1066,14 @@ export function GemView({
       {/* Existing ownership/position controls and new signals share one Apply action. */}
       <Panel
         title="Gem filters"
-        note="Automatic Gems require sustained workload, meaningful growth and active availability. Watch means promising evidence that does not yet pass every gate. OR between signals; AND between categories."
+        note="Automatic Gems require strong actual scoring and workload in both overlapping three-game windows, with active availability. Watch retains its workload opportunity rules. OR between signals; AND between categories."
       >
-        {/* Classification uses the current imported snapshot with no manual role review or approval. */}
+        {/* Describe the confirmed automatic scoring/workload rule without repeating domain thresholds. */}
         <p>
           Every player is classified automatically from imported played-game
-          workload and availability. Missing news or role commentary never
-          blocks a Gem. Labels describe the imported snapshot; warnings identify
-          uncertainty.
+          scoring, workload and availability. Missing news or role commentary
+          never blocks a Gem. Labels describe the imported snapshot; warnings
+          identify uncertainty.
         </p>
         <form
           className="gem-filters"

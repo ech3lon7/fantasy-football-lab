@@ -106,15 +106,17 @@ export function TradeSearch({
           mode: upgradeMode,
           minimum: parseOffset(minimumUpgrade),
           requiredStarters:
-            upgradeMode === "depth"
+            upgradeMode === "depth" || upgradeMode === "best"
               ? 0
               : parseOffset(
                   upgradeMode === "either"
                     ? requiredStarters
                     : requiredUpgrades,
                 ),
+          requiredBest:
+            upgradeMode === "best" ? parseOffset(requiredUpgrades) : undefined,
           requiredBench:
-            upgradeMode === "starter"
+            upgradeMode === "starter" || upgradeMode === "best"
               ? 0
               : parseOffset(
                   upgradeMode === "either" ? requiredBench : requiredUpgrades,
@@ -453,7 +455,9 @@ export function TradeSearch({
         aria-label={label}
         type="number"
         min={upgradeMode === "either" ? 0 : 1}
-        max={draft.give.length}
+        max={
+          upgradeMode === "best" ? offeredPositions.length : draft.give.length
+        }
         step="1"
         value={value}
         onChange={(event) => set(event.target.value)}
@@ -525,10 +529,12 @@ export function TradeSearch({
                 <option value="starter">Starter</option>
                 <option value="depth">Depth (bench)</option>
                 <option value="either">Either</option>
+                <option value="best">Best at position</option>
               </select>
             </label>
             {/* Single targets use one minimum; Either requires both independently selected group minimums. */}
             {upgradeMode !== "depth" &&
+              upgradeMode !== "best" &&
               upgradeCountControl(
                 "Minimum starter upgrades",
                 upgradeMode === "either" ? requiredStarters : requiredUpgrades,
@@ -537,12 +543,20 @@ export function TradeSearch({
                   : setRequiredUpgrades,
               )}
             {upgradeMode !== "starter" &&
+              upgradeMode !== "best" &&
               upgradeCountControl(
                 "Minimum bench upgrades",
                 upgradeMode === "either" ? requiredBench : requiredUpgrades,
                 upgradeMode === "either"
                   ? setRequiredBench
                   : setRequiredUpgrades,
+              )}
+            {/* Best-roster matches count positions, with one comparison for the team's strongest owned player at each. */}
+            {upgradeMode === "best" &&
+              upgradeCountControl(
+                "Minimum positions upgraded",
+                requiredUpgrades,
+                setRequiredUpgrades,
               )}
             <label className="control">
               <span>Minimum Expected PPG upgrade</span>
@@ -560,18 +574,40 @@ export function TradeSearch({
       {upgradeOnly && (
         <p>
           <small>
-            Requires at least{" "}
-            {formatUpgradeCount(query.upgrade?.requiredStarters)} starter
-            upgrades and {formatUpgradeCount(query.upgrade?.requiredBench)}{" "}
-            bench upgrades. Each qualifying offered player, including your
-            bench, must exceed the same-position comparison by{" "}
-            {fmt(query.upgrade?.minimum)} Expected PPG. Each offered and
-            opposing player can appear only once. Starter uses same-position
-            current starters (including FLEX); Depth uses their actual
-            same-position bench, excluding IR. Either maximizes distinct starter
-            upgrades first, then bench upgrades, among assignments meeting both
-            minimums. Comparisons use their roster before the trade, including
-            players they may send away. Teams failing either minimum or lacking
+            {upgradeMode === "best" ? (
+              <>
+                Requires at least{" "}
+                {formatUpgradeCount(query.upgrade?.requiredBest)} distinct
+                positions upgraded.
+              </>
+            ) : (
+              <>
+                Requires at least{" "}
+                {formatUpgradeCount(query.upgrade?.requiredStarters)} starter
+                upgrades and {formatUpgradeCount(query.upgrade?.requiredBench)}{" "}
+                bench upgrades.
+              </>
+            )}{" "}
+            Each qualifying offered player, including your bench, must exceed
+            the same-position comparison by {fmt(query.upgrade?.minimum)}{" "}
+            Expected PPG. Each offered and opposing player can appear only once.{" "}
+            {upgradeMode === "best" ? (
+              <>
+                Best at position uses the highest Expected PPG on their entire
+                pre-trade roster, including bench and IR. A missing forecast at
+                that position makes the position ineligible. Only one offer
+                counts per position.
+              </>
+            ) : (
+              <>
+                Starter uses same-position current starters (including FLEX);
+                Depth uses their actual same-position bench, excluding IR.
+                Either maximizes distinct starter upgrades first, then bench
+                upgrades, among assignments meeting both minimums.
+              </>
+            )}{" "}
+            Comparisons use their roster before the trade, including players
+            they may send away. Teams failing the required minimums or lacking
             enough usable comparisons are excluded. With the deficit filter
             enabled, at least one assigned upgrade must match its position;
             other upgrades may be at other positions. Net trade impact is shown
@@ -821,9 +857,11 @@ export function TradeSearch({
                           {/* Show the exact qualifying comparison instead of implying a guaranteed net improvement or acceptance. */}
                           {row.upgrades?.map((upgrade) => (
                             <p key={`${upgrade.offered}-${upgrade.group}`}>
-                              {upgrade.group === "starter"
-                                ? "Starter upgrade"
-                                : "Depth upgrade"}
+                              {upgrade.group === "best"
+                                ? "Best-at-position upgrade"
+                                : upgrade.group === "starter"
+                                  ? "Starter upgrade"
+                                  : "Depth upgrade"}
                               : {names([upgrade.offered])} (
                               <span className="model">
                                 {fmt(upgrade.offeredPPG)}

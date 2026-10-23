@@ -74,9 +74,11 @@ GitHub Actions verifies the source, builds the static application, runs browser 
 
 See [architecture](docs/architecture.md), [implementation plan](docs/implementation-plan.md), [model contract](docs/model-contract.md) and [verification report](docs/verification.md).
 
-## Automatic Gem redesign (0.3.3)
+## Automatic Gem classification
 
-**Gem** is assigned automatically from completed-game workload and availability. No manual role review, approval, news entry or supplemental CSV is required. RB: last-three mean ≥18 carries+targets, every game ≥14; WR: mean ≥7 targets, every game ≥5; TE: mean ≥6 targets, every game ≥5. Growth versus the immediately preceding 2–3 games must reach +3 for RB or +2 for WR/TE AND +25% (absolute growth only when prior volume is zero). Five played games and active availability are required. **Watch** means promising evidence still fails a statistical or availability gate.
+**Gem** means strong actual scoring backed by sustained workload. Both the latest three played games and the previous overlapping three-game window must pass. Mean actual PPG must reach 16 for RB/WR or 11 for TE, with at least two games individually at that point floor. Mean workload must reach RB18 carries+targets /WR7 targets /TE6 targets, with at least two games individually reaching the workload floor RB14 /WR5 /TE5. Four verified played games are the minimum: compare A/B/C and B/C/D. Stable strong production can qualify; growth and a prior Watch label are not required. Existing history, availability and remaining-game safeguards remain. No manual review, approval, news entry or supplemental CSV is required.
+
+**Watch** keeps its existing workload-only opportunity tests and earlier-game growth comparison. **Reduced workload**, scoring trends, projection gaps and touchdown cautions remain separate supporting signals. Refreshing the imported data automatically recalculates every player's Gem status; scoring forecasts and trade values receive no label bonus. The thresholds have offline historical screening evidence but remain provisional, not calibrated individual success probabilities or proof that a player is undervalued. TE evidence is weaker.
 
 Open **Gem screener** and use **Breakout classification → Gem only / Gem + Watch / All classifications** alongside the existing combined filters. Classification happens for every player on data load, independently of screen filters. Prior saved filter labels migrate automatically while numeric thresholds are preserved. Click a player and expand **Why Gem? / Why Watch?** to see each observed workload, requirement and result.
 

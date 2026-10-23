@@ -87,7 +87,7 @@ it("screens reduced workloads independently and preserves existing classificatio
   const p = evaluate(d, d.settings).players[0],
     prior = evaluate(d, d.settings, { workbookMode: true }).players[0];
   expect(p.gem).toBe("No breakout signal");
-  expect(p.breakout!.checks).toHaveLength(5);
+  expect(p.breakout!.checks).toHaveLength(10);
   for (const key of [
     "expected",
     "penalty",
@@ -129,47 +129,110 @@ async function data(
   return d;
 }
 
-// Initial evaluation alone must qualify Gems when all imported-data gates pass.
-it("automatically awards Gems with no manual role confirmation", async () => {
-  const d = await data(),
-    p = evaluate(d, d.settings).players[0];
-  expect(p.gem).toBe("Gem");
-  expect(p.breakout!.recent).toBeCloseTo(23 / 3);
-  expect(p.breakout!.previous).toBeCloseTo(10 / 3);
-  expect(p.breakout!.checks).toHaveLength(5);
-  expect(p.breakout!.checks.every((c) => c.status === "PASS")).toBe(true);
-});
-
-// A single weak workload game and unchanged production cannot be hidden by a high scoring average.
-it("retains workload floor and developing-role requirements", async () => {
-  const inconsistent = await data([7, 4, 3, 10, 1, 9]);
-  const p = evaluate(inconsistent, inconsistent.settings).players[0];
-  expect(p.gem).toBe("Watch");
-  expect(
-    p.breakout!.checks.find((c) => c.check === "Each of the last 3 games"),
-  ).toMatchObject({ actual: "10, 1, 9", status: "FAIL" });
-  for (const counts of [
-    [8, 8, 8, 8, 8, 8],
-    [1, 1, 1, 2, 2, 2],
-  ]) {
+// Four stable games at each inclusive positional boundary qualify without growth, ownership or a manual review.
+it("automatically confirms scoring and workload for RB, WR and TE after four played games", async () => {
+  for (const [position, workload, points] of [
+    ["RB", 18, 16],
+    ["WR", 7, 16],
+    ["TE", 6, 11],
+  ] as const) {
     const d = await data(
-      counts,
-      "TE",
-      counts.map(() => 30),
+      Array(4).fill(workload),
+      position,
+      Array(4).fill(points),
     );
-    expect(evaluate(d, d.settings).players[0].gem).toBe("No breakout signal");
+    for (const owner of [0, 1, 2]) {
+      d.tables.ModelPlayers[0].OnTeamID = owner;
+      const p = evaluate(d, d.settings).players[0];
+      expect(p.gem).toBe("Gem");
+      expect(p.breakout!.checks).toHaveLength(10);
+      expect(p.breakout!.checks.every((c) => c.status === "PASS")).toBe(true);
+      expect(p.breakout!.checks[0].actual).toContain(
+        "previous-window weeks 1, 2, 3",
+      );
+      expect(p.breakout!.explanation).toContain("growth is not required");
+    }
   }
 });
 
-// Missing current context creates automatic warnings, never a human-review prerequisite or an expiry veto.
-it("recognizes a growing RB despite missing commentary and warns about stale data and injured competition", async () => {
-  const d = await data([11, 6, 7, 16, 28, 19], "RB");
+// Both overlapping windows need their means and two separate games of scoring/workload support.
+it("rejects a single strong window, one-game spikes and values just below inclusive means", async () => {
+  for (const [counts, scores, check] of [
+    [[2, 7, 7, 7], [16, 16, 16, 16], "Previous window targets / game"],
+    [[7, 7, 7, 7], [0, 16, 16, 16], "Previous window actual PPG"],
+    [[7, 7, 7, 7], [0, 0, 48, 0], "Recent window scoring support"],
+    [[0, 0, 21, 0], [16, 16, 16, 16], "Recent window workload support"],
+    [[7, 7, 7, 7], [16, 16, 16, 15.999999], "Recent window actual PPG"],
+    [[7, 7, 7, 6.999999], [16, 16, 16, 16], "Recent window targets / game"],
+  ] as const) {
+    const d = await data([...counts], "WR", [...scores]);
+    const p = evaluate(d, d.settings).players[0];
+    expect(p.gem).not.toBe("Gem");
+    expect(p.breakout!.checks.find((c) => c.check === check)?.status).toBe(
+      "FAIL",
+    );
+  }
+  const short = await data([7, 7, 7], "WR", [16, 16, 16]);
+  expect(evaluate(short, short.settings).players[0].gem).toBe("Watch");
+  expect(
+    evaluate(short, short.settings).players[0].breakout!.checks[0].status,
+  ).toBe("FAIL");
+});
+
+// A weak played game stays in both windows; two good games may still support an adequate average.
+it("retains zero and negative scores and excludes nonparticipation from confirmation windows", async () => {
+  for (const scores of [
+    [20, 0, 28, 20],
+    [20, -1, 29, 20],
+  ]) {
+    const d = await data([9, 0, 12, 9], "WR", scores);
+    d.tables.ModelHistory.push({
+      PlayerID: 1,
+      Season: 2026,
+      Week: 5,
+      Games: 0,
+      Points: 0,
+      Targets: 0,
+      HistoryStatus: "Valid",
+    });
+    const p = evaluate(d, d.settings).players[0];
+    expect(p.games).toBe(4);
+    expect(p.gem).toBe("Gem");
+    expect(p.breakout!.recentWeeks).toEqual([2, 3, 4]);
+    expect(
+      playedHistory(d)
+        .get("1")!
+        .map((r) => r.Points),
+    ).toEqual(scores);
+  }
+});
+
+// A formerly workload-only Gem becomes Watch; its existing opportunity boundaries stay intact.
+it("preserves Watch growth and short-history eligibility without awarding workload-only Gems", async () => {
+  for (const [counts, position, label] of [
+    [[3, 2, 5, 8, 8, 7], "TE", "Watch"],
+    [[0, 0, 0, 6, 6, 6], "TE", "Watch"],
+    [[4, 4, 4, 6, 6, 6], "TE", "Watch"],
+    [[4.000001, 4.000001, 4.000001, 6, 6, 6], "TE", "Watch"],
+    [[24, 24, 24, 27, 27, 27], "RB", "Watch"],
+    [[2, 6, 6, 6], "TE", "Watch"],
+    [[8, 8, 8, 8, 8, 8], "TE", "No breakout signal"],
+    [[1, 1, 1, 2, 2, 2], "TE", "No breakout signal"],
+  ] as const) {
+    const d = await data([...counts], position);
+    expect(evaluate(d, d.settings).players[0].gem).toBe(label);
+  }
+});
+
+// Warnings remain informative and automatic; they do not become manual review or expiration gates.
+it("warns about stale data and injured competition without vetoing a confirmed Gem", async () => {
+  const d = await data([18, 18, 18, 18], "RB", [16, 16, 16, 16]);
   d.tables.ModelPlayers.find((p) => p.PlayerID === 103)!.InjuryStatus = "OUT";
   d.sourceUTC = new Date(Date.now() - 2 * 86400000).toISOString();
   const p = evaluate(d, d.settings).players[0];
   expect(p.gem).toBe("Gem");
-  expect(p.breakout!.recent).toBe(21);
-  expect(p.opportunity.recentCarries).toBe(19);
+  expect(p.breakout!.recent).toBe(18);
+  expect(p.opportunity.recentCarries).toBe(16);
   expect(p.opportunity.recentTargets).toBe(2);
   expect(p.breakout!.warnings.join()).toContain("does not establish");
   expect(p.breakout!.warnings.join()).toContain("Stale or undated snapshot");
@@ -177,66 +240,43 @@ it("recognizes a growing RB despite missing commentary and warns about stale dat
   expect(evaluate(d, d.settings).players[0].gem).toBe("Gem");
 });
 
-// Inclusive growth boundaries retain precision and handle a zero prior denominator without inventing a percentage.
-it("handles zero prior workload, growth boundaries and five-game minimums", async () => {
-  const zero = await data([0, 0, 0, 6, 6, 6]);
-  const p = evaluate(zero, zero.settings).players[0];
-  expect(p.gem).toBe("Gem");
-  expect(p.breakout!.growthPct).toBeNull();
-  for (const [counts, position, label] of [
-    [[4, 4, 4, 6, 6, 6], "TE", "Gem"],
-    [[4.000001, 4.000001, 4.000001, 6, 6, 6], "TE", "Watch"],
-    [[24, 24, 24, 27, 27, 27], "RB", "Watch"],
-    [[2, 3, 6, 6, 6], "TE", "Gem"],
-    [[2, 6, 6, 6], "TE", "Watch"],
-  ] as const) {
-    const d = await data([...counts], position);
-    expect(evaluate(d, d.settings).players[0].gem).toBe(label);
-  }
-});
-
-// Zero and negative scoring games remain played games; nonparticipation does not shift the workload windows.
-it("uses the immediately preceding played games and retains zero and negative scores", async () => {
-  const d = await data([2, 3, 2, 5, 8, 8, 7], "TE", [0, -2, 5, 10, 12, 10, 8]);
-  d.tables.ModelHistory.push({
-    PlayerID: 1,
-    Season: 2026,
-    Week: 8,
-    Games: 0,
-    Points: 0,
-    HistoryStatus: "Valid",
-  });
-  const p = evaluate(d, d.settings).players[0];
-  expect(p.games).toBe(7);
-  expect(p.breakout!.previousWeeks).toEqual([2, 3, 4]);
-  expect(p.breakout!.recentWeeks).toEqual([5, 6, 7]);
-  expect(
-    playedHistory(d)
-      .get("1")!
-      .map((r) => r.Points),
-  ).toContain(-2);
+// Re-evaluation adds the newest played game and drops the Gem label when confirmation no longer passes.
+it("automatically removes Gem after a new weak game without changing saved selections", async () => {
+  const before = await data([7, 7, 7, 7], "WR", [16, 16, 16, 16]);
+  const after = await data([7, 7, 7, 7, 0], "WR", [16, 16, 16, 16, 0]);
+  expect(evaluate(before, before.settings).players[0].gem).toBe("Gem");
+  expect(evaluate(after, after.settings).players[0].gem).not.toBe("Gem");
 });
 
 // Invalid or absent evidence stays unknown; an explicitly present null counting stat is a legitimate zero.
 it("does not invent missing workload or accept conflicting history", async () => {
-  const missing = await data();
+  const missing = await data([6, 6, 6, 6], "TE", [11, 11, 11, 11]);
   delete missing.tables.ModelHistory.find((h) => h.PlayerID === 1)!.Targets;
   expect(evaluate(missing, missing.settings).players[0].gem).toBe(
     "Insufficient data",
   );
-  const duplicate = await data();
+  const duplicate = await data([6, 6, 6, 6], "TE", [11, 11, 11, 11]);
   duplicate.tables.ModelHistory.push({ ...duplicate.tables.ModelHistory[0] });
   expect(evaluate(duplicate, duplicate.settings).players[0].gem).toBe(
     "Insufficient data",
   );
-  const zero = await data([0, 0, 0, 6, 6, 6]);
-  zero.tables.ModelHistory.find((h) => h.PlayerID === 1)!.Targets = null;
+  // Explicit null carries are zero, while targets alone can supply the required RB workload.
+  const zero = await data([18, 18, 18, 18], "RB", [16, 16, 16, 16]);
+  zero.tables.ModelHistory.filter((h) => h.PlayerID === 1).forEach((h) =>
+    Object.assign(h, { Targets: 18, RushAttempts: null }),
+  );
   expect(evaluate(zero, zero.settings).players[0].gem).toBe("Gem");
+  // Older missing usage affects the unchanged decline window, not valid last-four-game Gem evidence.
+  const older = await data([7, 7, 7, 7, 7, 7], "WR", [16, 16, 16, 16, 16, 16]);
+  delete older.tables.ModelHistory.find((h) => h.PlayerID === 1)!.Targets;
+  const p = evaluate(older, older.settings).players[0];
+  expect(p.gem).toBe("Gem");
+  expect(p.breakout!.reducedWorkload?.status).toBe("UNKNOWN");
 });
 
 // Player availability is read automatically; injuries cannot be resolved by unsupported assumptions.
 it("keeps injury and no-remaining-game cases conditional and excludes unsupported positions", async () => {
-  const d = await data();
+  const d = await data([3, 2, 7, 7, 7, 7], "TE", [11, 11, 11, 11, 11, 11]);
   d.tables.ModelPlayers[0].InjuryStatus = "QUESTIONABLE";
   expect(evaluate(d, d.settings).players[0].gem).toBe("Watch");
   d.tables.ModelPlayers[0].InjuryStatus = "ACTIVE";
@@ -270,7 +310,7 @@ it("preserves the core valuation model and Excel parity mode", async () => {
     ] as const)
       expect(p[key]).toEqual(prior[key]);
   }
-  expect(app.analysisVersion).toContain("automatic-breakout-2");
+  expect(app.analysisVersion).toContain("automatic-breakout-3");
   expect(workbook.players[0].breakout).toBeUndefined();
 });
 
@@ -296,7 +336,7 @@ it("automatically migrates saved searches and preserves numeric thresholds", asy
     indexMax: "40",
     position: "TE",
   });
-  const d = await data(),
+  const d = await data([6, 6, 6, 6], "TE", [11, 11, 11, 11]),
     p = { ...evaluate(d, d.settings).players[0], trendDelta: 2, index: 20 };
   const q = validateGemDraft(
     { ...restored.draft, classification: "Gem only" },

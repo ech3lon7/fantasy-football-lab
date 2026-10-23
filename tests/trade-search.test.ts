@@ -1197,3 +1197,171 @@ it("matches exhaustive assignment feasibility for every requested starter and be
       expect(findTradeMatches(m, q).matches.length > 0).toBe(feasible);
     }
 });
+
+// The strongest forecast anywhere on their roster is the comparison, even when benched, on IR or absent from a valid starter plan.
+it("compares best-at-position upgrades against the entire roster including bench and IR", async () => {
+  const m = await upgradeModel();
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["101"],
+    below: 500,
+    above: 500,
+    upgrade: { mode: "best", minimum: 1, requiredBest: 1 },
+  };
+  m.byId.get("102")!.expected = 35;
+  expect(
+    offeredUpgrades(m, { ...q, upgrade: { mode: "starter", minimum: 1 } }, "2"),
+  ).toHaveLength(1);
+  expect(findTradeMatches(m, q).matches).toEqual([]);
+  m.byId.get("101")!.expected = 40;
+  for (const slot of [20, 21]) {
+    m.byId.get("102")!.slot = slot;
+    const edges = offeredUpgrades(m, q, "2", "invalid saved starter data");
+    expect(edges).toMatchObject([
+      {
+        offered: "101",
+        compared: "102",
+        group: "best",
+        comparedPPG: 35,
+        gain: 5,
+      },
+    ]);
+    expect(edges[0].source).toContain("including bench and IR");
+  }
+});
+
+// One unknown opposing forecast blocks only that position; an unrelated position and known zero/negative forecasts remain usable.
+it("excludes only positions whose best forecast cannot be verified", async () => {
+  const m = await upgradeModel();
+  Object.assign(m.byId.get("1")!, { pos: "WR", expected: 20 });
+  m.byId.get("102")!.expected = null;
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["101", "1"],
+    below: 500,
+    above: 500,
+    upgrade: { mode: "best", minimum: 1, requiredBest: 1 },
+  };
+  expect(offeredUpgrades(m, q, "2")).toMatchObject([
+    { offered: "1", compared: "2", group: "best" },
+  ]);
+  expect(findTradeMatches(m, q).matches.length).toBeGreaterThan(0);
+  expect(
+    findTradeMatches(m, { ...q, deficit: { position: "QB", ceiling: "A+" } })
+      .matches,
+  ).toEqual([]);
+  expect(
+    findTradeMatches(m, { ...q, upgrade: { ...q.upgrade!, requiredBest: 2 } })
+      .matches,
+  ).toEqual([]);
+  m.byId.get("102")!.expected = -2;
+  m.byId.get("200")!.expected = -1;
+  m.byId.get("101")!.expected = 0;
+  expect(offeredUpgrades(m, { ...q, give: ["101"] }, "2")).toMatchObject([
+    { compared: "200", comparedPPG: -1, offeredPPG: 0, gain: 1 },
+  ]);
+  // Unknown free agents do not belong to their roster and cannot block qualification.
+  m.byId.get("102")!.owner = "0";
+  m.byId.get("102")!.expected = null;
+  expect(offeredUpgrades(m, { ...q, give: ["101"] }, "2")).toHaveLength(1);
+});
+
+// Duplicate-position offers cannot reuse the team's best player; package minimums count distinct upgraded positions.
+it("counts distinct best-roster positions and chooses the strongest offered player once per position", async () => {
+  const m = await upgradeModel();
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["100", "101"],
+    below: 500,
+    above: 500,
+    upgrade: { mode: "best", minimum: 1, requiredBest: 1 },
+  };
+  expect(offeredUpgrades(m, q, "2")).toMatchObject([
+    { offered: "101", compared: "200", group: "best" },
+  ]);
+  expect(
+    tradeSearchBounds(m, {
+      ...q,
+      upgrade: { ...q.upgrade!, requiredBest: 2 },
+    }).errors.join(),
+  ).toContain("distinct offered positions");
+  Object.assign(m.byId.get("1")!, { pos: "WR", expected: 20 });
+  const mixed: TradeSearchQuery = {
+    ...q,
+    give: ["101", "1"],
+    upgrade: { ...q.upgrade!, requiredBest: 2 },
+    deficit: { position: "QB", ceiling: "A+" },
+  };
+  const matches = findTradeMatches(m, mixed).matches;
+  expect(matches.length).toBeGreaterThan(0);
+  expect(matches[0].upgrades).toMatchObject([
+    { offered: "1", compared: "2" },
+    { offered: "101", compared: "200" },
+  ]);
+  expect(new Set(matches[0].upgrades!.map((edge) => edge.compared)).size).toBe(
+    2,
+  );
+});
+
+// Equal forecasts never count as an upgrade, exact positive minimums do, and ties resolve by stable player IDs.
+it("applies best-roster thresholds without rounding and breaks tied comparisons deterministically", async () => {
+  const m = await upgradeModel();
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["101", "100"],
+    upgrade: { mode: "best", minimum: 5, requiredBest: 1 },
+  };
+  m.byId.get("102")!.expected = 25;
+  m.byId.get("100")!.expected = 30;
+  const first = offeredUpgrades(m, q, "2");
+  expect(first).toMatchObject([{ offered: "100", compared: "102", gain: 5 }]);
+  expect(
+    offeredUpgrades(m, { ...q, give: [...q.give].reverse() }, "2"),
+  ).toEqual(first);
+  expect(
+    offeredUpgrades(
+      m,
+      { ...q, upgrade: { ...q.upgrade!, minimum: 5.0001 } },
+      "2",
+    ),
+  ).toEqual([]);
+  m.byId.get("101")!.expected = 25;
+  m.byId.get("100")!.expected = 25;
+  expect(
+    offeredUpgrades(m, { ...q, upgrade: { ...q.upgrade!, minimum: 0 } }, "2"),
+  ).toEqual([]);
+  m.byId.get("102")!.owner = "0";
+  m.byId.get("200")!.owner = "0";
+  expect(offeredUpgrades(m, q, "2")).toEqual([]);
+});
+
+// The new mode has its own active count, default of one and search identity; old modes ignore the hidden best count.
+it("validates and fingerprints best-at-position minimums without affecting other targets", async () => {
+  const m = await upgradeModel();
+  const q: TradeSearchQuery = {
+    ...query,
+    give: ["101", "1"],
+    upgrade: { mode: "best", minimum: 1 },
+  };
+  expect(tradeSearchBounds(m, q).errors).toEqual([]);
+  for (const requiredBest of [0, -1, 1.5, NaN, Infinity, 6])
+    expect(
+      tradeSearchBounds(m, {
+        ...q,
+        upgrade: { ...q.upgrade!, requiredBest },
+      }).errors.join(),
+    ).toContain("Upgrade minimums");
+  for (const requiredBest of [1, 2])
+    expect(
+      tradeSearchContext(m, { ...q, upgrade: { ...q.upgrade!, requiredBest } }),
+    ).not.toBe(tradeSearchContext(m, q));
+  expect(
+    tradeSearchBounds(m, {
+      ...q,
+      upgrade: { mode: "starter", minimum: 1, requiredBest: NaN },
+    }).errors,
+  ).toEqual([]);
+  expect(
+    tradeSearchContext(m, { ...q, upgrade: { mode: "starter", minimum: 1 } }),
+  ).not.toBe(tradeSearchContext(m, q));
+});

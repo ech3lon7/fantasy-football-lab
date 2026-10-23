@@ -1,15 +1,16 @@
 import { mean, n, num, str, type Dataset, type Row } from "./contracts";
 import type { Player } from "./valuation";
 
-// Fixed provisional defaults restore the workload redesign without any review, CSV or manual-approval input.
-export const gemVersion = "automatic-breakout-2";
+// Version the confirmed scoring-and-workload rule separately from app and workbook versions.
+export const gemVersion = "automatic-breakout-3";
 export const gemPositions = ["RB", "WR", "TE"] as const;
+// Scoring is Gem-only; growth remains part of the unchanged Watch opportunity calculation.
 export const defaultGemRules = {
   growthPct: 0.25,
   positions: {
-    RB: { mean: 18, floor: 14, growth: 3 },
-    WR: { mean: 7, floor: 5, growth: 2 },
-    TE: { mean: 6, floor: 5, growth: 2 },
+    RB: { mean: 18, floor: 14, growth: 3, points: 16 },
+    WR: { mean: 7, floor: 5, growth: 2, points: 16 },
+    TE: { mean: 6, floor: 5, growth: 2, points: 11 },
   },
 };
 export interface GemCheck {
@@ -50,7 +51,7 @@ export function assessGem(
     classification: "Not applicable",
     checks: [],
     explanation:
-      "Breakout workload rules apply to RB, WR and TE. Other scoring and regression signals remain separate.",
+      "Gem scoring and workload rules apply to RB, WR and TE. Other scoring and regression signals remain separate.",
     recentWeeks: recentRows.map((r) => num(r.Week)),
     previousWeeks: previousRows.map((r) => num(r.Week)),
     recent: null,
@@ -93,7 +94,6 @@ export function assessGem(
       : null;
   const historyPass = complete && rows.length >= 5;
   const meanPass = recent.length === 3 && result.recent! >= rule.mean;
-  const floorPass = recent.length === 3 && recent.every((v) => v >= rule.floor);
   const growthPass =
     previous.length >= 2 &&
     result.increase !== null &&
@@ -133,39 +133,82 @@ export function assessGem(
     actual: `${fmt(result.previous)} → ${fmt(result.recent)} ${unit}/game; change ${fmt(result.increase)}; ${result.growthPct === null ? "percentage unavailable" : (result.growthPct * 100).toFixed(2) + "%"}; ${lowerGames}/3 recent games meet the decline minimum`,
     status: !historyPass || !usable ? "UNKNOWN" : declining ? "PASS" : "FAIL",
   };
-  // The same explicit tests drive the label and the player-detail evidence table.
+  // Gem uses overlapping three-game windows from the latest four played games; Watch/decline retain their earlier windows.
+  const confirmationRows = rows.slice(-4, -1);
+  const gemHistoryPass = complete && rows.length >= 4;
+  const windows = [
+    { name: "Recent window", rows: recentRows },
+    { name: "Previous window", rows: confirmationRows },
+  ].map((window) => {
+    const workloadUsable = window.rows.every((r) =>
+      keys.every(
+        (key) =>
+          Object.hasOwn(r, key) &&
+          (r[key] === null || (n(r[key]) !== null && num(r[key]) >= 0)),
+      ),
+    );
+    const pointsUsable = window.rows.every((r) => n(r.Points) !== null);
+    const workload = workloadUsable ? amounts(window.rows) : [];
+    const points = pointsUsable ? window.rows.map((r) => num(r.Points)) : [];
+    const scoresPassing = points.filter((value) => value >= rule.points).length;
+    const workloadsPassing = workload.filter(
+      (value) => value >= rule.floor,
+    ).length;
+    const scoreMean = mean(points),
+      workloadMean = mean(workload);
+    const known = gemHistoryPass && window.rows.length === 3;
+    // These domain-owned checks also supply every threshold and observed result to the evidence UI.
+    const status = (valid: boolean, passed: boolean): GemCheck["status"] =>
+      !known || !valid ? "UNKNOWN" : passed ? "PASS" : "FAIL";
+    return [
+      {
+        check: `${window.name} actual PPG`,
+        required: `≥ ${rule.points} points/game`,
+        actual: `${fmt(scoreMean)}; weeks ${window.rows.map((r) => num(r.Week)).join(", ") || "none"}`,
+        status: status(
+          pointsUsable,
+          scoreMean !== null && scoreMean >= rule.points,
+        ),
+      },
+      {
+        check: `${window.name} scoring support`,
+        required: `At least 2 of 3 games ≥ ${rule.points} points`,
+        actual:
+          pointsUsable && points.length
+            ? `${points.join(", ")}; ${scoresPassing}/3 meet the floor`
+            : "unavailable",
+        status: status(pointsUsable, scoresPassing >= 2),
+      },
+      {
+        check: `${window.name} ${unit} / game`,
+        required: `≥ ${rule.mean}`,
+        actual: fmt(workloadMean),
+        status: status(
+          workloadUsable,
+          workloadMean !== null && workloadMean >= rule.mean,
+        ),
+      },
+      {
+        check: `${window.name} workload support`,
+        required: `At least 2 of 3 games ≥ ${rule.floor} ${unit}`,
+        actual:
+          workloadUsable && workload.length
+            ? `${workload.join(", ")}; ${workloadsPassing}/3 meet the floor`
+            : "unavailable",
+        status: status(workloadUsable, workloadsPassing >= 2),
+      },
+    ];
+  });
+  // Qualification and explanations consume the same checks, preventing a label/evidence disagreement.
   result.checks = [
     {
       check: "Verified history",
-      required: "5+ played games; 3 recent and 2–3 immediately preceding",
-      actual: `${rows.length} games; recent weeks ${result.recentWeeks.join(", ") || "none"}; previous weeks ${result.previousWeeks.join(", ") || "none"}`,
-      status: !complete ? "UNKNOWN" : historyPass ? "PASS" : "FAIL",
+      required:
+        "4+ played games; both overlapping three-game windows must pass",
+      actual: `${rows.length} games; recent weeks ${result.recentWeeks.join(", ") || "none"}; previous-window weeks ${confirmationRows.map((r) => num(r.Week)).join(", ") || "none"}`,
+      status: !complete ? "UNKNOWN" : gemHistoryPass ? "PASS" : "FAIL",
     },
-    {
-      check: `Recent ${unit} / game`,
-      required: `≥ ${rule.mean}`,
-      actual: fmt(result.recent),
-      status:
-        !usable || !recent.length ? "UNKNOWN" : meanPass ? "PASS" : "FAIL",
-    },
-    {
-      check: "Each of the last 3 games",
-      required: `≥ ${rule.floor} ${unit} in EACH game`,
-      actual: recent.length ? recent.join(", ") : "unavailable",
-      status:
-        !usable || !recent.length ? "UNKNOWN" : floorPass ? "PASS" : "FAIL",
-    },
-    {
-      check: "Workload growth",
-      required: `≥ +${rule.growth} AND ≥ 25%; previous zero: absolute gate only`,
-      actual: `${fmt(result.previous)} → ${fmt(result.recent)}; change ${fmt(result.increase)}; ${result.growthPct === null ? "percentage unavailable" : (result.growthPct * 100).toFixed(2) + "%"}`,
-      status:
-        !usable || previous.length < 2
-          ? "UNKNOWN"
-          : growthPass
-            ? "PASS"
-            : "FAIL",
-    },
+    ...windows.flat(),
     {
       check: "Availability",
       required: "Active; no unresolved return scenario; remaining games",
@@ -197,7 +240,7 @@ export function assessGem(
     result.warnings.push(
       `Injured same-team competition: ${competition.map((r) => `${str(r.Player)} (${str(r.InjuryStatus)})`).join(", ")}. This does not establish whether the increased role is temporary.`,
     );
-  // Preserve the redesign's strict workload, floor, growth and availability gates, with no human-context veto.
+  // Preserve the existing Watch opportunity tests; strong stable production can now independently earn Gem.
   const promising =
     recent.length === 3 &&
     previous.length >= 2 &&
@@ -210,24 +253,25 @@ export function assessGem(
     rows.length < 5 &&
     recent.length > 0 &&
     result.recent! >= rule.mean;
-  result.classification =
-    !complete || !usable || !rows.length
+  result.classification = result.checks.every(
+    (check) => check.status === "PASS",
+  )
+    ? "Gem"
+    : !complete || !usable || !rows.length
       ? "Insufficient data"
-      : historyPass && meanPass && floorPass && growthPass && availabilityPass
-        ? "Gem"
-        : promising || shortPromising
-          ? "Watch"
-          : "No breakout signal";
+      : promising || shortPromising
+        ? "Watch"
+        : "No breakout signal";
   result.explanation =
     result.classification === "Gem"
-      ? "Automatically identified sustained starter-level workload and meaningful growth. This is a data-supported high-potential signal, not confirmation of a permanent role or a guaranteed breakout."
+      ? "Strong actual scoring backed by sustained workload in both consecutive, overlapping three-game windows. Workload growth is not required. This identifies a strong production candidate, not a guaranteed breakout or proof of an undervalued player."
       : result.classification === "Watch"
-        ? `Developing opportunity does not yet pass every automatic gate. ${result.checks
+        ? `Workload opportunity meets the existing Watch criteria but does not pass every Gem gate. ${result.checks
             .filter((c) => c.status !== "PASS")
             .map((c) => c.check + ": " + c.status)
             .join("; ")}.`
         : result.classification === "Insufficient data"
-          ? "Verified played-game workload is missing, inconsistent or invalid. Scoring alone cannot establish a Gem."
-          : "No qualifying developing-role evidence. Strong established production alone is not a Gem.";
+          ? "Verified played-game evidence is missing, inconsistent or invalid. Gem requires both actual scoring and workload."
+          : "No qualifying Gem or developing-workload signal under the automatic rules.";
   return result;
 }

@@ -38,7 +38,8 @@ async function seed(
   const patterns = [
     // Reproduce a rostered, rising RB that the default gem labels do not classify.
     { id: 1, scores: [6, 6, 21, 21, 21], projection: 15, targets: 0 },
-    { id: 2, scores: [8, 8, 16, 16, 16], projection: 8, targets: 200 },
+    // Four strong played games confirm Gem while preserving the fixture's rising-scoring search.
+    { id: 2, scores: [8, 16, 16, 16, 16], projection: 8, targets: 200 },
     { id: 106, scores: [6, 6, 12, 12, 12], projection: 15, targets: 200 },
     { id: 108, scores: [6, 6, 12, 12], projection: 6, targets: 200 },
   ];
@@ -70,7 +71,7 @@ async function seed(
         // Weekly workload drives automatic qualification; no manual context is seeded for any test player.
         Targets:
           x.id === 2
-            ? i < 2
+            ? i < 1
               ? 2
               : 8
             : x.id === 106
@@ -184,15 +185,34 @@ test("automatic Gems need no review, relabeling or Apply after saved-filter migr
   await dialog.getByText("Why Gem?", { exact: true }).click();
   await expect(
     dialog.getByRole("table", { name: "Breakout evidence checks" }),
-  ).toContainText("Workload growth");
+  ).toContainText("Previous window scoring support");
   await expect(
     dialog
       .getByRole("table", { name: "Breakout evidence checks" })
       .getByRole("cell", { name: "PASS", exact: true }),
-  ).toHaveCount(5);
+  ).toHaveCount(10);
   await expect(dialog).toContainText(
     "no manual role review, approval or news entry is required",
   );
+  // Inspect the shared full-profile evidence without full-page capture moving the popover's anchor out of view.
+  await dialog.getByRole("button", { name: "Close player details" }).click();
+  await page.goto("./#/player/2");
+  await page.getByText("Why Gem?", { exact: true }).click();
+  await page.screenshot({
+    path: "test-results/gem-confirmation-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/gem-confirmation-mobile.png",
+    fullPage: true,
+  });
+  await page.goto("./#/gems");
   await page.reload();
   await expect(page.getByRole("status")).toContainText("1 confirmed matches");
   await page.goto("./#/model");
@@ -205,7 +225,7 @@ test("automatic Gems need no review, relabeling or Apply after saved-filter migr
 });
 
 // The independent decline signal filters automatically, survives reload, and exposes evidence in existing player views.
-test("sustained reduced workload is selectable, persistent and explained without changing the primary label", async ({
+test("sustained reduced workload remains selectable, persistent and independent of confirmed Gem", async ({
   page,
 }) => {
   await seed(
@@ -227,7 +247,7 @@ test("sustained reduced workload is selectable, persistent and explained without
   ).toBeVisible();
   await page.getByRole("link", { name: /Synthetic 2 WR/ }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByText("Why No breakout signal?", { exact: true }).click();
+  await dialog.getByText("Why Gem?", { exact: true }).click();
   await expect(
     dialog.locator(".notice.warning").filter({ hasText: "Reduced workload." }),
   ).toContainText("13.50 → 10.00");
@@ -240,7 +260,7 @@ test("sustained reduced workload is selectable, persistent and explained without
     page.getByLabel("Reduced workload", { exact: true }),
   ).toBeChecked();
   await page.goto("./#/player/2");
-  await page.getByText("Why No breakout signal?", { exact: true }).click();
+  await page.getByText("Why Gem?", { exact: true }).click();
   await expect(
     page.locator(".notice.warning").filter({ hasText: "Reduced workload." }),
   ).toContainText("-25.93%");
