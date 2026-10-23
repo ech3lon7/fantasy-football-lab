@@ -109,7 +109,9 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
       evidence: request.evidence,
       roleWeight: request.roleWeight,
     });
-    let lastProgress = 0;
+    const started = performance.now();
+    let lastProgress = 0,
+      evaluationStarted = started;
     // Throttle expensive structured-clone messages while keeping phase changes immediately visible.
     const progress = (
       phase:
@@ -117,9 +119,21 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
       stats: SearchStats,
       force = false,
     ) => {
-      if (force || performance.now() - lastProgress >= 150) {
-        send({ id, context, type: "progress", progress: { phase, stats } });
-        lastProgress = performance.now();
+      const now = performance.now();
+      if (force || now - lastProgress >= 150) {
+        // Estimate only the bounded evaluation phase; later, more complex packages may change this estimate.
+        const remainingMs =
+          phase === "Evaluating trades" && stats.scored > 0
+            ? ((now - evaluationStarted) / stats.scored) *
+              Math.max(0, stats.matched - stats.scored)
+            : undefined;
+        send({
+          id,
+          context,
+          type: "progress",
+          progress: { phase, stats, elapsedMs: now - started, remainingMs },
+        });
+        lastProgress = now;
       }
     };
     progress(
@@ -141,6 +155,7 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
       (s) => progress("Finding matching packages", s),
       request.lineupsRaw,
     );
+    evaluationStarted = performance.now();
     progress("Evaluating trades", stats, true);
     const rows: SearchRow[] = [];
     const suggestions: SearchRow[] = [];

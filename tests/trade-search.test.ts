@@ -53,6 +53,72 @@ const query: TradeSearchQuery = {
   above: 5,
 };
 
+// Omitting speculative waiver searches must preserve every search score, warning and roster decision for all 25 trade sizes.
+it("keeps fast search summaries identical to full trade evaluations across package sizes", async () => {
+  const d = await starterFixture();
+  d.tables.ModelContext[0].BenchSlots = 0;
+  const m = evaluate(d, d.settings);
+  const give = ["1", "100", "101", "102", "103"],
+    get = ["2", "200", "104", "105", "106"];
+  give.forEach((id) => (m.byId.get(id)!.owner = "1"));
+  get.forEach((id) => (m.byId.get(id)!.owner = "2"));
+  Object.assign(m.byId.get("103")!, {
+    injury: "OUT",
+    uncertain: true,
+    out: true,
+    irEligible: true,
+  });
+  for (let offered = 1; offered <= 5; offered++)
+    for (let received = 1; received <= 5; received++) {
+      const q = { ...query, give: give.slice(0, offered), count: received };
+      const match = {
+        key: `${offered}/${received}`,
+        teamB: "2",
+        get: get.slice(0, received),
+        incoming: 0,
+        outgoing: 0,
+        difference: 0,
+      };
+      const full = evaluateTrade(m, { ...q, teamB: "2", get: match.get });
+      if (!full.valid) throw Error(full.errors.join(" "));
+      const row = scoreTradeMatch(m, q, match);
+      expect(row).toMatchObject({
+        own: full.directA.expectedPerWeek,
+        other: full.potentialB.expectedPerWeek,
+        ownTotal: full.directA.expected,
+        otherTotal: full.potentialB.expected,
+        grade: full.grade,
+        surplus: full.surplusTest,
+        points: full.pointsTest,
+        legal: full.legality,
+        dropsA: full.dropsA,
+        dropsB: full.dropsB,
+        irA: full.irA,
+        irB: full.irB,
+      });
+      const availability = [...q.give, ...match.get].flatMap((id) => {
+        const p = m.byId.get(id)!;
+        return [
+          p.injury !== "ACTIVE" ? `${p.name}: ${p.injury}` : "",
+          p.bye === m.current ? `${p.name}: bye this week` : "",
+        ].filter(Boolean);
+      });
+      expect(row.warnings).toEqual([
+        ...new Set([
+          ...full.uncertainty,
+          ...full.directA.errors,
+          ...full.directA.warnings,
+          ...full.directB.errors,
+          ...full.directB.warnings,
+          ...full.potentialA.errors,
+          ...full.potentialB.errors,
+          ...availability,
+          ...(!full.legality ? ["Unresolved roster conflict"] : []),
+        ]),
+      ]);
+    }
+});
+
 // Labels are OR selections, while simultaneous label/position categories count the same distinct incoming players.
 it("filters incoming package labels and positions with independent inclusive minimums", async () => {
   const m = await matchingModel();

@@ -47,6 +47,13 @@ interface SearchJob {
   // Store only explanations explicitly opened in this completed search.
   lineups?: Record<string, { details?: SearchLineupDetails; error?: string }>;
 }
+// Keep long-running search timings readable without implying the estimated finish time is guaranteed.
+function searchDuration(ms: number) {
+  const seconds = Math.ceil(ms / 1000);
+  return seconds < 60
+    ? `${seconds}s`
+    : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
 export function TradeSearch({
   m,
   draft,
@@ -1246,12 +1253,20 @@ export function TradeSearch({
             {job.progress?.phase ?? "Preparing search"}…
             {job.progress &&
               (job.progress.phase === "Evaluating trades"
-                ? ` ${job.progress.stats.scored} of ${job.progress.stats.matched}`
+                ? ` ${job.progress.stats.scored.toLocaleString()} of ${job.progress.stats.matched.toLocaleString()} (${job.progress.stats.matched ? Math.floor((100 * job.progress.stats.scored) / job.progress.stats.matched) : 100}%)`
                 : ` ${job.progress.stats.checked}/${job.progress.stats.teams} ${multiplePackages ? "team/package checks" : "teams"}; ${job.progress.stats.matched} matches`)}
+            {/* Show elapsed time and a changing estimate so a large, finite search does not look frozen. */}
+            {job.progress?.elapsedMs !== undefined && (
+              <small>
+                Elapsed: {searchDuration(job.progress.elapsedMs)}.
+                {job.progress.remainingMs !== undefined &&
+                  ` Estimated remaining: ${searchDuration(job.progress.remainingMs)} (may change).`}
+              </small>
+            )}
             <small>
-              {" "}
-              Larger package searches can take several minutes. Results appear
-              after every match is evaluated.
+              Every match is evaluated before results appear. Large searches can
+              take several minutes; Cancel to narrow the index range or package
+              sizes.
             </small>
           </span>
         </div>

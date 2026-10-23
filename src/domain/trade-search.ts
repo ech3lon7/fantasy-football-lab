@@ -199,6 +199,9 @@ export interface SearchStats {
 export interface SearchProgress {
   phase: "Finding matching packages" | "Evaluating trades" | "Sorting results";
   stats: SearchStats;
+  // Worker timings describe real completed evaluations, rather than assuming a fixed speed per package.
+  elapsedMs?: number;
+  remainingMs?: number;
 }
 export type SearchRequest =
   | {
@@ -1013,7 +1016,8 @@ export function scoreTradeMatch(
       give: [...q.give],
       get: [...match.get],
     },
-    true,
+    // Search scores are trade-only: legal waiver additions cannot change these gains, tests or injury warnings.
+    false,
     lineupsRaw,
   );
   if (!r.valid)

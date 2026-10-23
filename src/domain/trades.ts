@@ -186,6 +186,9 @@ export function evaluateTrade(
       rosterExcess(m, postA.ids) +
       rosterExcess(m, postB.ids) ===
     0;
+  // Search summaries never read the legacy coverage series; compute each only when its details are requested.
+  let coverageA: ReturnType<typeof impact> | undefined,
+    coverageB: ReturnType<typeof impact> | undefined;
   return {
     valid: true as const,
     errors,
@@ -239,8 +242,12 @@ export function evaluateTrade(
     // Trade-only roster potential uses legal rosters after required drops, with equal optimization before and after.
     potentialA: rosterPotentialImpact(m, initialA, a.ids, d.get),
     potentialB: rosterPotentialImpact(m, initialB, b.ids, d.give),
-    a: impact(initialA, a.ids, postA.ids),
-    b: impact(initialB, b.ids, postB.ids),
+    get a() {
+      return (coverageA ??= impact(initialA, a.ids, postA.ids));
+    },
+    get b() {
+      return (coverageB ??= impact(initialB, b.ids, postB.ids));
+    },
   };
 }
 export type TradeResult = ReturnType<typeof evaluateTrade>;

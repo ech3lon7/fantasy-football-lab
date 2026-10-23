@@ -1560,6 +1560,10 @@ test("large searches show progress and support cancel, restart and navigation", 
   await expect(
     search.getByRole("button", { name: "Cancel", exact: true }),
   ).toBeVisible();
+  // Real worker progress includes elapsed time while cancellation remains available during exhaustive evaluation.
+  await expect(search.locator(".trade-search-progress")).toContainText(
+    /Elapsed: \d+[sm]/,
+  );
   await search.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(
     search.getByText("Search cancelled.", { exact: true }),
