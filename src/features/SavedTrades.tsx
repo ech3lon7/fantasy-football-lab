@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { num, str, type AppState } from "../domain/contracts";
 import { evidenceKey, roleScenarioKey } from "../domain/opportunity";
-import { starterLineupsKey } from "../domain/starter-lineups";
+import {
+  starterLineupsKey,
+  tradeImpactVersion,
+} from "../domain/starter-lineups";
 import {
   ownsSavedDraft,
   readSavedTrades,
@@ -38,6 +41,7 @@ export function SavedTrades({
   // Hide old summaries immediately when the source/settings identity changes.
   const [evaluatedKey, setEvaluatedKey] = useState("");
   const evaluationKey = JSON.stringify([
+    tradeImpactVersion,
     m.dataset.hash,
     m.analysisVersion,
     m.settings,
@@ -290,7 +294,14 @@ function SavedTradeCard({
                 : []),
             ].map(({ label, summary }) => (
               <tr key={label}>
-                <td>{label}</td>
+                <td>
+                  {label}
+                  {/* Preserve historical summaries while making the change in scoring basis visible. */}
+                  {label === "Original" &&
+                    summary.impactVersion !== tradeImpactVersion && (
+                      <small>Previous scoring method</small>
+                    )}
+                </td>
                 <td className="model">{points(summary.own)}</td>
                 <td className="model">{points(summary.other)}</td>
                 <td>
@@ -313,9 +324,10 @@ function SavedTradeCard({
       </div>
       <p>
         <small>
-          Weekly values are model expected starting-lineup gains, not player PPG
-          or ESPN weekly projections. Original source:{" "}
-          {trade.original.sourceUTC ?? "Unavailable"}. Saved:{" "}
+          Current weekly values use your marked-starter impact and their
+          optimized roster-potential impact, with consistent before/after rules.
+          These are model estimates, not player PPG or ESPN weekly projections.
+          Original source: {trade.original.sourceUTC ?? "Unavailable"}. Saved:{" "}
           {new Date(trade.createdAt).toLocaleString()}. Current source:{" "}
           {m.dataset.sourceUTC ?? "Unavailable"}. Loading restores the saved
           trade and its search settings; it does not submit a trade.

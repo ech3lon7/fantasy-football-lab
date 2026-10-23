@@ -1,5 +1,9 @@
 import { mean, n, num, str, type Dataset, type Row } from "./contracts";
 import type { Player } from "./valuation";
+import {
+  evidenceComparison,
+  type EvidenceComparison,
+} from "./evidence-comparison";
 
 // Version the confirmed scoring-and-workload rule separately from app and workbook versions.
 export const gemVersion = "automatic-breakout-3";
@@ -18,6 +22,7 @@ export interface GemCheck {
   required: string;
   actual: string;
   status: "PASS" | "FAIL" | "UNKNOWN" | "UNRESOLVED";
+  comparisons?: EvidenceComparison[];
 }
 export interface GemAssessment {
   classification:
@@ -132,6 +137,41 @@ export function assessGem(
     required: `Average decline ≥ ${declineMinimum} ${unit}/game AND ≥ 20%; at least 2 of the last 3 games ≥ ${declineMinimum} below the earlier average; 5+ verified games`,
     actual: `${fmt(result.previous)} → ${fmt(result.recent)} ${unit}/game; change ${fmt(result.increase)}; ${result.growthPct === null ? "percentage unavailable" : (result.growthPct * 100).toFixed(2) + "%"}; ${lowerGames}/3 recent games meet the decline minimum`,
     status: !historyPass || !usable ? "UNKNOWN" : declining ? "PASS" : "FAIL",
+    // Expose each existing decline gate numerically without changing the exact total-based boundary tests above.
+    comparisons: [
+      evidenceComparison(
+        declineMinimum,
+        usable && previous.length > 0 && recent.length > 0
+          ? declineNumerator / (recent.length * previous.length)
+          : null,
+        `${unit}/game`,
+        "≥",
+        "Average decline; all decline gates required",
+      ),
+      evidenceComparison(
+        0.2,
+        usable && previousTotal > 0 && recent.length > 0
+          ? declineNumerator / (previousTotal * recent.length)
+          : null,
+        "%",
+        "≥",
+        "Relative average decline",
+      ),
+      evidenceComparison(
+        2,
+        usable ? lowerGames : null,
+        "games",
+        "≥",
+        `Recent games at least ${declineMinimum} ${unit} below the earlier average`,
+      ),
+      evidenceComparison(
+        5,
+        rows.length,
+        "games",
+        "≥",
+        "Verified played-game sample",
+      ),
+    ],
   };
   // Gem uses overlapping three-game windows from the latest four played games; Watch/decline retain their earlier windows.
   const confirmationRows = rows.slice(-4, -1);
@@ -157,6 +197,11 @@ export function assessGem(
     const scoreMean = mean(points),
       workloadMean = mean(workload);
     const known = gemHistoryPass && window.rows.length === 3;
+    // Pair every individual score/count with its actual week so overlapping windows are explicit in Why Gem.
+    const weekly = (values: number[]) =>
+      window.rows
+        .map((r, i) => `${r.Season} W${r.Week}: ${fmt(values[i])}`)
+        .join(", ");
     // These domain-owned checks also supply every threshold and observed result to the evidence UI.
     const status = (valid: boolean, passed: boolean): GemCheck["status"] =>
       !known || !valid ? "UNKNOWN" : passed ? "PASS" : "FAIL";
@@ -169,15 +214,26 @@ export function assessGem(
           pointsUsable,
           scoreMean !== null && scoreMean >= rule.points,
         ),
+        // Display the same window aggregates and support counts that determine the existing Gem checks.
+        comparisons: [evidenceComparison(rule.points, scoreMean, "PPG")],
       },
       {
         check: `${window.name} scoring support`,
         required: `At least 2 of 3 games ≥ ${rule.points} points`,
         actual:
           pointsUsable && points.length
-            ? `${points.join(", ")}; ${scoresPassing}/3 meet the floor`
+            ? `${weekly(points)} points; ${scoresPassing}/3 meet the floor`
             : "unavailable",
         status: status(pointsUsable, scoresPassing >= 2),
+        comparisons: [
+          evidenceComparison(
+            2,
+            pointsUsable ? scoresPassing : null,
+            "games",
+            "≥",
+            `Of three games, each scoring ≥ ${rule.points} points`,
+          ),
+        ],
       },
       {
         check: `${window.name} ${unit} / game`,
@@ -187,15 +243,27 @@ export function assessGem(
           workloadUsable,
           workloadMean !== null && workloadMean >= rule.mean,
         ),
+        comparisons: [
+          evidenceComparison(rule.mean, workloadMean, `${unit}/game`),
+        ],
       },
       {
         check: `${window.name} workload support`,
         required: `At least 2 of 3 games ≥ ${rule.floor} ${unit}`,
         actual:
           workloadUsable && workload.length
-            ? `${workload.join(", ")}; ${workloadsPassing}/3 meet the floor`
+            ? `${weekly(workload)} ${unit}; ${workloadsPassing}/3 meet the floor`
             : "unavailable",
         status: status(workloadUsable, workloadsPassing >= 2),
+        comparisons: [
+          evidenceComparison(
+            2,
+            workloadUsable ? workloadsPassing : null,
+            "games",
+            "≥",
+            `Of three games, each with ≥ ${rule.floor} ${unit}`,
+          ),
+        ],
       },
     ];
   });
@@ -207,6 +275,8 @@ export function assessGem(
         "4+ played games; both overlapping three-game windows must pass",
       actual: `${rows.length} games; recent weeks ${result.recentWeeks.join(", ") || "none"}; previous-window weeks ${confirmationRows.map((r) => num(r.Week)).join(", ") || "none"}`,
       status: !complete ? "UNKNOWN" : gemHistoryPass ? "PASS" : "FAIL",
+      // Sample size and availability retain their additional nonnumeric requirements in the original evidence text.
+      comparisons: [evidenceComparison(4, rows.length, "games")],
     },
     ...windows.flat(),
     {
@@ -214,6 +284,15 @@ export function assessGem(
       required: "Active; no unresolved return scenario; remaining games",
       actual: `${p.injury}; ${p.available} available games${p.opportunity.returnWeek !== null ? "; return scenario selected" : ""}`,
       status: availabilityPass ? "PASS" : "UNRESOLVED",
+      comparisons: [
+        evidenceComparison(
+          0,
+          p.available,
+          "games",
+          ">",
+          "Remaining available games; active status also required",
+        ),
+      ],
     },
   ];
   // Freshness and injured teammates are automatic warnings, never a request for manual qualification.

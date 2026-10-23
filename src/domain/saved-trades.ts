@@ -14,6 +14,7 @@ import type { Model } from "./valuation";
 import type { TradeResult } from "./trades";
 import type { SearchRow, TradeSearchQuery } from "./trade-search";
 import { tradeSearchBounds } from "./trade-search";
+import { tradeImpactVersion } from "./starter-lineups";
 
 // Reuse the existing account-scoped string filters, so saved trades need no new database table or migration.
 export const savedTradesKey = "savedTrades";
@@ -29,6 +30,31 @@ const querySchema = z
     count: count.min(1),
     below: finite.nonnegative(),
     above: finite.nonnegative(),
+    // Preserve the optional usefulness setting when a saved trade restores its search controls.
+    usefulness: z.object({ minimum: finite.nonnegative() }).strict().optional(),
+    // Optional discovery settings use the existing saved-search/sync contract; old saved trades need no migration.
+    discovery: z
+      .object({
+        // Persist incoming size ranges while older entries retain their original exact count.
+        receive: z
+          .object({ minimum: count.min(1), maximum: count.min(1) })
+          .strict()
+          .refine((r) => r.minimum <= r.maximum)
+          .optional(),
+        flexible: z
+          .object({
+            pool: z.array(z.string()).min(1).max(12),
+            minimum: count.min(1),
+            maximum: count.min(1),
+          })
+          .strict()
+          .optional(),
+        target: z.string().optional(),
+        ranking: z.enum(["own", "other", "balanced"]).optional(),
+        nearMisses: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
     upgrade: z
       .object({
         mode: z.enum(["starter", "depth", "either", "best"]),
@@ -65,6 +91,8 @@ const querySchema = z
 // Store compact summaries rather than historical datasets or large weekly lineup objects.
 const summarySchema = z
   .object({
+    // Old original summaries remain readable and explicitly identifiable as using the previous scoring method.
+    impactVersion: z.string().max(60).optional(),
     own: finite.nullable(),
     other: finite.nullable(),
     ownTotal: finite.nullable(),
@@ -173,6 +201,7 @@ export function writeSavedTrades(state: AppState, trades: SavedTrade[]) {
 // Copy existing authoritative outputs only; saving never introduces a second trade valuation formula.
 export function summaryFromSearch(row: SearchRow): SavedTradeSummary {
   return {
+    impactVersion: tradeImpactVersion,
     own: row.own,
     other: row.other,
     ownTotal: row.ownTotal,
@@ -187,10 +216,11 @@ export function summaryFromSearch(row: SearchRow): SavedTradeSummary {
 export function summaryFromTrade(result: TradeResult): SavedTradeSummary {
   return result.valid
     ? {
+        impactVersion: tradeImpactVersion,
         own: result.directA.expectedPerWeek,
-        other: result.directB.expectedPerWeek,
+        other: result.potentialB.expectedPerWeek,
         ownTotal: result.directA.expected,
-        otherTotal: result.directB.expected,
+        otherTotal: result.potentialB.expected,
         grade: result.grade,
         surplus: result.surplusTest,
         points: result.pointsTest,
@@ -198,9 +228,12 @@ export function summaryFromTrade(result: TradeResult): SavedTradeSummary {
         conditional:
           result.uncertainty.length > 0 ||
           result.directA.errors.length > 0 ||
-          result.directB.errors.length > 0,
+          result.directB.errors.length > 0 ||
+          result.potentialA.errors.length > 0 ||
+          result.potentialB.errors.length > 0,
       }
     : {
+        impactVersion: tradeImpactVersion,
         own: null,
         other: null,
         ownTotal: null,

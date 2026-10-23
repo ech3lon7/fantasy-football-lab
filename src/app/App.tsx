@@ -126,8 +126,14 @@ export default function App() {
   }
   useEffect(() => {
     const notify = () => setUpdateReady(true);
+    // Clear a previously offered update when the current entry is verified as the published release.
+    const current = () => setUpdateReady(false);
     window.addEventListener("fantasy-update-ready", notify);
-    return () => window.removeEventListener("fantasy-update-ready", notify);
+    window.addEventListener("fantasy-update-current", current);
+    return () => {
+      window.removeEventListener("fantasy-update-ready", notify);
+      window.removeEventListener("fantasy-update-current", current);
+    };
   }, []);
   useEffect(() => {
     let alive = true;

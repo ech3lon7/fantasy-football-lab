@@ -1,6 +1,7 @@
 import {
   cmpId,
   n,
+  num,
   str,
   sum,
   positions,
@@ -9,11 +10,41 @@ import {
   type Settings,
 } from "./contracts";
 // Reuse existing league-relative positional grades rather than inventing a second grade formula.
-import { teamsAssessment } from "./lineups";
+import {
+  teamsAssessment,
+  lineup,
+  rosterExcess,
+  irAssignments,
+} from "./lineups";
 import { evaluateTrade } from "./trades";
 // Positional fit uses the same saved/imported starter assignments as the existing analyzer.
-import { readStarterLineup } from "./starter-lineups";
+import { readStarterLineup, tradeImpactVersion } from "./starter-lineups";
 import type { Model, Player } from "./valuation";
+import type { OpponentIncentive } from "./trade-discovery";
+
+// Discovery settings are optional so saved fixed-package searches retain their original behavior.
+export interface DiscoveryOptions {
+  flexible?: { pool: string[]; minimum: number; maximum: number };
+  // Optional incoming bounds allow one search to include singles and larger same-team packages.
+  receive?: { minimum: number; maximum: number };
+  target?: string;
+  ranking?: "own" | "other" | "balanced";
+  nearMisses?: boolean;
+}
+
+// Package usefulness is independent of the legacy pre-trade upgrade counts and value tests.
+export interface UsefulnessEvidence {
+  offered: string;
+  compared: string | null;
+  group: "starter" | "depth";
+  role: string;
+  offeredPPG: number;
+  comparedPPG: number;
+  gain: number;
+  minimum: number;
+  competitionPPG: number | null;
+  competitionGain: number | null;
+}
 
 // Optional discovery criteria never change valuations or the trade evaluator's inputs.
 export interface UpgradeFilter {
@@ -70,6 +101,8 @@ export interface DeficitEvidence extends DeficitFilter {
 // Fetch weekly slot explanations only on demand instead of retaining full lineups for every search match.
 export interface SearchLineupSide {
   source: string;
+  expectedPerWeek: number | null;
+  expectedTotal: number | null;
   replacements: string[];
   incoming: string[];
   benchOutgoing: string[];
@@ -90,6 +123,10 @@ export interface SearchLineupSide {
 export interface SearchLineupDetails {
   own: SearchLineupSide;
   other: SearchLineupSide;
+  // Secondary views explain the distinct marked-starter and full-roster measurements for both teams.
+  ownPotential: SearchLineupSide;
+  otherMarked: SearchLineupSide;
+  incentive?: OpponentIncentive;
 }
 // Incoming criteria screen existing labels and positions without changing values or ranking.
 export interface IncomingFilter {
@@ -109,6 +146,12 @@ export interface TradeSearchQuery {
   weekly?: WeeklyFilter;
   deficit?: DeficitFilter;
   incoming?: IncomingFilter;
+  usefulness?: { minimum: number };
+  discovery?: DiscoveryOptions;
+}
+// Old saved searches keep their exact receive count; only an explicit range broadens package sizes.
+export function incomingCountRange(q: TradeSearchQuery) {
+  return q.discovery?.receive ?? { minimum: q.count, maximum: q.count };
 }
 export interface SearchMatch {
   key: string;
@@ -119,8 +162,12 @@ export interface SearchMatch {
   difference: number;
   upgrades?: UpgradeEvidence[];
   deficit?: DeficitEvidence;
+  // Flexible searches carry their actual outgoing package through scoring, loading, saving and details.
+  give?: string[];
 }
 export interface SearchRow extends SearchMatch {
+  nearMiss?: { reasons: string[]; distance: number };
+  usefulness?: UsefulnessEvidence[];
   own: number | null;
   other: number | null;
   ownTotal: number | null;
@@ -146,6 +193,8 @@ export interface SearchStats {
   weeklyExcluded?: number;
   deficitExcluded?: number;
   incomingExcluded?: number;
+  usefulnessExcluded?: number;
+  protectedExcluded?: number;
 }
 export interface SearchProgress {
   phase: "Finding matching packages" | "Evaluating trades" | "Sorting results";
@@ -173,6 +222,7 @@ export type SearchResponse = { id: string; context: string } & (
       total: number;
       offset: number;
       stats: SearchStats;
+      suggestions?: SearchRow[];
     }
   | { type: "error"; message: string }
   | {
@@ -192,6 +242,7 @@ export function tradeSearchContext(
   workspace = "",
 ) {
   return JSON.stringify([
+    tradeImpactVersion,
     workspace,
     m.dataset.hash,
     m.analysisVersion,
@@ -205,6 +256,7 @@ export function tradeSearchContext(
     query.count,
     query.below,
     query.above,
+    query.discovery ?? null,
     // Disabled controls do not affect existing searches; enabled changes invalidate old results.
     query.upgrade
       ? [
@@ -216,6 +268,8 @@ export function tradeSearchContext(
         ]
       : null,
     query.deficit ? [query.deficit.position, query.deficit.ceiling] : null,
+    // Invalid edits invalidate results too; disabling usefulness preserves the old search path.
+    query.usefulness ? [String(query.usefulness.minimum)] : null,
     // Include selections and counts in stale-result protection, even during invalid numeric edits.
     query.incoming
       ? [
@@ -243,20 +297,78 @@ export function tradeSearchContext(
 // Missing indices block outgoing searches, while genuine zero remains a usable number.
 export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
   const errors: string[] = [];
+  // Every unselected player is protected; validate the explicit candidate pool before generating subsets.
+  const flexible = q.discovery?.flexible;
+  const offered = flexible?.pool ?? q.give;
+  const maximum = flexible?.maximum ?? q.give.length;
+  if (
+    flexible &&
+    (!Number.isInteger(flexible.minimum) ||
+      !Number.isInteger(flexible.maximum) ||
+      flexible.minimum < 1 ||
+      flexible.maximum > 5 ||
+      flexible.minimum > flexible.maximum ||
+      flexible.minimum > flexible.pool.length ||
+      flexible.pool.length > 12)
+  )
+    errors.push(
+      "Choose up to 12 tradable players and outgoing counts from 1 to 5 within the pool size.",
+    );
+  if (
+    q.discovery?.ranking &&
+    !["own", "other", "balanced"].includes(q.discovery.ranking)
+  )
+    errors.push("Choose a recognized trade ranking.");
+  if (q.discovery?.target) {
+    const target = m.byId.get(q.discovery.target);
+    if (
+      !target ||
+      target.owner === "0" ||
+      target.owner === q.teamA ||
+      n(target.index) === null
+    )
+      errors.push(
+        "Choose a target with a usable index on another fantasy team.",
+      );
+  }
+  // Only an enabled usefulness minimum is validated; genuine zero still requires a strictly positive upgrade.
+  if (
+    q.usefulness &&
+    (!Number.isFinite(q.usefulness.minimum) || q.usefulness.minimum < 0)
+  )
+    errors.push(
+      "Enter a nonnegative minimum Expected PPG improvement for usefulness.",
+    );
   if (!m.dataset.tables.ModelTeams.some((t) => str(t.TeamID) === q.teamA))
     errors.push("Choose your team.");
   if (
-    !q.give.length ||
-    q.give.length > 5 ||
-    new Set(q.give).size !== q.give.length
+    !offered.length ||
+    offered.length > (flexible ? 12 : 5) ||
+    new Set(offered).size !== offered.length
   )
-    errors.push("Select one to five distinct outgoing players.");
-  if (q.give.some((id) => m.byId.get(id)?.owner !== q.teamA))
+    errors.push(
+      flexible
+        ? "Select one to twelve distinct tradable players."
+        : "Select one to five distinct outgoing players.",
+    );
+  if (offered.some((id) => m.byId.get(id)?.owner !== q.teamA))
     errors.push("Outgoing players must belong to your selected team.");
-  if (q.give.some((id) => n(m.byId.get(id)?.index) === null))
+  if (offered.some((id) => n(m.byId.get(id)?.index) === null))
     errors.push("An outgoing player has an unavailable index.");
   if (!Number.isInteger(q.count) || q.count < 1 || q.count > 5)
     errors.push("Choose one to five players to receive.");
+  // Validate both incoming endpoints before the discovery worker enumerates any count in the range.
+  const receive = incomingCountRange(q);
+  if (
+    !Number.isInteger(receive.minimum) ||
+    !Number.isInteger(receive.maximum) ||
+    receive.minimum < 1 ||
+    receive.maximum > 5 ||
+    receive.minimum > receive.maximum
+  )
+    errors.push(
+      "Choose an incoming-player range from 1 to 5, with minimum no greater than maximum.",
+    );
   if (![q.below, q.above].every((x) => Number.isFinite(x) && x >= 0))
     errors.push("Enter nonnegative numbers for both index offsets.");
   // Disabled categories impose no minimum; enabled counts must fit the incoming package.
@@ -280,9 +392,9 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
       selected.some((value) => !(allowed as readonly string[]).includes(value))
     )
       errors.push(`Choose valid, distinct incoming ${name} selections.`);
-    if (!Number.isInteger(minimum) || minimum < 1 || minimum > q.count)
+    if (!Number.isInteger(minimum) || minimum < 1 || minimum > receive.maximum)
       errors.push(
-        `Minimum incoming ${name} matches must be a whole number from 1 to ${q.count}.`,
+        `Minimum incoming ${name} matches must be a whole number from 1 to ${receive.maximum}.`,
       );
   }
   // Only enabled upgrade criteria are validated; disabled searches keep their previous behavior.
@@ -307,7 +419,7 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
         (value) => Number.isInteger(value) && value >= 0 && value <= 5,
       ) ||
       (explicit && counts.starter + counts.depth + counts.best < 1) ||
-      counts.starter + counts.depth + counts.best > q.give.length
+      counts.starter + counts.depth + counts.best > maximum
     )
       errors.push(
         "Upgrade minimums must be whole numbers from 0 to 5, require at least one upgrade, and total no more than the outgoing players.",
@@ -317,7 +429,7 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
   if (
     q.upgrade?.mode === "best" &&
     upgradeCounts(q.upgrade).best >
-      new Set(q.give.map((id) => m.byId.get(id)?.pos).filter(Boolean)).size
+      new Set(offered.map((id) => m.byId.get(id)?.pos).filter(Boolean)).size
   )
     errors.push(
       "The best-at-position minimum cannot exceed the number of distinct offered positions.",
@@ -326,7 +438,7 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
   if (
     q.deficit &&
     (!positions.includes(q.deficit.position) ||
-      !q.give.some((id) => m.byId.get(id)?.pos === q.deficit!.position) ||
+      !offered.some((id) => m.byId.get(id)?.pos === q.deficit!.position) ||
       !positionGradeScale.some((grade) => grade === q.deficit!.ceiling))
   )
     errors.push(
@@ -595,6 +707,11 @@ export function findTradeMatches(
   if (bounds.errors.length) throw Error(bounds.errors.join(" "));
   const teams = m.dataset.tables.ModelTeams.map((t) => str(t.TeamID))
     .filter((id) => id !== "0" && id !== q.teamA)
+    // A named target restricts both the counterparty and package membership, never combines owners.
+    .filter(
+      (id) =>
+        !q.discovery?.target || m.byId.get(q.discovery.target)?.owner === id,
+    )
     .sort(cmpId);
   const stats: SearchStats = {
     teams: teams.length,
@@ -653,6 +770,11 @@ export function findTradeMatches(
       if (++nodes % 2048 === 0) onProgress?.({ ...stats });
       if (!remaining) {
         if (total >= bounds.lower && total <= bounds.upper) {
+          if (
+            q.discovery?.target &&
+            !chosen.some((p) => p.id === q.discovery!.target)
+          )
+            return;
           // Screen complete index-matching packages before scoring; existing index pruning and sort order remain intact.
           if (!matchesIncoming(chosen, q.incoming)) {
             stats.incomingExcluded = (stats.incomingExcluded ?? 0) + 1;
@@ -703,6 +825,177 @@ export function findTradeMatches(
   return { matches, stats };
 }
 
+// Check the evaluator's trade-only legal roster; waiver claims never manufacture usefulness for an offered player.
+function packageUsefulness(
+  m: Model,
+  q: TradeSearchQuery,
+  initial: string[],
+  after: string[],
+  ir: string[],
+): UsefulnessEvidence[] {
+  if (!q.usefulness) return [];
+  if (rosterExcess(m, after) > 0) return [];
+  const excluded = new Set(ir);
+  const bag = after
+    .filter((id) => !excluded.has(id))
+    .map((id) => m.byId.get(id)!);
+  if (
+    q.give.some(
+      (id) =>
+        !bag.some((p) => p.id === id) ||
+        n(m.byId.get(id)?.expected) === null ||
+        m.byId.get(id)!.available <= 0,
+    )
+  )
+    return [];
+  // Baselines use the original active roster, including departing/dropped players, so the trade cannot manufacture vacancies.
+  const originalIR = new Set(irAssignments(m, initial));
+  const incumbents = initial
+    .filter((id) => !originalIR.has(id))
+    .map((id) => m.byId.get(id)!);
+  // Missing forecasts before or after the trade cannot establish a reliable improvement in a competing position.
+  const offeredPositions = new Set(q.give.map((id) => m.byId.get(id)!.pos));
+  const flexPositions = ["RB", "WR", "TE"];
+  if (
+    [...incumbents, ...bag].some(
+      (p) =>
+        (offeredPositions.has(p.pos) ||
+          (num(m.dataset.tables.ModelContext[0].FlexSlots) > 0 &&
+            flexPositions.includes(p.pos) &&
+            [...offeredPositions].some((pos) =>
+              flexPositions.includes(pos),
+            ))) &&
+        (n(p.expected) === null || n(p.value) === null),
+    )
+  )
+    return [];
+  // Healthy slot assignment measures general roster fit through the horizon, rather than one week's bye/matchup.
+  const before = lineup(
+    m,
+    incumbents.map((p) => p.id),
+    m.current,
+    false,
+    true,
+    "expected",
+  );
+  const final = lineup(
+    m,
+    bag.map((p) => p.id),
+    m.current,
+    false,
+    true,
+    "expected",
+  );
+  const beforeStarters = new Set(before.ids.filter(Boolean)),
+    finalStarters = new Set(final.ids.filter(Boolean));
+  // Empty starting slots do not create additional bench slots for otherwise unusable offers.
+  if (
+    bag.length - finalStarters.size >
+    num(m.dataset.tables.ModelContext[0].BenchSlots)
+  )
+    return [];
+  const byStrength = (a: Player, b: Player) =>
+    b.expected! - a.expected! || cmpId(a.id, b.id);
+  const reserve = (
+    players: Player[],
+    starters: Set<string | null>,
+    pos: Position,
+  ) =>
+    players
+      .filter((p) => p.pos === pos && !starters.has(p.id))
+      .sort(byStrength);
+  // One best-backup role exists per position; all incoming players compete for those same finite roles.
+  const roles = before.ids.map((id, i) => ({
+    id,
+    group: "starter" as "starter" | "depth",
+    slot: before.slots[i],
+    key: `${before.slots[i]} starter ${before.slots.slice(0, i + 1).filter((slot) => slot === before.slots[i]).length}`,
+  }));
+  for (const pos of offeredPositions)
+    roles.push({
+      id: reserve(incumbents, beforeStarters, pos)[0]?.id ?? null,
+      group: "depth",
+      slot: pos,
+      key: `${pos} best backup`,
+    });
+  const offered = q.give
+    .map((id) => m.byId.get(id)!)
+    .sort((a, b) => cmpId(a.id, b.id));
+  let states: (UsefulnessEvidence[] | undefined)[] = Array(1 << offered.length);
+  states[0] = [];
+  // A role is consumed once, and the bitmask consumes each offer once; larger gains only break equal-coverage ties.
+  for (const role of roles) {
+    // A surviving starter already fills a role; an offer must improve a displaced or departing starter instead.
+    if (role.group === "starter" && role.id && finalStarters.has(role.id))
+      continue;
+    const next = [...states];
+    for (let mask = 0; mask < states.length; mask++) {
+      const previous = states[mask];
+      if (!previous) continue;
+      for (let i = 0; i < offered.length; i++) {
+        const player = offered[i];
+        if (mask & (1 << i)) continue;
+        const starter = finalStarters.has(player.id);
+        if (!starter && num(m.dataset.tables.ModelContext[0].BenchSlots) <= 0)
+          continue;
+        if (
+          (role.group === "starter") !== starter ||
+          (role.slot === "FLEX"
+            ? !flexPositions.includes(player.pos)
+            : role.slot !== player.pos)
+        )
+          continue;
+        const reserves = reserve(bag, finalStarters, player.pos);
+        if (!starter && reserves[0]?.id !== player.id) continue;
+        const compared = role.id ? m.byId.get(role.id)! : null;
+        const comparedPPG = compared?.expected ?? 0;
+        // A displaced starter can become strong depth: the incoming reserve must beat that competition too.
+        const competitionPPG = starter
+          ? null
+          : (reserves.find((p) => p.id !== player.id)?.expected ?? 0);
+        const gain = player.expected! - comparedPPG;
+        const qualifyingGain =
+          player.expected! -
+          Math.max(comparedPPG, competitionPPG ?? comparedPPG);
+        if (
+          gain <= 0 ||
+          qualifyingGain <= 0 ||
+          qualifyingGain < q.usefulness.minimum
+        )
+          continue;
+        const candidate = [
+          ...previous,
+          {
+            offered: player.id,
+            compared: role.id,
+            group: role.group,
+            role: role.key,
+            offeredPPG: player.expected!,
+            comparedPPG,
+            gain,
+            // Retain the actual search threshold with its evidence, even if the user edits controls before rerunning.
+            minimum: q.usefulness.minimum,
+            competitionPPG,
+            competitionGain:
+              competitionPPG === null
+                ? null
+                : player.expected! - competitionPPG,
+          },
+        ];
+        const target = mask | (1 << i);
+        if (
+          !next[target] ||
+          sum(candidate.map((e) => e.gain)) >
+            sum(next[target]!.map((e) => e.gain))
+        )
+          next[target] = candidate;
+      }
+    }
+    states = next;
+  }
+  return states[states.length - 1] ?? [];
+}
+
 // Delegate all trade math to the existing evaluator, retaining invalid matches with unavailable scores.
 export function scoreTradeMatch(
   m: Model,
@@ -710,6 +1003,8 @@ export function scoreTradeMatch(
   match: SearchMatch,
   lineupsRaw?: string,
 ): SearchRow {
+  // Use the chosen subset rather than the draft/pool for every authoritative trade calculation.
+  if (match.give) q = { ...q, give: [...match.give] };
   const r = evaluateTrade(
     m,
     {
@@ -747,10 +1042,15 @@ export function scoreTradeMatch(
   });
   return {
     ...match,
+    // Use the same legal roster and drop proposals already used for this package's authoritative scoring.
+    ...(q.usefulness
+      ? { usefulness: packageUsefulness(m, q, r.initialB, r.legalB, r.irB) }
+      : {}),
     own: n(r.directA.expectedPerWeek),
-    other: n(r.directB.expectedPerWeek),
+    // Opponent benefit must include the roster they give up and all backup improvements already available beforehand.
+    other: n(r.potentialB.expectedPerWeek),
     ownTotal: n(r.directA.expected),
-    otherTotal: n(r.directB.expected),
+    otherTotal: n(r.potentialB.expected),
     grade: r.grade,
     surplus: r.surplusTest,
     points: r.pointsTest,
@@ -762,6 +1062,8 @@ export function scoreTradeMatch(
         ...r.directA.warnings,
         ...r.directB.errors,
         ...r.directB.warnings,
+        ...r.potentialA.errors,
+        ...r.potentialB.errors,
         ...availability,
         ...(!r.legality ? ["Unresolved roster conflict"] : []),
       ]),
@@ -780,6 +1082,8 @@ export function searchLineupDetails(
   match: SearchMatch,
   lineupsRaw?: string,
 ): SearchLineupDetails {
+  // Expanded replacements must describe the same outgoing subset that produced this result.
+  if (match.give) q = { ...q, give: [...match.give] };
   const r = evaluateTrade(
     m,
     {
@@ -794,6 +1098,8 @@ export function searchLineupDetails(
   if (!r.valid) throw Error(r.errors.join(" "));
   const side = (direct: typeof r.directA): SearchLineupSide => ({
     source: direct.source,
+    expectedPerWeek: direct.expectedPerWeek,
+    expectedTotal: direct.expected,
     replacements: direct.replacements,
     incoming: direct.promotedIncoming,
     benchOutgoing: direct.benchOutgoing,
@@ -826,7 +1132,13 @@ export function searchLineupDetails(
       }),
     })),
   });
-  return { own: side(r.directA), other: side(r.directB) };
+  // Main result columns retain your chosen starters and use their full-roster potential; details expose both other views.
+  return {
+    own: side(r.directA),
+    other: side(r.potentialB),
+    ownPotential: side(r.potentialA),
+    otherMarked: side(r.directB),
+  };
 }
 
 // Sort every scored match globally, with unavailable scores after real losses and stable ID ties.

@@ -304,4 +304,65 @@ test("the update action loads the latest release without hanging on controllerch
   await expect(
     page.getByRole("heading", { name: "Your roster, in focus." }),
   ).toBeVisible();
+  // Re-registering the offline worker after recovery is not another app release.
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await expect(
+    page.getByText("An app update is ready.", { exact: false }),
+  ).toHaveCount(0);
+  await page.reload();
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await expect(
+    page.getByText("An app update is ready.", { exact: false }),
+  ).toHaveCount(0);
+});
+
+// Fresh HTML may already contain the current release while an older offline controller still owns the tab.
+test("current app silently adopts its waiting worker instead of repeatedly asking to reload", async ({
+  page,
+}) => {
+  await page.goto(`${origin}${base}`);
+  await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+  await seedSavedData(page);
+  release = "b";
+  await page.goto(`${origin}${base}?fresh-entry=1`);
+  await expect(page.locator('script[type="module"][src]')).toHaveAttribute(
+    "src",
+    entryFor("b"),
+  );
+  await page.waitForFunction(
+    () => document.getElementById("app-startup")?.hidden,
+  );
+  await page.evaluate(async () => {
+    await (await navigator.serviceWorker.getRegistration())!.update();
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        async (url) => !!(await caches.match(url)),
+        `${origin}${entryFor("b")}`,
+      ),
+    )
+    .toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const reg = await navigator.serviceWorker.getRegistration();
+        return !!reg?.active && !reg.installing && !reg.waiting;
+      }),
+    )
+    .toBe(true);
+  await expect(
+    page.getByText("An app update is ready.", { exact: false }),
+  ).toHaveCount(0);
+  await page.reload();
+  await expect(
+    page.getByText("An app update is ready.", { exact: false }),
+  ).toHaveCount(0);
+  expect(
+    await page.evaluate(() => localStorage.getItem("recovery-session-marker")),
+  ).toBe("keep-my-session");
 });

@@ -8,13 +8,13 @@ export const gemSignals = [
   "Projection-gap watch",
   "TD caution",
   "No breakout signal",
-  "Insufficient data",
-  "Not applicable",
   // Make decline explicitly selectable without changing default candidate signals or the existing rising preset.
   "Reduced workload",
   "Role-growth watch",
   "Scoring breakout watch",
 ] as const;
+// Data-coverage statuses remain player warnings, but are no longer selectable screening signals.
+const retiredSignalSelections = ["Insufficient data", "Not applicable"];
 export const gemClassifications = [
   "All classifications",
   "Gem only",
@@ -241,13 +241,15 @@ export function decodeGemFilters(saved: Record<string, string>, team: string) {
           (s) =>
             typeof s !== "string" ||
             (!gemSignals.includes(s as (typeof gemSignals)[number]) &&
+              !retiredSignalSelections.includes(s) &&
               !Object.hasOwn(legacySignals, s)),
         )
       )
         throw Error();
+      // Drop retired selections from older saved searches while retaining all other criteria.
       draft.signals = [
         ...new Set((selected as string[]).map((s) => legacySignals[s] ?? s)),
-      ];
+      ].filter((s) => !retiredSignalSelections.includes(s));
       for (const f of gemThresholds) draft[f.key] = saved[f.stored] ?? "";
       for (const k of [
         "gemAboveReplacement",
@@ -263,8 +265,14 @@ export function decodeGemFilters(saved: Record<string, string>, team: string) {
         "Saved gem filters are invalid or unsupported. Correct the controls and Apply, or Reset screener.";
     }
   } else if (saved.gemSignal === "All signals") draft.signals = [...gemSignals];
-  else if (Object.hasOwn(legacySignals, saved.gemSignal ?? "")) {
-    draft.signals = [legacySignals[saved.gemSignal]];
+  else if (
+    Object.hasOwn(legacySignals, saved.gemSignal ?? "") ||
+    retiredSignalSelections.includes(saved.gemSignal ?? "")
+  ) {
+    // Older single-choice aliases receive the same retirement handling as newer saved arrays.
+    draft.signals = [legacySignals[saved.gemSignal] ?? saved.gemSignal].filter(
+      (s) => !retiredSignalSelections.includes(s),
+    );
   } else if (
     gemSignals.includes(saved.gemSignal as (typeof gemSignals)[number])
   )
@@ -343,12 +351,13 @@ export function screenGems(players: Player[], q: GemQuery) {
   const matches: GemResult[] = [],
     incomplete: GemResult[] = [];
   for (const p of players) {
-    // Empty signal selections leave numeric, ownership and position filters in force.
+    // Empty or fully selected signals mean Any signal, even when player data-status warnings have no checkbox.
     if (
       (q.classification === "Gem only" && p.gem !== "Gem") ||
       (q.classification === "Gem + Watch" &&
         !["Gem", "Watch"].includes(p.gem)) ||
       (q.signals.length > 0 &&
+        q.signals.length !== gemSignals.length &&
         !playerSignals(p).some((s) => q.signals.includes(s))) ||
       (q.pool === "Available" && p.owner !== "0") ||
       (q.pool === "Selected team" && p.owner !== q.team) ||

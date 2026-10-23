@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import {
   initialState,
@@ -110,6 +110,628 @@ const panel = (page: Page) =>
     }),
   });
 
+// Clear optional restrictions in one action without silently unprotecting players or changing the selected trade's structure.
+test("clear filters restores defaults and removes results while preserving players and package choices", async ({
+  page,
+}) => {
+  await seed(page);
+  const search = panel(page);
+  await page
+    .getByLabel("Incoming player 1", { exact: true })
+    .selectOption("200");
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("12 index matches.", { exact: false }),
+  ).toBeVisible();
+  await search
+    .getByLabel("Find outgoing combinations", { exact: true })
+    .check();
+  await search.getByText(/Tradable pool \(1 selected/).click();
+  await search.getByLabel("Tradable Main QB", { exact: true }).check();
+  await search
+    .getByLabel("Maximum outgoing players", { exact: true })
+    .fill("2");
+  await search.getByLabel("Create package", { exact: true }).check();
+  await search
+    .getByLabel("Maximum players to receive", { exact: true })
+    .selectOption("2");
+  await search
+    .getByRole("combobox", { name: "Required incoming player", exact: true })
+    .selectOption("200");
+  await search
+    .getByRole("combobox", { name: "Rank trades by", exact: true })
+    .selectOption("balanced");
+  await search
+    .getByLabel("Show near misses and adjustments", { exact: true })
+    .check();
+  for (const label of [
+    "Gem",
+    "Watch",
+    "Receive QB",
+    "Every offered player must be useful to the other team",
+    "Only show positional upgrades for the other team",
+    "Only teams with a positional deficit",
+    "Filter your weekly gain",
+    "Filter their weekly gain",
+  ])
+    await search.getByLabel(label, { exact: true }).check();
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("");
+  await expect(
+    search.getByRole("button", { name: "Search", exact: true }),
+  ).toBeDisabled();
+  await search
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .click();
+  await expect(
+    search.getByRole("button", { name: "Search", exact: true }),
+  ).toBeEnabled();
+  await expect(search.locator("tbody tr")).toHaveCount(0);
+  for (const label of [
+    "Below outgoing total (index points)",
+    "Above outgoing total (index points)",
+  ])
+    await expect(search.getByLabel(label, { exact: true })).toHaveValue("5");
+  for (const label of [
+    "Gem",
+    "Watch",
+    "Receive QB",
+    "Every offered player must be useful to the other team",
+    "Only show positional upgrades for the other team",
+    "Only teams with a positional deficit",
+    "Filter your weekly gain",
+    "Filter their weekly gain",
+    "Show near misses and adjustments",
+  ])
+    await expect(search.getByLabel(label, { exact: true })).not.toBeChecked();
+  await expect(
+    search.getByRole("combobox", {
+      name: "Required incoming player",
+      exact: true,
+    }),
+  ).toHaveValue("");
+  await expect(
+    search.getByRole("combobox", { name: "Rank trades by", exact: true }),
+  ).toHaveValue("own");
+  // Pool protections, search sizes and the ordinary analyzer selections remain exactly as chosen.
+  await expect(
+    search.getByLabel("Find outgoing combinations", { exact: true }),
+  ).toBeChecked();
+  await expect(
+    search.getByLabel("Tradable Main QB", { exact: true }),
+  ).toBeChecked();
+  await expect(
+    search.getByLabel("Tradable Bench QB", { exact: true }),
+  ).toBeChecked();
+  await expect(
+    search.getByLabel("Tradable Synthetic 1", { exact: true }),
+  ).not.toBeChecked();
+  await expect(
+    search.getByLabel("Maximum outgoing players", { exact: true }),
+  ).toHaveValue("2");
+  await expect(
+    search.getByLabel("Create package", { exact: true }),
+  ).toBeChecked();
+  await expect(
+    search.getByLabel("Minimum players to receive", { exact: true }),
+  ).toHaveValue("1");
+  await expect(
+    search.getByLabel("Maximum players to receive", { exact: true }),
+  ).toHaveValue("2");
+  await expect(
+    page.getByLabel("Outgoing player 1", { exact: true }),
+  ).toHaveValue("101");
+  await expect(
+    page.getByLabel("Incoming player 1", { exact: true }),
+  ).toHaveValue("200");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await search
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .screenshot({ path: "test-results/clear-trade-filters-mobile.png" });
+  // Clearing during enumeration terminates that search and removes its progress/results without changing package sizes.
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search
+    .getByLabel("Maximum players to receive", { exact: true })
+    .selectOption("5");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByRole("button", { name: "Cancel", exact: true }),
+  ).toBeVisible();
+  await search
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .click();
+  await expect(
+    search.getByRole("button", { name: "Cancel", exact: true }),
+  ).toHaveCount(0);
+  await expect(search.locator("tbody tr")).toHaveCount(0);
+  await expect(
+    search.getByLabel("Maximum players to receive", { exact: true }),
+  ).toHaveValue("5");
+});
+// The worker applies the minimum to the original roster and still checks role eligibility for each complete package.
+test("usefulness filters complete packages, explains the replacement and invalidates edited thresholds", async ({
+  page,
+}) => {
+  await seed(page, true);
+  const search = panel(page);
+  const toggle = search.getByLabel(
+    "Every offered player must be useful to the other team",
+    { exact: true },
+  );
+  expect(await toggle.isChecked()).toBe(false);
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search.getByLabel("Receive QB", { exact: true }).check();
+  await toggle.check();
+  const minimum = search.getByLabel(
+    "Minimum usefulness improvement (Expected PPG)",
+    { exact: true },
+  );
+  await expect(minimum).toHaveValue("1");
+  await minimum.fill("20");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("2 index matches.", { exact: false }),
+  ).toBeVisible();
+  const row = search.locator("tbody tr").filter({
+    has: page.getByRole("link", { name: "Incoming QB", exact: true }),
+  });
+  await expect(
+    row.getByRole("link", { name: "Incoming QB", exact: true }),
+  ).toBeVisible();
+  await row.getByText("Trade details", { exact: true }).click();
+  await expect(
+    row.getByText("1/1 players useful", { exact: true }),
+  ).toBeVisible();
+  await row.getByText("Usefulness comparisons", { exact: true }).click();
+  await expect(row.getByText(/Useful starter:/)).toContainText("Incoming QB");
+  await expect(row.getByText(/Useful starter:/)).toContainText(
+    "+20.00 Expected PPG",
+  );
+  await expect(row.getByText(/Useful starter:/)).toContainText(
+    "Required improvement: +20.00 Expected PPG per player",
+  );
+  await expect(row.getByText(/Useful starter:/)).not.toContainText("vacant");
+  // Enabled controls and named comparison details stay contained on a phone-sized viewport.
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await search.screenshot({ path: "test-results/trade-usefulness-mobile.png" });
+  await openExclusions(search);
+  await expect(
+    search.getByText(
+      /Trades excluded because not every offered player is useful: 0/,
+    ),
+  ).toBeVisible();
+  await minimum.fill("20.000001");
+  await expect(row.getByRole("button", { name: "Load trade" })).toBeDisabled();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("0 index matches.", { exact: false }),
+  ).toBeVisible();
+  await minimum.fill("");
+  await expect(
+    search.getByRole("button", { name: "Search", exact: true }),
+  ).toBeDisabled();
+  await toggle.uncheck();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("2 index matches.", { exact: false }),
+  ).toBeVisible();
+});
+
+// A single worker search returns mixed incoming sizes, and saving a one-player result preserves the original search range.
+test("incoming range returns singles and packages together and restores saved bounds", async ({
+  page,
+}) => {
+  await seed(page);
+  const search = panel(page);
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search.getByLabel("Create package", { exact: true }).check();
+  await expect(
+    search.getByLabel("Minimum players to receive", { exact: true }),
+  ).toHaveValue("1");
+  await expect(
+    search.getByLabel("Maximum players to receive", { exact: true }),
+  ).toHaveValue("3");
+  await search
+    .getByLabel("Find a target player", { exact: true })
+    .fill("Incoming QB");
+  await search
+    .getByRole("combobox", { name: "Required incoming player", exact: true })
+    .selectOption("200");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("67 index matches.", { exact: false }),
+  ).toBeVisible();
+  await search.getByRole("button", { name: "Show more", exact: true }).click();
+  const rows = search.locator("tbody tr");
+  await expect(rows).toHaveCount(67);
+  const sizes = new Set<number>();
+  let single: Locator | undefined;
+  for (const row of await rows.all()) {
+    const count = await row.locator("td").first().getByRole("link").count();
+    sizes.add(count);
+    if (count === 1) single = row;
+  }
+  expect(sizes).toEqual(new Set([1, 2, 3]));
+  await single!
+    .getByRole("button", { name: "Save trade", exact: true })
+    .click();
+  const saved = JSON.parse(
+    (await storedWorkspace(page)).state.filters.savedTrades,
+  ).trades[0];
+  expect(saved.draft.get).toEqual(["200"]);
+  expect(saved.query.discovery.receive).toEqual({ minimum: 1, maximum: 3 });
+  await single!
+    .getByRole("button", { name: "Load trade", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Incoming player 1", { exact: true }),
+  ).toHaveValue("200");
+  await expect(
+    page.getByLabel("Incoming player 2", { exact: true }),
+  ).toHaveValue("");
+  // Changing the range invalidates old results; loading the saved search restores both endpoints rather than its result's size.
+  await search
+    .getByLabel("Minimum players to receive", { exact: true })
+    .selectOption("2");
+  const collection = page
+    .locator("section")
+    .filter({
+      has: page.getByRole("heading", { name: "Saved trades", exact: true }),
+    });
+  await collection.locator("summary").click();
+  await collection
+    .getByRole("button", { name: "Load saved trade", exact: true })
+    .click();
+  await expect(
+    search.getByLabel("Minimum players to receive", { exact: true }),
+  ).toHaveValue("1");
+  await expect(
+    search.getByLabel("Maximum players to receive", { exact: true }),
+  ).toHaveValue("3");
+  await search
+    .getByLabel("Minimum players to receive", { exact: true })
+    .selectOption("4");
+  await expect(
+    search.getByRole("button", { name: "Search", exact: true }),
+  ).toBeDisabled();
+  await expect(search).toContainText("minimum no greater than maximum");
+  await search
+    .getByLabel("Minimum players to receive", { exact: true })
+    .selectOption("1");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await search
+    .getByRole("group", { name: "Value range", exact: true })
+    .screenshot({ path: "test-results/incoming-range-mobile.png" });
+});
+// Flexible discovery preserves protected players and the exact outgoing subset through worker details, saving and loading.
+test("flexible targeted discovery ranks packages and saves the actual outgoing players", async ({
+  page,
+}) => {
+  await seed(page);
+  const search = panel(page);
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search
+    .getByLabel("Find outgoing combinations", { exact: true })
+    .check();
+  await search.getByText(/Tradable pool \(1 selected/).click();
+  await search.getByLabel("Tradable Main QB", { exact: true }).check();
+  await expect(
+    search.getByLabel("Tradable Synthetic 1", { exact: true }),
+  ).not.toBeChecked();
+  await search
+    .getByLabel("Maximum outgoing players", { exact: true })
+    .fill("2");
+  await search
+    .getByLabel("Find a target player", { exact: true })
+    .fill("Incoming QB");
+  await search
+    .getByRole("combobox", { name: "Required incoming player", exact: true })
+    .selectOption("200");
+  await search
+    .getByRole("combobox", { name: "Rank trades by", exact: true })
+    .selectOption("balanced");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("3 index matches.", { exact: false }),
+  ).toBeVisible();
+  const rows = search.locator("tbody tr");
+  await expect(rows).toHaveCount(3);
+  const row = rows.filter({
+    has: page.locator("small").filter({ hasText: /^Offer: Main QB$/ }),
+  });
+  await expect(row).toHaveCount(1);
+  await row.getByText("Trade details", { exact: true }).click();
+  await row
+    .getByText("Why the other team might accept", { exact: true })
+    .click();
+  await expect(row).toContainText("not an acceptance probability");
+  await expect(row).toContainText("Before grade:");
+  await row.getByRole("button", { name: "Save trade", exact: true }).click();
+  const saved = JSON.parse(
+    (await storedWorkspace(page)).state.filters.savedTrades,
+  ).trades[0];
+  expect(saved.draft.give).toEqual(["100"]);
+  expect(saved.query.discovery).toMatchObject({
+    target: "200",
+    ranking: "balanced",
+    flexible: { pool: ["101", "100"], minimum: 1, maximum: 2 },
+  });
+  await search
+    .getByRole("group", { name: "Search approach", exact: true })
+    .screenshot({ path: "test-results/discovery-controls.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await row.getByRole("button", { name: "Load trade", exact: true }).click();
+  await expect(
+    page.getByLabel("Outgoing player 1", { exact: true }),
+  ).toHaveValue("100");
+  await expect(
+    page.getByLabel("Outgoing player 2", { exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page.getByLabel("Incoming player 1", { exact: true }),
+  ).toHaveValue("200");
+  // Loading the saved entry restores discovery controls as well as the chosen actual trade.
+  await search
+    .getByLabel("Find outgoing combinations", { exact: true })
+    .uncheck();
+  await search
+    .getByRole("combobox", { name: "Rank trades by", exact: true })
+    .selectOption("own");
+  await search
+    .getByRole("combobox", { name: "Required incoming player", exact: true })
+    .selectOption("");
+  const collection = page
+    .locator("section")
+    .filter({
+      has: page.getByRole("heading", { name: "Saved trades", exact: true }),
+    });
+  await collection.locator("summary").click();
+  await collection
+    .getByRole("button", { name: "Load saved trade", exact: true })
+    .click();
+  await expect(
+    search.getByLabel("Find outgoing combinations", { exact: true }),
+  ).toBeChecked();
+  await expect(
+    search.getByRole("combobox", {
+      name: "Required incoming player",
+      exact: true,
+    }),
+  ).toHaveValue("200");
+  await expect(
+    search.getByRole("combobox", { name: "Rank trades by", exact: true }),
+  ).toHaveValue("balanced");
+  await expect(
+    search.getByLabel("Maximum outgoing players", { exact: true }),
+  ).toHaveValue("2");
+});
+
+// A nearby two-player counteroffer can meet the scoring goal without being misrepresented as the requested one-player match.
+test("near misses show evaluated package adjustments and explicit failed limits separately", async ({
+  page,
+}) => {
+  await seed(page);
+  const search = panel(page);
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search
+    .getByRole("combobox", { name: "Required incoming player", exact: true })
+    .selectOption("200");
+  await search.getByLabel("Filter your weekly gain", { exact: true }).check();
+  await search
+    .getByLabel("Your minimum weekly gain (points/week)", { exact: true })
+    .fill("1");
+  await search
+    .getByLabel("Show near misses and adjustments", { exact: true })
+    .check();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("0 index matches.", { exact: false }),
+  ).toBeVisible();
+  await search.getByText(/Near misses and possible adjustments/).click();
+  const suggestions = search.locator(".search-adjustments");
+  await expect(suggestions).toContainText(
+    "Adjustment: receive 2 players instead of 1.",
+  );
+  await expect(
+    suggestions.getByRole("link", { name: "Incoming QB", exact: true }).first(),
+  ).toBeVisible();
+  await suggestions
+    .getByRole("button", { name: "Inspect this alternative", exact: true })
+    .first()
+    .click();
+  await expect(
+    page.getByLabel("Outgoing player 1", { exact: true }),
+  ).toHaveValue("101");
+  await expect(
+    page.getByLabel("Incoming player 2", { exact: true }),
+  ).not.toHaveValue("");
+});
+
+// Exclusion counts are intentionally collapsed; opening them never reruns or relaxes a search.
+async function openExclusions(search: Locator) {
+  const summary = search.getByText("Why trades were excluded", { exact: true });
+  if ((await summary.locator("..").getAttribute("open")) === null)
+    await summary.click();
+}
+
+// Help opens only on hover; focus, typing and touch retain normal input behavior without unwanted popups.
+test("filter help is unobtrusive accessible and does not change controls or saved query state", async ({
+  page,
+  browser,
+}) => {
+  await seed(page);
+  await page.clock.install();
+  const search = panel(page);
+  for (const name of [
+    "Value range",
+    "Incoming players",
+    "Roster fit",
+    "Scoring impact",
+  ])
+    await expect(
+      search.getByRole("group", { name, exact: true }),
+    ).toBeVisible();
+  const label = "Every offered player must be useful to the other team";
+  const toggle = search.getByRole("checkbox", { name: label, exact: true });
+  const before = await storedWorkspace(page);
+  await expect(page.getByRole("button", { name: /^Help:/ })).toHaveCount(0);
+  await expect(page.getByText("ⓘ", { exact: true })).toHaveCount(0);
+  expect(
+    await toggle.evaluate((element) => getComputedStyle(element).cursor),
+  ).not.toBe("help");
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await search.getByText(label, { exact: true }).hover();
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await expect(page.getByRole("tooltip")).toContainText(
+    "independently of marked starters",
+  );
+  await expect(toggle).toHaveAttribute(
+    "aria-describedby",
+    (await page.getByRole("tooltip").getAttribute("id")) as string,
+  );
+  await page.getByRole("tooltip").hover();
+  await expect(page.getByRole("tooltip")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await toggle.focus();
+  await page.clock.runFor(800);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await toggle.check();
+  await page.mouse.move(0, 0);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await expect(
+    search.locator("p").filter({ hasText: "Every offer must improve" }),
+  ).toHaveCount(0);
+  await expect(
+    search.getByLabel("Minimum usefulness improvement (Expected PPG)", {
+      exact: true,
+    }),
+  ).toHaveValue("1");
+  await search
+    .getByRole("button", {
+      name: "Remove Every offer useful ≥ 1 Expected PPG",
+      exact: true,
+    })
+    .click();
+  await expect(toggle).not.toBeChecked();
+  // A real touch tap toggles the checkbox exactly once without opening hover help.
+  const touchPage = await browser.newPage({
+    baseURL: new URL("./", page.url()).href,
+    hasTouch: true,
+    viewport: { width: 390, height: 844 },
+  });
+  await seed(touchPage);
+  const touchToggle = panel(touchPage).getByRole("checkbox", {
+    name: label,
+    exact: true,
+  });
+  await touchToggle.tap();
+  await expect(touchToggle).toBeChecked();
+  await expect(touchPage.getByRole("tooltip")).toHaveCount(0);
+  await touchPage.screenshot({
+    path: "test-results/filter-help-mobile.png",
+  });
+  await touchPage
+    .getByRole("heading", { name: "Find matching trades", exact: true })
+    .tap();
+  await expect(touchPage.getByRole("tooltip")).toHaveCount(0);
+  await touchPage.close();
+  expect((await storedWorkspace(page)).state).toEqual(before.state);
+  // Shared screen controls retain the same help behavior outside trade search.
+  await page.goto("./#/gems");
+  const trendInput = page.getByLabel("Minimum trend PPG", { exact: true });
+  // Typing cancels pending hover help, and dismisses an already open tooltip without reopening it.
+  await trendInput.focus();
+  await trendInput.hover();
+  await trendInput.pressSequentially("2");
+  await page.clock.runFor(800);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await page.mouse.move(0, 0);
+  await trendInput.hover();
+  await expect(page.getByRole("tooltip")).toBeVisible();
+  await trendInput.pressSequentially("3");
+  await page.clock.runFor(800);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await expect(trendInput).toHaveValue("23");
+  await trendInput.fill("");
+  await page.mouse.move(0, 0);
+  await page
+    .getByText("Minimum trend PPG", { exact: true })
+    .hover();
+  await expect(page.getByRole("tooltip")).toContainText(
+    "16 recent minus 12 earlier gives +4",
+  );
+  await expect(
+    page.getByLabel("Minimum trend PPG", { exact: true }),
+  ).toHaveValue("");
+  await page.keyboard.press("Escape");
+  await page.goto("./#/players");
+  await page
+    .getByText("Ownership", { exact: true })
+    .hover();
+  await expect(page.getByRole("tooltip")).toContainText("free agents/waivers");
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("combobox", { name: "Position", exact: true })
+    .selectOption("QB");
+  await expect(
+    page.getByRole("button", { name: "Remove player position", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Remove player position", exact: true })
+    .click();
+  await expect(
+    page.getByRole("combobox", { name: "Position", exact: true }),
+  ).toHaveValue("All");
+});
+
 // Read persisted state only after IndexedDB's write transaction completes, matching the application's reload path.
 async function storedWorkspace(page: Page) {
   return page.evaluate(async () => {
@@ -194,7 +816,10 @@ test("incoming Gem/Watch and position filters intersect without changing existin
   await expect(search.locator("tbody tr")).toHaveCount(2);
   await search.getByLabel("Create package", { exact: true }).check();
   await search
-    .getByLabel("Players to receive", { exact: true })
+    .getByLabel("Minimum players to receive", { exact: true })
+    .selectOption("2");
+  await search
+    .getByLabel("Maximum players to receive", { exact: true })
     .selectOption("2");
   await search
     .getByLabel("Minimum incoming Gem/Watch matches", { exact: true })
@@ -240,6 +865,17 @@ test("saved trades persist names notes and original results and restore the save
     .fill("1000");
   await search.getByLabel("Gem", { exact: true }).check();
   await search.getByLabel("Receive WR", { exact: true }).check();
+  // The new optional filter survives saved-trade loading through the existing query schema and state store.
+  await search
+    .getByLabel("Every offered player must be useful to the other team", {
+      exact: true,
+    })
+    .check();
+  await search
+    .getByLabel("Minimum usefulness improvement (Expected PPG)", {
+      exact: true,
+    })
+    .fill("1.5");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
     search.getByRole("button", { name: "Save trade", exact: true }),
@@ -283,6 +919,16 @@ test("saved trades persist names notes and original results and restore the save
     .click();
   await expect(search.getByLabel("Gem", { exact: true })).toBeChecked();
   await expect(search.getByLabel("Receive WR", { exact: true })).toBeChecked();
+  await expect(
+    search.getByLabel("Every offered player must be useful to the other team", {
+      exact: true,
+    }),
+  ).toBeChecked();
+  await expect(
+    search.getByLabel("Minimum usefulness improvement (Expected PPG)", {
+      exact: true,
+    }),
+  ).toHaveValue("1.5");
   await expect(
     search.getByLabel("Below outgoing total (index points)", { exact: true }),
   ).toHaveValue("1000");
@@ -437,6 +1083,7 @@ test("weekly sliders filter exact averages for either or both teams without chan
   await expect(
     search.getByText("11 index matches.", { exact: false }),
   ).toBeVisible();
+  await openExclusions(search);
   await expect(
     search.getByText(/Trades excluded by weekly-gain limits: 1/),
   ).toBeVisible();
@@ -581,6 +1228,7 @@ test("positional-upgrade filter supports starter, depth, either and disabled beh
   await expect(
     search.getByText("0 index matches.", { exact: false }),
   ).toBeVisible();
+  await openExclusions(search);
   await expect(
     search.getByText(/Teams excluded by positional-upgrade filter: 1/),
   ).toBeVisible();
@@ -829,6 +1477,9 @@ test("packages paginate complete results and load exactly the selected receive c
     .getByLabel("Above outgoing total (index points)", { exact: true })
     .fill("500");
   await search.getByLabel("Create package", { exact: true }).check();
+  // Equal incoming bounds retain the exact-size package search and pagination checks.
+  await search.getByLabel("Minimum players to receive", { exact: true }).selectOption("2");
+  await search.getByLabel("Maximum players to receive", { exact: true }).selectOption("2");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
     search.getByText("66 index matches.", { exact: false }),
@@ -865,7 +1516,10 @@ test("packages paginate complete results and load exactly the selected receive c
     [5, 792],
   ]) {
     await search
-      .getByLabel("Players to receive", { exact: true })
+      .getByLabel("Minimum players to receive", { exact: true })
+      .selectOption(String(count));
+    await search
+      .getByLabel("Maximum players to receive", { exact: true })
       .selectOption(String(count));
     await search.getByRole("button", { name: "Search", exact: true }).click();
     await expect(
@@ -897,7 +1551,10 @@ test("large searches show progress and support cancel, restart and navigation", 
     .fill("500");
   await search.getByLabel("Create package", { exact: true }).check();
   await search
-    .getByLabel("Players to receive", { exact: true })
+    .getByLabel("Minimum players to receive", { exact: true })
+    .selectOption("5");
+  await search
+    .getByLabel("Maximum players to receive", { exact: true })
     .selectOption("5");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
@@ -988,6 +1645,7 @@ test("deficit filtering selects one offered position and invalidates changed gra
   await expect(
     search.getByText("0 index matches.", { exact: false }),
   ).toBeVisible();
+  await openExclusions(search);
   await expect(
     search.getByText(/Teams excluded by positional-deficit filter: 1/),
   ).toBeVisible();
@@ -1019,6 +1677,105 @@ test("deficit filtering selects one offered position and invalidates changed gra
   ).toBeVisible();
 });
 
+// Their existing stronger bench QB already contributes before the trade; only the remaining improvement is a trade benefit.
+test("opponent search gains use full rosters while details retain both impact measurements", async ({
+  page,
+}) => {
+  await seed(page, true, false, true);
+  const search = panel(page);
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("500");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("500");
+  await search
+    .getByRole("combobox", { name: "Required incoming player", exact: true })
+    .selectOption("2");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("1 index matches.", { exact: false }),
+  ).toBeVisible();
+  const row = search.locator("tbody tr");
+  await expect(row.locator("td").nth(3)).toHaveText("+5.00");
+  await row.getByText("Trade details", { exact: true }).click();
+  await expect(
+    row.getByText("Their scoring lineup", { exact: true }),
+  ).toBeVisible();
+  await expect(row).toContainText("Optimized roster potential (Expected PPG)");
+  await expect(
+    row.getByText("Your roster potential", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    row.getByText("Their marked-starter impact", { exact: true }),
+  ).toBeVisible();
+  await row
+    .getByText("Their weekly scoring replacements", { exact: true })
+    .click();
+  const weekly = row
+    .locator("details")
+    .filter({
+      has: page.locator("summary", {
+        hasText: /^Their weekly scoring replacements$/,
+      }),
+    })
+    .last();
+  await expect(weekly.getByText(/QB: Depth QB/).first()).toContainText(
+    "Bench QB",
+  );
+  await expect(weekly.getByText(/QB: Depth QB/).first()).toContainText(
+    "+5.00 points",
+  );
+  await row
+    .getByText("Their marked-starter weekly replacements", { exact: true })
+    .click();
+  const marked = row
+    .locator("details")
+    .filter({
+      has: page.locator("summary", {
+        hasText: /^Their marked-starter weekly replacements$/,
+      }),
+    })
+    .last();
+  await expect(marked.getByText(/QB: Incoming QB/).first()).toContainText(
+    "+20.00 points",
+  );
+  // Opponent weekly filters use the corrected +5 potential, not the +20 marked-starter difference.
+  await search.getByLabel("Filter their weekly gain", { exact: true }).check();
+  await search
+    .getByLabel("Their minimum weekly gain (points/week)", { exact: true })
+    .fill("6");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("0 index matches.", { exact: false }),
+  ).toBeVisible();
+  await search
+    .getByLabel("Their minimum weekly gain (points/week)", { exact: true })
+    .fill("5");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("1 index matches.", { exact: false }),
+  ).toBeVisible();
+  await search.getByRole("button", { name: "Load trade", exact: true }).click();
+  const potential = page
+    .locator("section")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Roster-potential impact",
+        exact: true,
+      }),
+    });
+  await expect(
+    potential
+      .locator(".metric")
+      .filter({
+        has: page.getByText("Their roster-potential gain / week", {
+          exact: true,
+        }),
+      })
+      .locator("strong"),
+  ).toHaveText("+5.00");
+});
 // Opening a match lazily explains both teams' actual slot changes, including bench promotions and bye weeks.
 test("trade details show named weekly scoring replacements from the captured lineups", async ({
   page,
@@ -1134,6 +1891,7 @@ test("upgrade counts require all requested starter and bench matches", async ({
   await expect(
     search.getByText("0 index matches.", { exact: false }),
   ).toBeVisible();
+  await openExclusions(search);
   await expect(
     search.getByText(/Teams excluded by positional-upgrade filter: 1/),
   ).toBeVisible();
@@ -1172,10 +1930,17 @@ test("upgrade counts require all requested starter and bench matches", async ({
   await search
     .getByLabel("Minimum bench upgrades", { exact: true })
     .fill("1.5");
+  await search
+    .getByText("Only show positional upgrades for the other team", {
+      exact: true,
+    })
+    .hover();
   await expect(
-    search.getByText(
-      /Requires at least 0 starter upgrades and Unavailable bench upgrades/,
-    ),
+    page
+      .getByRole("tooltip")
+      .getByText(
+        /Requires at least 0 starter upgrades and Unavailable bench upgrades/,
+      ),
   ).toBeVisible();
   await expect(
     search.getByRole("button", { name: "Search", exact: true }),

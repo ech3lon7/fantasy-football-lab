@@ -12,8 +12,22 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
     steps:
       - uses: actions/checkout@v4
+      # Branch/Jekyll publishing can overwrite the built app with raw source HTML.
+      - name: Require GitHub Actions as the Pages source
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pages_build_type=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq '.build_type')
+          if [ "$pages_build_type" != "workflow" ]; then
+            echo '::error::Set Settings > Pages > Build and deployment > Source to GitHub Actions. Branch/Jekyll publishing can overwrite the compiled app.'
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -39,12 +53,22 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      # Verify the public artifact, since successful local tests cannot detect a wrong publisher.
+      - name: Verify published app assets
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: node scripts/verify-pages.mjs "$PAGES_URL" "$GITHUB_SHA"

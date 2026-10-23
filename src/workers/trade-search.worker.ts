@@ -1,9 +1,6 @@
 import { evaluate, type Model } from "../domain/valuation";
 import {
-  compareSearchRows,
-  findTradeMatches,
   scoreTradeMatch,
-  matchesWeekly,
   searchLineupDetails,
   type TradeSearchQuery,
   searchPageSize,
@@ -12,6 +9,14 @@ import {
   type SearchRow,
   type SearchStats,
 } from "../domain/trade-search";
+import {
+  compareDiscoveryRows,
+  discoveryFailures,
+  findDiscoveryMatches,
+  opponentIncentive,
+  retainSuggestion,
+  violatesProtection,
+} from "../domain/trade-discovery";
 
 // Keep one completed search in this dedicated worker; cancellation terminates the whole worker.
 let retained:
@@ -19,6 +24,7 @@ let retained:
       id: string;
       context: string;
       rows: SearchRow[];
+      suggestions: SearchRow[];
       stats: SearchStats;
       model: Model;
       query: TradeSearchQuery;
@@ -35,7 +41,7 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
       if (!retained || retained.id !== id || retained.context !== context)
         return;
       try {
-        const row = retained.rows.find(
+        const row = [...retained.rows, ...retained.suggestions].find(
           (candidate) => candidate.key === request.key,
         );
         if (!row)
@@ -45,12 +51,20 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
           context,
           type: "details",
           key: request.key,
-          details: searchLineupDetails(
-            retained.model,
-            retained.query,
-            row,
-            retained.lineupsRaw,
-          ),
+          details: {
+            ...searchLineupDetails(
+              retained.model,
+              retained.query,
+              row,
+              retained.lineupsRaw,
+            ),
+            incentive: opponentIncentive(
+              retained.model,
+              retained.query,
+              row,
+              retained.lineupsRaw,
+            ),
+          },
         });
       } catch (error) {
         send({
@@ -121,7 +135,7 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
       true,
     );
     // Forward saved starters for the optional opponent-fit check; unfiltered enumeration is unchanged.
-    const { matches, stats } = findTradeMatches(
+    const { matches, stats } = findDiscoveryMatches(
       model,
       request.query,
       (s) => progress("Finding matching packages", s),
@@ -129,8 +143,11 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
     );
     progress("Evaluating trades", stats, true);
     const rows: SearchRow[] = [];
+    const suggestions: SearchRow[] = [];
     // Weekly screening uses the evaluator's averages after every complete trade evaluation.
     if (request.query.weekly) stats.weeklyExcluded = 0;
+    // This filter needs each complete evaluated package, including its required drops.
+    if (request.query.usefulness) stats.usefulnessExcluded = 0;
     // Every exact match receives the same authoritative evaluation as a manually entered trade.
     for (const match of matches) {
       const row = scoreTradeMatch(
@@ -139,17 +156,42 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
         match,
         request.lineupsRaw,
       );
-      if (matchesWeekly(row, request.query.weekly)) rows.push(row);
-      else stats.weeklyExcluded = (stats.weeklyExcluded ?? 0) + 1;
+      // Exact matches keep every enabled limit; nearby evaluated packages are a separate, explicitly explained list.
+      const failures = discoveryFailures(row, request.query);
+      if (!failures.length) rows.push(row);
+      else {
+        if (violatesProtection(row, request.query))
+          stats.protectedExcluded = (stats.protectedExcluded ?? 0) + 1;
+        if (
+          request.query.usefulness &&
+          row.usefulness?.length !== (row.give ?? request.query.give).length
+        )
+          stats.usefulnessExcluded = (stats.usefulnessExcluded ?? 0) + 1;
+        else if (request.query.weekly)
+          stats.weeklyExcluded = (stats.weeklyExcluded ?? 0) + 1;
+        if (
+          request.query.discovery?.nearMisses &&
+          !violatesProtection(row, request.query)
+        )
+          retainSuggestion(
+            suggestions,
+            row,
+            failures,
+            request.query.discovery.ranking,
+          );
+      }
       stats.scored++;
       progress("Evaluating trades", stats);
     }
     progress("Sorting results", stats, true);
-    rows.sort(compareSearchRows);
+    rows.sort((a, b) =>
+      compareDiscoveryRows(a, b, request.query.discovery?.ranking),
+    );
     retained = {
       id,
       context,
       rows,
+      suggestions,
       stats,
       model,
       query: request.query,
@@ -163,6 +205,7 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
       offset: 0,
       total: rows.length,
       stats,
+      suggestions,
     });
   } catch (error) {
     // Fail explicitly rather than publishing an incomplete list as a completed search.

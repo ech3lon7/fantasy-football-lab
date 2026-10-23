@@ -186,6 +186,57 @@ it("migrates legacy signals and round-trips only applied string-valued state", (
   ).toHaveLength(gemSignals.length);
 });
 
+// Retiring status choices must not break saved searches or discard unrelated criteria.
+it("removes retired status selections while preserving saved screening criteria", () => {
+  for (const status of ["Insufficient data", "Not applicable"]) {
+    expect(gemSignals).not.toContain(status);
+    const restored = decodeGemFilters(
+      {
+        ...encodeGemFilters(query()),
+        gemSignals: JSON.stringify(["Gem", status, "Watch"]),
+      },
+      "1",
+    );
+    expect(restored.issue).toBe("");
+    expect(restored.draft.signals).toEqual(["Gem", "Watch"]);
+    expect(restored.draft.trendMin).toBe("2");
+    expect(validateGemDraft(restored.draft, ["1", "2"]).query).not.toBeNull();
+    expect(decodeGemFilters({ gemSignal: status }, "1").draft.signals).toEqual(
+      [],
+    );
+  }
+  for (const alias of ["Limited history", "Projection only", "Data issue"])
+    expect(decodeGemFilters({ gemSignal: alias }, "1").draft.signals).toEqual(
+      [],
+    );
+  const retiredOnly = decodeGemFilters(
+    {
+      gemFilterVersion: "2",
+      gemSignals: '["Insufficient data","Not applicable"]',
+      gemTrendMin: "2",
+    },
+    "1",
+  );
+  expect(retiredOnly.issue).toBe("");
+  expect(retiredOnly.draft.signals).toEqual([]);
+  expect(retiredOnly.draft.trendMin).toBe("2");
+  // Select all retains the same unrestricted signal meaning as clearing signals, including status-only players.
+  const rows = [
+    player("1", { gem: "Insufficient data" }),
+    player("2", { gem: "Not applicable" }),
+    player("3", { gem: "Gem" }),
+  ];
+  const all = query({ signals: [...gemSignals] });
+  expect(screenGems(rows, all)).toEqual(
+    screenGems(rows, { ...all, signals: [] }),
+  );
+  expect(screenGems(rows, all).matches.map((row) => row.player.id)).toEqual([
+    "1",
+    "2",
+    "3",
+  ]);
+});
+
 // Unsupported or malformed new state must require correction rather than broadening.
 it("reports corrupt saved queries and missing selected teams", () => {
   const saved = encodeGemFilters(query());

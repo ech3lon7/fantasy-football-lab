@@ -1,4 +1,4 @@
-import { directStarterImpact } from "./starter-lineups";
+import { directStarterImpact, rosterPotentialImpact } from "./starter-lineups";
 import { type Model } from "./valuation";
 import { type Draft, sum } from "./contracts";
 import { marketStatus } from "./opportunity";
@@ -236,6 +236,9 @@ export function evaluateTrade(
     // Keep direct starter scoring separate from optimized future coverage.
     directA: directStarterImpact(m, d.teamA, a.ids, d.get, lineupsRaw),
     directB: directStarterImpact(m, d.teamB, b.ids, d.give, lineupsRaw),
+    // Trade-only roster potential uses legal rosters after required drops, with equal optimization before and after.
+    potentialA: rosterPotentialImpact(m, initialA, a.ids, d.get),
+    potentialB: rosterPotentialImpact(m, initialB, b.ids, d.give),
     a: impact(initialA, a.ids, postA.ids),
     b: impact(initialB, b.ids, postB.ids),
   };

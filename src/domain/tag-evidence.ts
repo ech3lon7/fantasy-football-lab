@@ -1,5 +1,11 @@
 import { defaultGemRules, gemPositions } from "./gems";
+import { n, num, type Row } from "./contracts";
+import { playedHistory } from "./opportunity";
 import { playerSignals, type Model, type Player } from "./valuation";
+import {
+  evidenceComparison,
+  type EvidenceComparison,
+} from "./evidence-comparison";
 
 // Explanations describe active analytical labels only; they never assign signals or change forecasts.
 export interface TagEvidenceRow {
@@ -7,7 +13,8 @@ export interface TagEvidenceRow {
   required: string;
   actual: string;
   kind: "fact" | "projection" | "model";
-  requiredKind?: "model";
+  requiredKind?: "model" | "projection";
+  comparisons?: EvidenceComparison[];
 }
 export interface TagExplanation {
   tag: string;
@@ -30,7 +37,101 @@ const row = (
   actual: string,
   kind: TagEvidenceRow["kind"] = "fact",
   requiredKind?: TagEvidenceRow["requiredKind"],
-): TagEvidenceRow => ({ check, required, actual, kind, requiredKind });
+  comparisons?: EvidenceComparison[],
+): TagEvidenceRow => ({
+  check,
+  required,
+  actual,
+  kind,
+  requiredKind,
+  comparisons,
+});
+
+// Show the underlying recorded games using each tag's existing window, without changing its qualification rules.
+function gameEvidence(
+  p: Player,
+  history: Row[],
+  tag: string,
+): TagEvidenceRow[] {
+  const regression = ["BUY LOW", "SELL HIGH", "TD caution"].includes(tag);
+  if (regression && !p.opportunity.source.startsWith("Completed-game history"))
+    return [
+      row(
+        "Game-by-game evidence",
+        "The label uses aligned season totals; a verified weekly workload breakdown is unavailable",
+        "Unavailable",
+      ),
+    ];
+  const workloadWindow = tag === "Watch" || tag === "Reduced workload";
+  const windows = regression
+    ? [
+        {
+          name: "Season played-game evidence",
+          games: history,
+          note: "Aligned cumulative opportunities and touchdowns; points are context",
+        },
+      ]
+    : tag === "Projection-gap watch"
+      ? [
+          {
+            name: "Season played-game evidence",
+            games: history,
+            note: "All recorded played games behind actual season PPG",
+          },
+          {
+            name: "Recent played-game evidence",
+            games: history.slice(-3),
+            note: "Latest three played games behind recent PPG",
+          },
+        ]
+      : [
+          {
+            name: "Recent played-game evidence",
+            games: history.slice(-3),
+            note: "Latest three played games",
+          },
+          {
+            name: "Earlier played-game evidence",
+            games: workloadWindow
+              ? history.slice(-6, -3)
+              : history.slice(0, -3),
+            note: workloadWindow
+              ? "Immediately preceding two or three played games"
+              : "ALL earlier played games before the latest three",
+          },
+        ];
+  // Explicit null counting stats mean zero in a verified game; absent or invalid counts stay unavailable.
+  const count = (game: Row, key: string) =>
+    Object.hasOwn(game, key) &&
+    (game[key] === null || (n(game[key]) !== null && num(game[key]) >= 0))
+      ? num(game[key])
+      : null;
+  return windows.map(({ name, games, note }) =>
+    row(
+      name,
+      `${note}${workloadWindow ? "; workload drives this tag; points are context" : ""}`,
+      games.length
+        ? games
+            .map((game) => {
+              const details = [`${value(n(game.Points))} points`];
+              if (["RB", "QB"].includes(p.pos))
+                details.push(`${value(count(game, "RushAttempts"))} carries`);
+              if (["RB", "WR", "TE"].includes(p.pos))
+                details.push(`${value(count(game, "Targets"))} targets`);
+              if (regression) {
+                const receiving = count(game, "ReceivingTD"),
+                  rushing = count(game, "RushTD");
+                details.push(
+                  `${value(receiving === null || (p.pos === "RB" && rushing === null) ? null : receiving + (p.pos === "RB" ? rushing! : 0))} TDs`,
+                );
+              }
+              return `${game.Season} W${game.Week}: ${details.join("; ")}`;
+            })
+            .join(" | ")
+        : "Unavailable",
+    ),
+  );
+}
 
 // Read existing engine results and selected settings; all displayed comparisons stay in the domain layer.
 export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
@@ -76,6 +177,11 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           "Recent workload",
           short ? `At least ${rule.mean} ${unit}` : "Latest three played games",
           `${value(assessment.recent)} ${unit}; weeks ${assessment.recentWeeks.join(", ")}`,
+          "fact",
+          undefined,
+          short
+            ? [evidenceComparison(rule.mean, assessment.recent, unit)]
+            : undefined,
         ),
         ...(short
           ? []
@@ -89,11 +195,51 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
                 "Positive workload change",
                 "Strictly greater than zero",
                 `${value(assessment.increase)} ${unit}`,
+                "fact",
+                undefined,
+                [evidenceComparison(0, assessment.increase, unit, ">")],
               ),
               row(
                 "Level OR growth route",
                 `Recent workload ≥ ${rule.mean}, OR increase ≥ ${rule.growth} AND ≥ ${percent(defaultGemRules.growthPct)}`,
                 `Recent ${value(assessment.recent)}; increase ${value(assessment.increase)}; growth ${assessment.previous === 0 ? "zero earlier workload; percentage requirement waived" : percent(assessment.growthPct)}`,
+                "fact",
+                undefined,
+                // Watch permits the level route OR both growth gates; failed alternatives do not invalidate a passing route.
+                [
+                  evidenceComparison(
+                    rule.mean,
+                    assessment.recent,
+                    unit,
+                    "≥",
+                    "Level route — OR growth route below",
+                  ),
+                  evidenceComparison(
+                    rule.growth,
+                    assessment.increase,
+                    unit,
+                    "≥",
+                    "Growth route — absolute AND percentage increase",
+                  ),
+                  ...(assessment.previous === 0
+                    ? [
+                        {
+                          required: "Waived: earlier workload is zero",
+                          actual: "Percentage undefined",
+                          margin: "Not required",
+                          note: "Growth route — percentage gate waived",
+                        },
+                      ]
+                    : [
+                        evidenceComparison(
+                          defaultGemRules.growthPct,
+                          assessment.growthPct,
+                          "%",
+                          "≥",
+                          "Growth route — percentage AND absolute increase",
+                        ),
+                      ]),
+                ],
               ),
             ]),
         row(
@@ -128,6 +274,9 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           "Played-game sample",
           `At least ${3 + s.GemMinPriorGames} games: three recent plus ${s.GemMinPriorGames} earlier`,
           `${p.games} games`,
+          "fact",
+          undefined,
+          [evidenceComparison(3 + s.GemMinPriorGames, p.games, "games")],
         ),
         row(
           "Earlier actual PPG",
@@ -138,11 +287,25 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           "Recent actual PPG",
           "At least ESPN season projected PPG",
           value(p.recent),
+          "fact",
+          "projection",
+          [
+            evidenceComparison(
+              p.projected,
+              p.recent,
+              "PPG",
+              "≥",
+              "Minimum is ESPN season projected PPG",
+            ),
+          ],
         ),
         row(
           "Scoring improvement",
           `Recent minus earlier PPG ≥ ${value(s.GemMinGap)}`,
           `${value(p.trendDelta)} PPG`,
+          "fact",
+          undefined,
+          [evidenceComparison(s.GemMinGap, p.trendDelta, "PPG")],
         ),
         projection,
       ],
@@ -179,11 +342,33 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           "Workload sample",
           `Three recent games and at least ${s.GemMinPriorGames} earlier games`,
           `${o.recentGames} recent; ${o.priorGames} earlier`,
+          "fact",
+          undefined,
+          // Both nonoverlapping sample counts must qualify; their thresholds are not interchangeable.
+          [
+            evidenceComparison(
+              3,
+              o.recentGames,
+              "games",
+              "≥",
+              "Recent played games",
+            ),
+            evidenceComparison(
+              s.GemMinPriorGames,
+              o.priorGames,
+              "games",
+              "≥",
+              "Earlier played games",
+            ),
+          ],
         ),
         row(
           "Recent workload",
           `At least ${value(minimum)} ${unit}`,
           `${value(o.recentRate)} ${unit}`,
+          "fact",
+          undefined,
+          [evidenceComparison(minimum, o.recentRate, unit)],
         ),
         row(
           "Earlier workload",
@@ -194,6 +379,25 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           "Workload increase",
           `At least 2.00 AND at least 20% of the absolute earlier rate (${value(o.priorRate === null ? null : Math.abs(o.priorRate) * 0.2)})`,
           `${value(o.delta)} ${unit}`,
+          "fact",
+          undefined,
+          // Keep both absolute and relative growth gates visible, using the opportunity module's earlier average.
+          [
+            evidenceComparison(
+              2,
+              o.delta,
+              unit,
+              "≥",
+              "Absolute increase — AND relative increase",
+            ),
+            evidenceComparison(
+              o.priorRate === null ? null : Math.abs(o.priorRate) * 0.2,
+              o.delta,
+              unit,
+              "≥",
+              "Relative gate: 20% of the absolute earlier rate",
+            ),
+          ],
         ),
       ],
       interpretation:
@@ -216,6 +420,9 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           "Played-game sample",
           `At least ${s.GemMinGames} games`,
           `${p.games} games`,
+          "fact",
+          undefined,
+          [evidenceComparison(s.GemMinGames, p.games, "games")],
         ),
         row(
           "Actual season PPG",
@@ -228,6 +435,8 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           `Actual minus projected PPG ≥ ${value(s.GemMinGap)}`,
           `${value(p.gap)} PPG`,
           "model",
+          undefined,
+          [evidenceComparison(s.GemMinGap, p.gap, "PPG")],
         ),
         row(
           "Relative scoring gap",
@@ -236,11 +445,32 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
             : "No percentage requirement when projected PPG is zero or negative",
           percent(p.gapPct),
           "model",
+          undefined,
+          p.projected !== null && p.projected > 0
+            ? [evidenceComparison(s.GemMinGapPct, p.gapPct, "%")]
+            : [
+                {
+                  required: "Waived: projected PPG is zero or negative",
+                  actual: percent(p.gapPct),
+                  margin: "Not required",
+                },
+              ],
         ),
         row(
           "Recent actual PPG",
           "At least ESPN season projected PPG",
           value(p.recent),
+          "fact",
+          "projection",
+          [
+            evidenceComparison(
+              p.projected,
+              p.recent,
+              "PPG",
+              "≥",
+              "Minimum is ESPN season projected PPG",
+            ),
+          ],
         ),
       ],
       interpretation:
@@ -262,6 +492,9 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           "Sustained workload decline",
           assessment.reducedWorkload.required,
           assessment.reducedWorkload.actual,
+          "fact",
+          undefined,
+          assessment.reducedWorkload.comparisons,
         ),
       ],
       interpretation:
@@ -290,6 +523,9 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
                 "Played-game sample",
                 `At least ${s.GemMinGames} games`,
                 `${p.games} games`,
+                "fact",
+                undefined,
+                [evidenceComparison(s.GemMinGames, p.games, "games")],
               ),
             ]
           : []),
@@ -297,6 +533,15 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           "Minimum opportunity sample",
           `At least ${value(s.MinOpportunity)} cumulative opportunities`,
           value(p.opportunities),
+          "fact",
+          undefined,
+          [
+            evidenceComparison(
+              s.MinOpportunity,
+              p.opportunities,
+              "opportunities",
+            ),
+          ],
         ),
         row(
           "Positional volume test",
@@ -304,6 +549,14 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           value(p.opportunities),
           "fact",
           "model",
+          [
+            evidenceComparison(
+              g?.highVolume,
+              p.opportunities,
+              "opportunities",
+              buy ? "≥" : "<",
+            ),
+          ],
         ),
         row(
           "Recorded touchdowns",
@@ -316,6 +569,7 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           percent(p.tdRate),
           "fact",
           "model",
+          [evidenceComparison(cutoff, p.tdRate, "%", buy ? "<" : ">")],
         ),
         row(
           "Positional peer mean TD rate",
@@ -339,5 +593,15 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
         "Aligned completed-game cumulative workload and touchdowns. Peers include all same-position players in the imported dataset, owned or available; the volume cutoff uses positive-volume players.",
     });
   }
-  return explanations;
+  // Attach the numerical game trail only to active explanations; byes and nonparticipation use the engine's existing exclusions.
+  const historyRows = explanations.length
+    ? (playedHistory(m.dataset).get(p.id) ?? [])
+    : [];
+  return explanations.map((explanation) => ({
+    ...explanation,
+    rows: [
+      ...explanation.rows,
+      ...gameEvidence(p, historyRows, explanation.tag),
+    ],
+  }));
 }

@@ -781,9 +781,9 @@ it("reuses authoritative scoring for bench, starter and unequal trades without m
         if (!result.valid) throw Error(result.errors.join());
         expect(row).toMatchObject({
           own: result.directA.expectedPerWeek,
-          other: result.directB.expectedPerWeek,
+          other: result.potentialB.expectedPerWeek,
           ownTotal: result.directA.expected,
-          otherTotal: result.directB.expected,
+          otherTotal: result.potentialB.expected,
           grade: result.grade,
           surplus: result.surplusTest,
           points: result.pointsTest,

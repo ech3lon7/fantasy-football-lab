@@ -1,3 +1,4 @@
+import { FilterHelp } from "../ui/FilterHelp";
 import { GemEvidence } from "../ui/GemEvidence";
 import { StarterLineupEditor } from "./StarterLineupEditor";
 // Trade discovery delegates scoring to its own worker without changing the existing analyzer.
@@ -328,14 +329,16 @@ export function TeamView({
         <Select label="Team" value={team} change={change}>
           <TeamsOptions d={m.dataset} />
         </Select>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={all}
-            onChange={(e) => setAll(e.target.checked)}
-          />{" "}
-          All evaluation fields
-        </label>
+        <FilterHelp label={"All evaluation fields"}>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={all}
+              onChange={(e) => setAll(e.target.checked)}
+            />{" "}
+            All evaluation fields
+          </label>
+        </FilterHelp>
       </div>
       <Panel
         title="Position grades and roster advice"
@@ -447,14 +450,16 @@ export function PlayerList({
   return (
     <>
       <div className="toolbar">
-        <label className="control grow">
-          <span>Search players</span>
-          <input
-            placeholder="Player name…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </label>
+        <FilterHelp label={"Search players"}>
+          <label className="control grow">
+            <span>Search players</span>
+            <input
+              placeholder="Player name…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </label>
+        </FilterHelp>
         <Select label="Position" value={pos} change={setPos}>
           {["All", "QB", "RB", "WR", "TE", "K", "D/ST"].map((x) => (
             <option key={x}>{x}</option>
@@ -465,14 +470,51 @@ export function PlayerList({
           <option>Available</option>
           <TeamsOptions d={m.dataset} />
         </Select>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={all}
-            onChange={(e) => setAll(e.target.checked)}
-          />{" "}
-          All fields
-        </label>
+        <FilterHelp label={"All fields"}>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={all}
+              onChange={(e) => setAll(e.target.checked)}
+            />{" "}
+            All fields
+          </label>
+        </FilterHelp>
+      </div>
+      {/* Remove only the selected live player criterion, preserving every other filter and comparison choice. */}
+      <div className="active-filter-chips" aria-label="Active player filters">
+        {query && (
+          <button
+            aria-label="Remove player search"
+            onClick={() => setQuery("")}
+          >
+            Name: {query} ×
+          </button>
+        )}
+        {pos !== "All" && (
+          <button
+            aria-label="Remove player position"
+            onClick={() => setPos("All")}
+          >
+            Position: {pos} ×
+          </button>
+        )}
+        {owner !== "All" && (
+          <button
+            aria-label="Remove player ownership"
+            onClick={() => setOwner("All")}
+          >
+            Ownership:{" "}
+            {owner === "Available"
+              ? owner
+              : str(
+                  m.dataset.tables.ModelTeams.find(
+                    (t) => str(t.TeamID) === owner,
+                  )?.TeamName,
+                )}{" "}
+            ×
+          </button>
+        )}
       </div>
       <Panel
         title="Player comparison"
@@ -940,27 +982,29 @@ export function GemView({
   function threshold(f: (typeof gemThresholds)[number]) {
     const error = validation.errors[f.key];
     return (
-      <label className="control" key={f.key}>
-        <span>{f.label}</span>
-        <input
-          type="text"
-          inputMode="decimal"
-          // Keep the accessible label stable when inline validation text appears.
-          aria-label={f.label}
-          value={draft[f.key]}
-          placeholder="Any"
-          aria-invalid={!!error}
-          aria-describedby={error ? `gem-${f.key}-error` : undefined}
-          onChange={(e) =>
-            setEdit({ ...edit, draft: { ...draft, [f.key]: e.target.value } })
-          }
-        />
-        {error && (
-          <small className="danger-text" id={`gem-${f.key}-error`}>
-            {error}
-          </small>
-        )}
-      </label>
+      <FilterHelp key={f.key} label={f.label}>
+        <label className="control" key={f.key}>
+          <span>{f.label}</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            // Keep the accessible label stable when inline validation text appears.
+            aria-label={f.label}
+            value={draft[f.key]}
+            placeholder="Any"
+            aria-invalid={!!error}
+            aria-describedby={error ? `gem-${f.key}-error` : undefined}
+            onChange={(e) =>
+              setEdit({ ...edit, draft: { ...draft, [f.key]: e.target.value } })
+            }
+          />
+          {error && (
+            <small className="danger-text" id={`gem-${f.key}-error`}>
+              {error}
+            </small>
+          )}
+        </label>
+      </FilterHelp>
     );
   }
 
@@ -1073,17 +1117,9 @@ export function GemView({
   return (
     <>
       {/* Existing ownership/position controls and new signals share one Apply action. */}
-      <Panel
-        title="Gem filters"
-        note="Automatic Gems require strong actual scoring and workload in both overlapping three-game windows, with active availability. Watch retains its workload opportunity rules. OR between signals; AND between categories."
-      >
+      <Panel title="Gem filters">
         {/* Describe the confirmed automatic scoring/workload rule without repeating domain thresholds. */}
-        <p>
-          Every player is classified automatically from imported played-game
-          scoring, workload and availability. Missing news or role commentary
-          never blocks a Gem. Labels describe the imported snapshot; warnings
-          identify uncertainty.
-        </p>
+
         <form
           className="gem-filters"
           onSubmit={(e) => {
@@ -1138,42 +1174,50 @@ export function GemView({
                 ),
               )}
             </Select>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={draft.injured}
-                onChange={(e) =>
-                  setEdit({
-                    ...edit,
-                    draft: { ...draft, injured: e.target.checked },
-                  })
-                }
-              />
-              Include injured
-            </label>
+            <FilterHelp label={"Include injured"}>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={draft.injured}
+                  onChange={(e) =>
+                    setEdit({
+                      ...edit,
+                      draft: { ...draft, injured: e.target.checked },
+                    })
+                  }
+                />
+                Include injured
+              </label>
+            </FilterHelp>
           </div>
           <fieldset>
-            <legend>Signals - match any selected</legend>
+            <legend>
+              <FilterHelp label="Signals - match any selected">
+                <span>Signals - match any selected</span>
+              </FilterHelp>
+            </legend>
             <div className="toolbar">
               {gemSignals.map((signal) => (
-                <label className="check" key={signal}>
-                  <input
-                    type="checkbox"
-                    checked={draft.signals.includes(signal)}
-                    onChange={(e) =>
-                      setEdit({
-                        ...edit,
-                        draft: {
-                          ...draft,
-                          signals: e.target.checked
-                            ? [...draft.signals, signal]
-                            : draft.signals.filter((s) => s !== signal),
-                        },
-                      })
-                    }
-                  />
-                  {signal}
-                </label>
+                <FilterHelp key={signal} label={signal}>
+                  <label className="check" key={signal}>
+                    <input
+                      type="checkbox"
+                      checked={draft.signals.includes(signal)}
+                      onChange={(e) =>
+                        setEdit({
+                          ...edit,
+                          draft: {
+                            ...draft,
+                            signals: e.target.checked
+                              ? [...draft.signals, signal]
+                              : draft.signals.filter((s) => s !== signal),
+                          },
+                        })
+                      }
+                    />
+                    {signal}
+                  </label>
+                </FilterHelp>
               ))}
             </div>
             <div className="button-row">
@@ -1200,57 +1244,49 @@ export function GemView({
               </button>
             </div>
             {/* Clearing signal choices permits numeric-only searches, including saved ones. */}
-            <p>
-              No signal selections means Any signal. Classification and numeric
-              filters still apply. Choose All player pool to include rostered
-              players as well as free agents.
-            </p>
           </fieldset>
           {/* Use current control styles; extra thresholds remain discoverable when collapsed. */}
           <div className="toolbar">
             {gemThresholds.filter((f) => !f.advanced).map(threshold)}
           </div>
-          <p>
-            Trend = latest three played-game PPG minus earlier-game PPG. Surplus
-            index = the app's trade/value index, normalized remaining-season
-            surplus, not a market price.
-          </p>
+
           <details>
             <summary>Advanced filters ({advancedCount} applied)</summary>
             <div className="toolbar">
               {gemThresholds.filter((f) => f.advanced).map(threshold)}
             </div>
-            <p>
-              Projection gap compares actual season PPG with ESPN's season
-              projected PPG, not this week's matchup projection.
-            </p>
+
             <div className="toolbar">
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={draft.aboveReplacement}
-                  onChange={(e) =>
-                    setEdit({
-                      ...edit,
-                      draft: { ...draft, aboveReplacement: e.target.checked },
-                    })
-                  }
-                />
-                Above replacement only
-              </label>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={draft.includeMissing}
-                  onChange={(e) =>
-                    setEdit({
-                      ...edit,
-                      draft: { ...draft, includeMissing: e.target.checked },
-                    })
-                  }
-                />
-                Show players with missing filter data
-              </label>
+              <FilterHelp label={"Above replacement only"}>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={draft.aboveReplacement}
+                    onChange={(e) =>
+                      setEdit({
+                        ...edit,
+                        draft: { ...draft, aboveReplacement: e.target.checked },
+                      })
+                    }
+                  />
+                  Above replacement only
+                </label>
+              </FilterHelp>
+              <FilterHelp label={"Show players with missing filter data"}>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={draft.includeMissing}
+                    onChange={(e) =>
+                      setEdit({
+                        ...edit,
+                        draft: { ...draft, includeMissing: e.target.checked },
+                      })
+                    }
+                  />
+                  Show players with missing filter data
+                </label>
+              </FilterHelp>
             </div>
           </details>
           {Object.entries(validation.errors)
@@ -1292,18 +1328,16 @@ export function GemView({
             >
               Reset screener
             </button>
-            <button
-              className="button"
-              type="button"
-              onClick={() => replace(risingGemDraft(restored.draft.team))}
-            >
-              Rising targets
-            </button>
+            <FilterHelp label="Rising targets">
+              <button
+                className="button"
+                type="button"
+                onClick={() => replace(risingGemDraft(restored.draft.team))}
+              >
+                Rising targets
+              </button>
+            </FilterHelp>
           </div>
-          <p>
-            Rising targets is an editable example search, not a validated
-            cutoff.
-          </p>
         </form>
         {/* Resolve destructive-to-draft actions locally without changing cloud conflict handling. */}
         {pending && (
@@ -1334,6 +1368,51 @@ export function GemView({
             <div className="notice gem-query">
               <b>Applied search:</b> {gemQuerySummary(query)}
               <div className="button-row">
+                {query.pool !== "All" && (
+                  <button
+                    className="subtle"
+                    aria-label="Remove player pool filter"
+                    onClick={() => replace({ ...restored.draft, pool: "All" })}
+                  >
+                    Pool: {query.pool} ×
+                  </button>
+                )}
+                {query.position !== "All" && (
+                  <button
+                    className="subtle"
+                    aria-label="Remove Gem position filter"
+                    onClick={() =>
+                      replace({ ...restored.draft, position: "All" })
+                    }
+                  >
+                    Position: {query.position} ×
+                  </button>
+                )}
+                {query.classification !== "All classifications" && (
+                  <button
+                    className="subtle"
+                    aria-label="Remove classification filter"
+                    onClick={() =>
+                      replace({
+                        ...restored.draft,
+                        classification: "All classifications",
+                      })
+                    }
+                  >
+                    Classification: {query.classification} ×
+                  </button>
+                )}
+                {!query.injured && (
+                  <button
+                    className="subtle"
+                    aria-label="Remove active players only filter"
+                    onClick={() =>
+                      replace({ ...restored.draft, injured: true })
+                    }
+                  >
+                    Active players only ×
+                  </button>
+                )}
                 {query.signals.map((s) => (
                   <button
                     className="subtle"
@@ -1625,18 +1704,18 @@ export function TradeView({
         >
           <TeamsOptions d={m.dataset} />
         </Select>
-        <label className="control">
-          <span>Search this roster</span>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter player names…"
-          />
-        </label>
+        {/* Roster-search help follows the same compact treatment as the other player filters. */}
+        <FilterHelp label="Search this roster">
+          <label className="control">
+            <span>Search this roster</span>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter player names…"
+            />
+          </label>
+        </FilterHelp>
         {/* Native options stay selectable; each chosen player gets a separate clickable name. */}
-        <p className="muted">
-          Select a player, then click their name below for stats.
-        </p>
         {Array.from({ length: 5 }, (_, i) => (
           <div className="trade-player-slot" key={i}>
             <div className="trade-select-row">
@@ -1903,6 +1982,27 @@ export function TradeView({
               ))}
             </Panel>
           </div>
+          {/* Consistent full-roster before/after scoring is separate from each team's deliberately fixed starter plan. */}
+          <Panel
+            title="Roster-potential impact"
+            note="Optimizes the full roster before and after the trade using Expected PPG, identical availability and bye rules, and required drops. Existing backup improvements already count before the trade. Waiver proposals are excluded."
+          >
+            <div className="metric-grid two">
+              <Metric
+                label="Your roster-potential gain / week"
+                value={signed(r.potentialA.expectedPerWeek)}
+              />
+              <Metric
+                label="Their roster-potential gain / week"
+                value={signed(r.potentialB.expectedPerWeek)}
+              />
+            </div>
+            {[...r.potentialA.errors, ...r.potentialB.errors].map((issue) => (
+              <p className="notice warning" key={issue}>
+                {issue}
+              </p>
+            ))}
+          </Panel>
           {/* The former all-roster optimization remains separate for hypothetical future backup/bye coverage. */}
           <details>
             <summary>Modeled future coverage impact (includes bench)</summary>

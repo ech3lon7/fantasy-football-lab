@@ -143,6 +143,21 @@ it("preserves corrupt state and rejects missing ownership, invalid filters and o
   expect(() =>
     saveTrade(state, m, draft, summary, { ...query, above: NaN }),
   ).toThrow("invalid search controls");
+  // Saved searches preserve the optional package filter and reject invalid enabled thresholds.
+  expect(
+    readSavedTrades(
+      saveTrade(state, m, draft, summary, {
+        ...query,
+        usefulness: { minimum: 1.5 },
+      }),
+    ).trades[0].query?.usefulness,
+  ).toEqual({ minimum: 1.5 });
+  expect(() =>
+    saveTrade(state, m, draft, summary, {
+      ...query,
+      usefulness: { minimum: -1 },
+    }),
+  ).toThrow("invalid search controls");
   expect(() =>
     saveTrade(state, m, draft, summary, {
       ...query,

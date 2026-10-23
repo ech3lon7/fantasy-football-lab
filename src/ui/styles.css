@@ -1540,7 +1540,7 @@ pre {
 /* Breakout source explanations wrap in the compact popover without altering existing roster tables. */
 .gem-checks table {
   table-layout: fixed;
-  min-width: 380px;
+  min-width: 680px;
 }
 .gem-checks th,
 .gem-checks td {
@@ -1550,6 +1550,12 @@ pre {
   white-space: normal;
   overflow-wrap: anywhere;
   vertical-align: top;
+}
+/* Numeric requirements lead each evidence cell; supporting explanations and original weeks stay readable below them. */
+.gem-checks .evidence-note {
+  display: block;
+  margin-top: 4px;
+  font-weight: normal;
 }
 
 /* Search controls wrap on phones while retaining the existing editable-control appearance. */
@@ -1625,4 +1631,62 @@ pre {
 }
 .trade-search-results details p {
   margin: 8px 0;
+}
+/* Filter help reuses the existing palette; portals prevent clipping in panels and narrow tables. */
+.filter-help-control {
+  display: inline-flex;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 100%;
+}
+.filter-help-control > .control {
+  flex: 1;
+  min-width: 0;
+}
+.filter-help-control:has(> .grow) {
+  flex: 1;
+}
+.filter-tooltip {
+  position: fixed;
+  z-index: 1200;
+  width: 320px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid #dbe2d5;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px #152c2926;
+  background: #fffdf7;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.6;
+  font-family: inherit;
+}
+/* Search groups and removable chips expose active choices without repeating instructional paragraphs. */
+.trade-search-group {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  margin: 0 0 16px;
+}
+.trade-search-group legend {
+  font-weight: 600;
+  padding: 0 5px;
+}
+.active-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+.active-filter-chips button {
+  border: 1px solid #dbe2d5;
+  border-radius: 20px;
+  background: #f5f7f0;
+  color: var(--purple);
+  padding: 6px 10px;
+  font-size: 11px;
 }

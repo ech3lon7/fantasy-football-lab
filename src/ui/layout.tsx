@@ -1,23 +1,29 @@
 import type { ReactNode } from "react";
+import { FilterHelp } from "./FilterHelp";
 import { type Dataset, str } from "../domain/contracts";
 export function Select({
   label,
   value,
   change,
   children,
+  help,
 }: {
   label: string;
   value: string;
   change: (v: string) => void;
   children: ReactNode;
+  help?: ReactNode;
 }) {
+  // Known filter labels share hover/tap help; unmapped selectors retain their existing markup and behavior.
   return (
-    <label className="control">
-      <span>{label}</span>
-      <select value={value} onChange={(e) => change(e.target.value)}>
-        {children}
-      </select>
-    </label>
+    <FilterHelp label={label} help={help}>
+      <label className="control">
+        <span>{label}</span>
+        <select value={value} onChange={(e) => change(e.target.value)}>
+          {children}
+        </select>
+      </label>
+    </FilterHelp>
   );
 }
 export function TeamsOptions({ d }: { d: Dataset }) {

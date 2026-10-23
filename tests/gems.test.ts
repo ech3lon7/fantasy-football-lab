@@ -11,6 +11,29 @@ import {
   validateGemDraft,
 } from "../src/domain/gem-screening";
 
+// The overlapping Gem windows must pair each score/workload value with its real week instead of unlabeled lists.
+it("labels individual scoring and workload evidence by week in both Gem windows", async () => {
+  const d = await data([7, 8, 9, 10], "WR", [16, 17, 18, 19]);
+  const p = evaluate(d, d.settings).players[0];
+  expect(p.gem).toBe("Gem");
+  const checks = p.breakout!.checks;
+  expect(
+    checks.find((c) => c.check === "Recent window scoring support")!.actual,
+  ).toBe(
+    "2026 W2: 17.00, 2026 W3: 18.00, 2026 W4: 19.00 points; 3/3 meet the floor",
+  );
+  expect(
+    checks.find((c) => c.check === "Previous window scoring support")!.actual,
+  ).toBe(
+    "2026 W1: 16.00, 2026 W2: 17.00, 2026 W3: 18.00 points; 3/3 meet the floor",
+  );
+  expect(
+    checks.find((c) => c.check === "Recent window workload support")!.actual,
+  ).toBe(
+    "2026 W2: 8.00, 2026 W3: 9.00, 2026 W4: 10.00 targets; 3/3 meet the floor",
+  );
+});
+
 // Sustained-decline boundaries must honor both average thresholds and require two individual lower-workload games.
 it("detects sustained positional declines and rejects one-game dips or insufficient reductions", async () => {
   for (const [counts, position, status] of [

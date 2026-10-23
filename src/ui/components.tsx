@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import type { Player } from "../domain/valuation";
 import { playerSignals } from "../domain/valuation";
 import { PlayerName } from "./PlayerName";
+import { FilterHelp } from "./FilterHelp";
 export const fmt = (x: unknown, digits = 2) =>
   typeof x === "number" && Number.isFinite(x)
     ? x.toLocaleString(undefined, {
@@ -34,12 +35,15 @@ export function Metric({
 }
 // Reduced workload uses the existing caution appearance; other signal styling remains unchanged.
 export function Signal({ text }: { text: string }) {
+  // Known player tags share the same marker-free help as filter choices on every screen; other statuses stay unchanged.
   return (
-    <span
-      className={`signal ${text === "Gem" || text === "Gem candidate" ? "candidate" : text === "Watch" || text === "Opportunity watch" || text === "BUY LOW" ? "watch" : /caution|SELL HIGH|issue|FAIL|UNAVAILABLE|Reduced workload/.test(text) ? "caution" : /Emerging|Conditional|CONDITIONAL|Projection-gap/.test(text) ? "conditional" : ""}`}
-    >
-      {text}
-    </span>
+    <FilterHelp label={text}>
+      <span
+        className={`signal ${text === "Gem" || text === "Gem candidate" ? "candidate" : text === "Watch" || text === "Opportunity watch" || text === "BUY LOW" ? "watch" : /caution|SELL HIGH|issue|FAIL|UNAVAILABLE|Reduced workload/.test(text) ? "caution" : /Emerging|Conditional|CONDITIONAL|Projection-gap/.test(text) ? "conditional" : ""}`}
+      >
+        {text}
+      </span>
+    </FilterHelp>
   );
 }
 export function Trend({ p }: { p: Player }) {

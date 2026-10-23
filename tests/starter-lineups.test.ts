@@ -5,6 +5,7 @@ import { evaluateTrade } from "../src/domain/trades";
 import { roster, lineup } from "../src/domain/lineups";
 import {
   directStarterImpact,
+  rosterPotentialImpact,
   readStarterLineup,
   resetStarterLineup,
   saveStarterLineup,
@@ -186,4 +187,94 @@ it("requires review for missing imported slots and accepts an explicit valid app
   expect(directStarterImpact(m, "1", roster(m, "1"), []).expected).toBeNull();
   const saved = saveStarterLineup(m, "1", ["1", "100"]);
   expect(readStarterLineup(m, "1", saved).errors).toEqual([]);
+});
+
+// A reserve introduced for a lost FLEX role cannot migrate into TE and manufacture a second, unrelated scoring improvement.
+it("anchors surviving roles and excludes already available backup upgrades from trade gains", async () => {
+  const d = await starterFixture(),
+    m = evaluate(d, d.settings);
+  m.weeks = [m.current];
+  m.dataset.tables.ModelContext[0].TESlots = 1;
+  const add = (
+    id: string,
+    pos: "WR" | "TE" | "RB",
+    expected: number,
+    slot: number,
+    owner = "1",
+  ) => {
+    const p = {
+      ...m.byId.get("1")!,
+      id,
+      name: `Role ${id}`,
+      pos,
+      expected,
+      value: expected,
+      slot,
+      owner,
+    };
+    m.players.push(p);
+    m.byId.set(id, p);
+    m.dataset.tables.ModelRosters.push({
+      PlayerID: Number(id),
+      TeamID: Number(owner),
+      LineupSlotID: slot,
+    });
+  };
+  add("3000", "WR", 20, 4);
+  add("3001", "WR", 9, 23);
+  add("3002", "TE", 12, 6);
+  add("3003", "TE", 16, 20);
+  add("4000", "WR", 12, 20, "2");
+  add("4001", "WR", 11, 20, "2");
+  add("4002", "RB", 17, 20, "2");
+  Object.assign(m.byId.get("1")!, { expected: 25, value: 25 });
+  const before = roster(m, "1"),
+    incoming = ["4000", "4001", "4002"],
+    after = [
+      ...before.filter((id) => !["3000", "3001"].includes(id)),
+      ...incoming,
+    ];
+  const direct = directStarterImpact(m, "1", after, incoming);
+  expect(direct.expectedPerWeek).toBe(0);
+  const te = direct.weekly[0].slots.indexOf("TE");
+  expect(direct.weekly[0].beforeIds[te]).toBe("3002");
+  expect(direct.weekly[0].ids[te]).toBe("3002");
+  expect(direct.replacements).not.toContain("3003");
+  const potential = rosterPotentialImpact(m, before, after, incoming);
+  expect(potential.expectedPerWeek).toBe(-3);
+  expect(potential.weekly[0].beforeIds[te]).toBe("3003");
+  expect(potential.weekly[0].ids[te]).toBe("3003");
+  expect(new Set(direct.weekly[0].ids.filter(Boolean)).size).toBe(
+    direct.weekly[0].ids.filter(Boolean).length,
+  );
+});
+
+// Symmetric full-roster scoring includes existing bye coverage on both sides and remains distinct from zero direct bench impact.
+it("subtracts outgoing roster strength, covers byes symmetrically and excludes speculative waiver fills", async () => {
+  const d = await starterFixture(),
+    m = evaluate(d, d.settings),
+    ids = roster(m, "1");
+  const unchanged = rosterPotentialImpact(m, ids, ids, []);
+  expect(unchanged.expectedPerWeek).toBe(0);
+  expect(unchanged.weekly.every((w) => w.expectedGain === 0)).toBe(true);
+  expect(unchanged.weekly.find((w) => w.week === 8)!.beforeIds).toContain(
+    "101",
+  );
+  const draft = { teamA: "1", teamB: "2", give: ["101"], get: ["200"] };
+  const r = evaluateTrade(m, draft, true),
+    noWaivers = evaluateTrade(m, draft, false);
+  if (!r.valid || !noWaivers.valid)
+    throw Error("Expected a valid synthetic trade");
+  expect(r.directA.expectedPerWeek).toBe(0);
+  expect(r.potentialA.expectedPerWeek).toBeLessThan(0);
+  expect(r.potentialA).toEqual(noWaivers.potentialA);
+  const bye = r.potentialA.weekly.find((w) => w.week === 8)!;
+  expect(bye.beforeIds).toContain("101");
+  expect(bye.ids).toContain("200");
+  expect(bye.expectedGain).toBe(-20);
+  // Unknown forecasts cannot become a zero-point replacement that makes the transaction look favorable.
+  m.byId.get("101")!.expected = null;
+  const missing = rosterPotentialImpact(m, ids, ids, []);
+  expect(missing.expected).toBeNull();
+  expect(missing.errors.join(" ")).toContain("Bench QB");
 });

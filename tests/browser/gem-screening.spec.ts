@@ -3,6 +3,8 @@ import { execFileSync } from "node:child_process";
 // Compare the new read-only explanations with the real model's active labels in both player surfaces.
 import { evaluate } from "../../src/domain/valuation";
 import { activeTagExplanations } from "../../src/domain/tag-evidence";
+import { gemSignals, gemThresholds } from "../../src/domain/gem-screening";
+import { filterHelp } from "../../src/ui/FilterHelp";
 import {
   initialState,
   mean,
@@ -186,6 +188,129 @@ async function seed(
   return dataset;
 }
 
+// Every signal and screener selection keeps its help after leaving and returning, without changing filter values.
+test("all screener signals and controls retain repeatable marker-free help", async ({
+  page,
+}) => {
+  // Retired saved selections disappear automatically without hiding valid choices or numeric criteria.
+  await seed(page, {
+    gemFilterVersion: "2",
+    gemSignals: '["Gem","Watch","Insufficient data","Not applicable"]',
+    gemTrendMin: "2",
+  });
+  const filters = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "Gem filters", exact: true }),
+  });
+  for (const label of ["Insufficient data", "Not applicable"])
+    await expect(
+      filters.getByRole("checkbox", { name: label, exact: true }),
+    ).toHaveCount(0);
+  await expect(
+    filters.getByRole("checkbox", { name: "Gem", exact: true }),
+  ).toBeChecked();
+  await expect(
+    filters.getByRole("checkbox", { name: "Watch", exact: true }),
+  ).toBeChecked();
+  await expect(
+    filters.getByLabel("Minimum trend PPG", { exact: true }),
+  ).toHaveValue("2");
+  const before = await filters
+    .locator("input, select")
+    .evaluateAll((controls) =>
+      controls.map((control) => ({
+        value: (control as HTMLInputElement).value,
+        checked: (control as HTMLInputElement).checked,
+      })),
+    );
+  await filters
+    .locator("summary")
+    .filter({ hasText: "Advanced filters" })
+    .click();
+  const labels = [
+    ...gemSignals,
+    "Player pool",
+    "Breakout classification",
+    "Position",
+    "Include injured",
+    "Signals - match any selected",
+    ...gemThresholds.map((field) => field.label),
+    "Above replacement only",
+    "Show players with missing filter data",
+    "Rising targets",
+  ];
+  for (const label of labels) {
+    const trigger = filters.getByText(label, { exact: true });
+    for (let visit = 0; visit < 2; visit++) {
+      await trigger.hover();
+      await expect(
+        page.getByRole("tooltip"),
+        `${label}, visit ${visit + 1}`,
+      ).toHaveText(filterHelp[label]);
+      await page.mouse.move(0, 0);
+      await expect(page.getByRole("tooltip")).toHaveCount(0);
+    }
+  }
+  await expect(page.getByRole("button", { name: /^Help:/ })).toHaveCount(0);
+  expect(
+    await filters.locator("input, select").evaluateAll((controls) =>
+      controls.map((control) => ({
+        value: (control as HTMLInputElement).value,
+        checked: (control as HTMLInputElement).checked,
+      })),
+    ),
+  ).toEqual(before);
+  // The team selector is conditional on the chosen pool and must also retain its shared help.
+  await filters
+    .getByRole("combobox", { name: "Player pool", exact: true })
+    .selectOption("Selected team");
+  await filters.getByText("Team", { exact: true }).hover();
+  await expect(page.getByRole("tooltip")).toHaveText(filterHelp.Team);
+  await page.mouse.move(0, 0);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+});
+
+// Signal badges use the same explanations in player tables, profiles and inspection popovers.
+test("player signal badges retain help across player surfaces", async ({
+  page,
+}) => {
+  await seed(page, {}, true, true);
+  await page.goto("./#/players");
+  for (const label of ["Gem", "Watch", "Projection-gap watch"]) {
+    const badge = page
+      .locator(".signal")
+      .getByText(label, { exact: true })
+      .first();
+    await badge.hover();
+    await expect(page.getByRole("tooltip")).toHaveText(filterHelp[label]);
+    await page.mouse.move(0, 0);
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+  }
+  // Inspecting a player still opens their popover; help does not intercept the existing link action.
+  await page.locator('a[href="#/player/2"]').first().click();
+  const popover = page.getByRole("dialog");
+  await expect(popover).toBeVisible();
+  await popover.locator(".signal").getByText("Gem", { exact: true }).hover();
+  await expect(page.getByRole("tooltip")).toHaveText(filterHelp.Gem);
+  await page.mouse.move(0, 0);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await expect(popover).toBeVisible();
+  for (const [id, labels] of [
+    ["2", ["Gem", "Scoring breakout watch", "Reduced workload", "BUY LOW"]],
+    ["106", ["Watch", "Role-growth watch"]],
+    ["107", ["SELL HIGH", "TD caution"]],
+    ["108", ["Projection-gap watch"]],
+  ] as const) {
+    await page.goto(`./#/player/${id}`);
+    for (const label of labels) {
+      await page.locator(".signal").getByText(label, { exact: true }).hover();
+      await expect(page.getByRole("tooltip")).toHaveText(filterHelp[label]);
+      await page.mouse.move(0, 0);
+      await expect(page.getByRole("tooltip")).toHaveCount(0);
+    }
+  }
+  await expect(page.getByRole("button", { name: /^Help:/ })).toHaveCount(0);
+});
+
 // Every displayed analytical label has its own collapsed explanation, with no inactive, injury, trend or data-status sections.
 test("active analytical tag explanations agree across popovers and profiles", async ({
   page,
@@ -224,6 +349,15 @@ test("active analytical tag explanations agree across popovers and profiles", as
       await expect(details).not.toHaveAttribute("open");
       await summary.click();
       await expect(details.getByRole("table")).toBeVisible();
+      // Every active tag shares numerical comparisons while retaining its original evidence and source weeks.
+      const table = details.getByRole("table");
+      await expect(
+        table.getByRole("columnheader", { name: "Margin", exact: true }),
+      ).toBeVisible();
+      await expect(table.locator("td strong")).not.toHaveCount(0);
+      await expect(table).toContainText(
+        /above minimum|below maximum|at threshold/,
+      );
       const explanation = activeTagExplanations(p, model).find(
         (e) => e.tag === tag,
       );
@@ -232,6 +366,19 @@ test("active analytical tag explanations agree across popovers and profiles", as
         await expect(details).toContainText(explanation.interpretation);
         await expect(details).toContainText(explanation.limitations);
         await expect(details).toContainText(explanation.rows[0].actual);
+        for (const row of explanation.rows) {
+          for (const comparison of row.comparisons ?? []) {
+            await expect(table).toContainText(comparison.required);
+            await expect(table).toContainText(comparison.actual);
+            await expect(table).toContainText(comparison.margin);
+          }
+        }
+        // Numerical game evidence remains visible in every active explanation, not just aggregate averages.
+        const gameEvidence = explanation.rows.find((row) =>
+          row.check.includes("played-game evidence"),
+        );
+        expect(gameEvidence).toBeDefined();
+        await expect(details).toContainText(gameEvidence!.actual);
       }
       await summary.click();
     }
@@ -248,6 +395,12 @@ test("active analytical tag explanations agree across popovers and profiles", as
   await expect(
     dialog.getByRole("table", { name: "BUY LOW evidence checks", exact: true }),
   ).toContainText("80th-percentile");
+  // The popover uses the same comparison table as the profile, including its numeric margin column.
+  await expect(
+    dialog
+      .getByRole("table", { name: "BUY LOW evidence checks", exact: true })
+      .getByRole("columnheader", { name: "Margin", exact: true }),
+  ).toBeVisible();
   await expect(
     dialog
       .getByRole("table", { name: "BUY LOW evidence checks", exact: true })
@@ -258,6 +411,9 @@ test("active analytical tag explanations agree across popovers and profiles", as
       .getByRole("table", { name: "BUY LOW evidence checks", exact: true })
       .locator("td.model"),
   ).not.toHaveCount(0);
+  await expect(
+    dialog.getByRole("table", { name: "BUY LOW evidence checks", exact: true }),
+  ).toContainText("2026 W1: 8.00 points; 14.00 targets; 0.00 TDs");
   await dialog.getByRole("button", { name: "Close player details" }).click();
   await page.goto("./#/player/107");
   await page.getByText("Why SELL HIGH?", { exact: true }).click();

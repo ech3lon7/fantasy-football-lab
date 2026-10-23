@@ -1,5 +1,117 @@
 import type { Model, Player } from "../domain/valuation";
-import { activeTagExplanations } from "../domain/tag-evidence";
+import {
+  activeTagExplanations,
+  type TagEvidenceRow,
+} from "../domain/tag-evidence";
+import type { GemCheck } from "../domain/gems";
+
+// Share one evidence table across all active tags; numeric comparisons arrive from the domain, never from UI formulas.
+function EvidenceTable({
+  rows,
+  label,
+  results = false,
+}: {
+  rows: (TagEvidenceRow & { status?: GemCheck["status"] })[];
+  label: string;
+  results?: boolean;
+}) {
+  return (
+    <>
+      <div className="table-wrap gem-checks">
+        <table aria-label={label}>
+          <thead>
+            <tr>
+              <th>Check</th>
+              <th>Required</th>
+              <th>Actual evidence</th>
+              <th>Margin</th>
+              {results && <th>Result</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.flatMap((row) => {
+              // Compound gates get their own numeric lines; original requirements, game scores and weeks remain visible once.
+              const comparisons = row.comparisons?.length
+                ? row.comparisons
+                : [null];
+              return comparisons.map((comparison, i) => {
+                const actual = comparison?.actual ?? row.actual;
+                return (
+                  <tr key={`${row.check}:${i}`}>
+                    <td className={row.kind}>
+                      {row.check}
+                      {comparison?.note && (
+                        <small className="evidence-note">
+                          {comparison.note}
+                        </small>
+                      )}
+                    </td>
+                    <td
+                      className={
+                        comparison?.required === "Unavailable"
+                          ? "muted"
+                          : (row.requiredKind ??
+                            (comparison ? "input-text" : undefined))
+                      }
+                    >
+                      {comparison ? (
+                        <strong>{comparison.required}</strong>
+                      ) : (
+                        row.required
+                      )}
+                      {comparison && i === 0 && (
+                        <small className="evidence-note">{row.required}</small>
+                      )}
+                    </td>
+                    <td
+                      className={
+                        actual === "Unavailable" || row.status === "UNKNOWN"
+                          ? "muted"
+                          : row.kind
+                      }
+                    >
+                      {comparison ? <strong>{actual}</strong> : actual}
+                      {comparison && i === 0 && (
+                        <small className="evidence-note">{row.actual}</small>
+                      )}
+                    </td>
+                    <td
+                      className={
+                        !comparison || comparison.margin === "Unavailable"
+                          ? "muted"
+                          : "model"
+                      }
+                    >
+                      {comparison?.margin ?? "—"}
+                    </td>
+                    {results && i === 0 && (
+                      <td
+                        rowSpan={comparisons.length}
+                        className={
+                          row.status === "PASS" ? "model" : "notice warning"
+                        }
+                      >
+                        {row.status}
+                      </td>
+                    )}
+                  </tr>
+                );
+              });
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <small>
+          Margin measures clearance in the required direction: positive clears
+          the numeric limit; negative falls short. Equality passes only
+          inclusive limits (≥ or ≤). “—” means context without a numeric
+          threshold. All gates and any OR routes still apply.
+        </small>
+      </p>
+    </>
+  );
+}
 
 // Render shared checks verbatim; UI code never repeats the breakout thresholds or calculations.
 export function GemEvidence({ p, m }: { p: Player; m: Model }) {
@@ -20,36 +132,14 @@ export function GemEvidence({ p, m }: { p: Player; m: Model }) {
         <details>
           <summary className="model">Why Gem?</summary>
           <p>{assessment.explanation}</p>
-          <div className="table-wrap gem-checks">
-            <table aria-label="Breakout evidence checks">
-              <thead>
-                <tr>
-                  <th>Check</th>
-                  <th>Required</th>
-                  <th>Actual evidence</th>
-                  <th>Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {assessment.checks.map((c) => (
-                  <tr key={c.check}>
-                    <td>{c.check}</td>
-                    <td className="input-text">{c.required}</td>
-                    <td className={c.status === "UNKNOWN" ? "muted" : "fact"}>
-                      {c.actual}
-                    </td>
-                    <td
-                      className={
-                        c.status === "PASS" ? "model" : "notice warning"
-                      }
-                    >
-                      {c.status}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <EvidenceTable
+            label="Breakout evidence checks"
+            rows={assessment.checks.map((check) => ({
+              ...check,
+              kind: "fact",
+            }))}
+            results
+          />
           {p.pos === "RB" && (
             <p className="fact">
               Recent carries / game:{" "}
@@ -90,32 +180,10 @@ export function GemEvidence({ p, m }: { p: Player; m: Model }) {
         <details key={explanation.tag}>
           <summary className="model">Why {explanation.tag}?</summary>
           <p>{explanation.meaning}</p>
-          <div className="table-wrap gem-checks">
-            <table aria-label={`${explanation.tag} evidence checks`}>
-              <thead>
-                <tr>
-                  <th>Check</th>
-                  <th>Required</th>
-                  <th>Actual evidence</th>
-                </tr>
-              </thead>
-              <tbody>
-                {explanation.rows.map((row) => (
-                  <tr key={row.check}>
-                    <td className={row.kind}>{row.check}</td>
-                    <td className={row.requiredKind}>{row.required}</td>
-                    <td
-                      className={
-                        row.actual === "Unavailable" ? "muted" : row.kind
-                      }
-                    >
-                      {row.actual}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <EvidenceTable
+            label={`${explanation.tag} evidence checks`}
+            rows={explanation.rows}
+          />
           <p>{explanation.interpretation}</p>
           <p>{explanation.limitations}</p>
           <p>
