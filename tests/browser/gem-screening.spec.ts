@@ -1,5 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
+// Compare the new read-only explanations with the real model's active labels in both player surfaces.
+import { evaluate } from "../../src/domain/valuation";
+import { activeTagExplanations } from "../../src/domain/tag-evidence";
 import {
   initialState,
   mean,
@@ -13,6 +16,7 @@ async function seed(
   page: Page,
   filters: Record<string, string> = {},
   reduced = false,
+  analytical = false,
 ) {
   // Run the existing fixture through tsx so its JSON imports need no production change.
   const d: Dataset = JSON.parse(
@@ -95,6 +99,25 @@ async function seed(
     d.tables.ModelPlayers.find((p) => p.PlayerID === 107)!,
     { Targets: 10, ReceivingTD: 3 },
   );
+  // Only explanation tests need complete touchdown counts and distinct regression/gap examples; prior fixtures remain unchanged.
+  if (analytical) {
+    for (const h of d.tables.ModelHistory)
+      Object.assign(h, { ReceivingTD: 0, RushTD: 0 });
+    d.tables.ModelHistory.filter((h) => h.PlayerID === 107).forEach((h, i) =>
+      Object.assign(h, {
+        Targets: 2,
+        RushAttempts: 0,
+        ReceivingTD: i === 0 ? 3 : 0,
+      }),
+    );
+    Object.assign(
+      d.tables.ModelPlayers.find((p) => p.PlayerID === 108)!,
+      { Targets: 12 },
+    );
+    d.tables.ModelHistory.filter((h) => h.PlayerID === 108).forEach((h) => {
+      h.Targets = 3;
+    });
+  }
   // Extra non-gem QBs make pagination and deterministic equal-value ordering observable.
   const template = d.tables.ModelPlayers.find((p) => p.PlayerID === 100)!;
   const history = d.tables.ModelHistory.filter((h) => h.PlayerID === 100);
@@ -160,7 +183,103 @@ async function seed(
   await expect(
     page.getByRole("heading", { name: "Gem filters", exact: true }),
   ).toBeVisible();
+  return dataset;
 }
+
+// Every displayed analytical label has its own collapsed explanation, with no inactive, injury, trend or data-status sections.
+test("active analytical tag explanations agree across popovers and profiles", async ({
+  page,
+}) => {
+  const dataset = await seed(page, {}, true, true);
+  const model = evaluate(dataset, dataset.settings);
+  const expected: Record<string, string[]> = {
+    "2": ["Gem", "Scoring breakout watch", "Reduced workload", "BUY LOW"],
+    "106": ["Watch", "Role-growth watch"],
+    "107": ["SELL HIGH", "TD caution"],
+    "108": ["Projection-gap watch"],
+  };
+  for (const [id, tags] of Object.entries(expected)) {
+    const p = model.byId.get(id)!;
+    expect(
+      [
+        ...activeTagExplanations(p, model).map((e) => e.tag),
+        ...(p.gem === "Gem" ? ["Gem"] : []),
+      ].sort(),
+      JSON.stringify({
+        id,
+        regression: p.regression,
+        opportunities: p.opportunities,
+        td: p.td,
+        peer: p.regressionEvidence,
+      }),
+    ).toEqual([...tags].sort());
+    await page.goto(`./#/player/${id}`);
+    await expect(
+      page.locator("summary").filter({ hasText: /^Why .+\?$/ }),
+    ).toHaveCount(tags.length);
+    for (const tag of tags) {
+      const summary = page.getByText(`Why ${tag}?`, { exact: true });
+      await expect(summary).toBeVisible();
+      const details = summary.locator("..");
+      await expect(details).not.toHaveAttribute("open");
+      await summary.click();
+      await expect(details.getByRole("table")).toBeVisible();
+      const explanation = activeTagExplanations(p, model).find(
+        (e) => e.tag === tag,
+      );
+      if (explanation) {
+        await expect(details).toContainText(explanation.meaning);
+        await expect(details).toContainText(explanation.interpretation);
+        await expect(details).toContainText(explanation.limitations);
+        await expect(details).toContainText(explanation.rows[0].actual);
+      }
+      await summary.click();
+    }
+  }
+  // The same shared component appears in a player popover, and opening evidence leaves the route and selected player intact.
+  await page.goto("./#/players");
+  await page.locator('a[href="#/player/2"]').first().click();
+  const dialog = page.getByRole("dialog");
+  for (const tag of expected["2"])
+    await expect(
+      dialog.getByText(`Why ${tag}?`, { exact: true }),
+    ).toBeVisible();
+  await dialog.getByText("Why BUY LOW?", { exact: true }).click();
+  await expect(
+    dialog.getByRole("table", { name: "BUY LOW evidence checks", exact: true }),
+  ).toContainText("80th-percentile");
+  await expect(
+    dialog
+      .getByRole("table", { name: "BUY LOW evidence checks", exact: true })
+      .locator("td.fact"),
+  ).not.toHaveCount(0);
+  await expect(
+    dialog
+      .getByRole("table", { name: "BUY LOW evidence checks", exact: true })
+      .locator("td.model"),
+  ).not.toHaveCount(0);
+  await dialog.getByRole("button", { name: "Close player details" }).click();
+  await page.goto("./#/player/107");
+  await page.getByText("Why SELL HIGH?", { exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/analytical-tags-mobile.png",
+    fullPage: true,
+  });
+  await page
+    .getByText("Why SELL HIGH?", { exact: true })
+    .locator("..")
+    .screenshot({ path: "test-results/sell-high-explanation-mobile.png" });
+  await page.goto("./#/player/100");
+  await expect(
+    page.locator("summary").filter({ hasText: /^Why .+\?$/ }),
+  ).toHaveCount(0);
+});
 
 // Loading imported data and an old saved query must identify Gems automatically, ignoring obsolete manual-review settings.
 test("automatic Gems need no review, relabeling or Apply after saved-filter migration", async ({
@@ -248,8 +367,12 @@ test("sustained reduced workload remains selectable, persistent and independent 
   await page.getByRole("link", { name: /Synthetic 2 WR/ }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByText("Why Gem?", { exact: true }).click();
+  await dialog.getByText("Why Reduced workload?", { exact: true }).click();
   await expect(
-    dialog.locator(".notice.warning").filter({ hasText: "Reduced workload." }),
+    dialog.getByRole("table", {
+      name: "Reduced workload evidence checks",
+      exact: true,
+    }),
   ).toContainText("13.50 → 10.00");
   await expect(dialog).toContainText(
     "3/3 recent games meet the decline minimum",
@@ -260,9 +383,12 @@ test("sustained reduced workload remains selectable, persistent and independent 
     page.getByLabel("Reduced workload", { exact: true }),
   ).toBeChecked();
   await page.goto("./#/player/2");
-  await page.getByText("Why Gem?", { exact: true }).click();
+  await page.getByText("Why Reduced workload?", { exact: true }).click();
   await expect(
-    page.locator(".notice.warning").filter({ hasText: "Reduced workload." }),
+    page.getByRole("table", {
+      name: "Reduced workload evidence checks",
+      exact: true,
+    }),
   ).toContainText("-25.93%");
 });
 

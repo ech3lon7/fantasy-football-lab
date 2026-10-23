@@ -70,6 +70,12 @@ export interface Player {
   xtd: number | null;
   tdRate: number | null;
   regression: string;
+  // Retain the exact peer statistics used by the existing regression label for read-only explanations.
+  regressionEvidence?: {
+    meanRate: number;
+    rateSD: number;
+    highVolume: number;
+  };
   gem: string;
   breakout?: GemAssessment;
   priority: number;
@@ -474,6 +480,12 @@ export function evaluate(
     p.edge = p.adp !== null && p.rank !== null ? p.adp - p.rank : null;
     const g = groups.get(p.pos);
     if (g && g.avg !== null && g.sigma !== null && g.high !== null) {
+      // Expose the existing peer sample for explanations without changing the label comparison below.
+      p.regressionEvidence = {
+        meanRate: g.avg,
+        rateSD: g.sigma,
+        highVolume: g.high,
+      };
       p.regression =
         (p.opportunities ?? 0) < s.MinOpportunity
           ? "NEUTRAL - low volume"

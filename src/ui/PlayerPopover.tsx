@@ -322,8 +322,8 @@ function PlayerInspection({ p, m }: { p: Player; m: Model }) {
         <Signal text={p.regression} />
       </div>
       <p>{p.explanation}</p>
-      {/* Read-only automatic evidence matches the full player profile. */}
-      <GemEvidence p={p} />
+      {/* Read-only evidence for every active analytical tag matches the full player profile. */}
+      <GemEvidence p={p} m={m} />
       <p
         className={
           p.historyComplete && p.value !== null ? "" : "notice warning"

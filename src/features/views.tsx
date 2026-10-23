@@ -574,8 +574,8 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
         <PlayerSignals p={p} />
         <Trend p={p} />
       </div>
-      {/* Explain the automatic classification using the same domain gates shown in player popovers. */}
-      <GemEvidence p={p} />
+      {/* Explain only active analytical tags using the same domain evidence shown in player popovers. */}
+      <GemEvidence p={p} m={m} />
       <div className="metric-grid">
         <Metric label="Actual season PPG" value={fmt(p.actual)} kind="fact" />
         <Metric

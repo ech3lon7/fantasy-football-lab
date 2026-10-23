@@ -29,6 +29,12 @@ Choose **Save trade** on a completed search result or **Save current trade** in 
 
 Saved trades use the existing local/account state and **Sync now** workflow; no workbooks or extra database tables are stored. The shared state-size limit includes saved trades, notes and existing settings. An explicit storage-full message asks you to shorten notes or remove records if another save would exceed it. Saving/loading never sends an ESPN trade.
 
+## Player-tag explanations
+
+Click a player's name to open the popover, or open the full player profile. Each active analytical tag has a separate collapsed **Why [tag]?** section: Gem, Watch, Scoring breakout watch, Role-growth watch, Projection-gap watch, Reduced workload, BUY LOW, SELL HIGH and TD caution. Expand it for the meaning, exact requirements, the player's supporting numbers, the comparison window, source timestamp, interpretation and limitations. Inactive signals, neutral/no-signal states, injury/data-status labels and trend arrows do not create explanation sections.
+
+Watch shows its own workload qualification routes, including the early-sample branch; Gem retains its existing scoring/workload evidence. BUY LOW/SELL HIGH show the positional touchdown-rate and volume comparisons, not market prices. TD caution repeats SELL HIGH evidence without a second penalty. Explanations never assign a label, change a forecast/value, or automatically recommend a transaction. Displayed numbers are rounded; the existing engine compares unrounded values.
+
 ## Development
 
 ```sh
