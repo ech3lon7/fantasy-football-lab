@@ -14,6 +14,7 @@ async function seed(
   withDepth = false,
   withOffers = false,
   bestRoster = false,
+  incomingSignals = false,
 ) {
   const dataset: Dataset = JSON.parse(
     execFileSync(
@@ -50,6 +51,13 @@ async function seed(
            for(const [id,name,score] of [[2,'Their starter WR',9.72],[300,'Their bench WR',10.5]]) {
              Object.assign(d.tables.ModelPlayers.find(p=>p.PlayerID===id),{Player:name,ActualPoints:score*5,Actual_PPG:score,Last3_PPG:score,ESPN_Projected_PPG:score,ESPN_Projected_Total:score*17});
              d.tables.ModelHistory.filter(h=>h.PlayerID===id).forEach(h=>{h.Points=score});
+           }
+         }
+         // Only incoming-filter tests need genuine domain-derived Gem/Watch labels; existing fixtures stay unchanged.
+         if(${incomingSignals}) {
+           for(const [id,score,targets] of [[2,18,[8,8,8,8,8]],[301,10,[2,2,8,8,8]],[302,10,[2,2,2,2,2]]]) {
+             Object.assign(d.tables.ModelPlayers.find(p=>p.PlayerID===id),{ActualPoints:score*5,Actual_PPG:score,Last3_PPG:score,ScoreSD:0,ESPN_Projected_PPG:score,ESPN_Projected_Total:score*17});
+             d.tables.ModelHistory.filter(h=>h.PlayerID===id).forEach((h,i)=>Object.assign(h,{Points:score,Targets:targets[i]}));
            }
          }
          process.stdout.write(JSON.stringify(await fromTables(d.tables,d.settings)));`,
@@ -101,6 +109,286 @@ const panel = (page: Page) =>
       exact: true,
     }),
   });
+
+// Read persisted state only after IndexedDB's write transaction completes, matching the application's reload path.
+async function storedWorkspace(page: Page) {
+  return page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("fantasy-football-lab", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const value = await new Promise<Workspace>((resolve, reject) => {
+      const request = db
+        .transaction("current")
+        .objectStore("current")
+        .get("local");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return value;
+  });
+}
+
+// Change the imported snapshot through the same persisted workspace to check recalculation and automatic ownership cleanup.
+async function replaceSnapshot(page: Page, dataset: Dataset) {
+  await page.evaluate(async (value) => {
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const request = indexedDB.open("fantasy-football-lab", 1);
+      request.onsuccess = () => resolve(request.result);
+    });
+    const tx = db.transaction("current", "readwrite"),
+      store = tx.objectStore("current");
+    const get = store.get("local");
+    get.onsuccess = () => store.put({ ...get.result, dataset: value }, "local");
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }, dataset);
+  await page.reload();
+}
+
+// Exercise real model labels and the existing search worker, including OR labels, intersected positions and package counts.
+test("incoming Gem/Watch and position filters intersect without changing existing ranking", async ({
+  page,
+}) => {
+  const dataset = await seed(page, false, false, false, true);
+  const model = evaluate(dataset, dataset.settings);
+  expect(model.byId.get("2")?.gem).toBe("Gem");
+  expect(model.byId.get("301")?.gem).toBe("Watch");
+  const search = panel(page);
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("1000");
+  const run = async () => {
+    await search.getByRole("button", { name: "Search", exact: true }).click();
+    await expect(
+      search.getByRole("button", { name: "Cancel", exact: true }),
+    ).toHaveCount(0);
+    await expect(search.locator("tbody tr").first()).toBeVisible();
+  };
+  await run();
+  const original = await search
+    .locator("tbody tr td:first-child")
+    .allTextContents();
+  await search.getByLabel("Gem", { exact: true }).check();
+  await search.getByLabel("Receive WR", { exact: true }).check();
+  await expect(
+    search.getByRole("button", { name: "Load trade" }).first(),
+  ).toBeDisabled();
+  await run();
+  await expect(search.locator("tbody tr")).toHaveCount(1);
+  await expect(
+    search
+      .locator("tbody")
+      .getByRole("link", { name: model.byId.get("2")!.name, exact: true }),
+  ).toBeVisible();
+  await search.getByLabel("Watch", { exact: true }).check();
+  await run();
+  await expect(search.locator("tbody tr")).toHaveCount(2);
+  await search.getByLabel("Create package", { exact: true }).check();
+  await search
+    .getByLabel("Players to receive", { exact: true })
+    .selectOption("2");
+  await search
+    .getByLabel("Minimum incoming Gem/Watch matches", { exact: true })
+    .fill("2");
+  await search
+    .getByLabel("Minimum incoming position matches", { exact: true })
+    .fill("2");
+  await run();
+  await expect(search.locator("tbody tr")).toHaveCount(1);
+  await expect(
+    search
+      .locator("tbody")
+      .getByRole("link", { name: "Search WR 1", exact: true }),
+  ).toBeVisible();
+  // Changing position cannot qualify an unrelated QB just because a Gem WR occurs elsewhere in the package.
+  await search.getByLabel("Receive WR", { exact: true }).uncheck();
+  await search.getByLabel("Receive QB", { exact: true }).check();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("0 index matches.", { exact: false }),
+  ).toBeVisible();
+  await search.getByLabel("Gem", { exact: true }).uncheck();
+  await search.getByLabel("Watch", { exact: true }).uncheck();
+  await search.getByLabel("Receive QB", { exact: true }).uncheck();
+  await search.getByLabel("Create package", { exact: true }).uncheck();
+  await run();
+  expect(
+    await search.locator("tbody tr td:first-child").allTextContents(),
+  ).toEqual(original);
+});
+
+// Persist a result, preserve its original summary, restore the entire query and deduplicate saves from the analyzer.
+test("saved trades persist names notes and original results and restore the saved search", async ({
+  page,
+}) => {
+  await seed(page, false, false, false, true);
+  const search = panel(page);
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search.getByLabel("Gem", { exact: true }).check();
+  await search.getByLabel("Receive WR", { exact: true }).check();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByRole("button", { name: "Save trade", exact: true }),
+  ).toBeEnabled();
+  await search.getByRole("button", { name: "Save trade", exact: true }).click();
+  const saved = page
+    .locator("section")
+    .filter({
+      has: page.getByRole("heading", { name: "Saved trades", exact: true }),
+    });
+  await expect(saved.locator("details")).toHaveCount(1);
+  await saved.locator("summary").click();
+  await expect(
+    saved
+      .getByRole("row")
+      .filter({
+        has: page.getByRole("cell", { name: "Current", exact: true }),
+      }),
+  ).toBeVisible();
+  await saved.getByLabel("Saved trade name", { exact: true }).fill("WR target");
+  await saved
+    .getByLabel("Saved trade notes", { exact: true })
+    .fill("Ask about this package next week.");
+  await saved
+    .getByRole("button", { name: "Save details", exact: true })
+    .click();
+  await expect
+    .poll(async () => (await storedWorkspace(page)).state.filters.savedTrades)
+    .toContain("WR target");
+  const original = JSON.parse(
+    (await storedWorkspace(page)).state.filters.savedTrades,
+  ).trades[0].original;
+  await page.reload();
+  await expect(saved.getByText(/WR target ·/)).toBeVisible();
+  await saved.locator("summary").click();
+  await expect(
+    saved.getByLabel("Saved trade notes", { exact: true }),
+  ).toHaveValue("Ask about this package next week.");
+  await saved
+    .getByRole("button", { name: "Load saved trade", exact: true })
+    .click();
+  await expect(search.getByLabel("Gem", { exact: true })).toBeChecked();
+  await expect(search.getByLabel("Receive WR", { exact: true })).toBeChecked();
+  await expect(
+    search.getByLabel("Below outgoing total (index points)", { exact: true }),
+  ).toHaveValue("1000");
+  await expect(
+    page.getByLabel("Incoming player 1", { exact: true }),
+  ).toHaveValue("2");
+  await expect(
+    page.getByRole("button", { name: "Save current trade", exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByRole("button", { name: "Save current trade", exact: true })
+    .click();
+  await expect(saved.locator("details")).toHaveCount(1);
+  const updated = JSON.parse(
+    (await storedWorkspace(page)).state.filters.savedTrades,
+  ).trades;
+  expect(updated[0].original).toEqual(original);
+  expect(updated[0].notes).toBe("Ask about this package next week.");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await saved.screenshot({ path: "test-results/saved-trades-mobile.png" });
+  await saved
+    .getByRole("button", { name: "Delete saved trade", exact: true })
+    .click();
+  await expect(saved.getByText(/No saved trades yet/)).toBeVisible();
+});
+
+// New source data recalculates current summaries while ownership changes remove obsolete trades even outside the analyzer.
+test("saved trades refresh current points and automatically remove ownership-invalid packages", async ({
+  page,
+}) => {
+  const dataset = await seed(page);
+  await page
+    .getByLabel("Incoming player 1", { exact: true })
+    .selectOption("200");
+  await expect(
+    page.getByRole("button", { name: "Save current trade", exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByRole("button", { name: "Save current trade", exact: true })
+    .click();
+  await expect
+    .poll(
+      async () => (await storedWorkspace(page)).state.filters.savedTrades ?? "",
+    )
+    .toContain('"get":["200"]');
+  const original = JSON.parse(
+    (await storedWorkspace(page)).state.filters.savedTrades,
+  ).trades[0].original;
+  // A synthetic source refresh raises the received QB's scores without changing player ownership or the saved draft.
+  Object.assign(
+    dataset.tables.ModelPlayers.find((p) => p.PlayerID === 200)!,
+    {
+      ActualPoints: 175,
+      Actual_PPG: 35,
+      Last3_PPG: 35,
+      ESPN_Projected_PPG: 35,
+      ESPN_Projected_Total: 595,
+    },
+  );
+  dataset.tables.ModelHistory.filter((h) => h.PlayerID === 200).forEach((h) => {
+    h.Points = 35;
+  });
+  dataset.hash = "f".repeat(64);
+  await replaceSnapshot(page, dataset);
+  const saved = page
+    .locator("section")
+    .filter({
+      has: page.getByRole("heading", { name: "Saved trades", exact: true }),
+    });
+  await saved.locator("summary").click();
+  const currentRow = saved
+    .getByRole("row")
+    .filter({ has: page.getByRole("cell", { name: "Current", exact: true }) });
+  await expect(currentRow).toBeVisible();
+  const expected = evaluateTrade(
+    evaluate(dataset, dataset.settings),
+    { teamA: "1", teamB: "2", give: ["101"], get: ["200"] },
+    true,
+  );
+  expect(expected.valid).toBe(true);
+  if (expected.valid)
+    await expect(currentRow.locator("td").nth(1)).toHaveText(
+      "+" + expected.directA.expectedPerWeek!.toFixed(2),
+    );
+  expect(
+    JSON.parse((await storedWorkspace(page)).state.filters.savedTrades)
+      .trades[0].original,
+  ).toEqual(original);
+  await page.goto("./#/overview");
+  dataset.tables.ModelPlayers.find((p) => p.PlayerID === 200)!.OnTeamID = 0;
+  dataset.hash = "e".repeat(64);
+  await replaceSnapshot(page, dataset);
+  await expect
+    .poll(
+      async () =>
+        JSON.parse((await storedWorkspace(page)).state.filters.savedTrades)
+          .trades.length,
+    )
+    .toBe(0);
+  expect((await storedWorkspace(page)).pendingState).toBe(true);
+});
 
 // Screen weekly averages in the actual worker, combine both teams' bounds, and preserve the disabled path.
 test("weekly sliders filter exact averages for either or both teams without changing the horizon", async ({

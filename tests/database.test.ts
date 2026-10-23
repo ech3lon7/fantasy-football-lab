@@ -1,7 +1,17 @@
 import { beforeAll, afterAll, it, expect } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import fs from "node:fs/promises";
-import { defaults } from "../src/domain/contracts";
+import { defaults, initialState } from "../src/domain/contracts";
+// Saved records reuse the same account-isolated RPC and never require a table migration.
+import {
+  saveTrade,
+  savedTradesKey,
+  readSavedTrades,
+  summaryFromTrade,
+} from "../src/domain/saved-trades";
+import { evaluate } from "../src/domain/valuation";
+import { evaluateTrade } from "../src/domain/trades";
+import { starterFixture } from "./fixtures";
 // Filter serialization must remain accepted by the existing shared-project RPC.
 import {
   encodeGemFilters,
@@ -260,4 +270,52 @@ it("syncs applied gem filters through the existing state revision contract", asy
   expect(next.state.draft).toEqual(current.state.draft);
   expect(next.state.settings).toEqual(current.state.settings);
   expect(next.dataset_revision).toBe(current.dataset_revision);
+});
+
+// Exercise saved-trade serialization against the deployed state contract without touching the shared fitness app.
+it("syncs saved trade summaries and notes without changing the dataset or other account state", async () => {
+  await as(b);
+  const current = (
+    await db.query<{
+      state: typeof state;
+      state_revision: number;
+      dataset_revision: number;
+    }>(
+      "select state,state_revision,dataset_revision from public.get_fantasy_workspace()",
+    )
+  ).rows[0];
+  const source = await starterFixture();
+  const model = evaluate(source, source.settings);
+  const draft = { teamA: "1", teamB: "2", give: ["101"], get: ["200"] };
+  const raw = saveTrade(
+    initialState(source),
+    model,
+    draft,
+    summaryFromTrade(evaluateTrade(model, draft, true)),
+  );
+  const filters = { ...current.state.filters, [savedTradesKey]: raw };
+  await db.query("select public.update_fantasy_state($1,$2,$3,$4)", [
+    current.state_revision,
+    current.dataset_revision,
+    crypto.randomUUID(),
+    { ...current.state, filters },
+  ]);
+  const next = (
+    await db.query<{ state: typeof state; dataset_revision: number }>(
+      "select state,dataset_revision from public.get_fantasy_workspace()",
+    )
+  ).rows[0];
+  expect(next.state.filters).toEqual(filters);
+  expect(
+    readSavedTrades(
+      (next.state.filters as Record<string, string>)[savedTradesKey],
+    ).trades[0].draft,
+  ).toEqual(draft);
+  expect(next.state.settings).toEqual(current.state.settings);
+  expect(next.state.draft).toEqual(current.state.draft);
+  expect(next.dataset_revision).toBe(current.dataset_revision);
+  await as(a);
+  expect(
+    (await db.query("select * from public.get_fantasy_workspace()")).rows,
+  ).toHaveLength(0);
 });

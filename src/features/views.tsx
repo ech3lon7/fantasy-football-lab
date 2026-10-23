@@ -2,6 +2,15 @@ import { GemEvidence } from "../ui/GemEvidence";
 import { StarterLineupEditor } from "./StarterLineupEditor";
 // Trade discovery delegates scoring to its own worker without changing the existing analyzer.
 import { TradeSearch } from "./TradeSearch";
+import { SavedTrades } from "./SavedTrades";
+import {
+  saveTrade,
+  summaryFromTrade,
+  type SavedTrade,
+  type SavedTradeSummary,
+} from "../domain/saved-trades";
+import type { TradeSearchQuery } from "../domain/trade-search";
+import type { AppState } from "../domain/contracts";
 import { starterLineupsKey } from "../domain/starter-lineups";
 import { useState, useEffect } from "react";
 import {
@@ -1491,17 +1500,38 @@ export function TradeView({
   draft,
   change,
   lineupsRaw,
+  state,
+  saveTrades,
 }: {
   m: Model;
   draft: Draft;
   change: (d: Draft) => void;
   lineupsRaw?: string;
+  state: AppState;
+  saveTrades: (raw: string) => void;
 }) {
   const [result, setResult] = useState<TradeResult | null>(null),
     [pending, setPending] = useState(false),
     [message, setMessage] = useState(""),
     [searchA, setSearchA] = useState(""),
     [searchB, setSearchB] = useState("");
+  // Retain only the query being edited; completed search rows are saved solely by explicit user action.
+  const [searchQuery, setSearchQuery] = useState<TradeSearchQuery>();
+  const [restoreSearch, setRestoreSearch] = useState<{
+    id: string;
+    query: TradeSearchQuery;
+  }>();
+  const [saveMessage, setSaveMessage] = useState("");
+  const [resultStamp, setResultStamp] = useState("");
+  const evaluationStamp = JSON.stringify([
+    m.dataset.hash,
+    m.analysisVersion,
+    m.settings,
+    draft,
+    m.evidenceRaw,
+    m.roleScenarioWeight,
+    lineupsRaw,
+  ]);
   useEffect(() => {
     const worker = new Worker(
         new URL("../workers/model.worker.ts", import.meta.url),
@@ -1515,6 +1545,7 @@ export function TradeView({
       if (e.data.error) setMessage(e.data.error);
       else {
         setResult(e.data.result);
+        setResultStamp(evaluationStamp);
         setMessage("");
       }
       setPending(false);
@@ -1545,6 +1576,30 @@ export function TradeView({
     m.roleScenarioWeight,
     lineupsRaw,
   ]);
+  // Both save entry points share ownership validation, duplicate handling and workspace-size checks.
+  function saveSelection(
+    selected: Draft,
+    summary: SavedTradeSummary,
+    query?: TradeSearchQuery,
+  ) {
+    try {
+      saveTrades(saveTrade(state, m, selected, summary, query));
+      setSaveMessage(
+        "Trade saved. Duplicate packages update the existing entry while preserving its name, notes and original summary.",
+      );
+    } catch (error) {
+      setSaveMessage(
+        error instanceof Error ? error.message : "Could not save trade.",
+      );
+    }
+  }
+  // Loading is an explicit draft replacement; newer data/settings continue to determine current results.
+  function loadSaved(trade: SavedTrade) {
+    change(trade.draft);
+    if (trade.query)
+      setRestoreSearch({ id: crypto.randomUUID(), query: trade.query });
+    setSaveMessage("Saved trade loaded into the analyzer.");
+  }
   function side(isA: boolean) {
     const team = isA ? draft.teamA : draft.teamB,
       ids = isA ? draft.give : draft.get,
@@ -1687,6 +1742,29 @@ export function TradeView({
         draft={draft}
         lineupsRaw={lineupsRaw}
         change={change}
+        onQueryChange={setSearchQuery}
+        restore={restoreSearch}
+        save={saveSelection}
+      />
+      {/* Keep saving and browsing within the existing analyzer, without adding navigation or changing scoring. */}
+      <div className="toolbar">
+        <button
+          className="subtle"
+          disabled={!r || pending || resultStamp !== evaluationStamp}
+          onClick={() => {
+            if (r) saveSelection(draft, summaryFromTrade(r), searchQuery);
+          }}
+        >
+          Save current trade
+        </button>
+      </div>
+      {saveMessage && <p aria-live="polite">{saveMessage}</p>}
+      <SavedTrades
+        m={m}
+        state={state}
+        lineupsRaw={lineupsRaw}
+        change={saveTrades}
+        load={loadSaved}
       />
       {pending && (
         <div className="notice" role="status">

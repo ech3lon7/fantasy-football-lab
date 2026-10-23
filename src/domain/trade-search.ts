@@ -91,7 +91,14 @@ export interface SearchLineupDetails {
   own: SearchLineupSide;
   other: SearchLineupSide;
 }
-// Search contracts are temporary analysis state, never part of the synced workspace schema.
+// Incoming criteria screen existing labels and positions without changing values or ranking.
+export interface IncomingFilter {
+  signals?: ("Gem" | "Watch")[];
+  minimumSignals?: number;
+  positions?: Position[];
+  minimumPositions?: number;
+}
+// Results stay temporary; explicitly saved trades may retain their compact search query.
 export interface TradeSearchQuery {
   teamA: string;
   give: string[];
@@ -101,6 +108,7 @@ export interface TradeSearchQuery {
   upgrade?: UpgradeFilter;
   weekly?: WeeklyFilter;
   deficit?: DeficitFilter;
+  incoming?: IncomingFilter;
 }
 export interface SearchMatch {
   key: string;
@@ -137,6 +145,7 @@ export interface SearchStats {
   upgradeExcluded?: number;
   weeklyExcluded?: number;
   deficitExcluded?: number;
+  incomingExcluded?: number;
 }
 export interface SearchProgress {
   phase: "Finding matching packages" | "Evaluating trades" | "Sorting results";
@@ -207,6 +216,15 @@ export function tradeSearchContext(
         ]
       : null,
     query.deficit ? [query.deficit.position, query.deficit.ceiling] : null,
+    // Include selections and counts in stale-result protection, even during invalid numeric edits.
+    query.incoming
+      ? [
+          query.incoming.signals ?? [],
+          String(query.incoming.minimumSignals ?? 1),
+          query.incoming.positions ?? [],
+          String(query.incoming.minimumPositions ?? 1),
+        ]
+      : null,
     // Distinguish invalid numeric edits from valid unbounded limits so stale searches cannot revive.
     query.weekly
       ? [query.weekly.own, query.weekly.other].map((range) =>
@@ -241,6 +259,32 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
     errors.push("Choose one to five players to receive.");
   if (![q.below, q.above].every((x) => Number.isFinite(x) && x >= 0))
     errors.push("Enter nonnegative numbers for both index offsets.");
+  // Disabled categories impose no minimum; enabled counts must fit the incoming package.
+  for (const [selected, minimum, allowed, name] of [
+    [
+      q.incoming?.signals,
+      q.incoming?.minimumSignals ?? 1,
+      ["Gem", "Watch"],
+      "Gem/Watch",
+    ],
+    [
+      q.incoming?.positions,
+      q.incoming?.minimumPositions ?? 1,
+      positions,
+      "position",
+    ],
+  ] as const) {
+    if (!selected?.length) continue;
+    if (
+      new Set(selected).size !== selected.length ||
+      selected.some((value) => !(allowed as readonly string[]).includes(value))
+    )
+      errors.push(`Choose valid, distinct incoming ${name} selections.`);
+    if (!Number.isInteger(minimum) || minimum < 1 || minimum > q.count)
+      errors.push(
+        `Minimum incoming ${name} matches must be a whole number from 1 to ${q.count}.`,
+      );
+  }
   // Only enabled upgrade criteria are validated; disabled searches keep their previous behavior.
   if (
     q.upgrade &&
@@ -525,6 +569,21 @@ export function offeredUpgrades(
   );
 }
 
+// Count only players satisfying every enabled category, so a WR and an unrelated Gem cannot qualify together.
+export function matchesIncoming(players: Player[], filter?: IncomingFilter) {
+  const signals = filter?.signals ?? [],
+    selected = filter?.positions ?? [];
+  const count = players.filter(
+    (p) =>
+      (!signals.length || signals.includes(p.gem as "Gem" | "Watch")) &&
+      (!selected.length || selected.includes(p.pos as Position)),
+  ).length;
+  return (
+    (!signals.length || count >= (filter?.minimumSignals ?? 1)) &&
+    (!selected.length || count >= (filter?.minimumPositions ?? 1))
+  );
+}
+
 // Enumerate complete, same-owner combinations; conservative bounds prune only impossible branches.
 export function findTradeMatches(
   m: Model,
@@ -546,6 +605,7 @@ export function findTradeMatches(
     scored: 0,
     ...(q.upgrade ? { upgradeExcluded: 0 } : {}),
     ...(q.deficit ? { deficitExcluded: 0 } : {}),
+    ...(q.incoming ? { incomingExcluded: 0 } : {}),
   };
   // Compute the same grades displayed in Teams once, from the unchanged pre-trade snapshot.
   const assessments = q.deficit ? teamsAssessment(m) : undefined;
@@ -593,6 +653,11 @@ export function findTradeMatches(
       if (++nodes % 2048 === 0) onProgress?.({ ...stats });
       if (!remaining) {
         if (total >= bounds.lower && total <= bounds.upper) {
+          // Screen complete index-matching packages before scoring; existing index pruning and sort order remain intact.
+          if (!matchesIncoming(chosen, q.incoming)) {
+            stats.incomingExcluded = (stats.incomingExcluded ?? 0) + 1;
+            return;
+          }
           const get = chosen.map((p) => p.id).sort(cmpId);
           matches.push({
             key: JSON.stringify([teamB, get]),

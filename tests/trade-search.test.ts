@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { starterFixture } from "./fixtures";
-import { evaluate } from "../src/domain/valuation";
+import { evaluate, type Player } from "../src/domain/valuation";
 import { cmpId } from "../src/domain/contracts";
 import { teamsAssessment } from "../src/domain/lineups";
 import { evaluateTrade } from "../src/domain/trades";
@@ -16,6 +16,7 @@ import {
   tradeSearchContext,
   offeredUpgrades,
   matchesWeekly,
+  matchesIncoming,
   type SearchRow,
   type TradeSearchQuery,
 } from "../src/domain/trade-search";
@@ -51,6 +52,128 @@ const query: TradeSearchQuery = {
   below: 5,
   above: 5,
 };
+
+// Labels are OR selections, while simultaneous label/position categories count the same distinct incoming players.
+it("filters incoming package labels and positions with independent inclusive minimums", async () => {
+  const m = await matchingModel();
+  const gem: Player = { ...m.byId.get("103")!, pos: "WR", gem: "Gem" };
+  const watch: Player = { ...m.byId.get("104")!, pos: "TE", gem: "Watch" };
+  const other: Player = {
+    ...m.byId.get("105")!,
+    pos: "WR",
+    gem: "No breakout signal",
+  };
+  expect(matchesIncoming([other])).toBe(true);
+  expect(
+    matchesIncoming([gem, watch], {
+      signals: ["Gem", "Watch"],
+      minimumSignals: 2,
+    }),
+  ).toBe(true);
+  expect(
+    matchesIncoming([gem, watch], { signals: ["Gem"], minimumSignals: 2 }),
+  ).toBe(false);
+  expect(
+    matchesIncoming([gem, watch], {
+      signals: ["Gem", "Watch"],
+      positions: ["WR"],
+      minimumPositions: 2,
+    }),
+  ).toBe(false);
+  expect(
+    matchesIncoming([watch, other], { signals: ["Watch"], positions: ["WR"] }),
+  ).toBe(false);
+  expect(
+    matchesIncoming([gem, watch], {
+      signals: ["Gem", "Watch"],
+      positions: ["WR", "TE"],
+      minimumSignals: 2,
+      minimumPositions: 2,
+    }),
+  ).toBe(true);
+  expect(
+    matchesIncoming([other], {
+      signals: [],
+      minimumSignals: NaN,
+      positions: ["WR"],
+    }),
+  ).toBe(true);
+});
+
+// Every package size stays complete, same-owner and identically ranked when optional incoming categories are absent.
+it("applies incoming filters to all package sizes without changing index boundaries or ranking", async () => {
+  const m = await matchingModel();
+  for (const [i, p] of m.players.filter((p) => p.owner === "2").entries()) {
+    p.gem = i % 2 ? "Gem" : "Watch";
+    p.pos = i % 3 ? "WR" : "TE";
+  }
+  for (let count = 1; count <= 5; count++) {
+    const q = { ...query, count, below: 1000, above: 1000 };
+    const plain = findTradeMatches(m, q).matches;
+    const enabled: TradeSearchQuery = {
+      ...q,
+      incoming: {
+        signals: ["Gem", "Watch"],
+        minimumSignals: Math.min(count, 2),
+        positions: ["WR"],
+        minimumPositions: 1,
+      },
+    };
+    const found = findTradeMatches(m, enabled);
+    const expected = plain.filter((row) =>
+      matchesIncoming(
+        row.get.map((id) => m.byId.get(id)!),
+        enabled.incoming,
+      ),
+    );
+    expect(found.matches).toEqual(expected);
+    expect(found.stats.incomingExcluded).toBe(plain.length - expected.length);
+    expect(findTradeMatches(m, { ...q, incoming: undefined }).matches).toEqual(
+      plain,
+    );
+  }
+});
+
+// Changed selections/minima invalidate prior worker pages, and invalid or oversized counts cannot run.
+it("validates incoming filter inputs and includes them in search identity", async () => {
+  const m = await matchingModel();
+  const q: TradeSearchQuery = {
+    ...query,
+    count: 2,
+    incoming: {
+      signals: ["Gem"],
+      minimumSignals: 1,
+      positions: ["WR"],
+      minimumPositions: 1,
+    },
+  };
+  expect(tradeSearchBounds(m, q).errors).toEqual([]);
+  for (const minimum of [0, -1, 1.5, 3, NaN, Infinity])
+    expect(
+      tradeSearchBounds(m, {
+        ...q,
+        incoming: { ...q.incoming, minimumSignals: minimum },
+      }).errors.length,
+    ).toBeGreaterThan(0);
+  for (const incoming of [
+    { signals: ["Watch"] },
+    { signals: ["Gem"], minimumSignals: 2 },
+    { positions: ["TE"] },
+    { positions: ["WR"], minimumPositions: 2 },
+  ] as const)
+    expect(
+      tradeSearchContext(m, {
+        ...q,
+        incoming: incoming as unknown as typeof q.incoming,
+      }),
+    ).not.toBe(tradeSearchContext(m, q));
+  expect(
+    tradeSearchBounds(m, {
+      ...q,
+      incoming: { signals: ["Gem", "Gem"] },
+    }).errors.join(),
+  ).toContain("distinct");
+});
 
 // Signed bounds are inclusive and both teams' enabled ranges must pass using the exact unrounded averages.
 it("filters weekly gains with independent inclusive minimums and maximums", () => {

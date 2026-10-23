@@ -22,7 +22,32 @@ self.onmessage = (e: MessageEvent) => {
       key = next;
     }
     // Starter selections are request-specific analysis state; pass them through without changing cached player valuations.
-    if (type === "trade")
+    if (type === "saved-trades") {
+      // Batch saved drafts through one dataset transfer and cached model, preserving the existing evaluator.
+      for (const trade of e.data.trades) {
+        try {
+          self.postMessage({
+            id,
+            savedId: trade.id,
+            result: evaluateTrade(
+              model!,
+              trade.draft,
+              true,
+              filters?.[starterLineupsKey],
+            ),
+          });
+        } catch (error) {
+          self.postMessage({
+            id,
+            savedId: trade.id,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Saved trade calculation failed",
+          });
+        }
+      }
+    } else if (type === "trade")
       self.postMessage({
         id,
         result: evaluateTrade(

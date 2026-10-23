@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
-import { str, type Draft, type Position } from "../domain/contracts";
+import { positions, str, type Draft, type Position } from "../domain/contracts";
+import {
+  summaryFromSearch,
+  type SavedTradeSummary,
+} from "../domain/saved-trades";
 import type { Model } from "../domain/valuation";
 import { readStarterLineup } from "../domain/starter-lineups";
 import {
@@ -15,6 +19,7 @@ import {
   type SearchStats,
   type UpgradeFilter,
   type WeeklyRange,
+  type TradeSearchQuery,
 } from "../domain/trade-search";
 import { Panel } from "../ui/layout";
 import { PlayerName } from "../ui/PlayerName";
@@ -39,16 +44,31 @@ export function TradeSearch({
   draft,
   lineupsRaw,
   change,
+  save,
+  onQueryChange,
+  restore,
 }: {
   m: Model;
   draft: Draft;
   lineupsRaw?: string;
   change: (draft: Draft) => void;
+  save?: (
+    draft: Draft,
+    summary: SavedTradeSummary,
+    query: TradeSearchQuery,
+  ) => void;
+  onQueryChange?: (query: TradeSearchQuery) => void;
+  restore?: { id: string; query: TradeSearchQuery };
 }) {
   const [below, setBelow] = useState("5"),
     [above, setAbove] = useState("5");
   const [packages, setPackages] = useState(false),
     [count, setCount] = useState(2);
+  // Empty selections disable each category; active categories count only the same qualifying incoming players.
+  const [signals, setSignals] = useState<("Gem" | "Watch")[]>([]),
+    [incomingPositions, setIncomingPositions] = useState<Position[]>([]),
+    [minimumSignals, setMinimumSignals] = useState("1"),
+    [minimumPositions, setMinimumPositions] = useState("1");
   // Keep optional fit controls local and disabled by default, like the existing search controls.
   const [upgradeOnly, setUpgradeOnly] = useState(false),
     [upgradeMode, setUpgradeMode] = useState<UpgradeFilter["mode"]>("starter"),
@@ -95,12 +115,25 @@ export function TradeSearch({
           maximum: range.maximum.trim() ? Number(range.maximum) : null,
         }
       : undefined;
-  const query = {
+  const query: TradeSearchQuery = {
     teamA: draft.teamA,
     give: draft.give,
     count: packages ? count : 1,
     below: parseOffset(below),
     above: parseOffset(above),
+    incoming:
+      signals.length || incomingPositions.length
+        ? {
+            signals,
+            positions: incomingPositions,
+            ...(signals.length
+              ? { minimumSignals: parseOffset(minimumSignals) }
+              : {}),
+            ...(incomingPositions.length
+              ? { minimumPositions: parseOffset(minimumPositions) }
+              : {}),
+          }
+        : undefined,
     upgrade: upgradeOnly
       ? {
           mode: upgradeMode,
@@ -136,6 +169,48 @@ export function TradeSearch({
   const stale = !!job && (job.status === "stale" || job.context !== context);
   const running = !stale && job?.status === "running";
   const starter = readStarterLineup(m, draft.teamA, lineupsRaw);
+
+  // Parent saves capture the current query without persisting temporary result rows on every search.
+  useEffect(() => {
+    onQueryChange?.(query);
+  }, [JSON.stringify(query), onQueryChange]);
+  // Explicit saved-trade loading restores every search control; ordinary rerenders never reset user edits.
+  useEffect(() => {
+    if (!restore) return;
+    const q = restore.query;
+    setBelow(String(q.below));
+    setAbove(String(q.above));
+    setPackages(q.count !== 1);
+    setCount(q.count);
+    setUpgradeOnly(!!q.upgrade);
+    setUpgradeMode(q.upgrade?.mode ?? "starter");
+    setMinimumUpgrade(String(q.upgrade?.minimum ?? 1));
+    setRequiredUpgrades(
+      String(
+        q.upgrade?.mode === "best"
+          ? (q.upgrade.requiredBest ?? 1)
+          : q.upgrade?.mode === "depth"
+            ? (q.upgrade.requiredBench ?? 1)
+            : (q.upgrade?.requiredStarters ?? 1),
+      ),
+    );
+    setRequiredStarters(String(q.upgrade?.requiredStarters ?? 1));
+    setRequiredBench(String(q.upgrade?.requiredBench ?? 0));
+    setDeficitOnly(!!q.deficit);
+    setDeficitPosition(q.deficit?.position ?? "");
+    setDeficitCeiling(q.deficit?.ceiling ?? "C+");
+    const range = (r?: WeeklyRange) => ({
+      enabled: !!r,
+      minimum: r?.minimum == null ? "" : String(r.minimum),
+      maximum: r?.maximum == null ? "" : String(r.maximum),
+    });
+    setOwnWeekly(range(q.weekly?.own));
+    setOtherWeekly(range(q.weekly?.other));
+    setSignals(q.incoming?.signals ?? []);
+    setIncomingPositions(q.incoming?.positions ?? []);
+    setMinimumSignals(String(q.incoming?.minimumSignals ?? 1));
+    setMinimumPositions(String(q.incoming?.minimumPositions ?? 1));
+  }, [restore?.id]);
 
   // Relevant input changes and unmount terminate synchronous worker work; stale rows cannot be loaded.
   useEffect(() => {
@@ -505,6 +580,82 @@ export function TradeSearch({
           </label>
         )}
       </div>
+      {/* Incoming categories combine with all existing criteria and count the same matching players. */}
+      <fieldset>
+        <legend>Incoming player filters</legend>
+        <div className="toolbar">
+          {(["Gem", "Watch"] as const).map((label) => (
+            <label className="check" key={label}>
+              <input
+                type="checkbox"
+                checked={signals.includes(label)}
+                onChange={(e) =>
+                  setSignals(
+                    e.target.checked
+                      ? [...signals, label]
+                      : signals.filter((s) => s !== label),
+                  )
+                }
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        {signals.length > 0 && (
+          <label className="control">
+            <span>Minimum incoming Gem/Watch matches</span>
+            <input
+              type="number"
+              min="1"
+              max={query.count}
+              step="1"
+              value={minimumSignals}
+              onChange={(e) => setMinimumSignals(e.target.value)}
+            />
+          </label>
+        )}
+        <div className="toolbar">
+          {positions.map((position) => (
+            <label className="check" key={position}>
+              <input
+                type="checkbox"
+                aria-label={`Receive ${position}`}
+                checked={incomingPositions.includes(position)}
+                onChange={(e) =>
+                  setIncomingPositions(
+                    e.target.checked
+                      ? [...incomingPositions, position]
+                      : incomingPositions.filter((p) => p !== position),
+                  )
+                }
+              />
+              {position}
+            </label>
+          ))}
+        </div>
+        {incomingPositions.length > 0 && (
+          <label className="control">
+            <span>Minimum incoming position matches</span>
+            <input
+              type="number"
+              min="1"
+              max={query.count}
+              step="1"
+              value={minimumPositions}
+              onChange={(e) => setMinimumPositions(e.target.value)}
+            />
+          </label>
+        )}
+        <p>
+          <small>
+            No selections means no restriction. Gem and Watch selections match
+            either label; positions match any selected position. Each counted
+            player must satisfy every enabled incoming category. Gem/Watch
+            currently classify RB, WR and TE only. Existing result ranking is
+            unchanged.
+          </small>
+        </p>
+      </fieldset>
       {/* Qualify teams using current positional needs; keep this separate from net trade impact and index bounds. */}
       <div className="trade-search-controls">
         <label className="check">
@@ -802,6 +953,17 @@ export function TradeSearch({
                     <tr key={row.key}>
                       <td>
                         {names(row.get)}
+                        {/* Display existing primary labels and positions so incoming-filter matches can be inspected. */}
+                        {query.incoming && (
+                          <small>
+                            {row.get
+                              .map((id) => {
+                                const p = m.byId.get(id)!;
+                                return `${p.name}: ${p.pos}, ${p.gem}`;
+                              })
+                              .join("; ")}
+                          </small>
+                        )}
                         <small>
                           {str(
                             m.dataset.tables.ModelTeams.find(
@@ -1038,6 +1200,35 @@ export function TradeSearch({
                         >
                           Load trade
                         </button>
+                        {save && (
+                          <button
+                            className="subtle"
+                            disabled={
+                              stale ||
+                              job.status !== "complete" ||
+                              bounds.errors.length > 0
+                            }
+                            onClick={() => {
+                              if (
+                                !stale &&
+                                job.status === "complete" &&
+                                !bounds.errors.length
+                              )
+                                save(
+                                  {
+                                    teamA: query.teamA,
+                                    teamB: row.teamB,
+                                    give: [...query.give],
+                                    get: [...row.get],
+                                  },
+                                  summaryFromSearch(row),
+                                  query,
+                                );
+                            }}
+                          >
+                            Save trade
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -1046,12 +1237,21 @@ export function TradeSearch({
             </div>
             {job.total === 0 && (
               <p>
-                {query.weekly || query.deficit || query.upgrade
+                {query.weekly ||
+                query.deficit ||
+                query.upgrade ||
+                query.incoming
                   ? "No packages match this index range, incoming count and active filters."
                   : "No packages match this index range and incoming count."}
               </p>
             )}
             {/* Report post-evaluation filtering separately from index/positional eligibility. */}
+            {job.stats?.incomingExcluded !== undefined && (
+              <p>
+                Packages excluded by incoming player filters:{" "}
+                {job.stats.incomingExcluded}.
+              </p>
+            )}
             {job.stats?.weeklyExcluded !== undefined && (
               <p>
                 Trades excluded by weekly-gain limits:{" "}

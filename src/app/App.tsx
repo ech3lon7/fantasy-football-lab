@@ -1,4 +1,5 @@
 import { starterLineupsKey } from "../domain/starter-lineups";
+import { reconcileSavedTrades, savedTradesKey } from "../domain/saved-trades";
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
   LayoutDashboard,
@@ -114,6 +115,8 @@ export default function App() {
     saveQueue = useRef(Promise.resolve()),
     syncBusy = useRef(false);
   function commit(next: Workspace | null) {
+    // Ownership cleanup runs for local loads, imports and cloud adoption, including outside Trade Analyzer.
+    next = reconcileSavedTrades(next);
     wRef.current = next;
     setW(next);
     if (next)
@@ -248,7 +251,7 @@ export default function App() {
       }
       commit(next);
       setConflict(undefined);
-      setSyncStatus("Synced");
+      setSyncStatus(wRef.current?.pendingState ? "Changes pending" : "Synced");
     } catch (e) {
       if (e instanceof Conflict) {
         setConflict(e.remote);
@@ -629,7 +632,11 @@ export default function App() {
                     onClick={() => {
                       commit(conflict);
                       setConflict(undefined);
-                      setSyncStatus("Synced");
+                      setSyncStatus(
+                        wRef.current?.pendingState
+                          ? "Changes pending"
+                          : "Synced",
+                      );
                     }}
                   >
                     Use cloud workspace
@@ -704,6 +711,16 @@ export default function App() {
                   key={w.owner}
                   m={model}
                   draft={w.state.draft}
+                  state={w.state}
+                  // Merge only this account-state key against the latest workspace, preserving unrelated filters.
+                  saveTrades={(raw) =>
+                    updateState({
+                      filters: {
+                        ...wRef.current!.state.filters,
+                        [savedTradesKey]: raw,
+                      },
+                    })
+                  }
                   lineupsRaw={w.state.filters[starterLineupsKey]}
                   change={(draft) => updateState({ draft })}
                 />

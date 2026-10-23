@@ -21,6 +21,14 @@ Choose signals (OR), or clear them for **Any signal**; enter numeric thresholds 
 
 Trend compares the latest three played games with earlier games. Index bounds are inclusive and describe model surplus, not a market price. Blank thresholds are inactive; zero is a real value. **Advanced filters** adds games played, projection gap, above replacement, and a separate incomplete-evidence view. Matching evidence explains each result. **Reset screener** restores the original search defaults without changing model settings or other screens. Applied searches save locally and use the existing **Sync now** workflow for other devices; unapplied edits are not saved. These screening thresholds remain provisional.
 
+## Trade-search filters and saved trades
+
+In **Trade analyzer → Find matching trades**, select incoming **Gem** and/or **Watch** and any positions, then set the minimum matching players for each enabled category. Selecting both signals matches either label; positions also match any selected position. When both categories are enabled, the same incoming players must satisfy both. Empty categories impose no restriction. Existing index, positional-upgrade, deficit and weekly-gain filters still apply, and result ranking is unchanged.
+
+Choose **Save trade** on a completed search result or **Save current trade** in the analyzer. Expand the **Saved trades** entry to edit its name/notes, compare the original and current results, load its teams/players/search settings, or delete it. Duplicate packages update the existing entry while keeping the original summary, name and notes. Current results recalculate from imported data and settings; ownership-invalid trades are removed automatically. Other-season records retain their original summaries without applying current-season ownership rules.
+
+Saved trades use the existing local/account state and **Sync now** workflow; no workbooks or extra database tables are stored. The shared state-size limit includes saved trades, notes and existing settings. An explicit storage-full message asks you to shorten notes or remove records if another save would exceed it. Saving/loading never sends an ESPN trade.
+
 ## Development
 
 ```sh
