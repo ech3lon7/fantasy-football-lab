@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
+import { starterLineupsKey } from "../../src/domain/starter-lineups";
 import {
   initialState,
   type Dataset,
@@ -57,6 +58,37 @@ async function seed(page: Page) {
   ).toBeVisible();
 }
 
+// Read the committed local workspace: an optimistic on-screen update does not mean the queued IndexedDB save has finished.
+async function storedStarterState(page: Page) {
+  return page.evaluate(async (key) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("fantasy-football-lab", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const workspace = await new Promise<Workspace>((resolve, reject) => {
+        const request = db
+          .transaction("current")
+          .objectStore("current")
+          .get("local");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const raw = workspace.state.filters[key];
+      return {
+        starters: raw
+          ? (JSON.parse(raw).teams[workspace.state.preferredTeam]?.starters ??
+            [])
+          : [],
+        playersSearch: workspace.state.filters.playersSearch,
+      };
+    } finally {
+      db.close();
+    }
+  }, starterLineupsKey);
+}
+
 // Saving app choices validates slots, survives reload and reset, and retains unrelated filter state.
 test("starter controls save, enforce QB limits, reset, and fit a mobile screen", async ({
   page,
@@ -97,6 +129,13 @@ test("starter controls save, enforce QB limits, reset, and fit a mobile screen",
   await expect(
     editor.getByText(/Lineup source: Saved app lineup/),
   ).toBeVisible();
+  // Wait for the real write, preserving the original reload assertion instead of racing the browser's save queue in CI.
+  await expect
+    .poll(() => storedStarterState(page))
+    .toEqual({
+      starters: ["1", "101"],
+      playersSearch: "retain-me",
+    });
   await page.reload();
   await expect(
     editor.getByRole("combobox", {
@@ -120,6 +159,26 @@ test("starter controls save, enforce QB limits, reset, and fit a mobile screen",
   await editor
     .getByRole("button", { name: "Reset to imported lineup", exact: true })
     .click();
+  await expect(
+    editor.getByRole("combobox", {
+      name: "Lineup status: Main QB",
+      exact: true,
+    }),
+  ).toHaveValue("Starter");
+  await expect(
+    editor.getByRole("combobox", {
+      name: "Lineup status: Bench QB",
+      exact: true,
+    }),
+  ).toHaveValue("Bench");
+  // Reset must also be committed and survive reload without deleting unrelated saved filters.
+  await expect
+    .poll(() => storedStarterState(page))
+    .toEqual({
+      starters: [],
+      playersSearch: "retain-me",
+    });
+  await page.reload();
   await expect(
     editor.getByRole("combobox", {
       name: "Lineup status: Main QB",
