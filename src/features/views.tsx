@@ -1,5 +1,11 @@
 import { FilterHelp } from "../ui/FilterHelp";
 import { GemEvidence } from "../ui/GemEvidence";
+// Prospective tracking is an isolated read-only audit, not another input to the valuation model.
+import { GemTracking } from "./GemTracking";
+import type { GemTrackingState } from "../domain/gem-tracking";
+// Label audit is read-only metadata; it cannot change the current model, filters or stored settings.
+import { historicalLabelAudit } from "../domain/historical-label-reference";
+import { effectiveLabelRules } from "../domain/label-rules";
 import { StarterLineupEditor } from "./StarterLineupEditor";
 // Trade discovery delegates scoring to its own worker without changing the existing analyzer.
 import { TradeSearch } from "./TradeSearch";
@@ -13,7 +19,7 @@ import {
 import type { TradeSearchQuery } from "../domain/trade-search";
 import type { AppState } from "../domain/contracts";
 import { starterLineupsKey } from "../domain/starter-lineups";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import {
   Upload,
   ArrowUpRight,
@@ -428,6 +434,11 @@ export function PlayerList({
   filters: Record<string, string>;
   onFilters: (p: Record<string, string>) => void;
 }) {
+  // Keep partially typed comparison names local; only resolved player IDs enter the existing saved comparison.
+  const comparisonListId = useId();
+  const [comparisonNames, setComparisonNames] = useState<
+    Record<number, { text: string; id: string; hash: string }>
+  >({});
   const query = filters.playerQuery ?? "",
     pos = filters.playerPos ?? "All",
     owner = filters.playerOwner ?? "All",
@@ -447,6 +458,8 @@ export function PlayerList({
         ? owner === "All" || p.owner === "0"
         : p.owner === owner),
   );
+  // Suggestion labels disambiguate duplicate names while a unique full name can also be typed directly.
+  const comparisonLabel = (p: Player) => `${p.name} · ${p.pos} · ${p.id}`;
   return (
     <>
       <div className="toolbar">
@@ -518,36 +531,67 @@ export function PlayerList({
       </div>
       <Panel
         title="Player comparison"
-        note="Select up to three players. ESPN PPG is the season forecast."
+        note="Type a player name or choose a suggestion for up to three players. ESPN PPG is the season forecast."
       >
         <div className="three-col">
-          {[0, 1, 2].map((i) => (
-            <Select
-              key={i}
-              label={`Player ${i + 1}`}
-              value={compare[i] ?? ""}
-              change={(id) =>
-                setCompare((a) => {
-                  const next = [...a];
-                  next[i] = id;
-                  return next;
-                })
-              }
-            >
-              <option value="">Choose player</option>
-              {m.players
-                .filter(
-                  (p) =>
-                    !query ||
-                    p.name.toLowerCase().includes(query.toLowerCase()),
-                )
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} · {p.pos}
-                  </option>
-                ))}
-            </Select>
-          ))}
+          {[0, 1, 2].map((i) => {
+            const id = compare[i] ?? "",
+              selected = m.byId.get(id),
+              draft = comparisonNames[i];
+            // Restored selections or a replacement dataset take precedence over an older local typing draft.
+            const text =
+              draft?.id === id && draft.hash === m.dataset.hash
+                ? draft.text
+                : selected
+                  ? comparisonLabel(selected)
+                  : "";
+            return (
+              <FilterHelp
+                key={i}
+                label={`Player ${i + 1}`}
+                help="Type part of a name and choose a suggestion, or enter a unique full name. Each comparison searches the whole player pool independently. Clear the field to remove that player."
+              >
+                <label className="control">
+                  <span>Player {i + 1}</span>
+                  <input
+                    type="search"
+                    list={`${comparisonListId}-${i}`}
+                    placeholder="Type a player name…"
+                    autoComplete="off"
+                    value={text}
+                    onChange={(e) => {
+                      const name = e.target.value,
+                        normalized = name.trim().toLowerCase(),
+                        exact = m.players.filter(
+                          (p) => p.name.toLowerCase() === normalized,
+                        );
+                      // Ambiguous or unfinished text never becomes a guessed player or leaves stale comparison stats visible.
+                      const match =
+                        m.players.find(
+                          (p) =>
+                            comparisonLabel(p).toLowerCase() === normalized,
+                        ) ?? (exact.length === 1 ? exact[0] : undefined);
+                      const nextId = match?.id ?? "";
+                      setComparisonNames((names) => ({
+                        ...names,
+                        [i]: { text: name, id: nextId, hash: m.dataset.hash },
+                      }));
+                      setCompare((a) => {
+                        const next = [...a];
+                        next[i] = nextId;
+                        return next;
+                      });
+                    }}
+                  />
+                  <datalist id={`${comparisonListId}-${i}`}>
+                    {m.players.map((p) => (
+                      <option key={p.id} value={comparisonLabel(p)} />
+                    ))}
+                  </datalist>
+                </label>
+              </FilterHelp>
+            );
+          })}
         </div>
         {compare.filter(Boolean).length > 0 && (
           <DataTable
@@ -2289,11 +2333,16 @@ function Depth({
 export function ModelView({
   m,
   change,
+  tracking = null,
 }: {
   m: Model;
   change: (s: Settings) => void;
+  tracking?: Promise<GemTrackingState> | null;
 }) {
   const [message, setMessage] = useState("");
+  // Build compact method context from aggregate-only evidence and the same effective settings used by classification.
+  const labelAudit = historicalLabelAudit(m);
+  const labelRules = effectiveLabelRules(m.settings);
   const settingLabels: Record<string, string> = {
     PriorGames: "Prior games for forecast confidence",
     RecentWeight: "Recent PPG weight",
@@ -2351,6 +2400,117 @@ export function ModelView({
           consistency. Surplus index measures value above available
           replacements.
         </p>
+      </Panel>
+      {/* Automatic dated comparisons remain separate from current settings, historical summaries and live labels. */}
+      <GemTracking tracking={tracking} />
+      {/* Keep research and rule inventories collapsed while preserving the existing settings and baseline workflow. */}
+      <Panel title="Player-label evidence" note={labelAudit.version}>
+        <p>{labelAudit.status}</p>
+        <details>
+          <summary>Historical label research</summary>
+          <p>{labelAudit.outcome}</p>
+          <p>{labelAudit.volume}</p>
+          <DataTable
+            rows={labelAudit.rows}
+            id={(r) => r.id}
+            columns={[
+              { key: "tag", label: "Label", value: (r) => r.tag },
+              { key: "unit", label: "Unit", value: (r) => r.unit },
+              {
+                key: "sample",
+                label: "Successes / labels",
+                kind: "fact",
+                value: (r) => r.sample,
+              },
+              {
+                key: "rate",
+                label: "Historical rate",
+                kind: "fact",
+                value: (r) => r.rate,
+              },
+              {
+                key: "base",
+                label: "Matched base rate",
+                kind: "fact",
+                value: (r) => r.base,
+              },
+              {
+                key: "lift",
+                label: "Lift over base",
+                kind: "fact",
+                value: (r) => r.lift,
+              },
+              {
+                key: "volume",
+                label: "Label volume",
+                kind: "fact",
+                value: (r) => r.volume,
+              },
+              {
+                key: "followup",
+                label: "Missing outcomes",
+                value: (r) => r.followup,
+              },
+              {
+                key: "seasons",
+                label: "Successes / labels by season",
+                value: (r) => r.seasons,
+              },
+            ]}
+          />
+          <p>
+            <small>{labelAudit.baseline}</small>
+          </p>
+          <p>{labelAudit.scoring}</p>
+          <p>
+            <small>{labelAudit.limitations}</small>
+          </p>
+          {/* Fingerprints are unbroken identifiers; wrap this new audit line so it cannot widen the mobile page. */}
+          <p style={{ overflowWrap: "anywhere" }}>
+            <small>
+              Evidence binding: {labelAudit.binding.researchSHA256}; aggregate:{" "}
+              {labelAudit.binding.aggregateSHA256}.
+            </small>
+          </p>
+        </details>
+        <details>
+          <summary>Active label rules and parameters</summary>
+          <p>{labelAudit.policy}</p>
+          <DataTable
+            rows={labelRules}
+            id={(r) => r.id}
+            columns={[
+              { key: "id", label: "Rule", value: (r) => r.id },
+              {
+                key: "positions",
+                label: "Positions",
+                value: (r) => r.positions,
+              },
+              {
+                key: "window",
+                label: "Windows / routes",
+                value: (r) => r.window,
+              },
+              {
+                key: "parameters",
+                label: "Effective parameters",
+                kind: "model",
+                value: (r) =>
+                  r.parameters
+                    .map(
+                      (p) =>
+                        `${p.id}: ${p.operator} ${p.value} ${p.unit} (${p.binding})`,
+                    )
+                    .join("; "),
+              },
+              {
+                key: "evidence",
+                label: "Evidence status",
+                value: (r) => r.evidence,
+              },
+            ]}
+          />
+        </details>
       </Panel>
       <Panel
         title="Replacement baseline audit"

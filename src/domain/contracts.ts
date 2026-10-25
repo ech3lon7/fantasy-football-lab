@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { labelSettingDefaults } from "./label-rules";
 export const MODEL_VERSION = "v5.2-port-1";
 export const positions = ["QB", "RB", "WR", "TE", "K", "D/ST"] as const;
 export type Position = (typeof positions)[number];
@@ -24,7 +25,7 @@ export const defaults = {
   ConsistencyCoefficient: 0.1,
   ConsistencyCap: 0.1,
   MinConsistencyGames: 4,
-  MinOpportunity: 10,
+  MinOpportunity: labelSettingDefaults.MinOpportunity,
   CarriesPerTD: 32.5,
   TargetsPerTD: 11,
   Premium: 0.3,
@@ -33,19 +34,20 @@ export const defaults = {
   StealPct: 0.5,
   BadLossPct: 0.2,
   HorribleLossPct: 0.5,
-  GemMinGames: 4,
-  GemMinGap: 2,
-  GemMinGapPct: 0.2,
-  GemMinPriorGames: 2,
-  GemTrendFloor: 1,
-  GemTrendPctFloor: 0.1,
-  GemWRTargets: 6,
-  GemWRShare: 0.18,
-  GemTETargets: 5,
-  GemTEShare: 0.1,
-  GemRBOpportunities: 12,
-  GemRBRushShare: 0.3,
-  GemRBTargetShare: 0.1,
+  // Label defaults have one owner; existing imported/saved settings still override them.
+  GemMinGames: labelSettingDefaults.GemMinGames,
+  GemMinGap: labelSettingDefaults.GemMinGap,
+  GemMinGapPct: labelSettingDefaults.GemMinGapPct,
+  GemMinPriorGames: labelSettingDefaults.GemMinPriorGames,
+  GemTrendFloor: labelSettingDefaults.GemTrendFloor,
+  GemTrendPctFloor: labelSettingDefaults.GemTrendPctFloor,
+  GemWRTargets: labelSettingDefaults.GemWRTargets,
+  GemWRShare: labelSettingDefaults.GemWRShare,
+  GemTETargets: labelSettingDefaults.GemTETargets,
+  GemTEShare: labelSettingDefaults.GemTEShare,
+  GemRBOpportunities: labelSettingDefaults.GemRBOpportunities,
+  GemRBRushShare: labelSettingDefaults.GemRBRushShare,
+  GemRBTargetShare: labelSettingDefaults.GemRBTargetShare,
   ReserveCutoff: 0.1,
   GradeDMinus: -0.35,
   GradeD: -0.3,

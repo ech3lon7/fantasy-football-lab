@@ -1,0 +1,765 @@
+{
+  "version": "historical-label-context-1",
+  "classifierVersion": "automatic-breakout-3",
+  "registryVersion": "label-rules-1",
+  "sourceSHA256": "56eaabea545a89ed0afaa5867d84e22d56872d323875da95afeb35c65a900283",
+  "researchSHA256": "27fb606b7b619c82c8d9e4653f8e7f901bff3c89714c1b132b0e68f8f0fa6aa3",
+  "seasons": [
+    2023,
+    2024,
+    2025
+  ],
+  "observedScoringWeights": {
+    "3": 0.04,
+    "4": 4.0,
+    "19": 2.0,
+    "20": -2.0,
+    "24": 0.1,
+    "25": 6.0,
+    "26": 2.0,
+    "42": 0.1,
+    "43": 6.0,
+    "44": 2.0,
+    "53": 1.0,
+    "63": 6.0,
+    "72": -2.0,
+    "80": 3.0,
+    "93": 6.0,
+    "96": 0.0,
+    "97": 0.0,
+    "99": 0.0,
+    "101": 6.0,
+    "102": 6.0,
+    "104": 6.0
+  },
+  "references": [
+    {
+      "position": "QB",
+      "metric": "recentPPG",
+      "unit": "PPG",
+      "observations": 76,
+      "players": 24,
+      "playerSeasons": 39,
+      "bySeason": {
+        "2023": 24,
+        "2024": 26,
+        "2025": 26
+      },
+      "mean": 20.904298245614036,
+      "p10": 16.24666666666667,
+      "p25": 18.198333333333334,
+      "median": 21.0,
+      "p75": 22.956666666666667,
+      "p90": 25.77
+    },
+    {
+      "position": "QB",
+      "metric": "seasonPPG",
+      "unit": "PPG",
+      "observations": 76,
+      "players": 24,
+      "playerSeasons": 39,
+      "bySeason": {
+        "2023": 24,
+        "2024": 26,
+        "2025": 26
+      },
+      "mean": 20.705107655502392,
+      "p10": 18.4675,
+      "p25": 19.501136363636363,
+      "median": 20.387954545454548,
+      "p75": 21.847727272727273,
+      "p90": 23.38
+    },
+    {
+      "position": "QB",
+      "metric": "workload",
+      "unit": "/game",
+      "observations": 76,
+      "players": 24,
+      "playerSeasons": 39,
+      "bySeason": {
+        "2023": 24,
+        "2024": 26,
+        "2025": 26
+      },
+      "mean": 5.530701754385965,
+      "p10": 2.166666666666667,
+      "p25": 3.6666666666666665,
+      "median": 5.333333333333333,
+      "p75": 7.333333333333333,
+      "p90": 9.333333333333334
+    },
+    {
+      "position": "QB",
+      "metric": "carries",
+      "unit": "carries/game",
+      "observations": 76,
+      "players": 24,
+      "playerSeasons": 39,
+      "bySeason": {
+        "2023": 24,
+        "2024": 26,
+        "2025": 26
+      },
+      "mean": 5.530701754385965,
+      "p10": 2.166666666666667,
+      "p25": 3.6666666666666665,
+      "median": 5.333333333333333,
+      "p75": 7.333333333333333,
+      "p90": 9.333333333333334
+    },
+    {
+      "position": "QB",
+      "metric": "watchGrowth",
+      "unit": "/game",
+      "observations": 48,
+      "players": 19,
+      "playerSeasons": 29,
+      "bySeason": {
+        "2023": 14,
+        "2024": 17,
+        "2025": 17
+      },
+      "mean": -0.06944444444444445,
+      "p10": -3.6666666666666665,
+      "p25": -1.3333333333333324,
+      "median": 0.33333333333333315,
+      "p75": 1.3333333333333333,
+      "p90": 2.1000000000000014
+    },
+    {
+      "position": "QB",
+      "metric": "roleGrowth",
+      "unit": "/game",
+      "observations": 48,
+      "players": 19,
+      "playerSeasons": 29,
+      "bySeason": {
+        "2023": 14,
+        "2024": 17,
+        "2025": 17
+      },
+      "mean": -0.507093253968254,
+      "p10": -3.3666666666666663,
+      "p25": -1.78125,
+      "median": 0.02083333333333326,
+      "p75": 0.8675595238095244,
+      "p90": 1.3533333333333335
+    },
+    {
+      "position": "QB",
+      "metric": "scoringTrend",
+      "unit": "PPG",
+      "observations": 48,
+      "players": 19,
+      "playerSeasons": 29,
+      "bySeason": {
+        "2023": 14,
+        "2024": 17,
+        "2025": 17
+      },
+      "mean": 0.6319619708979164,
+      "p10": -5.018666666666667,
+      "p25": -2.625763888891668,
+      "median": 0.5308333333333337,
+      "p75": 3.307666666666666,
+      "p90": 6.464000000000002
+    },
+    {
+      "position": "RB",
+      "metric": "recentPPG",
+      "unit": "PPG",
+      "observations": 175,
+      "players": 42,
+      "playerSeasons": 77,
+      "bySeason": {
+        "2023": 55,
+        "2024": 64,
+        "2025": 56
+      },
+      "mean": 17.329638095238096,
+      "p10": 11.846666666666668,
+      "p25": 13.833333333333332,
+      "median": 16.633333333333333,
+      "p75": 20.35,
+      "p90": 23.713333333333328
+    },
+    {
+      "position": "RB",
+      "metric": "seasonPPG",
+      "unit": "PPG",
+      "observations": 175,
+      "players": 42,
+      "playerSeasons": 77,
+      "bySeason": {
+        "2023": 55,
+        "2024": 64,
+        "2025": 56
+      },
+      "mean": 17.252506988249845,
+      "p10": 13.825454545454546,
+      "p25": 14.510416666666666,
+      "median": 16.2,
+      "p75": 19.43482142857143,
+      "p90": 22.356
+    },
+    {
+      "position": "RB",
+      "metric": "workload",
+      "unit": "/game",
+      "observations": 175,
+      "players": 42,
+      "playerSeasons": 77,
+      "bySeason": {
+        "2023": 55,
+        "2024": 64,
+        "2025": 56
+      },
+      "mean": 19.56,
+      "p10": 15.333333333333334,
+      "p25": 17.333333333333332,
+      "median": 19.333333333333332,
+      "p75": 22.0,
+      "p90": 24.333333333333332
+    },
+    {
+      "position": "RB",
+      "metric": "targets",
+      "unit": "targets/game",
+      "observations": 175,
+      "players": 42,
+      "playerSeasons": 77,
+      "bySeason": {
+        "2023": 55,
+        "2024": 64,
+        "2025": 56
+      },
+      "mean": 3.775238095238095,
+      "p10": 1.6666666666666667,
+      "p25": 2.3333333333333335,
+      "median": 3.6666666666666665,
+      "p75": 4.666666666666667,
+      "p90": 6.1999999999999975
+    },
+    {
+      "position": "RB",
+      "metric": "carries",
+      "unit": "carries/game",
+      "observations": 175,
+      "players": 42,
+      "playerSeasons": 77,
+      "bySeason": {
+        "2023": 55,
+        "2024": 64,
+        "2025": 56
+      },
+      "mean": 15.784761904761904,
+      "p10": 11.8,
+      "p25": 13.5,
+      "median": 15.666666666666666,
+      "p75": 18.0,
+      "p90": 19.666666666666668
+    },
+    {
+      "position": "RB",
+      "metric": "watchGrowth",
+      "unit": "/game",
+      "observations": 114,
+      "players": 36,
+      "playerSeasons": 65,
+      "bySeason": {
+        "2023": 36,
+        "2024": 43,
+        "2025": 35
+      },
+      "mean": -0.4429824561403507,
+      "p10": -6.899999999999998,
+      "p25": -3.6666666666666656,
+      "median": -0.6666666666666643,
+      "p75": 2.583333333333334,
+      "p90": 5.666666666666666
+    },
+    {
+      "position": "RB",
+      "metric": "roleGrowth",
+      "unit": "/game",
+      "observations": 114,
+      "players": 36,
+      "playerSeasons": 65,
+      "bySeason": {
+        "2023": 36,
+        "2024": 43,
+        "2025": 35
+      },
+      "mean": -0.10596978557504867,
+      "p10": -5.498333333333333,
+      "p25": -2.695833333333331,
+      "median": -0.06666666666666643,
+      "p75": 2.3368055555555554,
+      "p90": 4.769444444444444
+    },
+    {
+      "position": "RB",
+      "metric": "scoringTrend",
+      "unit": "PPG",
+      "observations": 114,
+      "players": 36,
+      "playerSeasons": 65,
+      "bySeason": {
+        "2023": 36,
+        "2024": 43,
+        "2025": 35
+      },
+      "mean": -0.29446567808508767,
+      "p10": -7.5515238095366675,
+      "p25": -4.210416666666667,
+      "median": -0.9416666666666673,
+      "p75": 3.20625,
+      "p90": 7.2183333333333355
+    },
+    {
+      "position": "WR",
+      "metric": "recentPPG",
+      "unit": "PPG",
+      "observations": 204,
+      "players": 61,
+      "playerSeasons": 105,
+      "bySeason": {
+        "2023": 72,
+        "2024": 64,
+        "2025": 68
+      },
+      "mean": 17.014444444444443,
+      "p10": 11.27,
+      "p25": 13.908333333333331,
+      "median": 16.31666666666667,
+      "p75": 19.658333333333335,
+      "p90": 23.730000000000004
+    },
+    {
+      "position": "WR",
+      "metric": "seasonPPG",
+      "unit": "PPG",
+      "observations": 204,
+      "players": 61,
+      "playerSeasons": 105,
+      "bySeason": {
+        "2023": 72,
+        "2024": 64,
+        "2025": 68
+      },
+      "mean": 16.829163448207566,
+      "p10": 13.727500000000001,
+      "p25": 14.421527777777778,
+      "median": 15.675,
+      "p75": 18.88452380952381,
+      "p90": 21.21327272727273
+    },
+    {
+      "position": "WR",
+      "metric": "workload",
+      "unit": "/game",
+      "observations": 204,
+      "players": 61,
+      "playerSeasons": 105,
+      "bySeason": {
+        "2023": 72,
+        "2024": 64,
+        "2025": 68
+      },
+      "mean": 8.65032679738562,
+      "p10": 6.0,
+      "p25": 7.333333333333333,
+      "median": 8.333333333333334,
+      "p75": 10.0,
+      "p90": 11.666666666666666
+    },
+    {
+      "position": "WR",
+      "metric": "targets",
+      "unit": "targets/game",
+      "observations": 204,
+      "players": 61,
+      "playerSeasons": 105,
+      "bySeason": {
+        "2023": 72,
+        "2024": 64,
+        "2025": 68
+      },
+      "mean": 8.65032679738562,
+      "p10": 6.0,
+      "p25": 7.333333333333333,
+      "median": 8.333333333333334,
+      "p75": 10.0,
+      "p90": 11.666666666666666
+    },
+    {
+      "position": "WR",
+      "metric": "watchGrowth",
+      "unit": "/game",
+      "observations": 124,
+      "players": 51,
+      "playerSeasons": 79,
+      "bySeason": {
+        "2023": 44,
+        "2024": 37,
+        "2025": 43
+      },
+      "mean": 0.09005376344086025,
+      "p10": -3.566666666666666,
+      "p25": -1.6666666666666663,
+      "median": -0.08333333333333304,
+      "p75": 2.0,
+      "p90": 4.0
+    },
+    {
+      "position": "WR",
+      "metric": "roleGrowth",
+      "unit": "/game",
+      "observations": 124,
+      "players": 51,
+      "playerSeasons": 79,
+      "bySeason": {
+        "2023": 44,
+        "2024": 37,
+        "2025": 43
+      },
+      "mean": 0.3210701484895033,
+      "p10": -2.928333333333333,
+      "p25": -1.2729166666666667,
+      "median": 0.2916666666666665,
+      "p75": 1.666666666666666,
+      "p90": 3.6166666666666667
+    },
+    {
+      "position": "WR",
+      "metric": "scoringTrend",
+      "unit": "PPG",
+      "observations": 124,
+      "players": 51,
+      "playerSeasons": 79,
+      "bySeason": {
+        "2023": 44,
+        "2024": 37,
+        "2025": 43
+      },
+      "mean": -0.04102956989381717,
+      "p10": -9.410416666666665,
+      "p25": -4.928333333333333,
+      "median": -0.09666666665000001,
+      "p75": 4.897916666641665,
+      "p90": 9.500333333333336
+    },
+    {
+      "position": "TE",
+      "metric": "recentPPG",
+      "unit": "PPG",
+      "observations": 77,
+      "players": 28,
+      "playerSeasons": 45,
+      "bySeason": {
+        "2023": 27,
+        "2024": 26,
+        "2025": 24
+      },
+      "mean": 13.671948051948052,
+      "p10": 9.293333333333335,
+      "p25": 10.833333333333332,
+      "median": 12.833333333333332,
+      "p75": 16.133333333333333,
+      "p90": 19.9
+    },
+    {
+      "position": "TE",
+      "metric": "seasonPPG",
+      "unit": "PPG",
+      "observations": 77,
+      "players": 28,
+      "playerSeasons": 45,
+      "bySeason": {
+        "2023": 27,
+        "2024": 26,
+        "2025": 24
+      },
+      "mean": 12.840985644946684,
+      "p10": 10.352272727272727,
+      "p25": 11.085714285714285,
+      "median": 12.8,
+      "p75": 14.0875,
+      "p90": 15.745000000000003
+    },
+    {
+      "position": "TE",
+      "metric": "workload",
+      "unit": "/game",
+      "observations": 77,
+      "players": 28,
+      "playerSeasons": 45,
+      "bySeason": {
+        "2023": 27,
+        "2024": 26,
+        "2025": 24
+      },
+      "mean": 6.761904761904762,
+      "p10": 4.333333333333333,
+      "p25": 5.666666666666667,
+      "median": 6.666666666666667,
+      "p75": 8.0,
+      "p90": 9.333333333333334
+    },
+    {
+      "position": "TE",
+      "metric": "targets",
+      "unit": "targets/game",
+      "observations": 77,
+      "players": 28,
+      "playerSeasons": 45,
+      "bySeason": {
+        "2023": 27,
+        "2024": 26,
+        "2025": 24
+      },
+      "mean": 6.761904761904762,
+      "p10": 4.333333333333333,
+      "p25": 5.666666666666667,
+      "median": 6.666666666666667,
+      "p75": 8.0,
+      "p90": 9.333333333333334
+    },
+    {
+      "position": "TE",
+      "metric": "watchGrowth",
+      "unit": "/game",
+      "observations": 48,
+      "players": 22,
+      "playerSeasons": 32,
+      "bySeason": {
+        "2023": 18,
+        "2024": 16,
+        "2025": 14
+      },
+      "mean": 0.10416666666666673,
+      "p10": -2.9999999999999996,
+      "p25": -1.4166666666666663,
+      "median": 0.0,
+      "p75": 1.6666666666666679,
+      "p90": 3.333333333333333
+    },
+    {
+      "position": "TE",
+      "metric": "roleGrowth",
+      "unit": "/game",
+      "observations": 48,
+      "players": 22,
+      "playerSeasons": 32,
+      "bySeason": {
+        "2023": 18,
+        "2024": 16,
+        "2025": 14
+      },
+      "mean": 0.6002645502645504,
+      "p10": -1.5266666666666666,
+      "p25": -0.8238095238095243,
+      "median": 0.5222222222222221,
+      "p75": 1.9687500000000004,
+      "p90": 3.345833333333336
+    },
+    {
+      "position": "TE",
+      "metric": "scoringTrend",
+      "unit": "PPG",
+      "observations": 48,
+      "players": 22,
+      "playerSeasons": 32,
+      "bySeason": {
+        "2023": 18,
+        "2024": 16,
+        "2025": 14
+      },
+      "mean": 2.0863508597868052,
+      "p10": -5.123666666666667,
+      "p25": -2.3187500000000005,
+      "median": 2.166666666666666,
+      "p75": 5.166666666666667,
+      "p90": 8.95800000000001
+    }
+  ],
+  "calibration": {
+    "Gem": {
+      "firstAlert": {
+        "labels": 154,
+        "hits": 96,
+        "rate": 0.6233766233766234,
+        "matchedBaseRate": 0.14766972114514976,
+        "lift": 4.221424802203591,
+        "insufficientFollowup": 9,
+        "eligiblePlayerWeeks": 11693,
+        "eligibleHits": 1657,
+        "perSeason": {
+          "2023": {
+            "labels": 51,
+            "hits": 31
+          },
+          "2024": {
+            "labels": 57,
+            "hits": 34
+          },
+          "2025": {
+            "labels": 46,
+            "hits": 31
+          }
+        }
+      },
+      "weekly": {
+        "labels": 494,
+        "hits": 323,
+        "rate": 0.6538461538461539,
+        "matchedBaseRate": 0.1460793663122398,
+        "lift": 4.475965157519778,
+        "insufficientFollowup": 28,
+        "eligiblePlayerWeeks": 11693,
+        "eligibleHits": 1657,
+        "perSeason": {
+          "2023": {
+            "labels": 169,
+            "hits": 102
+          },
+          "2024": {
+            "labels": 169,
+            "hits": 109
+          },
+          "2025": {
+            "labels": 156,
+            "hits": 112
+          }
+        }
+      },
+      "calendarSeasonWeeks": 42,
+      "qualifiableSeasonWeeks": 33
+    },
+    "Watch": {
+      "firstAlert": {
+        "labels": 707,
+        "hits": 179,
+        "rate": 0.2531824611032532,
+        "matchedBaseRate": 0.13734133409415047,
+        "lift": 1.8434542140801626,
+        "insufficientFollowup": 53,
+        "eligiblePlayerWeeks": 16826,
+        "eligibleHits": 2190,
+        "perSeason": {
+          "2023": {
+            "labels": 237,
+            "hits": 63
+          },
+          "2024": {
+            "labels": 241,
+            "hits": 52
+          },
+          "2025": {
+            "labels": 229,
+            "hits": 64
+          }
+        }
+      },
+      "weekly": {
+        "labels": 2431,
+        "hits": 759,
+        "rate": 0.31221719457013575,
+        "matchedBaseRate": 0.1371781756942364,
+        "lift": 2.2759975702407136,
+        "insufficientFollowup": 249,
+        "eligiblePlayerWeeks": 16826,
+        "eligibleHits": 2190,
+        "perSeason": {
+          "2023": {
+            "labels": 789,
+            "hits": 269
+          },
+          "2024": {
+            "labels": 806,
+            "hits": 237
+          },
+          "2025": {
+            "labels": 836,
+            "hits": 253
+          }
+        }
+      },
+      "calendarSeasonWeeks": 42,
+      "qualifiableSeasonWeeks": 42
+    }
+  },
+  "method": {
+    "decisionWeeks": [
+      1,
+      14
+    ],
+    "referenceWeeks": [
+      4,
+      8,
+      12
+    ],
+    "horizonWeeks": 3,
+    "minimumForwardGames": 2,
+    "cohort": "As-of-date modeled starter quality: 9 QB, 18 RB, 18 WR, 9 TE + 9 RB/WR/TE FLEX; at least three played games; last appearance current/previous week.",
+    "quantiles": "Linear interpolation (NumPy linear / Excel PERCENTILE.INC); equal observation weights.",
+    "eligibility": "Recent means: three played games. Watch growth: preceding 2\u20133. Role/scoring growth: all earlier, at least two. Zero/negative scores included.",
+    "baseline": "Within each label observation, eligible same-position player-weeks at the same season/date, with Gem 4+ or Watch 1+ played games; average those base rates using the label observation mix.",
+    "outcome": "Future played-game PPG enters the modeled nine-team starter pool within the next three calendar weeks; fewer than two future appearances counts as failure.",
+    "limitations": "Retrospective, correlated observations; no archived injuries, ownership, ESPN forecasts or verified dated team shares. Not acquisition success or an individual probability. TE evidence is limited. Historical scoring comparisons require matching observed weights; unobserved bonuses cannot be verified.",
+    "referenceWindows": {
+      "recentPPG": "Latest three played games",
+      "seasonPPG": "All played games; at least three",
+      "workload": "Latest three played games",
+      "targets": "Latest three played games",
+      "carries": "Latest three played games",
+      "watchGrowth": "Latest three minus preceding two/three played games",
+      "roleGrowth": "Latest three minus all earlier played games; at least two earlier",
+      "scoringTrend": "Latest three minus all earlier played games; at least two earlier"
+    }
+  },
+  "gemConfiguration": {
+    "growthPct": 0.25,
+    "positions": {
+      "RB": {
+        "mean": 18,
+        "floor": 14,
+        "growth": 3,
+        "points": 16
+      },
+      "WR": {
+        "mean": 7,
+        "floor": 5,
+        "growth": 2,
+        "points": 16
+      },
+      "TE": {
+        "mean": 6,
+        "floor": 5,
+        "growth": 2,
+        "points": 11
+      }
+    }
+  },
+  "policyConfiguration": {
+    "window": 3,
+    "gemGames": 4,
+    "support": 2,
+    "watchGames": 5,
+    "priorGames": 2,
+    "declinePct": 0.2,
+    "decline": {
+      "RB": 3,
+      "WR": 2,
+      "TE": 2
+    },
+    "roleGrowth": 2,
+    "roleGrowthPct": 0.2,
+    "qbCarries": 3,
+    "volumeQuantile": 0.8,
+    "buySigma": 0.5,
+    "sellSigma": 1.5
+  }
+}

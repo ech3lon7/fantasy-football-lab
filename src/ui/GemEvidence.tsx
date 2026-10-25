@@ -4,6 +4,12 @@ import {
   type TagEvidenceRow,
 } from "../domain/tag-evidence";
 import type { GemCheck } from "../domain/gems";
+import {
+  historicalLabelContext,
+  labelResearchNote,
+  type HistoricalContext,
+} from "../domain/historical-label-reference";
+import { FilterHelp } from "./FilterHelp";
 
 // Share one evidence table across all active tags; numeric comparisons arrive from the domain, never from UI formulas.
 function EvidenceTable({
@@ -11,7 +17,11 @@ function EvidenceTable({
   label,
   results = false,
 }: {
-  rows: (TagEvidenceRow & { status?: GemCheck["status"] })[];
+  rows: (TagEvidenceRow & {
+    status?: GemCheck["status"];
+    historical?: HistoricalContext;
+    provisionalFloor?: boolean;
+  })[];
   label: string;
   results?: boolean;
 }) {
@@ -62,6 +72,13 @@ function EvidenceTable({
                       {comparison && i === 0 && (
                         <small className="evidence-note">{row.required}</small>
                       )}
+                      {/* Keep the mandatory numerical gate visible while distinguishing historical redundancy from validation. */}
+                      {row.provisionalFloor && i === 0 && (
+                        <small className="evidence-note">
+                          Provisional floor; historically redundant alongside
+                          the other current Gem gates.
+                        </small>
+                      )}
                     </td>
                     <td
                       className={
@@ -73,6 +90,23 @@ function EvidenceTable({
                       {comparison ? <strong>{actual}</strong> : actual}
                       {comparison && i === 0 && (
                         <small className="evidence-note">{row.actual}</small>
+                      )}
+                      {/* Historical context stays beside evidence, once per check, without replacing scores or adding a wide column. */}
+                      {i === 0 && row.historical && (
+                        <small className="evidence-note">
+                          <FilterHelp
+                            label="Historical reference"
+                            help={row.historical.note}
+                          >
+                            <span
+                              className={
+                                row.historical.unavailable ? "muted" : "fact"
+                              }
+                            >
+                              {row.historical.text}
+                            </span>
+                          </FilterHelp>
+                        </small>
                       )}
                     </td>
                     <td
@@ -137,9 +171,17 @@ export function GemEvidence({ p, m }: { p: Player; m: Model }) {
             rows={assessment.checks.map((check) => ({
               ...check,
               kind: "fact",
+              // The domain accessor suppresses incompatible windows/scoring and exposes descriptive text only.
+              historical: historicalLabelContext("Gem", check.check, p, m),
+              // Annotate only individual-game workload support; scoring and mean-workload requirements remain unchanged.
+              provisionalFloor: check.check.endsWith("workload support"),
             }))}
             results
           />
+          {/* Floor sensitivity describes the complete researched rule, never an independently optimized cutoff. */}
+          <p>
+            <small>{labelResearchNote("Gem")}</small>
+          </p>
           {p.pos === "RB" && (
             <p className="fact">
               Recent carries / game:{" "}
@@ -182,8 +224,20 @@ export function GemEvidence({ p, m }: { p: Player; m: Model }) {
           <p>{explanation.meaning}</p>
           <EvidenceTable
             label={`${explanation.tag} evidence checks`}
-            rows={explanation.rows}
+            rows={explanation.rows.map((row) => ({
+              ...row,
+              historical: historicalLabelContext(
+                explanation.tag,
+                row.check,
+                p,
+                m,
+              ),
+            }))}
           />
+          {/* Unsupported historical comparisons are stated explicitly instead of filled with mismatched percentiles. */}
+          <p>
+            <small>{labelResearchNote(explanation.tag)}</small>
+          </p>
           <p>{explanation.interpretation}</p>
           <p>{explanation.limitations}</p>
           <p>

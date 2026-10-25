@@ -1,3 +1,5 @@
+// The workload window shares label policy while forecasts and supplemental provider definitions stay unchanged.
+import { labelPolicy } from "./label-rules";
 import { mean, n, num, str, sum, type Dataset, type Row } from "./contracts";
 
 // Supplemental evidence stays tied to one imported snapshot and uses the existing synced state.
@@ -307,8 +309,8 @@ export function workload(
     (pos === "RB" ? count(bag, "RushAttempts") : 0);
   // A valid scoring window can support supplied xFP even when native workload fields are unavailable.
   const matchingHistory = rows.length === games && !p.HistoryIssue;
-  const recent = matchingHistory ? rows.slice(-3) : [],
-    prior = matchingHistory ? rows.slice(0, -3) : [];
+  const recent = matchingHistory ? rows.slice(-labelPolicy.window) : [],
+    prior = matchingHistory ? rows.slice(0, -labelPolicy.window) : [];
   const recentRate =
     usable && recent.length ? amount(recent) / recent.length : null;
   const priorRate =

@@ -1,4 +1,5 @@
-import { defaultGemRules, gemPositions } from "./gems";
+// Reuse the classifier registry when displaying requirements; stored setting overrides remain authoritative.
+import { defaultGemRules, gemPositions, labelPolicy } from "./label-rules";
 import { n, num, type Row } from "./contracts";
 import { playedHistory } from "./opportunity";
 import { playerSignals, type Model, type Player } from "./valuation";
@@ -80,21 +81,21 @@ function gameEvidence(
           },
           {
             name: "Recent played-game evidence",
-            games: history.slice(-3),
+            games: history.slice(-labelPolicy.window),
             note: "Latest three played games behind recent PPG",
           },
         ]
       : [
           {
             name: "Recent played-game evidence",
-            games: history.slice(-3),
+            games: history.slice(-labelPolicy.window),
             note: "Latest three played games",
           },
           {
             name: "Earlier played-game evidence",
             games: workloadWindow
-              ? history.slice(-6, -3)
-              : history.slice(0, -3),
+              ? history.slice(-2 * labelPolicy.window, -labelPolicy.window)
+              : history.slice(0, -labelPolicy.window),
             note: workloadWindow
               ? "Immediately preceding two or three played games"
               : "ALL earlier played games before the latest three",
@@ -162,7 +163,7 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
     const rule =
       defaultGemRules.positions[p.pos as (typeof gemPositions)[number]];
     const unit = p.pos === "RB" ? "carries + targets/game" : "targets/game";
-    const short = p.games < 5;
+    const short = p.games < labelPolicy.watchGames;
     explanations.push({
       tag: "Watch",
       meaning:
@@ -272,11 +273,17 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
         history,
         row(
           "Played-game sample",
-          `At least ${3 + s.GemMinPriorGames} games: three recent plus ${s.GemMinPriorGames} earlier`,
+          `At least ${labelPolicy.window + s.GemMinPriorGames} games: three recent plus ${s.GemMinPriorGames} earlier`,
           `${p.games} games`,
           "fact",
           undefined,
-          [evidenceComparison(3 + s.GemMinPriorGames, p.games, "games")],
+          [
+            evidenceComparison(
+              labelPolicy.window + s.GemMinPriorGames,
+              p.games,
+              "games",
+            ),
+          ],
         ),
         row(
           "Earlier actual PPG",
@@ -326,7 +333,7 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           : "targets/game";
     const minimum =
       p.pos === "QB"
-        ? 3
+        ? labelPolicy.qbCarries
         : p.pos === "RB"
           ? s.GemRBOpportunities
           : p.pos === "WR"
@@ -377,25 +384,27 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
         ),
         row(
           "Workload increase",
-          `At least 2.00 AND at least 20% of the absolute earlier rate (${value(o.priorRate === null ? null : Math.abs(o.priorRate) * 0.2)})`,
+          `At least ${value(labelPolicy.roleGrowth)} AND at least ${labelPolicy.roleGrowthPct * 100}% of the absolute earlier rate (${value(o.priorRate === null ? null : Math.abs(o.priorRate) * labelPolicy.roleGrowthPct)})`,
           `${value(o.delta)} ${unit}`,
           "fact",
           undefined,
           // Keep both absolute and relative growth gates visible, using the opportunity module's earlier average.
           [
             evidenceComparison(
-              2,
+              labelPolicy.roleGrowth,
               o.delta,
               unit,
               "≥",
               "Absolute increase — AND relative increase",
             ),
             evidenceComparison(
-              o.priorRate === null ? null : Math.abs(o.priorRate) * 0.2,
+              o.priorRate === null
+                ? null
+                : Math.abs(o.priorRate) * labelPolicy.roleGrowthPct,
               o.delta,
               unit,
               "≥",
-              "Relative gate: 20% of the absolute earlier rate",
+              `Relative gate: ${labelPolicy.roleGrowthPct * 100}% of the absolute earlier rate`,
             ),
           ],
         ),
@@ -509,7 +518,10 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
     if (!active.has(tag)) continue;
     const buy = tag === "BUY LOW",
       g = p.regressionEvidence;
-    const cutoff = g ? g.meanRate + (buy ? -0.5 : 1.5) * g.rateSD : null;
+    const cutoff = g
+      ? g.meanRate +
+        (buy ? -labelPolicy.buySigma : labelPolicy.sellSigma) * g.rateSD
+      : null;
     explanations.push({
       tag,
       meaning: buy
@@ -545,7 +557,7 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
         ),
         row(
           "Positional volume test",
-          `${buy ? "At least" : "Strictly below"} the 80th-percentile ${p.pos} cutoff: ${value(g?.highVolume)}`,
+          `${buy ? "At least" : "Strictly below"} the ${labelPolicy.volumeQuantile * 100}th-percentile ${p.pos} cutoff: ${value(g?.highVolume)}`,
           value(p.opportunities),
           "fact",
           "model",
@@ -565,7 +577,7 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
         ),
         row(
           "Player touchdown rate",
-          `${buy ? "Strictly below" : "Strictly above"} ${percent(cutoff)} (${buy ? "peer mean − 0.5 × SD" : "peer mean + 1.5 × SD"})`,
+          `${buy ? "Strictly below" : "Strictly above"} ${percent(cutoff)} (${buy ? `peer mean − ${labelPolicy.buySigma} × SD` : `peer mean + ${labelPolicy.sellSigma} × SD`})`,
           percent(p.tdRate),
           "fact",
           "model",

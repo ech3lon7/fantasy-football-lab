@@ -187,6 +187,65 @@ test("roster and discovery popovers preserve the page and retain full profile na
   ).toBeVisible();
 });
 
+// Typed comparison choices resolve the existing saved IDs independently of the league-pool search, without retaining stale stats.
+test("player comparisons accept typed names and suggestions and preserve selections on reload", async ({
+  page,
+}) => {
+  await seed(page);
+  await page.goto("./#/players");
+  const comparison = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "Player comparison", exact: true }),
+  });
+  const first = comparison.getByRole("combobox", {
+      name: "Player 1",
+      exact: true,
+    }),
+    second = comparison.getByRole("combobox", {
+      name: "Player 2",
+      exact: true,
+    }),
+    third = comparison.getByRole("combobox", { name: "Player 3", exact: true });
+  await first.fill("synthetic 1");
+  await second.fill("Synthetic 2 · WR · 2");
+  await page
+    .getByRole("textbox", { name: "Search players", exact: true })
+    .fill("Synthetic 1");
+  await third.fill("Synthetic 100");
+  await expect(comparison.locator("tbody tr")).toHaveCount(3);
+  await expect(comparison.locator('a[href="#/player/2"]')).toBeVisible();
+  await first.fill("");
+  await second.fill("No matching player");
+  await expect(comparison.locator("tbody tr")).toHaveCount(1);
+  await expect(comparison.locator('a[href="#/player/100"]')).toBeVisible();
+  // Wait for the normal persisted comparison rather than racing a browser reload against its IndexedDB transaction.
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open("fantasy-football-lab", 1);
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        const workspace = await new Promise<Workspace>((resolve, reject) => {
+          const request = db
+            .transaction("current")
+            .objectStore("current")
+            .get("local");
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        db.close();
+        return workspace.state.filters.compareIds;
+      }),
+    )
+    .toBe(",,100");
+  await page.reload();
+  await expect(third).toHaveValue("Synthetic 100 · QB · 100");
+  await expect(first).toHaveValue("");
+  await expect(second).toHaveValue("");
+  await expect(comparison.locator("tbody tr")).toHaveCount(1);
+});
+
 // The mobile sheet traps focus, scrolls its own details and restores the page on dismissal or navigation.
 test("mobile player details use an accessible bottom sheet", async ({
   page,

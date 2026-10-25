@@ -28,7 +28,8 @@ import type { Model } from "../domain/valuation";
 import { evidenceKey, roleScenarioKey } from "../domain/opportunity";
 import { EvidenceSettings } from "../features/EvidenceSettings";
 import type { PositionGrade } from "../domain/lineups";
-import { load, save, remove } from "../storage/workspace";
+import { load, save, remove, observeGemTracking } from "../storage/workspace";
+import type { GemTrackingState } from "../domain/gem-tracking";
 import {
   getConfig,
   putConfig,
@@ -113,6 +114,12 @@ export default function App() {
     importRef = useRef<Worker | null>(null),
     importTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     saveQueue = useRef(Promise.resolve()),
+    // Keep background audit completion from rerendering unrelated active screens or interrupting their focus.
+    gemTracking = useRef<{
+      owner: string;
+      hash: string;
+      result: Promise<GemTrackingState>;
+    } | null>(null),
     syncBusy = useRef(false);
   function commit(next: Workspace | null) {
     // Ownership cleanup runs for local loads, imports and cloud adoption, including outside Trade Analyzer.
@@ -217,6 +224,33 @@ export default function App() {
       else {
         setModel(e.data.result.model);
         setGrades(new Map(e.data.result.grades));
+        // Serialize tracking behind workspace saves and discard obsolete/account-switched results without blocking calculations.
+        const result: Model = e.data.result.model,
+          owner = w.owner,
+          hash = result.dataset.hash;
+        const observation = saveQueue.current.then(
+          async (): Promise<GemTrackingState> => {
+            if (
+              wRef.current?.owner !== owner ||
+              wRef.current.dataset?.hash !== hash
+            )
+              return {
+                journal: { version: 1, cohorts: [] },
+                status: "Waiting for the current workspace.",
+              };
+            try {
+              return await observeGemTracking(owner, result);
+            } catch {
+              return {
+                journal: { version: 1, cohorts: [] },
+                status:
+                  "Could not access local Gem tracking. Live labels and calculations remain available; retry by reopening the app.",
+              };
+            }
+          },
+        );
+        gemTracking.current = { owner, hash, result: observation };
+        saveQueue.current = observation.then(() => {});
       }
       setCalculating(false);
     };
@@ -233,6 +267,7 @@ export default function App() {
     });
     return () => worker.terminate();
   }, [
+    w?.owner,
     w?.dataset?.hash,
     JSON.stringify(w?.state.settings),
     w?.state.filters[evidenceKey],
@@ -757,6 +792,12 @@ export default function App() {
                   />
                   <ModelView
                     m={model}
+                    tracking={
+                      gemTracking.current?.owner === w.owner &&
+                      gemTracking.current.hash === model.dataset.hash
+                        ? gemTracking.current.result
+                        : null
+                    }
                     change={(settings) => updateState({ settings })}
                   />
                 </>

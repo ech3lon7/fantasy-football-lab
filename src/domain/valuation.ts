@@ -24,6 +24,7 @@ import {
   type EvidenceInput,
 } from "./opportunity";
 import { assessGem, gemVersion, type GemAssessment } from "./gems";
+import { labelPolicy, labelRuleVersion } from "./label-rules";
 export interface Player {
   id: string;
   name: string;
@@ -466,7 +467,7 @@ export function evaluate(
         group
           .filter((p) => (p.opportunities ?? 0) > 0)
           .map((p) => p.opportunities!),
-        0.8,
+        labelPolicy.volumeQuantile,
       ),
     });
   }
@@ -491,21 +492,25 @@ export function evaluate(
           ? "NEUTRAL - low volume"
           : p.tdRate === null
             ? "NEUTRAL - insufficient data"
-            : p.opportunities! >= g.high && p.tdRate < g.avg - 0.5 * g.sigma
+            : p.opportunities! >= g.high &&
+                p.tdRate < g.avg - labelPolicy.buySigma * g.sigma
               ? "BUY LOW"
-              : p.opportunities! < g.high && p.tdRate > g.avg + 1.5 * g.sigma
+              : p.opportunities! < g.high &&
+                  p.tdRate > g.avg + labelPolicy.sellSigma * g.sigma
                 ? "SELL HIGH"
                 : "NEUTRAL";
     }
     if (
       p.historyComplete &&
-      p.games >= 3 + s.GemMinPriorGames &&
+      p.games >= labelPolicy.window + s.GemMinPriorGames &&
       p.actual !== null &&
       p.recent !== null
     ) {
       p.earlier =
         Math.round(
-          ((num(p.raw.ActualPoints) - 3 * p.recent) / (p.games - 3)) * 1e10,
+          ((num(p.raw.ActualPoints) - labelPolicy.window * p.recent) /
+            (p.games - labelPolicy.window)) *
+            1e10,
         ) / 1e10;
       p.trendDelta = p.recent - p.earlier;
       p.trendPct = p.earlier === 0 ? null : p.trendDelta / Math.abs(p.earlier);
@@ -601,22 +606,22 @@ export function evaluate(
             : p.pos === "TE"
               ? s.GemTETargets
               : p.pos === "QB"
-                ? 3
+                ? labelPolicy.qbCarries
                 : Infinity;
       if (
-        o.recentGames === 3 &&
+        o.recentGames === labelPolicy.window &&
         o.priorGames >= s.GemMinPriorGames &&
         o.recentRate !== null &&
         o.priorRate !== null &&
         o.delta !== null &&
         o.recentRate >= minimum &&
-        o.delta >= 2 &&
-        o.delta >= Math.abs(o.priorRate) * 0.2
+        o.delta >= labelPolicy.roleGrowth &&
+        o.delta >= Math.abs(o.priorRate) * labelPolicy.roleGrowthPct
       )
         o.signals.push("Role-growth watch");
       if (
         ["RB", "WR", "TE", "QB"].includes(p.pos) &&
-        p.games >= 3 + s.GemMinPriorGames &&
+        p.games >= labelPolicy.window + s.GemMinPriorGames &&
         p.trendDelta !== null &&
         p.trendDelta >= s.GemMinGap &&
         p.recent !== null &&
@@ -658,7 +663,7 @@ export function evaluate(
     weeks,
     analysisVersion: options.workbookMode
       ? "v5.2-workbook"
-      : `${evidenceVersion}/${gemVersion}`,
+      : `${evidenceVersion}/${gemVersion}/${labelRuleVersion}`,
     calibration,
     supplementalInput: supplemental.input,
     evidenceIssue: supplemental.issue,

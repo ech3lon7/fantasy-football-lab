@@ -5,6 +5,7 @@ import { evaluate } from "../../src/domain/valuation";
 import { activeTagExplanations } from "../../src/domain/tag-evidence";
 import { gemSignals, gemThresholds } from "../../src/domain/gem-screening";
 import { filterHelp } from "../../src/ui/FilterHelp";
+import type { GemJournal } from "../../src/domain/gem-tracking";
 import {
   initialState,
   mean,
@@ -188,6 +189,202 @@ async function seed(
   return dataset;
 }
 
+// Inspect only this isolated browser's private journal; test fixtures never reach cloud services or publication assets.
+async function readTracking(
+  page: Page,
+  key = "gem-tracking:local",
+): Promise<GemJournal | undefined> {
+  return page.evaluate(async (key) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("fantasy-football-lab", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const value = await new Promise<GemJournal | undefined>(
+      (resolve, reject) => {
+        const request = db
+          .transaction("current")
+          .objectStore("current")
+          .get(key);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      },
+    );
+    db.close();
+    return value;
+  }, key);
+}
+
+// The production app records automatically on load, deduplicates reloads, scores later imports and clears its local journal with the workspace.
+test("prospective Gem tracking persists once, scores follow-up imports and stays account scoped", async ({
+  page,
+}) => {
+  const dataset = await seed(page);
+  await page.goto("./#/model");
+  const panel = page
+    .locator("section")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Prospective Gem tracking",
+        exact: true,
+      }),
+    });
+  await expect(panel.getByText(/Week 5 observation recorded/)).toBeVisible();
+  await expect
+    .poll(async () => (await readTracking(page))?.cohorts[0].checkpoints.length)
+    .toBe(1);
+  const first = await readTracking(page);
+  await page.reload();
+  await expect(panel.getByText(/Week 5 observation recorded/)).toBeVisible();
+  expect(await readTracking(page)).toEqual(first);
+  await panel.getByText("Method and storage", { exact: true }).click();
+  await expect(
+    panel.getByText(/Stored only in this browser for this account/),
+  ).toBeVisible();
+
+  // Advance the complete synthetic import, not the recorded classifications; all old player scores and weeks remain intact.
+  const future = structuredClone(dataset);
+  future.tables.ModelContext[0].CurrentWeek = 11;
+  future.tables.ModelContext[0].RefreshUTC = new Date().toISOString();
+  for (const p of future.tables.ModelPlayers) {
+    for (let week = 6; week <= 10; week++)
+      future.tables.ModelHistory.push({
+        PlayerID: p.PlayerID,
+        Season: 2026,
+        Week: week,
+        Points: p.PlayerID === 2 ? 20 : 10,
+        Games: 1,
+        HistoryStatus: "Valid",
+        Targets: 8,
+        RushAttempts: 20,
+      });
+    const scores = future.tables.ModelHistory.filter(
+      (h) => h.PlayerID === p.PlayerID,
+    ).map((h) => Number(h.Points));
+    Object.assign(p, {
+      GamesPlayed: scores.length,
+      Season_Games: scores.length,
+      ActualPoints: scores.reduce((a, b) => a + b, 0),
+      Actual_PPG: mean(scores),
+      Last3_PPG: mean(scores.slice(-3)),
+      ScoreSD: sd(scores),
+    });
+  }
+  const next: Dataset = JSON.parse(
+    execFileSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "--input-type=module",
+        "-e",
+        "import fs from 'node:fs';import {fromTables} from './src/import/workbook.ts';const d=JSON.parse(fs.readFileSync(0,'utf8'));process.stdout.write(JSON.stringify(await fromTables(d.tables,d.settings)));",
+      ],
+      { input: JSON.stringify(future), encoding: "utf8" },
+    ),
+  );
+  await page.evaluate(async (dataset) => {
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const r = indexedDB.open("fantasy-football-lab", 1);
+      r.onsuccess = () => resolve(r.result);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("current", "readwrite"),
+        store = tx.objectStore("current"),
+        request = store.get("local");
+      request.onsuccess = () => {
+        store.put({ ...request.result, dataset }, "local");
+        store.put(
+          { version: 999, privateAccount: true },
+          "gem-tracking:another-account",
+        );
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }, next);
+  await page.reload();
+  await expect(panel.getByText(/Week 10 observation recorded/)).toBeVisible();
+  const scored = await readTracking(page);
+  expect(scored!.cohorts[0].checkpoints[0].cases).toEqual(
+    first!.cohorts[0].checkpoints[0].cases,
+  );
+  expect(scored!.cohorts[0].checkpoints[0].outcomes.three).toBeDefined();
+  expect(scored!.cohorts[0].checkpoints[0].outcomes.five).toBeDefined();
+  expect(await readTracking(page, "gem-tracking:another-account")).toEqual({
+    version: 999,
+    privateAccount: true,
+  });
+  await panel.getByText(/2026 · cohort 1/).click();
+  await expect(
+    panel.getByRole("columnheader", {
+      name: "First recorded: successful / scored",
+    }),
+  ).toBeVisible();
+  await expect(
+    panel.getByText("Without game-workload floor", { exact: true }),
+  ).toHaveCount(6);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+
+  // Existing account-data removal deletes only the active account's journal, and pending saves cannot resurrect it.
+  await page.goto("./#/data");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page
+    .getByRole("button", { name: "Remove from this device", exact: true })
+    .click();
+  await expect.poll(() => readTracking(page)).toBeUndefined();
+  expect(await readTracking(page, "gem-tracking:another-account")).toEqual({
+    version: 999,
+    privateAccount: true,
+  });
+});
+
+// A malformed/future-version journal must never prevent application startup or be silently reset by a reload.
+test("unsupported prospective journal stays preserved while live Gem evidence remains usable", async ({
+  page,
+}) => {
+  await seed(page);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const r = indexedDB.open("fantasy-football-lab", 1);
+      r.onsuccess = () => resolve(r.result);
+    });
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction("current", "readwrite");
+      tx.objectStore("current").put({ version: 999 }, "gem-tracking:local");
+      tx.oncomplete = () => resolve();
+    });
+    db.close();
+  });
+  await page.goto("./#/model");
+  await page.reload();
+  await expect(
+    page.getByText(
+      /Saved Gem tracking is unreadable or from an unsupported version/,
+    ),
+  ).toBeVisible();
+  expect(await readTracking(page)).toEqual({ version: 999 });
+  await page.goto("./#/player/2");
+  await page.getByText("Why Gem?", { exact: true }).click();
+  await expect(
+    page.getByText(/Provisional floor; historically redundant/),
+  ).toHaveCount(2);
+  await expect(
+    page.getByText(/494 weekly labels; 154 first alerts/),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("table", { name: "Breakout evidence checks" })
+      .getByText(/2026 W5: 16.00/),
+  ).toBeVisible();
+});
+
 // Every signal and screener selection keeps its help after leaving and returning, without changing filter values.
 test("all screener signals and controls retain repeatable marker-free help", async ({
   page,
@@ -355,6 +552,17 @@ test("active analytical tag explanations agree across popovers and profiles", as
         table.getByRole("columnheader", { name: "Margin", exact: true }),
       ).toBeVisible();
       await expect(table.locator("td strong")).not.toHaveCount(0);
+      // Descriptive history uses matched windows and retains the original numeric requirements and season/week trail.
+      if (tag === "Gem") {
+        await expect(table).toContainText(
+          "Historical nine-team modeled starter-quality WR: median 8.33 targets/game",
+        );
+        await expect(table).toContainText("not a qualification cutoff");
+        await expect(table).toContainText(
+          "scoring compatibility is not fully verified",
+        );
+        await expect(table).toContainText("2026 W2:");
+      }
       await expect(table).toContainText(
         /above minimum|below maximum|at threshold/,
       );
@@ -435,6 +643,43 @@ test("active analytical tag explanations agree across popovers and profiles", as
   await expect(
     page.locator("summary").filter({ hasText: /^Why .+\?$/ }),
   ).toHaveCount(0);
+});
+
+// Audit keeps repeated weekly labels separate from first discoveries and displays effective settings without changing filters.
+test("historical label audit exposes version-bound research and shared parameter bindings", async ({
+  page,
+}) => {
+  await seed(page);
+  await page.goto("./#/model");
+  const panel = page.locator("section").filter({
+    has: page.getByRole("heading", {
+      name: "Player-label evidence",
+      exact: true,
+    }),
+  });
+  await expect(panel).toContainText(
+    "label-rules-1 / automatic-breakout-3 / historical-label-context-1",
+  );
+  await panel.getByText("Historical label research", { exact: true }).click();
+  await expect(panel).toContainText("323/494");
+  await expect(panel).toContainText("96/154");
+  await expect(panel).toContainText("33 season-weeks");
+  await expect(panel).toContainText(
+    "Not acquisition success or an individual probability",
+  );
+  await panel
+    .getByText("Active label rules and parameters", { exact: true })
+    .click();
+  await expect(panel).toContainText("Gem + Watch.positions.WR.mean");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await panel.screenshot({
+    path: "test-results/historical-label-audit-mobile.png",
+  });
 });
 
 // Loading imported data and an old saved query must identify Gems automatically, ignoring obsolete manual-review settings.

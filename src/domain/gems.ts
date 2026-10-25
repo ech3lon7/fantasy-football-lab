@@ -5,18 +5,9 @@ import {
   type EvidenceComparison,
 } from "./evidence-comparison";
 
-// Version the confirmed scoring-and-workload rule separately from app and workbook versions.
-export const gemVersion = "automatic-breakout-3";
-export const gemPositions = ["RB", "WR", "TE"] as const;
-// Scoring is Gem-only; growth remains part of the unchanged Watch opportunity calculation.
-export const defaultGemRules = {
-  growthPct: 0.25,
-  positions: {
-    RB: { mean: 18, floor: 14, growth: 3, points: 16 },
-    WR: { mean: 7, floor: 5, growth: 2, points: 16 },
-    TE: { mean: 6, floor: 5, growth: 2, points: 11 },
-  },
-};
+// Preserve compatibility exports while the shared registry owns Gem and Watch policy values.
+import { defaultGemRules, gemPositions, labelPolicy } from "./label-rules";
+export { defaultGemRules, gemPositions, gemVersion } from "./label-rules";
 export interface GemCheck {
   check: string;
   required: string;
@@ -50,8 +41,8 @@ export function assessGem(
   d: Dataset,
   now = Date.now(),
 ): GemAssessment {
-  const recentRows = rows.slice(-3),
-    previousRows = rows.slice(-6, -3);
+  const recentRows = rows.slice(-labelPolicy.window),
+    previousRows = rows.slice(-2 * labelPolicy.window, -labelPolicy.window);
   const result: GemAssessment = {
     classification: "Not applicable",
     checks: [],
@@ -97,10 +88,11 @@ export function assessGem(
     result.increase !== null && result.previous !== null && result.previous > 0
       ? result.increase / result.previous
       : null;
-  const historyPass = complete && rows.length >= 5;
-  const meanPass = recent.length === 3 && result.recent! >= rule.mean;
+  const historyPass = complete && rows.length >= labelPolicy.watchGames;
+  const meanPass =
+    recent.length === labelPolicy.window && result.recent! >= rule.mean;
   const growthPass =
-    previous.length >= 2 &&
+    previous.length >= labelPolicy.priorGames &&
     result.increase !== null &&
     result.increase >= rule.growth &&
     (result.previous === 0 || result.growthPct! >= defaultGemRules.growthPct);
@@ -109,14 +101,15 @@ export function assessGem(
   const fmt = (value: number | null) =>
     value === null ? "unavailable" : value.toFixed(2);
   // Flag sustained decline independently: average loss must meet both thresholds and occur in at least two recent games.
-  const declineMinimum = p.pos === "RB" ? 3 : 2;
+  const declineMinimum =
+    labelPolicy.decline[p.pos as (typeof gemPositions)[number]];
   // Compare totals across window lengths so exact 20% boundaries are not lost to division rounding.
   const previousTotal = previous.reduce((total, value) => total + value, 0);
   const recentTotal = recent.reduce((total, value) => total + value, 0);
   const declineNumerator =
     previousTotal * recent.length - recentTotal * previous.length;
   const lowerGames =
-    previous.length >= 2 && result.previous !== null
+    previous.length >= labelPolicy.priorGames && result.previous !== null
       ? recent.filter(
           (value) =>
             value * previous.length <=
@@ -130,12 +123,13 @@ export function assessGem(
     result.previous > 0 &&
     result.increase !== null &&
     declineNumerator >= declineMinimum * recent.length * previous.length &&
-    declineNumerator * 5 >= previousTotal * recent.length &&
-    lowerGames >= 2;
+    declineNumerator * (1 / labelPolicy.declinePct) >=
+      previousTotal * recent.length &&
+    lowerGames >= labelPolicy.support;
   result.reducedWorkload = {
     check: "Reduced workload",
-    required: `Average decline ≥ ${declineMinimum} ${unit}/game AND ≥ 20%; at least 2 of the last 3 games ≥ ${declineMinimum} below the earlier average; 5+ verified games`,
-    actual: `${fmt(result.previous)} → ${fmt(result.recent)} ${unit}/game; change ${fmt(result.increase)}; ${result.growthPct === null ? "percentage unavailable" : (result.growthPct * 100).toFixed(2) + "%"}; ${lowerGames}/3 recent games meet the decline minimum`,
+    required: `Average decline ≥ ${declineMinimum} ${unit}/game AND ≥ ${labelPolicy.declinePct * 100}%; at least ${labelPolicy.support} of the last ${labelPolicy.window} games ≥ ${declineMinimum} below the earlier average; ${labelPolicy.watchGames}+ verified games`,
+    actual: `${fmt(result.previous)} → ${fmt(result.recent)} ${unit}/game; change ${fmt(result.increase)}; ${result.growthPct === null ? "percentage unavailable" : (result.growthPct * 100).toFixed(2) + "%"}; ${lowerGames}/${labelPolicy.window} recent games meet the decline minimum`,
     status: !historyPass || !usable ? "UNKNOWN" : declining ? "PASS" : "FAIL",
     // Expose each existing decline gate numerically without changing the exact total-based boundary tests above.
     comparisons: [
@@ -149,7 +143,7 @@ export function assessGem(
         "Average decline; all decline gates required",
       ),
       evidenceComparison(
-        0.2,
+        labelPolicy.declinePct,
         usable && previousTotal > 0 && recent.length > 0
           ? declineNumerator / (previousTotal * recent.length)
           : null,
@@ -158,14 +152,14 @@ export function assessGem(
         "Relative average decline",
       ),
       evidenceComparison(
-        2,
+        labelPolicy.support,
         usable ? lowerGames : null,
         "games",
         "≥",
         `Recent games at least ${declineMinimum} ${unit} below the earlier average`,
       ),
       evidenceComparison(
-        5,
+        labelPolicy.watchGames,
         rows.length,
         "games",
         "≥",
@@ -174,8 +168,8 @@ export function assessGem(
     ],
   };
   // Gem uses overlapping three-game windows from the latest four played games; Watch/decline retain their earlier windows.
-  const confirmationRows = rows.slice(-4, -1);
-  const gemHistoryPass = complete && rows.length >= 4;
+  const confirmationRows = rows.slice(-labelPolicy.gemGames, -1);
+  const gemHistoryPass = complete && rows.length >= labelPolicy.gemGames;
   const windows = [
     { name: "Recent window", rows: recentRows },
     { name: "Previous window", rows: confirmationRows },
@@ -196,7 +190,7 @@ export function assessGem(
     ).length;
     const scoreMean = mean(points),
       workloadMean = mean(workload);
-    const known = gemHistoryPass && window.rows.length === 3;
+    const known = gemHistoryPass && window.rows.length === labelPolicy.window;
     // Pair every individual score/count with its actual week so overlapping windows are explicit in Why Gem.
     const weekly = (values: number[]) =>
       window.rows
@@ -219,15 +213,15 @@ export function assessGem(
       },
       {
         check: `${window.name} scoring support`,
-        required: `At least 2 of 3 games ≥ ${rule.points} points`,
+        required: `At least ${labelPolicy.support} of ${labelPolicy.window} games ≥ ${rule.points} points`,
         actual:
           pointsUsable && points.length
-            ? `${weekly(points)} points; ${scoresPassing}/3 meet the floor`
+            ? `${weekly(points)} points; ${scoresPassing}/${labelPolicy.window} meet the floor`
             : "unavailable",
-        status: status(pointsUsable, scoresPassing >= 2),
+        status: status(pointsUsable, scoresPassing >= labelPolicy.support),
         comparisons: [
           evidenceComparison(
-            2,
+            labelPolicy.support,
             pointsUsable ? scoresPassing : null,
             "games",
             "≥",
@@ -249,15 +243,15 @@ export function assessGem(
       },
       {
         check: `${window.name} workload support`,
-        required: `At least 2 of 3 games ≥ ${rule.floor} ${unit}`,
+        required: `At least ${labelPolicy.support} of ${labelPolicy.window} games ≥ ${rule.floor} ${unit}`,
         actual:
           workloadUsable && workload.length
-            ? `${weekly(workload)} ${unit}; ${workloadsPassing}/3 meet the floor`
+            ? `${weekly(workload)} ${unit}; ${workloadsPassing}/${labelPolicy.window} meet the floor`
             : "unavailable",
-        status: status(workloadUsable, workloadsPassing >= 2),
+        status: status(workloadUsable, workloadsPassing >= labelPolicy.support),
         comparisons: [
           evidenceComparison(
-            2,
+            labelPolicy.support,
             workloadUsable ? workloadsPassing : null,
             "games",
             "≥",
@@ -271,12 +265,13 @@ export function assessGem(
   result.checks = [
     {
       check: "Verified history",
-      required:
-        "4+ played games; both overlapping three-game windows must pass",
+      required: `${labelPolicy.gemGames}+ played games; both overlapping three-game windows must pass`,
       actual: `${rows.length} games; recent weeks ${result.recentWeeks.join(", ") || "none"}; previous-window weeks ${confirmationRows.map((r) => num(r.Week)).join(", ") || "none"}`,
       status: !complete ? "UNKNOWN" : gemHistoryPass ? "PASS" : "FAIL",
       // Sample size and availability retain their additional nonnumeric requirements in the original evidence text.
-      comparisons: [evidenceComparison(4, rows.length, "games")],
+      comparisons: [
+        evidenceComparison(labelPolicy.gemGames, rows.length, "games"),
+      ],
     },
     ...windows.flat(),
     {
@@ -321,15 +316,15 @@ export function assessGem(
     );
   // Preserve the existing Watch opportunity tests; strong stable production can now independently earn Gem.
   const promising =
-    recent.length === 3 &&
-    previous.length >= 2 &&
+    recent.length === labelPolicy.window &&
+    previous.length >= labelPolicy.priorGames &&
     result.increase !== null &&
     result.increase > 0 &&
     (meanPass || growthPass);
   const shortPromising =
     complete &&
     usable &&
-    rows.length < 5 &&
+    rows.length < labelPolicy.watchGames &&
     recent.length > 0 &&
     result.recent! >= rule.mean;
   result.classification = result.checks.every(
