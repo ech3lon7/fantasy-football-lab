@@ -22,14 +22,19 @@ import { evaluate } from "../src/domain/valuation";
 import { playedHistory } from "../src/domain/opportunity";
 import { fixture } from "./fixtures";
 
-// Freeze the deployed aggregate bytes and the researched classifier configuration so evidence cannot silently drift.
+// Normalize only CRLF line endings; all research content, formatting and other bytes remain protected by the fingerprint.
+const aggregateHash = (text: string) =>
+  createHash("sha256")
+    .update(text.replace(/\r\n/g, "\n"), "utf8")
+    .digest("hex");
+
+// Freeze the deployed aggregate text and researched classifier configuration consistently on Windows and Linux.
 it("binds aggregates, research replay and the exact Gem/Watch policy version", () => {
-  const bytes = readFileSync(
+  const text = readFileSync(
     new URL("../src/domain/historical-label-reference.json", import.meta.url),
+    "utf8",
   );
-  expect(createHash("sha256").update(bytes).digest("hex")).toBe(
-    labelEvidenceBinding.aggregateSHA256,
-  );
+  expect(aggregateHash(text)).toBe(labelEvidenceBinding.aggregateSHA256);
   expect(references.sourceSHA256).toBe(labelEvidenceBinding.sourceSHA256);
   expect(references.researchSHA256).toBe(labelEvidenceBinding.researchSHA256);
   expect(gemVersion).toBe(references.classifierVersion);
@@ -40,6 +45,24 @@ it("binds aggregates, research replay and the exact Gem/Watch policy version", (
   expect(defaultGemRules).toEqual(references.gemConfiguration);
   expect(labelPolicy).toEqual(references.policyConfiguration);
   expect(compatibilityRules).toBe(defaultGemRules);
+});
+
+// Exercise both checkout formats and a substantive data edit so portability does not weaken the integrity check.
+it("accepts LF and CRLF aggregates but still rejects changed research content", () => {
+  const lf = readFileSync(
+    new URL("../src/domain/historical-label-reference.json", import.meta.url),
+    "utf8",
+  ).replace(/\r\n/g, "\n");
+  expect(aggregateHash(lf)).toBe(labelEvidenceBinding.aggregateSHA256);
+  expect(aggregateHash(lf.replace(/\n/g, "\r\n"))).toBe(
+    labelEvidenceBinding.aggregateSHA256,
+  );
+  const changed = lf.replace(
+    /"version":\s*"[^"]+"/,
+    '"version": "changed-research"',
+  );
+  expect(changed).not.toBe(lf);
+  expect(aggregateHash(changed)).not.toBe(labelEvidenceBinding.aggregateSHA256);
 });
 
 // User overrides remain effective for their original labels and cannot silently alter primary Gem/Watch means.
