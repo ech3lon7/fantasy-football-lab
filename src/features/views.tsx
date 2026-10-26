@@ -1,5 +1,20 @@
 import { FilterHelp } from "../ui/FilterHelp";
+import {
+  lineupBases,
+  lineupBasisKey,
+  readLineupBasis,
+  lineupBasisLabel,
+  tradeImpact,
+  type LineupBasis,
+} from "../domain/trade-impact";
 import { GemEvidence } from "../ui/GemEvidence";
+import {
+  sourceDataset,
+  scenarioTradeErrors,
+  scenarioTeamImpact,
+  type RosterScenario,
+} from "../domain/roster-scenarios";
+import { Bookmark } from "lucide-react";
 // Prospective tracking is an isolated read-only audit, not another input to the valuation model.
 import { GemTracking } from "./GemTracking";
 import type { GemTrackingState } from "../domain/gem-tracking";
@@ -13,6 +28,7 @@ import { SavedTrades } from "./SavedTrades";
 import {
   saveTrade,
   summaryFromTrade,
+  savedLineupBasis,
   type SavedTrade,
   type SavedTradeSummary,
 } from "../domain/saved-trades";
@@ -184,10 +200,20 @@ export function Overview({
   const ids = roster(m, team),
     players = ids.map((id) => m.byId.get(id)!),
     ls = horizon(m, ids),
-    starters = lineup(m, ids, m.current),
-    expected = ls.length
-      ? ls.reduce((a, l) => a + l.expected, 0) / ls.length
-      : null,
+    starters = lineup(
+      m,
+      ids,
+      m.current,
+      false,
+      false,
+      m.ignoreTemporaryAbsences ? "expected" : "value",
+    ),
+    // Reuse the simulator's Expected-PPG summary and missing-data rules for the hypothetical overview.
+    expected = m.ignoreTemporaryAbsences
+      ? scenarioTeamImpact(m, m, team).after
+      : ls.length
+        ? ls.reduce((a, l) => a + l.expected, 0) / ls.length
+        : null,
     watch = players.filter(
       (p) =>
         p.regression === "BUY LOW" ||
@@ -218,7 +244,12 @@ export function Overview({
             {fmt(expected)}
             <small> pts / week</small>
           </strong>
-          <p>Expected PPG for Value PPG-selected lineups through W{m.final}</p>
+          <p>
+            {m.ignoreTemporaryAbsences
+              ? "Best available Expected-PPG lineup; byes and temporary injury absences ignored; IR excluded"
+              : "Expected PPG for Value PPG-selected lineups"}{" "}
+            through W{m.final}
+          </p>
         </div>
       </div>
       <div className="metric-grid">
@@ -307,13 +338,15 @@ export function Overview({
         </Panel>
       </div>
       {/* Starter choices have a dedicated saved setting, leaving the existing roster and team grades unchanged. */}
-      <StarterLineupEditor
-        key={`${team}/${m.dataset.hash}/${filters[starterLineupsKey] ?? ""}`}
-        m={m}
-        team={team}
-        filters={filters}
-        change={onFilters}
-      />
+      {!m.simulation && (
+        <StarterLineupEditor
+          key={`${team}/${m.dataset.hash}/${filters[starterLineupsKey] ?? ""}`}
+          m={m}
+          team={team}
+          filters={filters}
+          change={onFilters}
+        />
+      )}
     </>
   );
 }
@@ -1625,6 +1658,9 @@ export function TradeView({
   lineupsRaw,
   state,
   saveTrades,
+  restoreScenario,
+  forceTrade,
+  changeBasis,
 }: {
   m: Model;
   draft: Draft;
@@ -1632,7 +1668,12 @@ export function TradeView({
   lineupsRaw?: string;
   state: AppState;
   saveTrades: (raw: string) => void;
+  restoreScenario?: (scenario?: RosterScenario) => boolean;
+  forceTrade?: (draft: Draft) => boolean;
+  changeBasis: (basis: LineupBasis) => void;
 }) {
+  // One persisted preference controls both teams and both trade entry points.
+  const lineupBasis = readLineupBasis(state.filters[lineupBasisKey]);
   const [result, setResult] = useState<TradeResult | null>(null),
     [pending, setPending] = useState(false),
     [message, setMessage] = useState(""),
@@ -1645,6 +1686,8 @@ export function TradeView({
     query: TradeSearchQuery;
   }>();
   const [saveMessage, setSaveMessage] = useState("");
+  // Keep an applied-trade receipt separate from save/evaluation messages that reset when the consumed draft is cleared.
+  const [forceMessage, setForceMessage] = useState("");
   const [resultStamp, setResultStamp] = useState("");
   const evaluationStamp = JSON.stringify([
     m.dataset.hash,
@@ -1663,6 +1706,8 @@ export function TradeView({
       id = crypto.randomUUID();
     setPending(true);
     setResult(null);
+    // A previous save confirmation must not label a newly edited draft as already saved.
+    setSaveMessage("");
     worker.onmessage = (e) => {
       if (e.data.id !== id) return;
       if (e.data.error) setMessage(e.data.error);
@@ -1680,7 +1725,8 @@ export function TradeView({
     worker.postMessage({
       id,
       type: "trade",
-      dataset: m.dataset,
+      dataset: sourceDataset(m),
+      scenario: m.simulation?.scenario,
       settings: m.settings,
       draft,
       // The trade worker uses the same supplemental sources and return scenarios as the player screens.
@@ -1710,17 +1756,25 @@ export function TradeView({
       setSaveMessage(
         "Trade saved. Duplicate packages update the existing entry while preserving its name, notes and original summary.",
       );
+      return true;
     } catch (error) {
       setSaveMessage(
         error instanceof Error ? error.message : "Could not save trade.",
       );
+      return false;
     }
   }
   // Loading is an explicit draft replacement; newer data/settings continue to determine current results.
   function loadSaved(trade: SavedTrade) {
+    // Storage or recipe failures must not load a draft against the wrong roster context.
+    if (restoreScenario?.(trade.scenario) === false) return;
     change(trade.draft);
+    changeBasis(savedLineupBasis(trade));
     if (trade.query)
-      setRestoreSearch({ id: crypto.randomUUID(), query: trade.query });
+      setRestoreSearch({
+        id: crypto.randomUUID(),
+        query: { ...trade.query, lineupBasis: savedLineupBasis(trade) },
+      });
     setSaveMessage("Saved trade loaded into the analyzer.");
   }
   function side(isA: boolean) {
@@ -1827,6 +1881,15 @@ export function TradeView({
     );
   }
   const r = result?.valid ? result : null,
+    primary = r ? tradeImpact(r, lineupBasis)! : null,
+    alternative = r
+      ? tradeImpact(
+          r,
+          lineupBasis === "best-available"
+            ? "marked-starters"
+            : "best-available",
+        )!
+      : null,
     tone =
       r?.advantage == null
         ? r && r.outgoing === 0 && r.incoming > 0
@@ -1852,6 +1915,31 @@ export function TradeView({
         : "None";
   return (
     <>
+      {/* This selector changes interpretation only; forecasts, transaction legality and asking-price tests stay independent. */}
+      <FilterHelp
+        label="Evaluate lineup impact using"
+        help="Applies to both teams, search filters, ranking and the analyzer. Best available compares the strongest full rosters before and after. Marked starters uses saved/imported roles; a bench departure costs zero direct starting points. Byes follow the current live or hypothetical policy. Changing basis requires a new search."
+      >
+        <Select
+          label="Evaluate lineup impact using"
+          value={lineupBasis}
+          change={(value) => changeBasis(readLineupBasis(value))}
+        >
+          {lineupBases.map((basis) => (
+            <option key={basis} value={basis}>
+              {lineupBasisLabel(basis)}
+              {basis === "best-available" ? " — recommended" : ""}
+            </option>
+          ))}
+        </Select>
+      </FilterHelp>
+      <p className="muted">
+        Model Expected points/week · {lineupBasisLabel(lineupBasis)} ·{" "}
+        {m.current}–{m.final} ({m.weeks.length} weeks) ·{" "}
+        {m.ignoreByeWeeks
+          ? "Byes and temporary injury absences ignored; IR excluded"
+          : "Scheduled bye and availability rules"}
+      </p>
       <div className="trade-builder">
         {side(true)}
         <div className="trade-swap">
@@ -1859,12 +1947,38 @@ export function TradeView({
         </div>
         {side(false)}
       </div>
+      {/* Forcing records completion regardless of price/lineup verdicts; ownership validation still protects the simulation. */}
+      {forceTrade && (
+        <div className="toolbar">
+          <FilterHelp
+            label="Apply trade to hypothetical roster"
+            help="Assume this trade is completed, regardless of its grade. Updates both simulated teams and future searches as one undoable move. Creates a simulation if needed. Arrivals stay on the bench; no automatic drops or live league transactions occur. Load a search result first to apply that particular package."
+          >
+            <button
+              className="button"
+              disabled={scenarioTradeErrors(m, draft).length > 0}
+              onClick={() => {
+                const exchange = `${draft.give.map((id) => m.byId.get(id)!.name).join(" + ")} ↔ ${draft.get.map((id) => m.byId.get(id)!.name).join(" + ")}`;
+                if (forceTrade(draft))
+                  setForceMessage(
+                    `Applied hypothetical trade: ${exchange}. Both rosters and subsequent trade searches now use the new ownership.`,
+                  );
+              }}
+            >
+              Apply trade to hypothetical roster
+            </button>
+          </FilterHelp>
+        </div>
+      )}
+      {forceMessage && <p role="status">{forceMessage}</p>}
       {/* Search preserves the outgoing draft and loads only an explicitly selected counterparty/package. */}
       <TradeSearch
         m={m}
         draft={draft}
         lineupsRaw={lineupsRaw}
         change={change}
+        lineupBasis={lineupBasis}
+        onLineupBasisChange={changeBasis}
         onQueryChange={setSearchQuery}
         restore={restoreSearch}
         save={saveSelection}
@@ -1872,13 +1986,22 @@ export function TradeView({
       {/* Keep saving and browsing within the existing analyzer, without adding navigation or changing scoring. */}
       <div className="toolbar">
         <button
-          className="subtle"
+          className="button primary"
+          aria-label="Save current trade"
           disabled={!r || pending || resultStamp !== evaluationStamp}
           onClick={() => {
-            if (r) saveSelection(draft, summaryFromTrade(r), searchQuery);
+            if (r)
+              saveSelection(
+                draft,
+                summaryFromTrade(r, lineupBasis),
+                searchQuery ? { ...searchQuery, lineupBasis } : undefined,
+              );
           }}
         >
-          Save current trade
+          <Bookmark size={16} aria-hidden="true" />{" "}
+          {saveMessage.startsWith("Trade saved.")
+            ? "Saved"
+            : "Save current trade"}
         </button>
       </div>
       {saveMessage && <p aria-live="polite">{saveMessage}</p>}
@@ -1958,95 +2081,130 @@ export function TradeView({
               />
             </div>
           </Panel>
-          <div className="two-col">
-            <Panel
-              title="Your direct starter impact"
-              note="Uses your marked starters. A bench-only departure costs zero direct starting points; trade value and coverage remain separate."
-            >
-              <div className="metric-grid two">
-                <Metric
-                  label="Expected scoring gain / week"
-                  value={signed(r.directA.expectedPerWeek)}
-                />
-                <Metric
-                  label={`Expected gain through W${m.final}`}
-                  value={signed(r.directA.expected)}
-                />
-                <Metric
-                  label="Adjusted value gain / week"
-                  value={signed(r.directA.valuePerWeek)}
-                />
-                <Metric
-                  label="Direct expected gain this week"
-                  value={signed(r.directA.weekly[0]?.expectedGain ?? null)}
-                />
-              </div>
-              <p>
-                Lineup source: {r.directA.source}. Existing bench replacements:{" "}
-                {names(r.directA.replacements)}. Modeled incoming starters:{" "}
-                {names(r.directA.promotedIncoming)}.
-              </p>
-              {[...r.directA.errors, ...r.directA.warnings].map((issue) => (
-                <p className="notice warning" key={issue}>
-                  {issue}
-                </p>
-              ))}
-            </Panel>
-            <Panel
-              title="Other team’s direct starter impact"
-              note="Uses their imported or saved starters. Incoming scoring upgrades and named replacements are modeled."
-            >
-              <div className="metric-grid two">
-                <Metric
-                  label="Expected scoring gain / week"
-                  value={signed(r.directB.expectedPerWeek)}
-                />
-                <Metric
-                  label={`Expected gain through W${m.final}`}
-                  value={signed(r.directB.expected)}
-                />
-                <Metric
-                  label="Adjusted value gain / week"
-                  value={signed(r.directB.valuePerWeek)}
-                />
-                <Metric
-                  label="Direct expected gain this week"
-                  value={signed(r.directB.weekly[0]?.expectedGain ?? null)}
-                />
-              </div>
-              <p>
-                Lineup source: {r.directB.source}. Existing bench replacements:{" "}
-                {names(r.directB.replacements)}. Modeled incoming starters:{" "}
-                {names(r.directB.promotedIncoming)}.
-              </p>
-              {[...r.directB.errors, ...r.directB.warnings].map((issue) => (
-                <p className="notice warning" key={issue}>
-                  {issue}
-                </p>
-              ))}
-            </Panel>
-          </div>
-          {/* Consistent full-roster before/after scoring is separate from each team's deliberately fixed starter plan. */}
+          {/* Primary and alternate summaries are selected in the domain; each keeps its own before/after baseline. */}
           <Panel
-            title="Roster-potential impact"
-            note="Optimizes the full roster before and after the trade using Expected PPG, identical availability and bye rules, and required drops. Existing backup improvements already count before the trade. Waiver proposals are excluded."
+            title="Expected team gain per week"
+            note={`${lineupBasisLabel(lineupBasis)} · Average model Expected points over Weeks ${m.current}–${m.final}. Required drops included; waiver proposals excluded. ${m.ignoreByeWeeks ? "Byes and temporary injury absences ignored; IR excluded." : "Scheduled bye, injury and IR rules retained."}`}
           >
             <div className="metric-grid two">
               <Metric
-                label="Your roster-potential gain / week"
-                value={signed(r.potentialA.expectedPerWeek)}
+                label="Your gain / week"
+                value={signed(primary!.own.expectedPerWeek)}
               />
               <Metric
-                label="Their roster-potential gain / week"
-                value={signed(r.potentialB.expectedPerWeek)}
+                label="Their gain / week"
+                value={signed(primary!.other.expectedPerWeek)}
               />
             </div>
-            {[...r.potentialA.errors, ...r.potentialB.errors].map((issue) => (
-              <p className="notice warning" key={issue}>
-                {issue}
-              </p>
+            {(
+              [
+                ["Your", primary!.own],
+                ["Their", primary!.other],
+              ] as const
+            ).map(([label, impact]) => (
+              <div key={label}>
+                <p className="model">
+                  <strong>{label} Expected points/week:</strong> Before{" "}
+                  {fmt(impact.beforePerWeek)} → After {fmt(impact.afterPerWeek)}{" "}
+                  · Gain {signed(impact.expectedPerWeek)}
+                </p>
+                <p className="muted">{impact.source}</p>
+                {[...impact.errors, ...impact.warnings].map((issue) => (
+                  <p className="notice warning" key={issue}>
+                    {issue}
+                  </p>
+                ))}
+                <details>
+                  <summary>
+                    {label} weekly lineups · {lineupBasisLabel(lineupBasis)}
+                  </summary>
+                  {impact.weekly.map((week) => (
+                    <div key={week.week}>
+                      <p>
+                        <strong>Week {week.week}:</strong>{" "}
+                        <span className="model">
+                          {fmt(week.beforeExpected)} → {fmt(week.afterExpected)}{" "}
+                          ({signed(week.expectedGain)})
+                        </span>{" "}
+                        expected points.
+                      </p>
+                      <p>
+                        Before:{" "}
+                        {names(
+                          week.beforeIds.filter((id): id is string => !!id),
+                        )}
+                        . After:{" "}
+                        {names(week.ids.filter((id): id is string => !!id))}.
+                      </p>
+                    </div>
+                  ))}
+                </details>
+              </div>
             ))}
           </Panel>
+          {/* The alternative is explanatory only and cannot silently supply the selected search's numbers. */}
+          <details>
+            <summary>
+              Compare with {lineupBasisLabel(alternative!.basis)}
+            </summary>
+            <p className="muted">
+              This uses a different starting baseline. Its gain cannot be added
+              to the primary Before total.
+            </p>
+            {(
+              [
+                ["Your", alternative!.own],
+                ["Their", alternative!.other],
+              ] as const
+            ).map(([label, impact]) => (
+              <Panel
+                key={label}
+                title={`${label} ${alternative!.basis === "marked-starters" ? "direct starter impact" : "best available lineup"}`}
+                note={impact.source}
+              >
+                <Metric
+                  label="Expected scoring gain / week"
+                  value={signed(impact.expectedPerWeek)}
+                />
+                <p className="model">
+                  Before {fmt(impact.beforePerWeek)} → After{" "}
+                  {fmt(impact.afterPerWeek)} · Gain{" "}
+                  {signed(impact.expectedPerWeek)} points/week
+                </p>
+                <p>
+                  Existing bench replacements: {names(impact.replacements)}.
+                  Modeled incoming starters: {names(impact.promotedIncoming)}.
+                </p>
+                <details>
+                  <summary>{label} alternative weekly lineups</summary>
+                  {impact.weekly.map((week) => (
+                    <div key={week.week}>
+                      <p>
+                        <strong>Week {week.week}:</strong>{" "}
+                        <span className="model">
+                          {fmt(week.beforeExpected)} → {fmt(week.afterExpected)}{" "}
+                          ({signed(week.expectedGain)})
+                        </span>
+                      </p>
+                      <p>
+                        Before:{" "}
+                        {names(
+                          week.beforeIds.filter((id): id is string => !!id),
+                        )}
+                        . After:{" "}
+                        {names(week.ids.filter((id): id is string => !!id))}.
+                      </p>
+                    </div>
+                  ))}
+                </details>
+                {[...impact.errors, ...impact.warnings].map((issue) => (
+                  <p className="notice warning" key={issue}>
+                    {issue}
+                  </p>
+                ))}
+              </Panel>
+            ))}
+          </details>
           {/* The former all-roster optimization remains separate for hypothetical future backup/bye coverage. */}
           <details>
             <summary>Modeled future coverage impact (includes bench)</summary>
@@ -2142,13 +2300,13 @@ export function TradeView({
             )}
           </Panel>
           <Panel
-            title="Weekly direct starter impact"
-            note="Your marked starter group is held across the remaining weeks; byes and known availability still apply. Existing bench players enter only as named replacements for departing starters. Incoming players may improve starters. Expected PPG is a model estimate, not ESPN’s weekly forecast."
+            title={`Weekly lineup impact · ${lineupBasisLabel(lineupBasis)}`}
+            note={`Same selected basis as search and headline totals: ${lineupBasisLabel(lineupBasis)}. Model Expected points, not ESPN’s weekly forecast.`}
           >
             <DataTable
-              rows={r.directA.weekly.map((w, i) => ({
+              rows={primary!.own.weekly.map((w, i) => ({
                 ...w,
-                their: r.directB.weekly[i].expectedGain,
+                their: primary!.other.weekly[i].expectedGain,
               }))}
               id={(w) => str(w.week)}
               columns={[
@@ -2198,7 +2356,7 @@ export function TradeView({
             />
             <details>
               <summary>Inspect your before/after starters</summary>
-              {r.directA.weekly.map((w) => (
+              {primary!.own.weekly.map((w) => (
                 <p key={w.week}>
                   <b>Week {w.week}:</b>{" "}
                   <span>

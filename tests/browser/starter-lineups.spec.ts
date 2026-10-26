@@ -205,14 +205,14 @@ test("bench trades keep direct points unchanged while exchange grade and coverag
   await page
     .getByLabel("Incoming player 1", { exact: true })
     .selectOption("200");
-  const direct = page
-    .locator("section")
-    .filter({
-      has: page.getByRole("heading", {
-        name: "Your direct starter impact",
-        exact: true,
-      }),
-    });
+  // The other scoring basis is deliberately secondary and must be opened explicitly.
+  await page.getByText("Compare with Marked starters", { exact: true }).click();
+  const direct = page.locator("section").filter({
+    has: page.getByRole("heading", {
+      name: "Your direct starter impact",
+      exact: true,
+    }),
+  });
   const gain = direct
     .locator(".metric")
     .filter({
@@ -232,10 +232,11 @@ test("bench trades keep direct points unchanged while exchange grade and coverag
       has: page.getByText("Your modeled coverage gain / week", { exact: true }),
     });
   await expect(coverage.locator("strong")).toHaveText(/^-/);
-  await page
-    .getByText("Inspect your before/after starters", { exact: true })
+  // Inspect the marked baseline inside its own disclosure, rather than a similarly worded optimized lineup.
+  await direct
+    .getByText("Your alternative weekly lineups", { exact: true })
     .click();
-  await expect(page.getByText(/Before: Main QB/).first()).toBeVisible();
+  await expect(direct.getByText(/Before: Main QB/).first()).toBeVisible();
   await page.screenshot({
     path: "test-results/direct-starter-trade.png",
     fullPage: true,
@@ -251,6 +252,7 @@ test("bench trades keep direct points unchanged while exchange grade and coverag
   await page.getByRole("button", { name: "Save lineup", exact: true }).click();
   await expect(page.getByText(/Lineup source: Saved app lineup/)).toBeVisible();
   await page.goto("./#/trades");
+  await page.getByText("Compare with Marked starters", { exact: true }).click();
   await expect(gain).toHaveText(/^-/);
   await expect(
     page.getByLabel("Outgoing player 1", { exact: true }),

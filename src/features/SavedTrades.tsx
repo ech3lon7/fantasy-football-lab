@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { lineupBasisLabel } from "../domain/trade-impact";
 import { num, str, type AppState } from "../domain/contracts";
 import { evidenceKey, roleScenarioKey } from "../domain/opportunity";
 import {
@@ -10,6 +11,8 @@ import {
   readSavedTrades,
   savedTradesKey,
   summaryFromTrade,
+  savedLineupBasis,
+  originalLineupBasis,
   writeSavedTrades,
   type SavedTrade,
   type SavedTradeSummary,
@@ -17,7 +20,8 @@ import {
 import type { Model } from "../domain/valuation";
 import { Panel } from "../ui/layout";
 import { PlayerName } from "../ui/PlayerName";
-import { signed, Signal } from "../ui/components";
+import { fmt, signed, Signal } from "../ui/components";
+import { sourceDataset } from "../domain/roster-scenarios";
 
 // Saved summaries are recalculated by the existing trade worker, not on the interface thread.
 export function SavedTrades({
@@ -48,7 +52,13 @@ export function SavedTrades({
     m.evidenceRaw,
     m.roleScenarioWeight,
     lineupsRaw,
-    read.trades.map((t) => [t.id, t.season, t.draft]),
+    read.trades.map((t) => [
+      t.id,
+      t.season,
+      t.draft,
+      t.scenario,
+      savedLineupBasis(t),
+    ]),
   ]);
   useEffect(() => {
     setResults({});
@@ -56,7 +66,7 @@ export function SavedTrades({
     const eligible = read.trades.filter(
       (t) =>
         t.season === num(m.dataset.tables.ModelContext[0].Season) &&
-        ownsSavedDraft(m.dataset, t.draft),
+        (!!t.scenario || ownsSavedDraft(sourceDataset(m), t.draft)),
     );
     if (!eligible.length) return;
     const worker = new Worker(
@@ -75,7 +85,14 @@ export function SavedTrades({
       if (!eligible.some((t) => t.id === savedId)) return;
       setResults((prior) => ({
         ...prior,
-        [savedId]: error ? { error } : { summary: summaryFromTrade(result) },
+        [savedId]: error
+          ? { error }
+          : {
+              summary: summaryFromTrade(
+                result,
+                savedLineupBasis(eligible.find((t) => t.id === savedId)!),
+              ),
+            },
       }));
     };
     worker.onerror = () => {
@@ -92,13 +109,17 @@ export function SavedTrades({
     worker.postMessage({
       id: requestId,
       type: "saved-trades",
-      dataset: m.dataset,
+      dataset: sourceDataset(m),
       settings: m.settings,
-      trades: eligible.map((t) => ({ id: t.id, draft: t.draft })),
+      trades: eligible.map((t) => ({
+        id: t.id,
+        draft: t.draft,
+        scenario: t.scenario,
+      })),
       filters: {
         [evidenceKey]: m.evidenceRaw,
         [roleScenarioKey]: String(m.roleScenarioWeight),
-        [starterLineupsKey]: lineupsRaw ?? "",
+        [starterLineupsKey]: state.filters[starterLineupsKey] ?? "",
       },
     });
     return () => {
@@ -200,7 +221,8 @@ function SavedTradeCard({
   }, [trade.name, trade.notes]);
   const sameSeason =
     trade.season === num(m.dataset.tables.ModelContext[0].Season);
-  const owned = ownsSavedDraft(m.dataset, trade.draft);
+  const owned =
+    !!trade.scenario || ownsSavedDraft(sourceDataset(m), trade.draft);
   const team = (id: string) =>
     str(
       m.dataset.tables.ModelTeams.find((t) => str(t.TeamID) === id)?.TeamName,
@@ -217,6 +239,11 @@ function SavedTradeCard({
   return (
     <details>
       <summary>
+        {trade.scenario && (
+          <span className="signal conditional">
+            Hypothetical · {trade.scenario.name}
+          </span>
+        )}
         {trade.name} ·{" "}
         {sameSeason
           ? (current?.summary?.grade ??
@@ -273,6 +300,14 @@ function SavedTradeCard({
       {sameSeason && !current && (
         <p aria-live="polite">Recalculating saved trade…</p>
       )}
+      {/* Original numbers are immutable; incompatible baselines must never look like a performance comparison. */}
+      {(!originalLineupBasis(trade.original) ||
+        originalLineupBasis(trade.original) !== savedLineupBasis(trade)) && (
+        <p className="notice warning">
+          Original and current scoring bases differ or are unspecified; their
+          gains are not directly comparable.
+        </p>
+      )}
       <div className="table-wrap">
         <table aria-label="Saved trade original and current results">
           <thead>
@@ -296,14 +331,35 @@ function SavedTradeCard({
               <tr key={label}>
                 <td>
                   {label}
+                  <small>
+                    {originalLineupBasis(summary)
+                      ? lineupBasisLabel(originalLineupBasis(summary))
+                      : "Legacy / unspecified basis"}
+                  </small>
                   {/* Preserve historical summaries while making the change in scoring basis visible. */}
                   {label === "Original" &&
                     summary.impactVersion !== tradeImpactVersion && (
                       <small>Previous scoring method</small>
                     )}
                 </td>
-                <td className="model">{points(summary.own)}</td>
-                <td className="model">{points(summary.other)}</td>
+                <td className="model">
+                  <strong>{points(summary.own)}</strong>
+                  {summary.ownBefore !== undefined && (
+                    <small>
+                      Before {fmt(summary.ownBefore)} → After{" "}
+                      {fmt(summary.ownAfter)}
+                    </small>
+                  )}
+                </td>
+                <td className="model">
+                  <strong>{points(summary.other)}</strong>
+                  {summary.otherBefore !== undefined && (
+                    <small>
+                      Before {fmt(summary.otherBefore)} → After{" "}
+                      {fmt(summary.otherAfter)}
+                    </small>
+                  )}
+                </td>
                 <td>
                   {summary.grade}
                   {summary.conditional && <Signal text="CONDITIONAL" />}
@@ -324,8 +380,8 @@ function SavedTradeCard({
       </div>
       <p>
         <small>
-          Current weekly values use your marked-starter impact and their
-          optimized roster-potential impact, with consistent before/after rules.
+          Current weekly values use {lineupBasisLabel(savedLineupBasis(trade))}{" "}
+          for both teams, with consistent availability rules before and after.
           These are model estimates, not player PPG or ESPN weekly projections.
           Original source: {trade.original.sourceUTC ?? "Unavailable"}. Saved:{" "}
           {new Date(trade.createdAt).toLocaleString()}. Current source:{" "}

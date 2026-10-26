@@ -95,7 +95,7 @@ it("combines singles and packages with flexible offers, targets and saved ranges
     const manual = evaluateTrade(m, draft);
     expect(manual.valid).toBe(true);
     if (!manual.valid) continue;
-    expect(row.own).toBe(manual.directA.expectedPerWeek);
+    expect(row.own).toBe(manual.potentialA.expectedPerWeek);
     expect(row.other).toBe(manual.potentialB.expectedPerWeek);
     const saved = readSavedTrades(
       saveTrade(initialState(d), m, draft, summaryFromSearch(row), q),
@@ -181,7 +181,7 @@ it("enumerates tradable subsets, protects unselected starters and round-trips sa
     const expected = evaluateTrade(m, draft);
     expect(expected.valid).toBe(true);
     if (!expected.valid) continue;
-    expect(row.own).toBe(expected.directA.expectedPerWeek);
+    expect(row.own).toBe(expected.potentialA.expectedPerWeek);
     expect(row.other).toBe(expected.potentialB.expectedPerWeek);
     const saved = readSavedTrades(
       saveTrade(state, m, draft, summaryFromSearch(row), q),
@@ -280,7 +280,7 @@ it("explains recipient incentives on demand without mutating the snapshot", asyn
   const before = JSON.stringify(m.players),
     details = opponentIncentive(m, q, row);
   expect(details.notes.join(" ")).toContain(
-    "Their weekly roster-potential gain",
+    "Their weekly gain (Best available lineup)",
   );
   expect(details.notes.join(" ")).toContain("not a market price");
   expect(details.positions.length).toBeGreaterThan(0);

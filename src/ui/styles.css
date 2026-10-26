@@ -1705,3 +1705,298 @@ pre {
   padding: 6px 10px;
   font-size: 11px;
 }
+
+/* The simulator compares two readable card lineups, using existing colors and typography rather than another app-wide theme. */
+.sim-impact {
+  margin-bottom: 22px;
+}
+.sim-boards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.sim-board {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  background: #f5f7f0;
+}
+.sim-board > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+}
+.sim-board h3 {
+  margin: 5px 0 0;
+  font-size: 17px;
+}
+.sim-board header small {
+  font-size: 10px;
+  letter-spacing: 0.6px;
+}
+.sim-score {
+  text-align: right;
+}
+.sim-score strong {
+  display: block;
+  font-size: 25px;
+}
+.sim-slot-grid,
+.sim-reserve-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+/* Equal slot heights keep before/after positions aligned despite the editable board's action buttons. */
+.sim-slot-grid {
+  grid-auto-rows: 242px;
+}
+.sim-slot > .sim-player-card,
+.sim-slot > .sim-empty-slot {
+  height: 184px;
+}
+.sim-slot {
+  min-width: 0;
+}
+.sim-slot-qb {
+  grid-column: 1 / -1;
+  width: calc(50% - 7px);
+  justify-self: center;
+}
+.sim-slot-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 5px;
+  margin-bottom: 7px;
+  font-size: 11px;
+}
+.sim-slot-title > span,
+.sim-change-label {
+  color: var(--pink);
+  font-size: 10px;
+}
+.sim-player-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 10px;
+  background: #fff;
+}
+.sim-card-changed {
+  border: 2px solid #9d174d;
+  padding: 9px;
+}
+.sim-player-top {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 56px;
+}
+.sim-player-top > div:last-child {
+  min-width: 0;
+}
+.sim-player-top .player-name {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.sim-player-top small {
+  display: block;
+  font-size: 9px;
+}
+.sim-portrait {
+  width: 48px;
+  height: 52px;
+  flex: 0 0 48px;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  background: #f5f7f0;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.sim-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.sim-player-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin: 12px 0 8px;
+}
+.sim-player-stats span {
+  min-width: 0;
+  font-size: 9px;
+}
+.sim-player-stats strong {
+  display: block;
+  font-size: 15px;
+  margin-top: 3px;
+}
+.sim-player-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 9px;
+}
+.sim-player-status > span + span {
+  background: #fff1c3;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.sim-slot-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+.sim-slot-actions button,
+.sim-card-action {
+  font-size: 10px;
+  padding: 5px 8px;
+  min-height: 30px;
+}
+.sim-empty-slot {
+  min-height: 144px;
+  border: 1px dashed #9eafa5;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 12px;
+  color: #64748b;
+  font-size: 12px;
+}
+.sim-reserves {
+  margin-top: 20px;
+}
+.sim-reserve-grid {
+  margin-top: 12px;
+}
+.sim-board-note {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #53665a;
+}
+.sim-board-note svg {
+  flex-shrink: 0;
+}
+.sim-advanced {
+  margin-top: 18px;
+}
+.sim-advanced > summary {
+  margin-bottom: 16px;
+}
+.sim-board-tabs {
+  display: none;
+}
+
+/* The picker is an accessible native modal; its cards reuse the board's actual player data and public portraits. */
+.sim-player-picker {
+  width: min(860px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+  color: var(--ink);
+}
+.sim-player-picker::backdrop {
+  background: #122d2780;
+}
+.sim-player-picker > .toolbar {
+  justify-content: space-between;
+}
+.sim-player-picker h3 {
+  margin: 0;
+}
+.sim-player-picker .control {
+  margin-bottom: 0;
+}
+.sim-picker-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.sim-picker-list > div {
+  min-width: 0;
+}
+.sim-picker-list > div > small {
+  display: block;
+  margin: 5px 0;
+  font-size: 10px;
+}
+.sim-picker-list .button {
+  width: 100%;
+}
+
+/* Preserve full-size cards on phones by switching boards with tabs; keep wide tables inside their existing scroll containers. */
+@media (max-width: 900px) {
+  .sim-boards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sim-board:not(.sim-board-active) {
+    display: none;
+  }
+  .sim-board-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 15px 0;
+  }
+  .sim-board-tabs button {
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: white;
+    color: var(--ink);
+  }
+  .sim-board-tabs [aria-selected="true"] {
+    background: var(--ink);
+    color: white;
+  }
+  .sim-picker-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  .sim-board {
+    padding: 10px;
+  }
+  .sim-slot-grid,
+  .sim-reserve-grid {
+    gap: 8px;
+  }
+  .sim-slot-qb {
+    width: calc(50% - 4px);
+  }
+  .sim-player-card {
+    padding: 8px;
+  }
+  .sim-card-changed {
+    padding: 7px;
+  }
+  .sim-portrait {
+    width: 34px;
+    height: 40px;
+    flex-basis: 34px;
+  }
+  .sim-player-top {
+    gap: 5px;
+  }
+  .sim-player-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sim-picker-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

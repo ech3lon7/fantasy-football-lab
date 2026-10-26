@@ -12,9 +12,16 @@ import {
 } from "./contracts";
 import type { Model } from "./valuation";
 import type { TradeResult } from "./trades";
+import {
+  lineupBases,
+  tradeImpact,
+  readLineupBasis,
+  type LineupBasis,
+} from "./trade-impact";
 import type { SearchRow, TradeSearchQuery } from "./trade-search";
 import { tradeSearchBounds } from "./trade-search";
 import { tradeImpactVersion } from "./starter-lineups";
+import { rosterScenarioSchema } from "./roster-scenarios";
 
 // Reuse the existing account-scoped string filters, so saved trades need no new database table or migration.
 export const savedTradesKey = "savedTrades";
@@ -25,6 +32,10 @@ const range = z
   .strict();
 const querySchema = z
   .object({
+    // Optional guided-search metadata keeps old saved queries strictly bounded.
+    lineupBasis: z.enum(lineupBases).optional(),
+    indexMode: z.enum(["automatic", "strict"]).optional(),
+    goal: z.enum(["explore", "improve", "position", "custom"]).optional(),
     teamA: z.string(),
     give: z.array(z.string()).max(5),
     count: count.min(1),
@@ -93,6 +104,11 @@ const summarySchema = z
   .object({
     // Old original summaries remain readable and explicitly identifiable as using the previous scoring method.
     impactVersion: z.string().max(60).optional(),
+    lineupBasis: z.enum(lineupBases).optional(),
+    ownBefore: finite.nullable().optional(),
+    ownAfter: finite.nullable().optional(),
+    otherBefore: finite.nullable().optional(),
+    otherAfter: finite.nullable().optional(),
     own: finite.nullable(),
     other: finite.nullable(),
     ownTotal: finite.nullable(),
@@ -112,6 +128,10 @@ const savedSchema = z
     notes: z.string().max(2000),
     draft: draftSchema,
     query: querySchema.optional(),
+    // Current evaluation preference is separate from the immutable original summary.
+    lineupBasis: z.enum(lineupBases).optional(),
+    // Preserve a private immutable recipe with each hypothetical trade, never a pointer to mutable named scenarios.
+    scenario: rosterScenarioSchema.optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
     original: summarySchema
@@ -127,6 +147,22 @@ const collectionSchema = z
   .strict();
 export type SavedTrade = z.infer<typeof savedSchema>;
 export type SavedTradeSummary = z.infer<typeof summarySchema>;
+// Only a known historical version identifies an original summary's basis; older unknown numbers stay explicitly unspecified.
+export const originalLineupBasis = (
+  summary: SavedTradeSummary,
+): LineupBasis | undefined =>
+  summary.lineupBasis ??
+  (["roster-potential-primary-2", tradeImpactVersion].includes(
+    summary.impactVersion ?? "",
+  )
+    ? "best-available"
+    : undefined);
+export const savedLineupBasis = (trade: SavedTrade): LineupBasis =>
+  readLineupBasis(
+    trade.lineupBasis ??
+      trade.query?.lineupBasis ??
+      originalLineupBasis(trade.original),
+  );
 
 // Corrupt/future-format saved state stays intact and produces a recoverable message instead of breaking app startup.
 export function readSavedTrades(raw?: string): {
@@ -202,6 +238,11 @@ export function writeSavedTrades(state: AppState, trades: SavedTrade[]) {
 export function summaryFromSearch(row: SearchRow): SavedTradeSummary {
   return {
     impactVersion: tradeImpactVersion,
+    lineupBasis: readLineupBasis(row.lineupBasis),
+    ownBefore: row.ownBefore,
+    ownAfter: row.ownAfter,
+    otherBefore: row.otherBefore,
+    otherAfter: row.otherAfter,
     own: row.own,
     other: row.other,
     ownTotal: row.ownTotal,
@@ -213,14 +254,24 @@ export function summaryFromSearch(row: SearchRow): SavedTradeSummary {
     conditional: row.warnings.length > 0,
   };
 }
-export function summaryFromTrade(result: TradeResult): SavedTradeSummary {
-  return result.valid
+export function summaryFromTrade(
+  result: TradeResult,
+  basis?: LineupBasis,
+): SavedTradeSummary {
+  // Saving uses the same selected outputs as search and the analyzer, including manual saves without a query.
+  const impact = tradeImpact(result, basis);
+  return result.valid && impact
     ? {
         impactVersion: tradeImpactVersion,
-        own: result.directA.expectedPerWeek,
-        other: result.potentialB.expectedPerWeek,
-        ownTotal: result.directA.expected,
-        otherTotal: result.potentialB.expected,
+        lineupBasis: impact.basis,
+        ownBefore: impact.own.beforePerWeek,
+        ownAfter: impact.own.afterPerWeek,
+        otherBefore: impact.other.beforePerWeek,
+        otherAfter: impact.other.afterPerWeek,
+        own: impact.own.expectedPerWeek,
+        other: impact.other.expectedPerWeek,
+        ownTotal: impact.own.expected,
+        otherTotal: impact.other.expected,
         grade: result.grade,
         surplus: result.surplusTest,
         points: result.pointsTest,
@@ -278,12 +329,20 @@ export function saveTrade(
   const season = num(m.dataset.tables.ModelContext[0].Season);
   const identity = savedTradeIdentity(season, draft);
   const prior = read.trades.find(
-    (t) => savedTradeIdentity(t.season, t.draft) === identity,
+    (t) =>
+      savedTradeIdentity(t.season, t.draft) === identity &&
+      JSON.stringify(t.scenario) === JSON.stringify(m.simulation?.scenario),
   );
   const label = (ids: string[]) =>
     ids.map((id) => m.byId.get(id)?.name ?? id).join(" + ");
   const trade: SavedTrade = prior
-    ? { ...prior, draft, query: parsedQuery ?? prior.query, updatedAt: now }
+    ? {
+        ...prior,
+        draft,
+        lineupBasis: readLineupBasis(summary.lineupBasis),
+        query: parsedQuery ?? prior.query,
+        updatedAt: now,
+      }
     : {
         id: crypto.randomUUID(),
         season,
@@ -291,6 +350,10 @@ export function saveTrade(
         notes: "",
         draft,
         query: parsedQuery,
+        lineupBasis: readLineupBasis(summary.lineupBasis),
+        scenario: m.simulation?.scenario
+          ? structuredClone(m.simulation.scenario)
+          : undefined,
         createdAt: now,
         updatedAt: now,
         original: {
@@ -317,7 +380,10 @@ export function reconcileSavedTrades(
   if (read.issue) return workspace;
   const season = num(workspace.dataset.tables.ModelContext[0].Season);
   const keep = read.trades.filter(
-    (t) => t.season !== season || ownsSavedDraft(workspace.dataset!, t.draft),
+    (t) =>
+      !!t.scenario ||
+      t.season !== season ||
+      ownsSavedDraft(workspace.dataset!, t.draft),
   );
   if (keep.length === read.trades.length) return workspace;
   // Pruning only shrinks existing state and must not make a previously oversized workspace unloadable.

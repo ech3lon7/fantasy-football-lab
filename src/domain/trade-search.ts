@@ -17,10 +17,17 @@ import {
   irAssignments,
 } from "./lineups";
 import { evaluateTrade } from "./trades";
+import {
+  tradeImpact,
+  readLineupBasis,
+  lineupScoringVersion,
+  type LineupBasis,
+} from "./trade-impact";
 // Positional fit uses the same saved/imported starter assignments as the existing analyzer.
 import { readStarterLineup, tradeImpactVersion } from "./starter-lineups";
 import type { Model, Player } from "./valuation";
 import type { OpponentIncentive } from "./trade-discovery";
+import type { RosterScenario } from "./roster-scenarios";
 
 // Discovery settings are optional so saved fixed-package searches retain their original behavior.
 export interface DiscoveryOptions {
@@ -123,8 +130,8 @@ export interface SearchLineupSide {
 export interface SearchLineupDetails {
   own: SearchLineupSide;
   other: SearchLineupSide;
-  // Secondary views explain the distinct marked-starter and full-roster measurements for both teams.
-  ownPotential: SearchLineupSide;
+  // Legacy secondary field names carry the alternative basis; source labels identify its actual interpretation.
+  ownMarked: SearchLineupSide;
   otherMarked: SearchLineupSide;
   incentive?: OpponentIncentive;
 }
@@ -137,8 +144,13 @@ export interface IncomingFilter {
 }
 // Results stay temporary; explicitly saved trades may retain their compact search query.
 export interface TradeSearchQuery {
+  // Missing basis preserves historical optimized-search behavior.
+  lineupBasis?: LineupBasis;
   teamA: string;
   give: string[];
+  // Missing mode preserves strict index matching in legacy saved searches.
+  indexMode?: "automatic" | "strict";
+  goal?: "explore" | "improve" | "position" | "custom";
   count: number;
   below: number;
   above: number;
@@ -166,6 +178,14 @@ export interface SearchMatch {
   give?: string[];
 }
 export interface SearchRow extends SearchMatch {
+  // Compact before/after metadata travels with each result, never recomputed from a different live selection.
+  lineupBasis?: LineupBasis;
+  ownBefore?: number | null;
+  ownAfter?: number | null;
+  otherBefore?: number | null;
+  otherAfter?: number | null;
+  // Position-goal contributions include appearances in FLEX.
+  positionGain?: number | null;
   nearMiss?: { reasons: string[]; distance: number };
   usefulness?: UsefulnessEvidence[];
   own: number | null;
@@ -191,6 +211,7 @@ export interface SearchStats {
   scored: number;
   upgradeExcluded?: number;
   weeklyExcluded?: number;
+  positionExcluded?: number;
   deficitExcluded?: number;
   incomingExcluded?: number;
   usefulnessExcluded?: number;
@@ -203,6 +224,13 @@ export interface SearchProgress {
   elapsedMs?: number;
   remainingMs?: number;
 }
+// Recovery counts are exact completed evaluations, tied to the original request/context.
+export interface SearchRecovery {
+  id: string;
+  changes: string[];
+  query: TradeSearchQuery;
+  count: number;
+}
 export type SearchRequest =
   | {
       type: "start";
@@ -214,6 +242,8 @@ export type SearchRequest =
       roleWeight: string;
       lineupsRaw?: string;
       query: TradeSearchQuery;
+      // Workers always value the live source first, then apply the same frozen-index ownership overlay as the UI.
+      scenario?: RosterScenario;
     }
   | { type: "page"; id: string; context: string; offset: number }
   | { type: "details"; id: string; context: string; key: string };
@@ -226,6 +256,13 @@ export type SearchResponse = { id: string; context: string } & (
       offset: number;
       stats: SearchStats;
       suggestions?: SearchRow[];
+    }
+  | {
+      type: "recovery";
+      options?: SearchRecovery[];
+      checked?: number;
+      total?: number;
+      error?: string;
     }
   | { type: "error"; message: string }
   | {
@@ -246,10 +283,15 @@ export function tradeSearchContext(
 ) {
   return JSON.stringify([
     tradeImpactVersion,
+    lineupScoringVersion,
+    readLineupBasis(query.lineupBasis),
     workspace,
     m.dataset.hash,
     m.analysisVersion,
     m.weeks,
+    // Scoring-policy changes invalidate prior pages and recovery previews.
+    m.ignoreByeWeeks ?? false,
+    m.ignoreTemporaryAbsences ?? false,
     Object.entries(m.settings).sort(([a], [b]) => a.localeCompare(b)),
     m.evidenceRaw,
     m.roleScenarioWeight,
@@ -257,6 +299,8 @@ export function tradeSearchContext(
     query.teamA,
     query.give,
     query.count,
+    query.indexMode ?? "strict",
+    query.goal ?? "custom",
     query.below,
     query.above,
     query.discovery ?? null,
@@ -300,6 +344,12 @@ export function tradeSearchContext(
 // Missing indices block outgoing searches, while genuine zero remains a usable number.
 export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
   const errors: string[] = [];
+  // Unknown basis values must not silently change a saved search's meaning.
+  if (
+    q.lineupBasis !== undefined &&
+    !["best-available", "marked-starters"].includes(q.lineupBasis)
+  )
+    errors.push("Choose a valid lineup scoring basis.");
   // Every unselected player is protected; validate the explicit candidate pool before generating subsets.
   const flexible = q.discovery?.flexible;
   const offered = flexible?.pool ?? q.give;
@@ -372,7 +422,10 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
     errors.push(
       "Choose an incoming-player range from 1 to 5, with minimum no greater than maximum.",
     );
-  if (![q.below, q.above].every((x) => Number.isFinite(x) && x >= 0))
+  if (
+    q.indexMode !== "automatic" &&
+    ![q.below, q.above].every((x) => Number.isFinite(x) && x >= 0)
+  )
     errors.push("Enter nonnegative numbers for both index offsets.");
   // Disabled categories impose no minimum; enabled counts must fit the incoming package.
   for (const [selected, minimum, allowed, name] of [
@@ -466,9 +519,16 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
     )
       errors.push(`${label} minimum weekly gain cannot exceed its maximum.`);
   }
+  // One requested position keeps an upgrade distinct from gains elsewhere in the lineup.
+  if (q.goal === "position" && q.incoming?.positions?.length !== 1)
+    errors.push(
+      "Choose one position for the position-upgrade goal, or use Custom search.",
+    );
   const outgoing = sum(q.give.map((id) => m.byId.get(id)?.index ?? 0));
-  const lower = outgoing - q.below,
-    upper = outgoing + q.above;
+  // Automatic matching has no hidden price window; finite bounds retain safe enumerator arithmetic.
+  const lower =
+      q.indexMode === "automatic" ? -Number.MAX_VALUE : outgoing - q.below,
+    upper = q.indexMode === "automatic" ? Number.MAX_VALUE : outgoing + q.above;
   if (![outgoing, lower, upper].every(Number.isFinite))
     errors.push("The combined index range must be finite.");
   return { errors, outgoing, lower, upper };
@@ -518,7 +578,7 @@ export function upgradeCounts(filter: UpgradeFilter) {
 }
 
 // Counts and the selected deficit position must be satisfied by the same distinct-player assignment.
-function meetsUpgradeRequirements(
+export function meetsUpgradeRequirements(
   m: Model,
   q: TradeSearchQuery,
   edges: UpgradeEvidence[],
@@ -1023,6 +1083,7 @@ export function scoreTradeMatch(
   if (!r.valid)
     return {
       ...match,
+      lineupBasis: readLineupBasis(q.lineupBasis),
       own: null,
       other: null,
       ownTotal: null,
@@ -1037,11 +1098,15 @@ export function scoreTradeMatch(
       irA: [],
       irB: [],
     };
+  // Select both sides under the same captured basis before filtering or ranking the package.
+  const impact = tradeImpact(r, q.lineupBasis)!;
   const availability = [...q.give, ...match.get].flatMap((id) => {
     const p = m.byId.get(id)!;
     return [
       p.injury !== "ACTIVE" ? `${p.name}: ${p.injury}` : "",
-      p.bye === m.current ? `${p.name}: bye this week` : "",
+      !m.ignoreByeWeeks && p.bye === m.current
+        ? `${p.name}: bye this week`
+        : "",
     ].filter(Boolean);
   });
   return {
@@ -1050,11 +1115,37 @@ export function scoreTradeMatch(
     ...(q.usefulness
       ? { usefulness: packageUsefulness(m, q, r.initialB, r.legalB, r.irB) }
       : {}),
-    own: n(r.directA.expectedPerWeek),
-    // Opponent benefit must include the roster they give up and all backup improvements already available beforehand.
-    other: n(r.potentialB.expectedPerWeek),
-    ownTotal: n(r.directA.expected),
-    otherTotal: n(r.potentialB.expected),
+    // Attribute points in the same optimized weekly lineups to the requested position, including FLEX.
+    ...(q.goal === "position"
+      ? {
+          positionGain:
+            impact.own.expectedPerWeek === null
+              ? null
+              : sum(
+                  impact.own.weekly.map((w) => {
+                    const score = (ids: (string | null)[]) =>
+                      sum(
+                        ids.map((id) =>
+                          id &&
+                          m.byId.get(id)?.pos === q.incoming?.positions?.[0]
+                            ? m.byId.get(id)!.expected!
+                            : 0,
+                        ),
+                      );
+                    return score(w.ids) - score(w.beforeIds);
+                  }),
+                ) / m.weeks.length,
+        }
+      : {}),
+    lineupBasis: impact.basis,
+    ownBefore: impact.own.beforePerWeek,
+    ownAfter: impact.own.afterPerWeek,
+    otherBefore: impact.other.beforePerWeek,
+    otherAfter: impact.other.afterPerWeek,
+    own: n(impact.own.expectedPerWeek),
+    other: n(impact.other.expectedPerWeek),
+    ownTotal: n(impact.own.expected),
+    otherTotal: n(impact.other.expected),
     grade: r.grade,
     surplus: r.surplusTest,
     points: r.pointsTest,
@@ -1069,6 +1160,7 @@ export function scoreTradeMatch(
         ...r.potentialA.errors,
         ...r.potentialB.errors,
         ...availability,
+        ...(m.simulation?.issues ?? []),
         ...(!r.legality ? ["Unresolved roster conflict"] : []),
       ]),
     ],
@@ -1136,12 +1228,17 @@ export function searchLineupDetails(
       }),
     })),
   });
-  // Main result columns retain your chosen starters and use their full-roster potential; details expose both other views.
+  // Primary details follow the captured query; the other basis remains explicitly secondary.
+  const selected = tradeImpact(r, q.lineupBasis)!;
+  const alternative = tradeImpact(
+    r,
+    selected.basis === "marked-starters" ? "best-available" : "marked-starters",
+  )!;
   return {
-    own: side(r.directA),
-    other: side(r.potentialB),
-    ownPotential: side(r.potentialA),
-    otherMarked: side(r.directB),
+    own: side(selected.own),
+    other: side(selected.other),
+    ownMarked: side(alternative.own),
+    otherMarked: side(alternative.other),
   };
 }
 

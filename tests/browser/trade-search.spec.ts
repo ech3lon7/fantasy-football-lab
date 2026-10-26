@@ -15,6 +15,7 @@ async function seed(
   withOffers = false,
   bestRoster = false,
   incomingSignals = false,
+  guided = false,
 ) {
   const dataset: Dataset = JSON.parse(
     execFileSync(
@@ -100,6 +101,11 @@ async function seed(
   await expect(
     page.getByRole("heading", { name: "Find matching trades", exact: true }),
   ).toBeVisible();
+  if (guided) return dataset;
+  const search = panel(page);
+  await search.getByLabel("Search goal", { exact: true }).selectOption("custom");
+  await search.getByLabel("Use strict index range", { exact: true }).check();
+  await search.getByLabel("Create package", { exact: true }).uncheck();
   return dataset;
 }
 const panel = (page: Page) =>
@@ -109,6 +115,39 @@ const panel = (page: Page) =>
       exact: true,
     }),
   });
+
+// Zero qualified rows must explain that enumeration succeeded; outgoing pools do not implicitly enable multi-player returns.
+test("pooled search shows its actual incoming scope and explains weekly-limit exclusions", async ({
+  page,
+}) => {
+  await seed(page);
+  const search = panel(page);
+  await search
+    .getByLabel("Find outgoing combinations", { exact: true })
+    .check();
+  await expect(
+    search.getByLabel("Search package scope", { exact: true }),
+  ).toHaveText("Offer 1 of 1 pooled players · Receive 1 player from one team.");
+  await search
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("1000");
+  await search.getByLabel("Filter your weekly gain", { exact: true }).check();
+  await search.getByLabel("Your minimum weekly gain (points/week)", { exact: true }).fill("1000");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByRole("status").filter({
+      hasText:
+        "12 index-matched trades were evaluated; 12 failed your weekly-gain limits.",
+    }),
+  ).toBeVisible();
+  await search.getByLabel("Create package", { exact: true }).check();
+  await expect(
+    search.getByLabel("Search package scope", { exact: true }),
+  ).toContainText("Receive 1–3 players");
+});
 
 // Clear optional restrictions in one action without silently unprotecting players or changing the selected trade's structure.
 test("clear filters restores defaults and removes results while preserving players and package choices", async ({
@@ -174,6 +213,10 @@ test("clear filters restores defaults and removes results while preserving playe
     search.getByRole("button", { name: "Search", exact: true }),
   ).toBeEnabled();
   await expect(search.locator("tbody tr")).toHaveCount(0);
+  await expect(
+    search.getByLabel("Use strict index range", { exact: true }),
+  ).not.toBeChecked();
+  await search.getByLabel("Use strict index range", { exact: true }).check();
   for (const label of [
     "Below outgoing total (index points)",
     "Above outgoing total (index points)",
@@ -889,11 +932,9 @@ test("saved trades persist names notes and original results and restore the save
   await expect(saved.locator("details")).toHaveCount(1);
   await saved.locator("summary").click();
   await expect(
-    saved
-      .getByRole("row")
-      .filter({
-        has: page.getByRole("cell", { name: "Current", exact: true }),
-      }),
+    saved.getByRole("row").filter({
+      has: page.getByRole("cell", { name: /^Current/, exact: false }),
+    }),
   ).toBeVisible();
   await saved.getByLabel("Saved trade name", { exact: true }).fill("WR target");
   await saved
@@ -1004,9 +1045,9 @@ test("saved trades refresh current points and automatically remove ownership-inv
       has: page.getByRole("heading", { name: "Saved trades", exact: true }),
     });
   await saved.locator("summary").click();
-  const currentRow = saved
-    .getByRole("row")
-    .filter({ has: page.getByRole("cell", { name: "Current", exact: true }) });
+  const currentRow = saved.getByRole("row").filter({
+    has: page.getByRole("cell", { name: /^Current/, exact: false }),
+  });
   await expect(currentRow).toBeVisible();
   const expected = evaluateTrade(
     evaluate(dataset, dataset.settings),
@@ -1015,8 +1056,8 @@ test("saved trades refresh current points and automatically remove ownership-inv
   );
   expect(expected.valid).toBe(true);
   if (expected.valid)
-    await expect(currentRow.locator("td").nth(1)).toHaveText(
-      "+" + expected.directA.expectedPerWeek!.toFixed(2),
+    await expect(currentRow.locator("td").nth(1).locator("strong")).toHaveText(
+      "+" + expected.potentialA.expectedPerWeek!.toFixed(2),
     );
   expect(
     JSON.parse((await storedWorkspace(page)).state.filters.savedTrades)
@@ -1092,8 +1133,8 @@ test("weekly sliders filter exact averages for either or both teams without chan
   ).toHaveCount(0);
   const first = search.locator("tbody tr").first();
   await first.getByText("Trade details", { exact: true }).click();
-  await expect(first.getByText(/Your horizon gain:/)).toContainText("+180.00");
-  await expect(first.locator("td").nth(2)).toHaveText("+15.00");
+  await expect(first.getByText(/Your horizon gain:/)).toContainText("+40.00");
+  await expect(first.locator("td").nth(2)).toHaveText("+3.33");
   // Both sides must pass: existing bench replacements hold their gain at +20/week, below this +21/week requirement.
   await otherToggle.check();
   await expect(
@@ -1393,7 +1434,7 @@ test("single-player discovery agrees with the loaded analyzer and preserves outg
   const row = search.locator("tbody tr").filter({
     has: page.getByRole("link", { name: "Incoming QB", exact: true }),
   });
-  await expect(row.locator("td").nth(2)).toHaveText("0.00");
+  await expect(row.locator("td").nth(2)).toHaveText("-10.83");
   await row.getByRole("link", { name: "Incoming QB", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
@@ -1411,6 +1452,8 @@ test("single-player discovery agrees with the loaded analyzer and preserves outg
     get: ["200"],
   });
   if (!r.valid) throw Error(r.errors.join());
+  // Alternate marked-starter figures remain available under an explicit, separately based disclosure.
+  await page.getByText("Compare with Marked starters", { exact: true }).click();
   const direct = page.locator("section").filter({
     has: page.getByRole("heading", {
       name: "Your direct starter impact",
@@ -1584,6 +1627,10 @@ test("large searches show progress and support cancel, restart and navigation", 
   ).toBeVisible();
   await expect(panel(page).locator("tbody tr")).toHaveCount(0);
   // A successful empty search has its own result message, rather than resembling cancellation or failure.
+  // Navigation remounts broad defaults; opt back into the strict single-player case being verified.
+  await panel(page).getByLabel("Search goal", { exact: true }).selectOption("custom");
+  await panel(page).getByLabel("Use strict index range", { exact: true }).check();
+  await panel(page).getByLabel("Create package", { exact: true }).uncheck();
   await panel(page)
     .getByRole("button", { name: "Search", exact: true })
     .click();
@@ -1591,10 +1638,9 @@ test("large searches show progress and support cancel, restart and navigation", 
     panel(page).getByText("0 index matches.", { exact: false }),
   ).toBeVisible();
   await expect(
-    panel(page).getByText(
-      "No packages match this index range and incoming count.",
-      { exact: true },
-    ),
+    panel(page).getByText("No trades meet the current search criteria.", {
+      exact: true,
+    }),
   ).toBeVisible();
 });
 
@@ -1765,7 +1811,7 @@ test("opponent search gains use full rosters while details retain both impact me
     .locator("section")
     .filter({
       has: page.getByRole("heading", {
-        name: "Roster-potential impact",
+        name: "Expected team gain per week",
         exact: true,
       }),
     });
@@ -1773,7 +1819,7 @@ test("opponent search gains use full rosters while details retain both impact me
     potential
       .locator(".metric")
       .filter({
-        has: page.getByText("Their roster-potential gain / week", {
+        has: page.getByText("Their gain / week", {
           exact: true,
         }),
       })
@@ -1806,18 +1852,18 @@ test("trade details show named weekly scoring replacements from the captured lin
   });
   await row.getByText("Trade details", { exact: true }).click();
   await expect(
-    row.getByText("Your scoring lineup", { exact: true }),
+    row.getByText("Your roster potential", { exact: true }),
   ).toBeVisible();
   await expect(row.getByText(/Bench replacements: Bench QB/)).toBeVisible();
   await expect(row.getByText(/Bench replacements: Search WR 0/)).toBeVisible();
   await row
-    .getByText("Your weekly scoring replacements", { exact: true })
+    .getByText("Your marked-starter weekly replacements", { exact: true })
     .click();
   const own = row
     .locator("details")
     .filter({
       has: page.locator("summary", {
-        hasText: "Your weekly scoring replacements",
+        hasText: "Your marked-starter weekly replacements",
       }),
     })
     .last();
@@ -1842,7 +1888,7 @@ test("trade details show named weekly scoring replacements from the captured lin
   );
   // Collapse the checked weekly rows before inspecting the compact scoring summaries.
   await row
-    .getByText("Your weekly scoring replacements", { exact: true })
+    .getByText("Your marked-starter weekly replacements", { exact: true })
     .click();
   await row
     .getByText("Their weekly scoring replacements", { exact: true })
@@ -2059,4 +2105,172 @@ test("best-at-position target compares the full roster and enforces distinct-pos
   await search.screenshot({
     path: "test-results/trade-best-position-mobile.png",
   });
+});
+
+// New defaults expose a compact goal-first form; advanced legacy controls remain an explicit choice.
+test("guided search defaults to automatic singles and packages and configures transparent goals", async ({
+  page,
+}) => {
+  await seed(page, false, false, false, false, true);
+  const search = panel(page);
+  await expect(search.getByLabel("Search goal", { exact: true })).toHaveValue(
+    "explore",
+  );
+  await expect(
+    search.getByLabel("Use strict index range", { exact: true }),
+  ).not.toBeVisible();
+  await expect(
+    search.getByText("Receive 1–3 players. Automatic index matching", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(
+    search.getByRole("button", {
+      name: "Remove Receive 1–3 players",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await search.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "test-results/trade-goal-search.png" });
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(search.getByText(/\d+ index matches\. Ranked by/)).toBeVisible();
+  await expect(search.locator("tbody tr")).not.toHaveCount(0);
+  await search
+    .getByLabel("Search goal", { exact: true })
+    .selectOption("improve");
+  await expect(
+    search.getByRole("button", { name: /Remove Your weekly gain: 1 to any/ }),
+  ).toBeVisible();
+  await expect(
+    search.getByRole("button", { name: /Remove Their weekly gain: 0 to any/ }),
+  ).toBeVisible();
+  await search
+    .getByLabel("Search goal", { exact: true })
+    .selectOption("position");
+  await search
+    .getByLabel("Position to receive", { exact: true })
+    .selectOption("QB");
+  await search.getByText("Advanced search controls", { exact: true }).click();
+  await expect(search.getByLabel("Receive QB", { exact: true })).toBeChecked();
+  await expect(
+    search.getByLabel("Use strict index range", { exact: true }),
+  ).not.toBeChecked();
+});
+
+// Recovery does not change controls until clicked; the resulting completed count must equal its preview.
+test("zero-result recovery previews exact combined adjustments and applies only on request", async ({
+  page,
+}) => {
+  await seed(page);
+  const search = panel(page);
+  await search.getByLabel("Below outgoing total (index points)", { exact: true }).fill("0");
+  await search.getByLabel("Above outgoing total (index points)", { exact: true }).fill("0");
+  await search.getByLabel("Filter your weekly gain", { exact: true }).check();
+  await search.getByLabel("Your minimum weekly gain (points/week)", { exact: true }).fill("1000");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  const recovery = search.getByLabel("Search recovery options", {
+    exact: true,
+  });
+  const option = recovery.getByRole("button").first();
+  await expect(option).toBeVisible();
+  await expect(
+    search.getByLabel("Your minimum weekly gain (points/week)", {
+      exact: true,
+    }),
+  ).toHaveValue("1000");
+  await expect(
+    search.getByLabel("Use strict index range", { exact: true }),
+  ).toBeChecked();
+  const count = Number((await option.innerText()).match(/→ (\d+) matches/)![1]);
+  await option.click();
+  await expect(
+    search.getByText(`${count} index matches.`, { exact: false }),
+  ).toBeVisible();
+  await expect(
+    search.getByLabel("Your minimum weekly gain (points/week)", {
+      exact: true,
+    }),
+  ).toHaveValue("1");
+});
+
+// Switching one persisted scoring preference changes both filters and analyzer results, and saved trades restore their own basis.
+test("shared lineup basis drives filtering ranking analyzer and saved restoration", async ({
+  page,
+}) => {
+  await seed(page, true, false, true);
+  const search = panel(page);
+  const basis = page.getByRole("combobox", {
+    name: "Evaluate lineup impact using",
+    exact: true,
+  });
+  await expect(basis).toHaveValue("best-available");
+  await search.getByLabel("Use strict index range", { exact: true }).uncheck();
+  await search
+    .getByRole("combobox", { name: "Required incoming player", exact: true })
+    .selectOption("2");
+  await search.getByLabel("Filter their weekly gain", { exact: true }).check();
+  await search
+    .getByLabel("Their minimum weekly gain (points/week)", { exact: true })
+    .fill("6");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("0 index matches.", { exact: false }),
+  ).toBeVisible();
+  await basis.selectOption("marked-starters");
+  await expect(search.getByText(/Search inputs changed/)).toBeVisible();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    search.getByText("1 index matches.", { exact: false }),
+  ).toBeVisible();
+  const row = search.locator("tbody tr");
+  await expect(row.locator("td").nth(3)).toHaveText("+20.00");
+  const own = await row.locator("td").nth(2).innerText();
+  await row.getByRole("button", { name: "Load trade", exact: true }).click();
+  const primary = page.locator("section").filter({
+    has: page.getByRole("heading", {
+      name: "Expected team gain per week",
+      exact: true,
+    }),
+  });
+  await expect(
+    primary
+      .locator(".metric")
+      .filter({ has: page.getByText("Your gain / week", { exact: true }) })
+      .locator("strong"),
+  ).toHaveText(own);
+  await expect(
+    primary
+      .locator(".metric")
+      .filter({ has: page.getByText("Their gain / week", { exact: true }) })
+      .locator("strong"),
+  ).toHaveText("+20.00");
+  await expect(
+    primary.getByText(/Your Expected points\/week: Before/),
+  ).toContainText("After");
+  await row.getByRole("button", { name: "Save trade", exact: true }).click();
+  await expect
+    .poll(
+      async () => (await storedWorkspace(page)).state.filters.tradeLineupBasis,
+    )
+    .toBe("marked-starters");
+  const saved = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "Saved trades", exact: true }),
+  });
+  await saved.locator("summary").click();
+  await expect(
+    saved
+      .getByRole("row")
+      .filter({ has: page.getByRole("cell", { name: /^Current/ }) }),
+  ).toContainText("Marked starters");
+  await basis.selectOption("best-available");
+  await saved
+    .getByRole("button", { name: "Load saved trade", exact: true })
+    .click();
+  await expect(basis).toHaveValue("marked-starters");
+  await search
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .click();
+  await expect(basis).toHaveValue("marked-starters");
+  await page.reload();
+  await expect(basis).toHaveValue("marked-starters");
 });

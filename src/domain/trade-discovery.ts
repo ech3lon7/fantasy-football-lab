@@ -1,6 +1,7 @@
 import { cmpId, n, positions, sum } from "./contracts";
 import { irAssignments, lineup, teamsAssessment } from "./lineups";
 import { evaluateTrade } from "./trades";
+import { lineupBasisLabel, readLineupBasis } from "./trade-impact";
 import type { Model } from "./valuation";
 import {
   compareSearchRows,
@@ -116,6 +117,14 @@ export function discoveryFailures(
   q: TradeSearchQuery,
 ): string[] {
   const reasons: string[] = [];
+  // Receiving a position alone is not an upgrade: its optimized scoring contribution must increase.
+  if (
+    q.goal === "position" &&
+    !(n(row.positionGain) !== null && row.positionGain! > 0)
+  )
+    reasons.push(
+      "Your requested position does not have a positive weekly scoring gain.",
+    );
   if (violatesProtection(row, q))
     reasons.push("Requires dropping a protected player.");
   const receive = incomingCountRange(q);
@@ -125,11 +134,11 @@ export function discoveryFailures(
     );
   const lower = row.outgoing - q.below,
     upper = row.outgoing + q.above;
-  if (row.incoming < lower)
+  if (q.indexMode !== "automatic" && row.incoming < lower)
     reasons.push(
       `Incoming index is ${(lower - row.incoming).toFixed(2)} below your minimum.`,
     );
-  if (row.incoming > upper)
+  if (q.indexMode !== "automatic" && row.incoming > upper)
     reasons.push(
       `Incoming index is ${(row.incoming - upper).toFixed(2)} above your maximum.`,
     );
@@ -296,9 +305,9 @@ export function opponentIncentive(
     })
     .filter((change) => change.starterGain !== 0 || change.backupGain !== 0);
   const notes = [
-    `Their weekly roster-potential gain: ${row.other === null ? "unavailable" : row.other.toFixed(2) + " points/week"}.`,
+    `Their weekly gain (${lineupBasisLabel(q.lineupBasis)}): ${row.other === null ? "unavailable" : row.other.toFixed(2) + " points/week"}.`,
     `Their surplus received: ${r.outgoing.toFixed(2)}; surplus given: ${r.incoming.toFixed(2)}. Surplus is not a market price.`,
-    "Role changes below use healthy modeled Expected PPG; their weekly gain optimizes both full rosters with the same availability and bye rules. Existing backup upgrades are present before the trade too. Your weekly gain follows marked starters.",
+    `Role changes below use healthy modeled Expected PPG and are separate from weekly scoring. Both weekly gains use ${lineupBasisLabel(readLineupBasis(q.lineupBasis))}, with ${m.ignoreByeWeeks ? "byes and temporary injury absences ignored; IR excluded" : "scheduled bye and availability rules"}.`,
     ...(r.legality
       ? []
       : ["Unresolved roster legality prevents a reliable recommendation."]),

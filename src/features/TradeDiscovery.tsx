@@ -79,7 +79,7 @@ export function TradeDiscoveryControls({
         </FilterHelp>
         <FilterHelp
           label="Rank trades by"
-          help="Your gain uses your marked-starter impact. Their gain uses their optimized full-roster potential with the same rules before and after the trade. Benefit to both puts legal trades with positive gains on both measures first, then maximizes the smaller gain. Value, depth and uncertainty remain separate."
+          help={`Both gains use optimized full rosters for every remaining week, with ${m.ignoreByeWeeks ? "byes and temporary injury absences ignored; IR excluded" : "the same bye and availability rules"} before and after the trade. Marked-starter impact is shown separately. Benefit to both puts legal trades with positive gains on both measures first, then maximizes the smaller gain. Value, depth and uncertainty remain separate.`}
         >
           <label className="control">
             <span>Rank trades by</span>

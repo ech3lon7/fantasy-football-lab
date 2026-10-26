@@ -3,8 +3,29 @@ import { evaluate, type Model } from "../domain/valuation";
 import { teamsAssessment } from "../domain/lineups";
 import { evaluateTrade } from "../domain/trades";
 import { evidenceKey, roleScenarioKey } from "../domain/opportunity";
+import { applyRosterScenario } from "../domain/roster-scenarios";
+import type { RosterScenario } from "../domain/roster-scenarios";
+import type { Draft } from "../domain/contracts";
 let model: Model | undefined,
   key = "";
+// Project each saved recipe independently, retaining conflicts as uncertainty rather than changing the live cache.
+function projectedTrade(
+  base: Model,
+  draft: Draft,
+  scenario?: RosterScenario,
+  raw?: string,
+) {
+  const projected = applyRosterScenario(base, scenario, raw);
+  const result = evaluateTrade(
+    projected,
+    draft,
+    true,
+    projected.simulation?.lineupsRaw ?? raw,
+  );
+  if (result.valid)
+    result.uncertainty.push(...(projected.simulation?.issues ?? []));
+  return result;
+}
 self.onmessage = (e: MessageEvent) => {
   const { id, dataset, settings, draft, type, filters } = e.data;
   try {
@@ -29,10 +50,10 @@ self.onmessage = (e: MessageEvent) => {
           self.postMessage({
             id,
             savedId: trade.id,
-            result: evaluateTrade(
+            result: projectedTrade(
               model!,
               trade.draft,
-              true,
+              trade.scenario,
               filters?.[starterLineupsKey],
             ),
           });
@@ -50,10 +71,10 @@ self.onmessage = (e: MessageEvent) => {
     } else if (type === "trade")
       self.postMessage({
         id,
-        result: evaluateTrade(
+        result: projectedTrade(
           model!,
           draft,
-          true,
+          e.data.scenario,
           filters?.[starterLineupsKey],
         ),
       });

@@ -25,6 +25,7 @@ import {
 } from "./opportunity";
 import { assessGem, gemVersion, type GemAssessment } from "./gems";
 import { labelPolicy, labelRuleVersion } from "./label-rules";
+import type { RosterScenario } from "./roster-scenarios";
 export interface Player {
   id: string;
   name: string;
@@ -101,6 +102,17 @@ export interface Pool {
   status: string;
 }
 export interface Model {
+  // Hypothetical availability changes lineup eligibility only; forecasts, recorded injury statuses and values stay factual.
+  ignoreByeWeeks?: boolean;
+  ignoreTemporaryAbsences?: boolean;
+  // Hypothetical ownership is an analysis overlay; the original dataset remains available for every worker and evidence journal.
+  simulation?: {
+    scenario: RosterScenario;
+    sourceDataset: Dataset;
+    issues: string[];
+    lineupsRaw: string;
+    rebased: boolean;
+  };
   players: Player[];
   byId: Map<string, Player>;
   pools: Pool[];

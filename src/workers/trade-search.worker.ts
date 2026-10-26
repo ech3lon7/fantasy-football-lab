@@ -1,6 +1,9 @@
+import { findTradeRecoveries } from "../domain/trade-guidance";
 import { evaluate, type Model } from "../domain/valuation";
+import { applyRosterScenario } from "../domain/roster-scenarios";
 import {
   scoreTradeMatch,
+  matchesWeekly,
   searchLineupDetails,
   type TradeSearchQuery,
   searchPageSize,
@@ -105,10 +108,14 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
       return;
     }
     retained = undefined;
-    const model = evaluate(request.dataset, request.settings, {
-      evidence: request.evidence,
-      roleWeight: request.roleWeight,
-    });
+    const model = applyRosterScenario(
+      evaluate(request.dataset, request.settings, {
+        evidence: request.evidence,
+        roleWeight: request.roleWeight,
+      }),
+      request.scenario,
+      request.lineupsRaw,
+    );
     const started = performance.now();
     let lastProgress = 0,
       evaluationStarted = started;
@@ -157,6 +164,8 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
     );
     evaluationStarted = performance.now();
     progress("Evaluating trades", stats, true);
+    // Cache authoritative scores for exact zero-result recovery previews.
+    const evaluated = new Map<string, SearchRow>();
     const rows: SearchRow[] = [];
     const suggestions: SearchRow[] = [];
     // Weekly screening uses the evaluator's averages after every complete trade evaluation.
@@ -171,6 +180,7 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
         match,
         request.lineupsRaw,
       );
+      evaluated.set(match.key, row);
       // Exact matches keep every enabled limit; nearby evaluated packages are a separate, explicitly explained list.
       const failures = discoveryFailures(row, request.query);
       if (!failures.length) rows.push(row);
@@ -182,7 +192,13 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
           row.usefulness?.length !== (row.give ?? request.query.give).length
         )
           stats.usefulnessExcluded = (stats.usefulnessExcluded ?? 0) + 1;
-        else if (request.query.weekly)
+        // Report positional failures separately; they must not masquerade as failed total weekly-gain limits.
+        if (
+          request.query.goal === "position" &&
+          !(row.positionGain != null && row.positionGain > 0)
+        )
+          stats.positionExcluded = (stats.positionExcluded ?? 0) + 1;
+        if (request.query.weekly && !matchesWeekly(row, request.query.weekly))
           stats.weeklyExcluded = (stats.weeklyExcluded ?? 0) + 1;
         if (
           request.query.discovery?.nearMisses &&
@@ -222,6 +238,35 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
       stats,
       suggestions,
     });
+    // Recovery runs only after an empty completed search; separate messages preserve its original filters and totals.
+    if (!rows.length) {
+      send({ id, context, type: "recovery", checked: 0, total: 0 });
+      let lastRecovery = 0;
+      try {
+        const options = findTradeRecoveries(
+          model,
+          request.query,
+          request.lineupsRaw,
+          evaluated,
+          (checked, total) => {
+            const now = performance.now();
+            if (now - lastRecovery >= 150) {
+              send({ id, context, type: "recovery", checked, total });
+              lastRecovery = now;
+            }
+          },
+        );
+        send({ id, context, type: "recovery", options });
+      } catch {
+        send({
+          id,
+          context,
+          type: "recovery",
+          error:
+            "Recovery previews could not be completed. Your original search is unchanged.",
+        });
+      }
+    }
   } catch (error) {
     // Fail explicitly rather than publishing an incomplete list as a completed search.
     retained = undefined;

@@ -1,5 +1,17 @@
+import { guidedQuery } from "../domain/trade-guidance";
+import {
+  lineupBasisLabel,
+  readLineupBasis,
+  type LineupBasis,
+} from "../domain/trade-impact";
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle } from "lucide-react";
+import { Bookmark, LoaderCircle } from "lucide-react";
+import { sourceDataset } from "../domain/roster-scenarios";
+import {
+  diagnoseTradeCandidate,
+  poolIndexRanges,
+  tradeDebugReport,
+} from "../domain/trade-tools";
 import { positions, str, type Draft, type Position } from "../domain/contracts";
 import {
   summaryFromSearch,
@@ -13,6 +25,7 @@ import {
   tradeSearchBounds,
   tradeSearchContext,
   incomingCountRange,
+  type SearchRecovery,
   type SearchProgress,
   type SearchRequest,
   type SearchResponse,
@@ -44,6 +57,14 @@ interface SearchJob {
   stats?: SearchStats;
   error?: string;
   paging?: boolean;
+  // Recovery previews belong to this captured search and cannot silently modify its filters.
+  recovery?: {
+    busy: boolean;
+    options?: SearchRecovery[];
+    checked?: number;
+    total?: number;
+    error?: string;
+  };
   // Store only explanations explicitly opened in this completed search.
   lineups?: Record<string, { details?: SearchLineupDetails; error?: string }>;
 }
@@ -61,6 +82,8 @@ export function TradeSearch({
   change,
   save,
   onQueryChange,
+  lineupBasis = "best-available",
+  onLineupBasisChange,
   restore,
 }: {
   m: Model;
@@ -71,15 +94,28 @@ export function TradeSearch({
     draft: Draft,
     summary: SavedTradeSummary,
     query: TradeSearchQuery,
-  ) => void;
+  ) => boolean | void;
   onQueryChange?: (query: TradeSearchQuery) => void;
+  lineupBasis?: LineupBasis;
+  onLineupBasisChange?: (basis: LineupBasis) => void;
   restore?: { id: string; query: TradeSearchQuery };
 }) {
   const [below, setBelow] = useState("5"),
     [above, setAbove] = useState("5");
+  // New searches start broad; legacy saved searches restore their strict offsets explicitly.
+  const [indexMode, setIndexMode] = useState<"automatic" | "strict">(
+    "automatic",
+  );
+  const [goal, setGoal] =
+    useState<NonNullable<TradeSearchQuery["goal"]>>("explore");
+  const [goalPosition, setGoalPosition] = useState<Position>("WR");
+  const [advanced, setAdvanced] = useState(false);
+  const [pendingSearch, setPendingSearch] = useState<TradeSearchQuery | null>(
+    null,
+  );
   // Discovery is opt-in; default controls preserve fixed outgoing packages and the existing ranking.
   const [discovery, setDiscovery] = useState(initialDiscovery);
-  const [packages, setPackages] = useState(false),
+  const [packages, setPackages] = useState(true),
     // Package searches can return singles as well as larger packages within these inclusive limits.
     [minimumCount, setMinimumCount] = useState(1),
     [count, setCount] = useState(3);
@@ -124,6 +160,13 @@ export function TradeSearch({
   ];
   const selectedPosition = deficitPosition || offeredPositions[0] || "";
   const [job, setJob] = useState<SearchJob | null>(null);
+  // Preserve the executed controls independently from later edits, so a debug export can identify stale results precisely.
+  const appliedSearch = useRef<{
+    query: TradeSearchQuery;
+    context: string;
+  } | null>(null);
+  const [diagnostic, setDiagnostic] = useState(""),
+    [savedRow, setSavedRow] = useState("");
   const active = useRef<{ worker: Worker; id: string; context: string } | null>(
     null,
   );
@@ -138,11 +181,23 @@ export function TradeSearch({
         }
       : undefined;
   const query: TradeSearchQuery = {
+    lineupBasis,
     teamA: draft.teamA,
     give: draft.give,
+    indexMode,
+    goal,
     count: packages ? count : 1,
-    below: parseOffset(below),
-    above: parseOffset(above),
+    // Disabled strict inputs cannot make an automatic search unsaveable; keep raw edits in the controls/debug report.
+    below:
+      indexMode === "automatic" &&
+      (!Number.isFinite(parseOffset(below)) || parseOffset(below) < 0)
+        ? 5
+        : parseOffset(below),
+    above:
+      indexMode === "automatic" &&
+      (!Number.isFinite(parseOffset(above)) || parseOffset(above) < 0)
+        ? 5
+        : parseOffset(above),
     discovery:
       packages ||
       discovery.flexible ||
@@ -213,6 +268,8 @@ export function TradeSearch({
   };
   // Display and progress labels follow the same incoming bounds used by discovery and saved searches.
   const receive = incomingCountRange(query);
+  // Make outgoing pool sizes and incoming package sizes visible as separate search choices.
+  const poolRange = poolIndexRanges(m, query);
   const multiplePackages =
     discovery.flexible ||
     discovery.nearMisses ||
@@ -235,9 +292,10 @@ export function TradeSearch({
     onQueryChange?.(query);
   }, [JSON.stringify(query), onQueryChange]);
   // Explicit saved-trade loading restores every search control; ordinary rerenders never reset user edits.
-  useEffect(() => {
-    if (!restore) return;
-    const q = restore.query;
+  function restoreQuery(q: TradeSearchQuery) {
+    setIndexMode(q.indexMode ?? "strict");
+    setGoal(q.goal ?? "custom");
+    setGoalPosition(q.incoming?.positions?.[0] ?? "WR");
     setBelow(String(q.below));
     setAbove(String(q.above));
     // Saved discovery restores protected/tradable choices and the target without storing temporary search results.
@@ -286,6 +344,13 @@ export function TradeSearch({
     setIncomingPositions(q.incoming?.positions ?? []);
     setMinimumSignals(String(q.incoming?.minimumSignals ?? 1));
     setMinimumPositions(String(q.incoming?.minimumPositions ?? 1));
+  }
+  // Legacy saved queries retain their original criteria and expose the advanced controls for review.
+  useEffect(() => {
+    if (!restore) return;
+    onLineupBasisChange?.(readLineupBasis(restore.query.lineupBasis));
+    restoreQuery(restore.query);
+    setAdvanced(true);
   }, [restore?.id]);
 
   // Relevant input changes and unmount terminate synchronous worker work; stale rows cannot be loaded.
@@ -307,6 +372,10 @@ export function TradeSearch({
     if (bounds.errors.length) return;
     active.current?.worker.terminate();
     const id = crypto.randomUUID();
+    // Clear feedback from the previous captured result set.
+    setSavedRow("");
+    setDiagnostic("");
+    appliedSearch.current = { query: structuredClone(query), context };
     setJob({ id, context, status: "running", rows: [], total: 0 });
     try {
       const worker = new Worker(
@@ -328,6 +397,17 @@ export function TradeSearch({
             previous.context !== message.context
           )
             return previous;
+          if (message.type === "recovery")
+            return {
+              ...previous,
+              recovery: {
+                busy: !message.options && !message.error,
+                options: message.options,
+                checked: message.checked,
+                total: message.total,
+                error: message.error,
+              },
+            };
           if (message.type === "progress")
             return { ...previous, progress: message.progress };
           if (message.type === "error")
@@ -392,7 +472,8 @@ export function TradeSearch({
         type: "start",
         id,
         context,
-        dataset: m.dataset,
+        dataset: sourceDataset(m),
+        scenario: m.simulation?.scenario,
         settings: m.settings,
         evidence: m.evidenceRaw,
         roleWeight: String(m.roleScenarioWeight),
@@ -417,12 +498,29 @@ export function TradeSearch({
     }
   }
 
+  // Applying a preview restores all controls first, then starts the exact previewed query after context cleanup.
+  useEffect(() => {
+    // React batches restored controls with this request; optional defaults need not serialize identically.
+    if (!pendingSearch) return;
+    setPendingSearch(null);
+    search();
+  }, [pendingSearch, context]);
+
   // Termination is immediate even if the worker is busy in a large package enumeration/evaluation loop.
   function cancel() {
     active.current?.worker.terminate();
     active.current = null;
     setJob((previous) =>
-      previous ? { ...previous, status: "cancelled", paging: false } : previous,
+      previous
+        ? {
+            ...previous,
+            status: "cancelled",
+            paging: false,
+            recovery: previous.recovery
+              ? { ...previous.recovery, busy: false }
+              : undefined,
+          }
+        : previous,
     );
   }
 
@@ -431,6 +529,9 @@ export function TradeSearch({
     active.current?.worker.terminate();
     active.current = null;
     setJob(null);
+    setPendingSearch(null);
+    setGoal("custom");
+    setIndexMode("automatic");
     setBelow("5");
     setAbove("5");
     setDiscovery((previous) => ({
@@ -586,7 +687,7 @@ export function TradeSearch({
       <div>
         <FilterHelp
           label={`Filter ${label.toLowerCase()} weekly gain`}
-          help={`${label === "Your" ? "Your marked/imported starters stay anchored; bench-only departures cost zero direct starter points." : "Their full roster is optimized before and after the trade with identical Expected PPG, bye and availability rules, including existing backups and required drops."} Total model Expected scoring gain divided by ${m.weeks.length} remaining weeks (${m.current}–${m.final}). Example: +24 points over 12 weeks is +2/week. This is not actual PPG or ESPN weekly projection. Blank limits are unbounded; negative limits are allowed.`}
+          help={`${lineupBasisLabel(lineupBasis)} for both teams, before and after, with required drops and ${m.ignoreByeWeeks ? "byes and temporary injury absences ignored; IR excluded" : "scheduled availability and byes"}. Total model Expected gain divided by ${m.weeks.length} weeks (${m.current}–${m.final}). Example: +24 over 12 weeks is +2/week. The other basis is shown separately. Blank bounds are unbounded; negatives are allowed.`}
         >
           <label className="check">
             <span>Filter {label.toLowerCase()} weekly gain</span>
@@ -718,7 +819,8 @@ export function TradeSearch({
     ...(packages
       ? [
           {
-            label: `Receive package: ${count} players`,
+            // The chip shows the inclusive range, not just its maximum.
+            label: `Receive ${receive.minimum === receive.maximum ? receive.minimum : `${receive.minimum}–${receive.maximum}`} player${receive.maximum === 1 ? "" : "s"}`,
             remove: () => setPackages(false),
           },
         ]
@@ -784,392 +886,484 @@ export function TradeSearch({
   return (
     <Panel
       title="Find matching trades"
-      note="Match summed value indices, then compare each trade's effect on your starting lineup."
+      note={`Scoring basis: ${lineupBasisLabel(lineupBasis)}. Compare weekly gains, value and legality separately.`}
     >
-      <TradeDiscoveryControls
-        m={m}
-        draft={draft}
-        value={discovery}
-        change={setDiscovery}
-        starters={starter.ids}
-        startersKnown={!starter.errors.length}
-      />
-      <p>
-        {discovery.flexible ? (
-          <>
-            Tradable pool: {names(discovery.pool)} · Offer {discovery.minimum}–
-            {discovery.maximum} players.
-          </>
-        ) : (
-          <>
-            Fixed outgoing: {names(draft.give)} · Combined index:{" "}
-            <strong className="model">
-              {bounds.errors.length ? "Unavailable" : fmt(bounds.outgoing)}
-            </strong>
-          </>
+      {/* Goal presets are explicit, reversible shortcuts; advanced criteria remain available without changing valuations. */}
+      <div className="trade-search-controls">
+        <FilterHelp
+          label="Search goal"
+          help="Choosing a preset resets screening filters and searches 1–3 incoming players with automatic index matching. Keeps your offered/protected players and required target. Improve scoring requires your gain ≥ +1 and theirs ≥ 0 points/week. Find a position also requires that position's scoring contribution to your optimized lineup to increase, including FLEX. Review value, depth and legality separately."
+        >
+          <label className="control">
+            <span>Search goal</span>
+            <select
+              aria-label="Search goal"
+              value={goal}
+              onChange={(e) => {
+                const next = e.target.value as typeof goal;
+                restoreQuery(guidedQuery(query, next, goalPosition));
+                setAdvanced(next === "custom");
+              }}
+            >
+              <option value="explore">Trade away these players</option>
+              <option value="improve">Improve my weekly scoring</option>
+              <option value="position">Find a position upgrade</option>
+              <option value="custom">Custom search</option>
+            </select>
+          </label>
+        </FilterHelp>
+        {goal === "position" && (
+          <label className="control">
+            <span>Position to receive</span>
+            <select
+              aria-label="Position to receive"
+              value={goalPosition}
+              onChange={(e) =>
+                restoreQuery(
+                  guidedQuery(query, "position", e.target.value as Position),
+                )
+              }
+            >
+              {positions.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
+      </div>
+      <p>
+        Receive{" "}
+        {receive.minimum === receive.maximum
+          ? receive.minimum
+          : `${receive.minimum}–${receive.maximum}`}{" "}
+        player{receive.maximum === 1 ? "" : "s"}.{" "}
+        {indexMode === "automatic"
+          ? "Automatic index matching; value differences stay visible."
+          : "Strict index range enabled."}
       </p>
-      <fieldset className="trade-search-group">
-        <legend>Value range</legend>
-        <div className="trade-search-controls">
-          {offsetControl("Below outgoing total", below, setBelow)}
-          {offsetControl("Above outgoing total", above, setAbove)}
-          <FilterHelp
-            label={"Create package"}
-            help={
-              discovery.flexible
-                ? "Search a range of incoming sizes for each outgoing subset. Example: receive 1–3 returns singles, pairs and three-player packages from one team. Every package must still meet your index and active filters."
-                : "Keep your outgoing players fixed and search a range of incoming sizes from one team. Example: receive 1–3 checks singles, pairs and three-player packages together. Equal minimum and maximum searches one exact size."
-            }
-          >
-            <label className="check">
-              <span>Create package</span>
-              <input
-                type="checkbox"
-                checked={packages}
-                onChange={(event) => setPackages(event.target.checked)}
-              />
-            </label>
-          </FilterHelp>
-          {/* Inclusive incoming bounds search all selected sizes, independently of outgoing pool combinations. */}
-          {packages &&
-            (
-              [
-                ["Minimum players to receive", minimumCount, setMinimumCount],
-                ["Maximum players to receive", count, setCount],
-              ] as const
-            ).map(([label, value, set]) => (
+      <p>
+        Offering: {names(discovery.flexible ? discovery.pool : draft.give)}
+        {discovery.flexible &&
+          ` (offer ${discovery.minimum}–${discovery.maximum} from this pool)`}
+      </p>
+      <details
+        open={advanced}
+        onToggle={(e) => setAdvanced(e.currentTarget.open)}
+      >
+        <summary>Advanced search controls</summary>
+        <TradeDiscoveryControls
+          m={m}
+          draft={draft}
+          value={discovery}
+          change={setDiscovery}
+          starters={starter.ids}
+          startersKnown={!starter.errors.length}
+        />
+        <p>
+          {discovery.flexible ? (
+            <>
+              Tradable pool: {names(discovery.pool)} · Offer {discovery.minimum}
+              –{discovery.maximum} players.
+            </>
+          ) : (
+            <>
+              Fixed outgoing: {names(draft.give)} · Combined index:{" "}
+              <strong className="model">
+                {bounds.errors.length ? "Unavailable" : fmt(bounds.outgoing)}
+              </strong>
+            </>
+          )}
+        </p>
+        <fieldset className="trade-search-group">
+          <legend>Value range</legend>
+          <div className="trade-search-controls">
+            {/* A strict price window is opt-in; hiding its fields must not leave a hidden active ±5 limit. */}
+            <FilterHelp
+              label="Use strict index range"
+              help="Limit incoming summed indices to your below/above offsets. Automatic matching checks all usable indices and keeps price tests separate from scoring gains."
+            >
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={indexMode === "strict"}
+                  onChange={(e) =>
+                    setIndexMode(e.target.checked ? "strict" : "automatic")
+                  }
+                />
+                Use strict index range
+              </label>
+            </FilterHelp>
+            {indexMode === "strict" &&
+              offsetControl("Below outgoing total", below, setBelow)}
+            {indexMode === "strict" &&
+              offsetControl("Above outgoing total", above, setAbove)}
+            <FilterHelp
+              label={"Create package"}
+              help={
+                discovery.flexible
+                  ? "Search a range of incoming sizes for each outgoing subset. Example: receive 1–3 returns singles, pairs and three-player packages from one team. Every package must still meet your index and active filters."
+                  : "Keep your outgoing players fixed and search a range of incoming sizes from one team. Example: receive 1–3 checks singles, pairs and three-player packages together. Equal minimum and maximum searches one exact size."
+              }
+            >
+              <label className="check">
+                <span>Create package</span>
+                <input
+                  type="checkbox"
+                  checked={packages}
+                  onChange={(event) => setPackages(event.target.checked)}
+                />
+              </label>
+            </FilterHelp>
+            {/* Inclusive incoming bounds search all selected sizes, independently of outgoing pool combinations. */}
+            {packages &&
+              (
+                [
+                  ["Minimum players to receive", minimumCount, setMinimumCount],
+                  ["Maximum players to receive", count, setCount],
+                ] as const
+              ).map(([label, value, set]) => (
+                <FilterHelp
+                  key={label}
+                  label={label}
+                  help="Choose an inclusive range from one through five incoming players, all from the same other team. A 1–3 range returns singles, pairs and triples; 2–2 returns exactly two. All active filters still apply to each package."
+                >
+                  <label className="control">
+                    <span>{label}</span>
+                    <select
+                      aria-label={label}
+                      value={value}
+                      onChange={(event) => set(Number(event.target.value))}
+                    >
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </FilterHelp>
+              ))}
+          </div>
+        </fieldset>
+        {/* Incoming categories combine with all existing criteria and count the same matching players. */}
+        <fieldset className="trade-search-group">
+          <legend>Incoming players</legend>
+          <div className="toolbar">
+            {(["Gem", "Watch"] as const).map((label) => (
               <FilterHelp
                 key={label}
                 label={label}
-                help="Choose an inclusive range from one through five incoming players, all from the same other team. A 1–3 range returns singles, pairs and triples; 2–2 returns exactly two. All active filters still apply to each package."
+                help={
+                  "Receive at least the selected minimum players labeled Gem or Watch; selecting both labels matches either. With positions enabled, the same counted players must also match those positions. Example: at least two WR players labeled Gem or Watch."
+                }
               >
-                <label className="control">
-                  <span>{label}</span>
-                  <select
-                    aria-label={label}
-                    value={value}
-                    onChange={(event) => set(Number(event.target.value))}
-                  >
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
+                <label className="check" key={label}>
+                  <input
+                    type="checkbox"
+                    checked={signals.includes(label)}
+                    onChange={(e) =>
+                      setSignals(
+                        e.target.checked
+                          ? [...signals, label]
+                          : signals.filter((s) => s !== label),
+                      )
+                    }
+                  />
+                  {label}
                 </label>
               </FilterHelp>
             ))}
-        </div>
-      </fieldset>
-      {/* Incoming categories combine with all existing criteria and count the same matching players. */}
-      <fieldset className="trade-search-group">
-        <legend>Incoming players</legend>
-        <div className="toolbar">
-          {(["Gem", "Watch"] as const).map((label) => (
+          </div>
+          {signals.length > 0 && (
             <FilterHelp
-              key={label}
-              label={label}
+              label={"Minimum incoming Gem/Watch matches"}
               help={
-                "Receive at least the selected minimum players labeled Gem or Watch; selecting both labels matches either. With positions enabled, the same counted players must also match those positions. Example: at least two WR players labeled Gem or Watch."
-              }
-            >
-              <label className="check" key={label}>
-                <input
-                  type="checkbox"
-                  checked={signals.includes(label)}
-                  onChange={(e) =>
-                    setSignals(
-                      e.target.checked
-                        ? [...signals, label]
-                        : signals.filter((s) => s !== label),
-                    )
-                  }
-                />
-                {label}
-              </label>
-            </FilterHelp>
-          ))}
-        </div>
-        {signals.length > 0 && (
-          <FilterHelp
-            label={"Minimum incoming Gem/Watch matches"}
-            help={
-              "Minimum number of received players that satisfy the selected signal category and any enabled positions. It cannot exceed the number of players to receive."
-            }
-          >
-            <label className="control">
-              <span>Minimum incoming Gem/Watch matches</span>
-              <input
-                type="number"
-                min="1"
-                max={query.count}
-                step="1"
-                value={minimumSignals}
-                onChange={(e) => setMinimumSignals(e.target.value)}
-              />
-            </label>
-          </FilterHelp>
-        )}
-        <div className="toolbar">
-          {positions.map((position) => (
-            <FilterHelp
-              key={position}
-              label={`Receive ${position}`}
-              help={
-                "Receive players at any selected position. The minimum counts players, not distinct positions. If Gem/Watch is enabled, the same players must satisfy both categories. No position selections means no position restriction."
-              }
-            >
-              <label className="check" key={position}>
-                <input
-                  type="checkbox"
-                  aria-label={`Receive ${position}`}
-                  checked={incomingPositions.includes(position)}
-                  onChange={(e) =>
-                    setIncomingPositions(
-                      e.target.checked
-                        ? [...incomingPositions, position]
-                        : incomingPositions.filter((p) => p !== position),
-                    )
-                  }
-                />
-                {position}
-              </label>
-            </FilterHelp>
-          ))}
-        </div>
-        {incomingPositions.length > 0 && (
-          <FilterHelp
-            label={"Minimum incoming position matches"}
-            help={
-              "Minimum number of received players at any selected position, also satisfying selected Gem/Watch signals if enabled. It cannot exceed the number of players to receive."
-            }
-          >
-            <label className="control">
-              <span>Minimum incoming position matches</span>
-              <input
-                type="number"
-                min="1"
-                max={query.count}
-                step="1"
-                value={minimumPositions}
-                onChange={(e) => setMinimumPositions(e.target.value)}
-              />
-            </label>
-          </FilterHelp>
-        )}
-      </fieldset>
-      <fieldset className="trade-search-group">
-        <legend>Roster fit</legend>
-        {/* Original-roster comparisons establish improvement; complete-package roles still account for departures and drops. */}
-        <div className="trade-search-controls">
-          <FilterHelp
-            label={"Every offered player must be useful to the other team"}
-            help={
-              "Every offer must improve a distinct modeled starter or best-backup role compared with the team's roster before the trade, including players traded away or dropped. Departures cannot create zero-point comparison vacancies. The offer must still fill that role after departures and required drops. Uses model Expected PPG, independently of marked starters. Default: +1.0 PPG. Backups must also beat displaced-player competition; missing comparisons do not qualify. Example: one QB starter upgrade plus one WR backup upgrade. This does not establish net weekly gain or fair value."
-            }
-          >
-            <label className="check">
-              <span>Every offered player must be useful to the other team</span>
-              <input
-                type="checkbox"
-                checked={usefulnessOnly}
-                onChange={(e) => setUsefulnessOnly(e.target.checked)}
-              />
-            </label>
-          </FilterHelp>
-          {usefulnessOnly && (
-            <FilterHelp
-              label={"Minimum usefulness improvement (Expected PPG)"}
-              help={
-                "Every offered player must improve its distinct role by at least this much model Expected PPG. Default +1.0. A backup must also beat the strongest other resulting reserve by that amount. Example: +0.5 does not meet +1.0."
+                "Minimum number of received players that satisfy the selected signal category and any enabled positions. It cannot exceed the number of players to receive."
               }
             >
               <label className="control">
-                <span>Minimum usefulness improvement (Expected PPG)</span>
+                <span>Minimum incoming Gem/Watch matches</span>
                 <input
                   type="number"
-                  min="0"
-                  step="0.1"
-                  value={minimumUsefulness}
-                  onChange={(e) => setMinimumUsefulness(e.target.value)}
+                  min="1"
+                  max={query.count}
+                  step="1"
+                  value={minimumSignals}
+                  onChange={(e) => setMinimumSignals(e.target.value)}
                 />
               </label>
             </FilterHelp>
           )}
-        </div>
-        {/* Qualify teams using current positional needs; keep this separate from net trade impact and index bounds. */}
-        <div className="trade-search-controls">
-          <FilterHelp
-            label={"Only show positional upgrades for the other team"}
-            help={`${upgradeOnly ? (upgradeMode === "best" ? `Requires at least ${formatUpgradeCount(query.upgrade?.requiredBest)} distinct positions upgraded.` : `Requires at least ${formatUpgradeCount(query.upgrade?.requiredStarters)} starter upgrades and ${formatUpgradeCount(query.upgrade?.requiredBench)} bench upgrades.`) : "Require your selected number of distinct positional upgrades."} Uses Expected PPG against their pre-trade roster, including players they send away. Comparisons are distinct. Starter uses marked/imported starters; Depth uses actual bench; Best includes the entire position, including IR. Net scoring gain is separate.`}
-          >
-            <label className="check">
-              <span>Only show positional upgrades for the other team</span>
-              <input
-                type="checkbox"
-                checked={upgradeOnly}
-                onChange={(event) => setUpgradeOnly(event.target.checked)}
-              />
-            </label>
-          </FilterHelp>
-          {upgradeOnly && (
-            <>
+          <div className="toolbar">
+            {positions.map((position) => (
               <FilterHelp
-                label={"Upgrade target"}
+                key={position}
+                label={`Receive ${position}`}
                 help={
-                  "Starter compares same-position marked/imported starters, including FLEX. Depth compares actual bench players, excluding IR. Either allows both with separate minimums. Best compares the strongest Expected PPG player at each position anywhere on their roster, including bench and IR."
+                  "Receive players at any selected position. The minimum counts players, not distinct positions. If Gem/Watch is enabled, the same players must satisfy both categories. No position selections means no position restriction."
                 }
               >
-                <label className="control">
-                  <span>Upgrade target</span>
-                  <select
-                    aria-label="Upgrade target"
-                    value={upgradeMode}
-                    onChange={(event) =>
-                      setUpgradeMode(
-                        event.target.value as UpgradeFilter["mode"],
+                <label className="check" key={position}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Receive ${position}`}
+                    checked={incomingPositions.includes(position)}
+                    onChange={(e) =>
+                      setIncomingPositions(
+                        e.target.checked
+                          ? [...incomingPositions, position]
+                          : incomingPositions.filter((p) => p !== position),
                       )
                     }
-                  >
-                    <option value="starter">Starter</option>
-                    <option value="depth">Depth (bench)</option>
-                    <option value="either">Either</option>
-                    <option value="best">Best at position</option>
-                  </select>
+                  />
+                  {position}
                 </label>
               </FilterHelp>
-              {/* Single targets use one minimum; Either requires both independently selected group minimums. */}
-              {upgradeMode !== "depth" &&
-                upgradeMode !== "best" &&
-                upgradeCountControl(
-                  "Minimum starter upgrades",
-                  upgradeMode === "either"
-                    ? requiredStarters
-                    : requiredUpgrades,
-                  upgradeMode === "either"
-                    ? setRequiredStarters
-                    : setRequiredUpgrades,
-                )}
-              {upgradeMode !== "starter" &&
-                upgradeMode !== "best" &&
-                upgradeCountControl(
-                  "Minimum bench upgrades",
-                  upgradeMode === "either" ? requiredBench : requiredUpgrades,
-                  upgradeMode === "either"
-                    ? setRequiredBench
-                    : setRequiredUpgrades,
-                )}
-              {/* Best-roster matches count positions, with one comparison for the team's strongest owned player at each. */}
-              {upgradeMode === "best" &&
-                upgradeCountControl(
-                  "Minimum positions upgraded",
-                  requiredUpgrades,
-                  setRequiredUpgrades,
-                )}
+            ))}
+          </div>
+          {incomingPositions.length > 0 && (
+            <FilterHelp
+              label={"Minimum incoming position matches"}
+              help={
+                "Minimum number of received players at any selected position, also satisfying selected Gem/Watch signals if enabled. It cannot exceed the number of players to receive."
+              }
+            >
+              <label className="control">
+                <span>Minimum incoming position matches</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={query.count}
+                  step="1"
+                  value={minimumPositions}
+                  onChange={(e) => setMinimumPositions(e.target.value)}
+                />
+              </label>
+            </FilterHelp>
+          )}
+        </fieldset>
+        <fieldset className="trade-search-group">
+          <legend>Roster fit</legend>
+          {/* Original-roster comparisons establish improvement; complete-package roles still account for departures and drops. */}
+          <div className="trade-search-controls">
+            <FilterHelp
+              label={"Every offered player must be useful to the other team"}
+              help={
+                "Every offer must improve a distinct modeled starter or best-backup role compared with the team's roster before the trade, including players traded away or dropped. Departures cannot create zero-point comparison vacancies. The offer must still fill that role after departures and required drops. Uses model Expected PPG, independently of marked starters. Default: +1.0 PPG. Backups must also beat displaced-player competition; missing comparisons do not qualify. Example: one QB starter upgrade plus one WR backup upgrade. This does not establish net weekly gain or fair value."
+              }
+            >
+              <label className="check">
+                <span>
+                  Every offered player must be useful to the other team
+                </span>
+                <input
+                  type="checkbox"
+                  checked={usefulnessOnly}
+                  onChange={(e) => setUsefulnessOnly(e.target.checked)}
+                />
+              </label>
+            </FilterHelp>
+            {usefulnessOnly && (
               <FilterHelp
-                label={"Minimum Expected PPG upgrade"}
+                label={"Minimum usefulness improvement (Expected PPG)"}
                 help={
-                  "Each counted comparison must improve model Expected PPG by this inclusive amount, without rounding. Example: 18 versus 16 meets a +2 minimum. A zero threshold still requires a positive gain."
+                  "Every offered player must improve its distinct role by at least this much model Expected PPG. Default +1.0. A backup must also beat the strongest other resulting reserve by that amount. Example: +0.5 does not meet +1.0."
                 }
               >
                 <label className="control">
-                  <span>Minimum Expected PPG upgrade</span>
+                  <span>Minimum usefulness improvement (Expected PPG)</span>
                   <input
                     type="number"
                     min="0"
-                    step="0.01"
-                    value={minimumUpgrade}
-                    onChange={(event) => setMinimumUpgrade(event.target.value)}
+                    step="0.1"
+                    value={minimumUsefulness}
+                    onChange={(e) => setMinimumUsefulness(e.target.value)}
                   />
                 </label>
               </FilterHelp>
-            </>
-          )}
-        </div>
-        {/* Reuse existing league-relative team grades for one offered position. */}
-        <div className="trade-search-controls">
-          <FilterHelp
-            label={"Only teams with a positional deficit"}
-            help={
-              "Use their current position grade relative to this fantasy league, as shown in League teams. The ceiling is inclusive: QB C+ includes C+ and lower. Unavailable grades cannot qualify. When positional upgrades are enabled, an upgrade must match this selected position."
-            }
-          >
-            <label className="check">
-              <span>Only teams with a positional deficit</span>
-              <input
-                type="checkbox"
-                checked={deficitOnly}
-                onChange={(event) => {
-                  // Freeze the initial position too, so changing offers cannot silently change the active criterion.
-                  if (event.target.checked && !deficitPosition)
-                    setDeficitPosition(selectedPosition);
-                  setDeficitOnly(event.target.checked);
-                }}
-              />
-            </label>
-          </FilterHelp>
-          {deficitOnly && (
-            <>
-              <FilterHelp
-                label={"Deficit position"}
-                help={
-                  "Choose one position represented among your offered players. Its grade controls the deficit test even when your package also contains other positions."
-                }
-              >
-                <label className="control">
-                  <span>Deficit position</span>
-                  <select
-                    aria-label="Deficit position"
-                    value={
-                      offeredPositions.includes(selectedPosition as Position)
-                        ? selectedPosition
-                        : ""
-                    }
-                    onChange={(event) => setDeficitPosition(event.target.value)}
-                  >
-                    <option value="" disabled>
-                      Select an offered position
-                    </option>
-                    {offeredPositions.map((position) => (
-                      <option key={position} value={position}>
-                        {position}
+            )}
+          </div>
+          {/* Qualify teams using current positional needs; keep this separate from net trade impact and index bounds. */}
+          <div className="trade-search-controls">
+            <FilterHelp
+              label={"Only show positional upgrades for the other team"}
+              help={`${upgradeOnly ? (upgradeMode === "best" ? `Requires at least ${formatUpgradeCount(query.upgrade?.requiredBest)} distinct positions upgraded.` : `Requires at least ${formatUpgradeCount(query.upgrade?.requiredStarters)} starter upgrades and ${formatUpgradeCount(query.upgrade?.requiredBench)} bench upgrades.`) : "Require your selected number of distinct positional upgrades."} Uses Expected PPG against their pre-trade roster, including players they send away. Comparisons are distinct. Starter uses marked/imported starters; Depth uses actual bench; Best includes the entire position, including IR. Net scoring gain is separate.`}
+            >
+              <label className="check">
+                <span>Only show positional upgrades for the other team</span>
+                <input
+                  type="checkbox"
+                  checked={upgradeOnly}
+                  onChange={(event) => setUpgradeOnly(event.target.checked)}
+                />
+              </label>
+            </FilterHelp>
+            {upgradeOnly && (
+              <>
+                <FilterHelp
+                  label={"Upgrade target"}
+                  help={
+                    "Starter compares same-position marked/imported starters, including FLEX. Depth compares actual bench players, excluding IR. Either allows both with separate minimums. Best compares the strongest Expected PPG player at each position anywhere on their roster, including bench and IR."
+                  }
+                >
+                  <label className="control">
+                    <span>Upgrade target</span>
+                    <select
+                      aria-label="Upgrade target"
+                      value={upgradeMode}
+                      onChange={(event) =>
+                        setUpgradeMode(
+                          event.target.value as UpgradeFilter["mode"],
+                        )
+                      }
+                    >
+                      <option value="starter">Starter</option>
+                      <option value="depth">Depth (bench)</option>
+                      <option value="either">Either</option>
+                      <option value="best">Best at position</option>
+                    </select>
+                  </label>
+                </FilterHelp>
+                {/* Single targets use one minimum; Either requires both independently selected group minimums. */}
+                {upgradeMode !== "depth" &&
+                  upgradeMode !== "best" &&
+                  upgradeCountControl(
+                    "Minimum starter upgrades",
+                    upgradeMode === "either"
+                      ? requiredStarters
+                      : requiredUpgrades,
+                    upgradeMode === "either"
+                      ? setRequiredStarters
+                      : setRequiredUpgrades,
+                  )}
+                {upgradeMode !== "starter" &&
+                  upgradeMode !== "best" &&
+                  upgradeCountControl(
+                    "Minimum bench upgrades",
+                    upgradeMode === "either" ? requiredBench : requiredUpgrades,
+                    upgradeMode === "either"
+                      ? setRequiredBench
+                      : setRequiredUpgrades,
+                  )}
+                {/* Best-roster matches count positions, with one comparison for the team's strongest owned player at each. */}
+                {upgradeMode === "best" &&
+                  upgradeCountControl(
+                    "Minimum positions upgraded",
+                    requiredUpgrades,
+                    setRequiredUpgrades,
+                  )}
+                <FilterHelp
+                  label={"Minimum Expected PPG upgrade"}
+                  help={
+                    "Each counted comparison must improve model Expected PPG by this inclusive amount, without rounding. Example: 18 versus 16 meets a +2 minimum. A zero threshold still requires a positive gain."
+                  }
+                >
+                  <label className="control">
+                    <span>Minimum Expected PPG upgrade</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={minimumUpgrade}
+                      onChange={(event) =>
+                        setMinimumUpgrade(event.target.value)
+                      }
+                    />
+                  </label>
+                </FilterHelp>
+              </>
+            )}
+          </div>
+          {/* Reuse existing league-relative team grades for one offered position. */}
+          <div className="trade-search-controls">
+            <FilterHelp
+              label={"Only teams with a positional deficit"}
+              help={
+                "Use their current position grade relative to this fantasy league, as shown in League teams. The ceiling is inclusive: QB C+ includes C+ and lower. Unavailable grades cannot qualify. When positional upgrades are enabled, an upgrade must match this selected position."
+              }
+            >
+              <label className="check">
+                <span>Only teams with a positional deficit</span>
+                <input
+                  type="checkbox"
+                  checked={deficitOnly}
+                  onChange={(event) => {
+                    // Freeze the initial position too, so changing offers cannot silently change the active criterion.
+                    if (event.target.checked && !deficitPosition)
+                      setDeficitPosition(selectedPosition);
+                    setDeficitOnly(event.target.checked);
+                  }}
+                />
+              </label>
+            </FilterHelp>
+            {deficitOnly && (
+              <>
+                <FilterHelp
+                  label={"Deficit position"}
+                  help={
+                    "Choose one position represented among your offered players. Its grade controls the deficit test even when your package also contains other positions."
+                  }
+                >
+                  <label className="control">
+                    <span>Deficit position</span>
+                    <select
+                      aria-label="Deficit position"
+                      value={
+                        offeredPositions.includes(selectedPosition as Position)
+                          ? selectedPosition
+                          : ""
+                      }
+                      onChange={(event) =>
+                        setDeficitPosition(event.target.value)
+                      }
+                    >
+                      <option value="" disabled>
+                        Select an offered position
                       </option>
-                    ))}
-                  </select>
-                </label>
-              </FilterHelp>
-              <FilterHelp
-                label={"Maximum position grade"}
-                help={
-                  "The selected grade and every lower grade qualify. Grades compare modeled starter Value PPG per slot with this fantasy league’s median, not the entire NFL."
-                }
-              >
-                <label className="control">
-                  <span>Maximum position grade</span>
-                  <select
-                    aria-label="Maximum position grade"
-                    value={deficitCeiling}
-                    onChange={(event) => setDeficitCeiling(event.target.value)}
-                  >
-                    {positionGradeScale.map((grade) => (
-                      <option key={grade} value={grade}>
-                        {grade} or lower
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </FilterHelp>
-            </>
-          )}
-        </div>
-      </fieldset>
-      <fieldset className="trade-search-group">
-        <legend>Scoring impact</legend>
-        {/* Screen existing average lineup gains independently for either or both teams. */}
-        {weeklyControls("Your", ownWeekly, setOwnWeekly)}
-        {weeklyControls("Their", otherWeekly, setOtherWeekly)}
-      </fieldset>
+                      {offeredPositions.map((position) => (
+                        <option key={position} value={position}>
+                          {position}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </FilterHelp>
+                <FilterHelp
+                  label={"Maximum position grade"}
+                  help={
+                    "The selected grade and every lower grade qualify. Grades compare modeled starter Value PPG per slot with this fantasy league’s median, not the entire NFL."
+                  }
+                >
+                  <label className="control">
+                    <span>Maximum position grade</span>
+                    <select
+                      aria-label="Maximum position grade"
+                      value={deficitCeiling}
+                      onChange={(event) =>
+                        setDeficitCeiling(event.target.value)
+                      }
+                    >
+                      {positionGradeScale.map((grade) => (
+                        <option key={grade} value={grade}>
+                          {grade} or lower
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </FilterHelp>
+              </>
+            )}
+          </div>
+        </fieldset>
+        <fieldset className="trade-search-group">
+          <legend>Scoring impact</legend>
+          {/* Screen existing average lineup gains independently for either or both teams. */}
+          {weeklyControls("Your", ownWeekly, setOwnWeekly)}
+          {weeklyControls("Their", otherWeekly, setOtherWeekly)}
+        </fieldset>
+      </details>
       <div
         className="active-filter-chips"
         aria-label="Active trade-search filters"
@@ -1185,30 +1379,68 @@ export function TradeSearch({
           </button>
         ))}
       </div>
-      {!bounds.errors.length && !discovery.flexible && (
-        <p>
-          Incoming index range:{" "}
-          <strong
-            className="model"
-            title={`${bounds.lower} through ${bounds.upper}`}
-          >
-            {fmt(bounds.lower)}–{fmt(bounds.upper)}
-          </strong>{" "}
-          (inclusive) · Receive{" "}
-          {receive.minimum === receive.maximum
-            ? receive.minimum
-            : `${receive.minimum}–${receive.maximum}`}{" "}
-          player
-          {receive.maximum === 1 ? "" : "s"} from one other team.
-        </p>
+      {!bounds.errors.length &&
+        !discovery.flexible &&
+        indexMode === "strict" && (
+          <p>
+            Incoming index range:{" "}
+            <strong
+              className="model"
+              title={`${bounds.lower} through ${bounds.upper}`}
+            >
+              {fmt(bounds.lower)}–{fmt(bounds.upper)}
+            </strong>{" "}
+            (inclusive) · Receive{" "}
+            {receive.minimum === receive.maximum
+              ? receive.minimum
+              : `${receive.minimum}–${receive.maximum}`}{" "}
+            player
+            {receive.maximum === 1 ? "" : "s"} from one other team.
+          </p>
+        )}
+      {/* These are exact raw offer extrema, never premium-adjusted and never a promise that every interior value is attainable. */}
+      {discovery.flexible && poolRange && (
+        <div className="notice">
+          <p aria-label="Search package scope">
+            Offer{" "}
+            {poolRange.counts[0].count === poolRange.counts.at(-1)!.count
+              ? poolRange.counts[0].count
+              : `${poolRange.counts[0].count}–${poolRange.counts.at(-1)!.count}`}{" "}
+            of {discovery.pool.length} pooled players · Receive{" "}
+            {receive.minimum === receive.maximum
+              ? receive.minimum
+              : `${receive.minimum}–${receive.maximum}`}{" "}
+            player{receive.maximum === 1 ? "" : "s"} from one team.
+          </p>
+          <strong className="model">
+            Pool offer index: {fmt(poolRange.minimum)}–{fmt(poolRange.maximum)}
+          </strong>
+          <div>
+            {poolRange.counts.map((r) => (
+              <span key={r.count}>
+                {r.count} player{r.count === 1 ? "" : "s"}:{" "}
+                <span className="model">
+                  {fmt(r.minimum)}–{fmt(r.maximum)}
+                </span>
+                {" · "}
+              </span>
+            ))}
+          </div>
+          <small>
+            Raw achievable minimum–maximum before search filters. Values inside
+            the range may have gaps.
+          </small>
+        </div>
       )}
       {bounds.errors.length > 0 && (
         <p className="notice danger">{bounds.errors.join(" ")}</p>
       )}
       <p>
         <small>
-          Lineup source: {starter.source} · Weeks {m.current}–{m.final} · Source
-          refreshed:{" "}
+          Lineup source: {starter.source}
+          {m.ignoreByeWeeks &&
+            " · Hypothetical: byes ignored; temporary injury absences ignored; IR excluded"}{" "}
+          · Weeks {m.current}–{m.final} · Source refreshed:{" "}
           {m.dataset.sourceUTC
             ? new Date(m.dataset.sourceUTC).toLocaleString()
             : "Unavailable"}
@@ -1216,6 +1448,92 @@ export function TradeSearch({
         </small>
       </p>
       <div className="toolbar">
+        {/* Export is explicit and local; the report contains analysis data and controls, never account/session credentials. */}
+        <button
+          className="button"
+          onClick={() => {
+            const report = {
+              ...tradeDebugReport(
+                m,
+                query,
+                draft,
+                lineupsRaw,
+                appliedSearch.current,
+                {
+                  status: job?.status ?? "not searched",
+                  stale,
+                  stats: job?.stats,
+                  total: job?.total,
+                  loadedRows: job?.rows.length,
+                },
+              ),
+              appVersion: import.meta.env.VITE_APP_VERSION,
+              controls: {
+                below,
+                above,
+                packages,
+                minimumCount,
+                count,
+                discovery,
+                signals,
+                incomingPositions,
+                minimumSignals,
+                minimumPositions,
+                upgradeOnly,
+                upgradeMode,
+                minimumUpgrade,
+                usefulnessOnly,
+                minimumUsefulness,
+                requiredUpgrades,
+                requiredStarters,
+                requiredBench,
+                ownWeekly,
+                otherWeekly,
+                deficitOnly,
+                deficitPosition,
+                deficitCeiling,
+              },
+              loadedCandidate: job?.rows.some(
+                (r) =>
+                  JSON.stringify([...(r.give ?? query.give)].sort()) ===
+                    JSON.stringify([...draft.give].sort()) &&
+                  JSON.stringify([...r.get].sort()) ===
+                    JSON.stringify([...draft.get].sort()),
+              ),
+            };
+            const url = URL.createObjectURL(
+              new Blob([JSON.stringify(report, null, 2)], {
+                type: "application/json",
+              }),
+            );
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "fantasy-trade-debug.json";
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+          }}
+        >
+          Download search debug
+        </button>
+        <button
+          className="button"
+          onClick={() => {
+            const result = diagnoseTradeCandidate(m, query, draft, lineupsRaw);
+            // Explain one exact candidate on both bases while preserving every active filter.
+            const scoring =
+              result.beforeAfter && result.alternative
+                ? `${result.basisLabel}: your Before ${fmt(result.beforeAfter.ownBefore)} → After ${fmt(result.beforeAfter.ownAfter)} (${signed(result.ownGainPerWeek ?? null)} points/week); their Before ${fmt(result.beforeAfter.otherBefore)} → After ${fmt(result.beforeAfter.otherAfter)} (${signed(result.otherGainPerWeek ?? null)} points/week). Alternative ${lineupBasisLabel(result.alternative.basis)}: your Before ${fmt(result.alternative.ownBefore)} → After ${fmt(result.alternative.ownAfter)} (${signed(result.alternative.own)}); their Before ${fmt(result.alternative.otherBefore)} → After ${fmt(result.alternative.otherAfter)} (${signed(result.alternative.other)}). `
+                : "";
+            setDiagnostic(
+              scoring +
+                (result.reasons.length
+                  ? result.reasons.join(" ")
+                  : "This candidate passes the current search filters. Check the applied-versus-current settings, completed-search status and later ranked result pages in the debug export."),
+            );
+          }}
+        >
+          Why wasn’t this trade found?
+        </button>
         <button
           className="button primary"
           disabled={bounds.errors.length > 0}
@@ -1226,18 +1544,23 @@ export function TradeSearch({
         {/* Keep the one-click recovery available even when an invalid filter disables Search. */}
         <FilterHelp
           label="Clear filters"
-          help="Clears optional search restrictions, target, ranking and near misses; restores the default ±5 index range and removes previous results. Keeps your selected players, protected tradable pool and outgoing/incoming package sizes."
+          help="Clears optional search restrictions, target, ranking and near misses; restores automatic index matching and removes previous results. Keeps your selected players, protected tradable pool and outgoing/incoming package sizes."
         >
           <button type="button" className="subtle" onClick={clearFilters}>
             Clear filters
           </button>
         </FilterHelp>
-        {running && (
+        {(running || (!stale && job?.recovery?.busy)) && (
           <button className="subtle" onClick={cancel}>
             Cancel
           </button>
         )}
       </div>
+      {diagnostic && (
+        <p className="notice" role="status">
+          {diagnostic}
+        </p>
+      )}
       {running && (
         <div
           className="notice trade-search-progress"
@@ -1298,6 +1621,55 @@ export function TradeSearch({
                   : "your model expected lineup gain per week"}
               ; an index match is not a fairness or acceptance guarantee.
             </p>
+            {/* A zero final result must not imply enumeration failed or that the pool had no index matches. */}
+            {!stale && !job.total && !!job.stats?.weeklyExcluded && (
+              <p className="notice warning" role="status">
+                {job.stats.scored} index-matched trades were evaluated;{" "}
+                {job.stats.weeklyExcluded} failed your weekly-gain limits.{" "}
+                {query.weekly?.own?.minimum != null &&
+                  `Your minimum: ${query.weekly.own.minimum} points/week. `}
+                {query.weekly?.other?.minimum != null &&
+                  `Their minimum: ${query.weekly.other.minimum} points/week. `}
+                Enable Near misses to inspect evaluated alternatives with unmet
+                limits.
+              </p>
+            )}
+            {/* Counts come from the same complete evaluator; applying a proposal is always an explicit user action. */}
+            {!stale && !job.total && job.recovery && (
+              <div className="notice" aria-label="Search recovery options">
+                {job.recovery.busy ? (
+                  <p role="status">
+                    Checking recovery options…{" "}
+                    {job.recovery.total
+                      ? `${job.recovery.checked} of ${job.recovery.total} evaluated`
+                      : "Finding candidate packages"}
+                    . Your filters are unchanged.
+                  </p>
+                ) : (
+                  <>
+                    <p>
+                      {job.recovery.error ??
+                        (job.recovery.options?.length
+                          ? "Try an evaluated adjustment:"
+                          : "No matches with these limited adjustments. Review your advanced criteria or offered players.")}
+                    </p>
+                    {job.recovery.options?.map((option) => (
+                      <button
+                        key={option.id}
+                        className="button"
+                        onClick={() => {
+                          restoreQuery(option.query);
+                          setAdvanced(true);
+                          setPendingSearch(option.query);
+                        }}
+                      >
+                        {option.changes.join(" + ")} → {option.count} matches
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
             <div className="table-wrap">
               <table className="trade-search-results">
                 <thead>
@@ -1305,10 +1677,20 @@ export function TradeSearch({
                     <th>Incoming / team</th>
                     <th className="model">Index / difference</th>
                     <th className="model">
-                      Your gain / week<small>Marked starters</small>
+                      Your gain / week
+                      <small>
+                        {lineupBasisLabel(
+                          job.rows[0]?.lineupBasis ?? lineupBasis,
+                        )}
+                      </small>
                     </th>
                     <th className="model">
-                      Their gain / week<small>Roster potential</small>
+                      Their gain / week
+                      <small>
+                        {lineupBasisLabel(
+                          job.rows[0]?.lineupBasis ?? lineupBasis,
+                        )}
+                      </small>
                     </th>
                     <th>Value exchange / tests</th>
                     <th>Details / load</th>
@@ -1392,10 +1774,15 @@ export function TradeSearch({
                           {/* Keep the scoring bases explicit without changing the independent positional-fit or price tests. */}
                           <p>
                             <small>
-                              Your gain uses marked starters. Their gain
-                              compares optimized full rosters before and after
-                              the trade, including existing backups and required
-                              drops.
+                              {lineupBasisLabel(row.lineupBasis)} for both
+                              teams, including required drops.
+                              <span className="model">
+                                {" "}
+                                Your Before {fmt(row.ownBefore)} → After{" "}
+                                {fmt(row.ownAfter)}; Their Before{" "}
+                                {fmt(row.otherBefore)} → After{" "}
+                                {fmt(row.otherAfter)} points/week.
+                              </span>
                             </small>
                           </p>
                           <OpponentIncentiveView
@@ -1535,7 +1922,7 @@ export function TradeSearch({
                               [
                                 "own",
                                 "other",
-                                "ownPotential",
+                                "ownMarked",
                                 "otherMarked",
                               ] as const
                             ).map((side) => {
@@ -1543,18 +1930,34 @@ export function TradeSearch({
                                 job.lineups![row.key].details![side];
                               // Both measurements retain their own named weekly changes; the secondary views are explanatory only.
                               const title = {
-                                own: "Your scoring lineup",
-                                other: "Their scoring lineup",
-                                ownPotential: "Your roster potential",
-                                otherMarked: "Their marked-starter impact",
+                                own:
+                                  lineupBasis === "best-available"
+                                    ? "Your roster potential"
+                                    : "Your marked-starter impact",
+                                other:
+                                  lineupBasis === "best-available"
+                                    ? "Their scoring lineup"
+                                    : "Their marked-starter impact",
+                                ownMarked:
+                                  lineupBasis === "best-available"
+                                    ? "Your marked-starter impact"
+                                    : "Your roster potential",
+                                otherMarked:
+                                  lineupBasis === "best-available"
+                                    ? "Their marked-starter impact"
+                                    : "Their best available lineup",
                               }[side];
                               const weeklyTitle = {
                                 own: "Your weekly scoring replacements",
                                 other: "Their weekly scoring replacements",
-                                ownPotential:
-                                  "Your roster-potential weekly replacements",
+                                ownMarked:
+                                  lineupBasis === "best-available"
+                                    ? "Your marked-starter weekly replacements"
+                                    : "Your best-lineup weekly replacements",
                                 otherMarked:
-                                  "Their marked-starter weekly replacements",
+                                  lineupBasis === "best-available"
+                                    ? "Their marked-starter weekly replacements"
+                                    : "Their best-lineup weekly replacements",
                               }[side];
                               return (
                                 <div key={side}>
@@ -1586,7 +1989,11 @@ export function TradeSearch({
                                         Same-slot before → after. Slot moves
                                         (including FLEX) can produce multiple
                                         rows; the weekly total includes all
-                                        changes and byes.
+                                        changes and{" "}
+                                        {m.ignoreByeWeeks
+                                          ? "IR exclusions; byes and temporary injury absences are ignored in this simulation"
+                                          : "byes"}
+                                        .
                                       </small>
                                     </p>
                                     {detail.weekly.map((week) => (
@@ -1659,7 +2066,8 @@ export function TradeSearch({
                         </button>
                         {save && (
                           <button
-                            className="subtle"
+                            className="button primary"
+                            aria-label="Save trade"
                             disabled={
                               stale ||
                               job.status !== "complete" ||
@@ -1670,8 +2078,8 @@ export function TradeSearch({
                                 !stale &&
                                 job.status === "complete" &&
                                 !bounds.errors.length
-                              )
-                                save(
+                              ) {
+                                const success = save(
                                   {
                                     teamA: query.teamA,
                                     teamB: row.teamB,
@@ -1681,9 +2089,12 @@ export function TradeSearch({
                                   summaryFromSearch(row),
                                   query,
                                 );
+                                if (success !== false) setSavedRow(row.key);
+                              }
                             }}
                           >
-                            Save trade
+                            <Bookmark size={16} aria-hidden="true" />{" "}
+                            {savedRow === row.key ? "Saved" : "Save trade"}
                           </button>
                         )}
                       </td>
@@ -1754,7 +2165,7 @@ export function TradeSearch({
                 query.usefulness ||
                 query.incoming
                   ? "No packages match this index range, incoming count and active filters."
-                  : "No packages match this index range and incoming count."}
+                  : "No trades meet the current search criteria."}
               </p>
             )}
             <details className="search-exclusions">

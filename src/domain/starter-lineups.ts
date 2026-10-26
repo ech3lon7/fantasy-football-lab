@@ -6,7 +6,10 @@ import { available, irAssignments, lineup, roster } from "./lineups";
 // Analysis-only starter selections use existing private settings sync, without a database or workbook schema change.
 export const starterLineupsKey = "startingLineups";
 // Version trade-scoring semantics independently of player valuations and the app's user-managed version.
-export const tradeImpactVersion = "consistent-lineups-1";
+export const tradeImpactVersion = "roster-potential-primary-3";
+// Optional ordered slot IDs preserve manual placement; old saved lineups keep their existing automatic role assignment.
+export const starterAssignmentsSchema = z.array(z.string().nullable()).max(100);
+export type StarterAssignments = z.infer<typeof starterAssignmentsSchema>;
 const savedSchema = z
   .object({
     version: z.literal(1),
@@ -19,6 +22,7 @@ const savedSchema = z
           week: z.number().int().min(1).max(18),
           savedUTC: z.string().datetime(),
           starters: z.array(z.string().max(40)).max(100),
+          assignments: starterAssignmentsSchema.optional(),
           roster: z.array(z.string().max(40)).max(100),
         })
         .strict(),
@@ -48,6 +52,46 @@ export function starterSlotCounts(m: Model) {
     K: num(c.KSlots),
     "D/ST": num(c.DSTSlots),
   };
+}
+
+// Use the same fixed slot order as the scorer, retaining empty slots instead of compressing or sorting manual choices.
+export function starterTemplate(
+  m: Model,
+  ids: string[],
+  assignments?: StarterAssignments,
+) {
+  if (!assignments) return lineup(m, ids, m.current, false, true, "expected");
+  const counts = starterSlotCounts(m);
+  const slots = (
+    ["QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"] as const
+  ).flatMap((slot) => Array.from({ length: counts[slot] }, () => slot));
+  return { slots, ids: [...assignments] };
+}
+
+// Reject duplicate, foreign, ineligible or mismatched assignments before saving or using a manual template.
+function validateAssignments(
+  m: Model,
+  ids: string[],
+  assignments: StarterAssignments,
+) {
+  const slots = starterTemplate(m, [], assignments).slots;
+  if (
+    assignments.length !== slots.length ||
+    JSON.stringify(assignments.filter((id) => id !== null).sort(cmpId)) !==
+      JSON.stringify([...ids].sort(cmpId))
+  )
+    return [
+      "Saved slot assignments must match the selected starters and league slots.",
+    ];
+  return assignments.some((id, i) => {
+    if (id === null) return false;
+    const pos = m.byId.get(id)?.pos;
+    return slots[i] === "FLEX"
+      ? !pos || !["RB", "WR", "TE"].includes(pos)
+      : pos !== slots[i];
+  })
+    ? ["A player is assigned to an ineligible starter slot."]
+    : [];
 }
 
 // Partial lineups are allowed; duplicate/foreign/IR players and impossible position/FLEX assignments are not.
@@ -92,6 +136,7 @@ export function readStarterLineup(m: Model, team: string, raw?: string) {
         num(r.LineupSlotID) === 23),
   ).map((r) => str(r.PlayerID));
   let ids = imported,
+    assignments: StarterAssignments | undefined,
     source = "Imported ESPN lineup",
     savedUTC: string | null = null;
   const errors: string[] = [],
@@ -113,6 +158,12 @@ export function readStarterLineup(m: Model, team: string, raw?: string) {
       source = "Saved app lineup";
       savedUTC = saved.savedUTC;
       ids = saved.starters;
+      // Slot choices are explicit user state, independent of points, ranking and weekly availability.
+      if (saved.assignments) {
+        const invalid = validateAssignments(m, ids, saved.assignments);
+        errors.push(...invalid);
+        if (!invalid.length) assignments = saved.assignments;
+      }
       const name = str(
         m.dataset.tables.ModelTeams.find((t) => str(t.TeamID) === team)
           ?.TeamName,
@@ -148,6 +199,7 @@ export function readStarterLineup(m: Model, team: string, raw?: string) {
     );
   return {
     ids: ids.filter((id) => m.byId.get(id)?.owner === team),
+    assignments,
     source,
     savedUTC,
     errors,
@@ -161,8 +213,11 @@ export function saveStarterLineup(
   team: string,
   ids: string[],
   raw?: string,
+  assignments?: StarterAssignments,
 ) {
   const errors = validateStarterIds(m, team, ids);
+  // Only explicit card edits add assignments; legacy saves, Reset and Optimize retain their existing behavior.
+  if (assignments) errors.push(...validateAssignments(m, ids, assignments));
   if (errors.length) throw Error(errors.join(" "));
   const saved = parseSaved(raw);
   saved.teams[team] = {
@@ -173,6 +228,9 @@ export function saveStarterLineup(
     week: m.current,
     savedUTC: new Date().toISOString(),
     starters: [...ids].sort(cmpId),
+    ...(assignments
+      ? { assignments: starterAssignmentsSchema.parse(assignments) }
+      : {}),
     roster: roster(m, team).sort(cmpId),
   };
   const result = JSON.stringify(saved);
@@ -206,7 +264,7 @@ export function directStarterImpact(
   const marked = new Set(selection.ids),
     replacements = new Set<string>(),
     promotedIncoming = new Set<string>();
-  const template = lineup(m, selection.ids, m.current, false, true, "expected");
+  const template = starterTemplate(m, selection.ids, selection.assignments);
   const allIncoming = [
       ...new Set(incoming.filter((id) => afterSet.has(id))),
     ].sort(cmpId),
@@ -332,7 +390,13 @@ export function directStarterImpact(
   const expected = total("expectedGain"),
     value = total("valueGain");
   return {
-    source: selection.source,
+    source:
+      selection.source +
+      (m.ignoreTemporaryAbsences
+        ? " · byes ignored; temporary injury absences ignored; IR excluded"
+        : m.ignoreByeWeeks
+          ? " · byes ignored"
+          : ""),
     savedUTC: selection.savedUTC,
     errors,
     warnings: selection.warnings,
@@ -400,7 +464,13 @@ export function rosterPotentialImpact(
       : sum(weekly.map((w) => w.expectedGain!)),
     value = errors.length ? null : sum(weekly.map((w) => w.valueGain!));
   return {
-    source: "Optimized roster potential (Expected PPG)",
+    source:
+      "Optimized roster potential (Expected PPG)" +
+      (m.ignoreTemporaryAbsences
+        ? " · byes ignored; temporary injury absences ignored; IR excluded"
+        : m.ignoreByeWeeks
+          ? " · byes ignored"
+          : ""),
     savedUTC: null,
     errors,
     warnings: [] as string[],

@@ -83,9 +83,9 @@ it("keeps fast search summaries identical to full trade evaluations across packa
       if (!full.valid) throw Error(full.errors.join(" "));
       const row = scoreTradeMatch(m, q, match);
       expect(row).toMatchObject({
-        own: full.directA.expectedPerWeek,
+        own: full.potentialA.expectedPerWeek,
         other: full.potentialB.expectedPerWeek,
-        ownTotal: full.directA.expected,
+        ownTotal: full.potentialA.expected,
         otherTotal: full.potentialB.expected,
         grade: full.grade,
         surplus: full.surplusTest,
@@ -357,14 +357,12 @@ it("screens authoritative weekly averages without changing index matching, weeks
   const rows = matches.map((match) => scoreTradeMatch(m, q, match));
   const qb = rows.find((row) => row.get[0] === "200")!,
     wr = rows.find((row) => row.get[0] === "2")!;
-  expect(qb.ownTotal).toBe(0);
-  expect(wr.own).toBe(15);
-  expect(wr.ownTotal).toBe(180);
+  expect(qb.ownTotal).toBe(-130);
+  expect(wr.own).toBeCloseTo(40 / 12);
+  expect(wr.ownTotal).toBe(40);
   expect(matchesWeekly(wr, filteredQuery.weekly)).toBe(true);
   expect(matchesWeekly(qb, filteredQuery.weekly)).toBe(false);
-  expect(matchesWeekly(wr, { own: { minimum: null, maximum: 10 } })).toBe(
-    false,
-  );
+  expect(matchesWeekly(wr, { own: { minimum: null, maximum: 3 } })).toBe(false);
   for (const match of matches)
     expect(scoreTradeMatch(m, filteredQuery, match)).toEqual(
       scoreTradeMatch(m, q, match),
@@ -846,9 +844,9 @@ it("reuses authoritative scoring for bench, starter and unequal trades without m
         );
         if (!result.valid) throw Error(result.errors.join());
         expect(row).toMatchObject({
-          own: result.directA.expectedPerWeek,
+          own: result.potentialA.expectedPerWeek,
           other: result.potentialB.expectedPerWeek,
-          ownTotal: result.directA.expected,
+          ownTotal: result.potentialA.expected,
           otherTotal: result.potentialB.expected,
           grade: result.grade,
           surplus: result.surplusTest,
@@ -1067,9 +1065,9 @@ it("explains actual replacements, byes and slot gains for both teams without alt
     (row) => row.get[0] === "2",
   )!;
   const trace = searchLineupDetails(m, q, match);
-  expect(trace.own.source).toBe("Imported ESPN lineup");
-  expect(trace.own.replacements).toEqual(["101"]);
-  expect(trace.own.weekly[0].changes).toContainEqual({
+  expect(trace.ownMarked.source).toBe("Imported ESPN lineup");
+  expect(trace.ownMarked.replacements).toEqual(["101"]);
+  expect(trace.ownMarked.weekly[0].changes).toContainEqual({
     slot: "QB",
     before: "100",
     after: "101",
@@ -1082,7 +1080,7 @@ it("explains actual replacements, byes and slot gains for both teams without alt
     gain: 10,
   });
   expect(
-    trace.own.weekly.find((week) => week.week === 8)!.changes,
+    trace.ownMarked.weekly.find((week) => week.week === 8)!.changes,
   ).toContainEqual({ slot: "QB", before: null, after: "101", gain: 30 });
   const scored = scoreTradeMatch(m, q, match);
   for (const [side, average] of [
@@ -1116,20 +1114,22 @@ it("honors saved scoring lineups and keeps unavailable explanations distinct fro
     (row) => row.get[0] === "200",
   )!;
   const bench = searchLineupDetails(m, q, match);
-  expect(bench.own.benchOutgoing).toEqual(["101"]);
+  expect(bench.ownMarked.benchOutgoing).toEqual(["101"]);
   expect(
-    bench.own.weekly.every(
+    bench.ownMarked.weekly.every(
       (week) => week.gain === 0 && week.changes.length === 0,
     ),
   ).toBe(true);
   const raw = saveStarterLineup(m, "1", ["1", "101"]);
   const saved = searchLineupDetails(m, q, match, raw);
-  expect(saved.own.source).toBe("Saved app lineup");
-  expect(saved.own.replacements).toEqual(["100"]);
+  expect(saved.ownMarked.source).toBe("Saved app lineup");
+  expect(saved.ownMarked.replacements).toEqual(["100"]);
   m.byId.get("100")!.expected = null;
   const unknown = searchLineupDetails(m, q, match);
-  expect(unknown.own.weekly.every((week) => week.gain === null)).toBe(true);
-  expect(unknown.own.issues.length).toBeGreaterThan(0);
+  expect(unknown.ownMarked.weekly.every((week) => week.gain === null)).toBe(
+    true,
+  );
+  expect(unknown.ownMarked.issues.length).toBeGreaterThan(0);
   expect(() =>
     searchLineupDetails(m, { ...q, give: ["missing"] }, match),
   ).toThrow();

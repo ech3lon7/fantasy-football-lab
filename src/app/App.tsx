@@ -1,4 +1,5 @@
 import { starterLineupsKey } from "../domain/starter-lineups";
+import { lineupBasisKey } from "../domain/trade-impact";
 import { reconcileSavedTrades, savedTradesKey } from "../domain/saved-trades";
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
@@ -23,11 +24,24 @@ import {
   str,
   type Workspace,
   type Dataset,
+  type Draft,
 } from "../domain/contracts";
 import type { Model } from "../domain/valuation";
 import { evidenceKey, roleScenarioKey } from "../domain/opportunity";
 import { EvidenceSettings } from "../features/EvidenceSettings";
 import type { PositionGrade } from "../domain/lineups";
+import { teamsAssessment } from "../domain/lineups";
+import { RosterSimulator } from "../features/RosterSimulator";
+import {
+  activeRosterScenario,
+  applyRosterScenario,
+  appendScenarioTrade,
+  readRosterScenarios,
+  writeRosterScenarios,
+  rosterScenariosKey,
+  selectMyTeam,
+  type RosterScenario,
+} from "../domain/roster-scenarios";
 import { load, save, remove, observeGemTracking } from "../storage/workspace";
 import type { GemTrackingState } from "../domain/gem-tracking";
 import {
@@ -94,7 +108,7 @@ export default function App() {
     [w, setW] = useState<Workspace | null>(null),
     wRef = useRef<Workspace | null>(null),
     [ready, setReady] = useState(false),
-    [model, setModel] = useState<Model | null>(null),
+    [realModel, setModel] = useState<Model | null>(null),
     [grades, setGrades] = useState<Map<string, PositionGrade[]>>(new Map()),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -121,9 +135,41 @@ export default function App() {
       result: Promise<GemTrackingState>;
     } | null>(null),
     syncBusy = useRef(false);
+  // Only analysis views receive projected ownership. The calculation worker and prospective journal still receive the real import.
+  const model = useMemo(
+    () =>
+      realModel
+        ? applyRosterScenario(
+            realModel,
+            activeRosterScenario(w?.state.filters[rosterScenariosKey]),
+            w?.state.filters[starterLineupsKey],
+          )
+        : null,
+    [
+      realModel,
+      w?.state.filters[rosterScenariosKey],
+      w?.state.filters[starterLineupsKey],
+    ],
+  );
+  const analysisGrades = useMemo(
+    () => (model?.simulation ? teamsAssessment(model) : grades),
+    [model, grades],
+  );
   function commit(next: Workspace | null) {
     // Ownership cleanup runs for local loads, imports and cloud adoption, including outside Trade Analyzer.
     next = reconcileSavedTrades(next);
+    // A remembered My Team is authoritative on load/import; an unrelated roster browser or legacy draft cannot replace it.
+    if (next?.dataset) {
+      const selected = next.dataset.tables.ModelTeams.some(
+        (t) => str(t.TeamID) === next!.state.preferredTeam,
+      )
+        ? next.state.preferredTeam
+        : initialState(next.dataset).preferredTeam;
+      next = {
+        ...next,
+        state: selectMyTeam(next.state, next.dataset, selected),
+      };
+    }
     wRef.current = next;
     setW(next);
     if (next)
@@ -333,6 +379,96 @@ export default function App() {
       );
     }
   }
+  // Restoring a saved hypothetical trade recreates its own recipe, independently of subsequent edits to a named scenario.
+  function restoreScenario(scenario?: RosterScenario) {
+    const current = wRef.current;
+    if (!current) return false;
+    try {
+      const read = readRosterScenarios(
+        current.state.filters[rosterScenariosKey],
+      );
+      if (read.issue) throw Error(read.issue);
+      const copy = scenario
+        ? { ...scenario, id: "saved-" + scenario.id.replace(/^saved-/, "") }
+        : undefined;
+      const collection = {
+        ...read.collection,
+        active: copy?.id ?? "",
+        scenarios: copy
+          ? [...read.collection.scenarios.filter((s) => s.id !== copy.id), copy]
+          : read.collection.scenarios,
+      };
+      updateState({
+        filters: {
+          ...current.state.filters,
+          [rosterScenariosKey]: writeRosterScenarios(current.state, collection),
+        },
+      });
+      return true;
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not restore simulation.",
+      );
+      return false;
+    }
+  }
+  // Applying a completed trade changes one private recipe and both ownership sides, never the imported league snapshot.
+  function forceScenarioTrade(draft: Draft) {
+    const current = wRef.current;
+    if (!current?.dataset || !realModel) return false;
+    try {
+      if (realModel.dataset.hash !== current.dataset.hash)
+        throw Error(
+          "Wait for the current import to finish before applying a hypothetical trade.",
+        );
+      const read = readRosterScenarios(
+        current.state.filters[rosterScenariosKey],
+      );
+      if (read.issue) throw Error(read.issue);
+      const selected = read.collection.scenarios.find(
+        (s) => s.id === read.collection.active,
+      );
+      const scenario: RosterScenario = selected ?? {
+        id: crypto.randomUUID(),
+        name: "Forced trade scenario",
+        team: draft.teamA,
+        season: num(current.dataset.tables.ModelContext[0].Season),
+        sourceHash: current.dataset.hash,
+        moves: [],
+        cursor: 0,
+      };
+      const projected = applyRosterScenario(
+        realModel,
+        selected,
+        current.state.filters[starterLineupsKey],
+      );
+      const next = appendScenarioTrade(projected, scenario, draft);
+      const collection = {
+        ...read.collection,
+        active: next.id,
+        scenarios: selected
+          ? read.collection.scenarios.map((s) => (s.id === next.id ? next : s))
+          : [...read.collection.scenarios, next],
+      };
+      const raw = writeRosterScenarios(current.state, collection);
+      // Clear the consumed draft so moved players cannot remain selected on their former ownership side.
+      updateState({
+        filters: { ...current.state.filters, [rosterScenariosKey]: raw },
+        draft: { ...draft, give: [], get: [] },
+      });
+      setError("");
+      return true;
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not apply hypothetical trade.",
+      );
+      return false;
+    }
+  }
   async function importFile(file: File) {
     setError("");
     if (file.size > 25 * 1024 * 1024) {
@@ -395,14 +531,20 @@ export default function App() {
                 dataset.tables.ModelPlayers.some(
                   (p) =>
                     str(p.PlayerID) === id &&
-                    str(p.OnTeamID) === current.state.draft.teamA,
+                    (activeRosterScenario(
+                      current.state.filters[rosterScenariosKey],
+                    ) ||
+                      str(p.OnTeamID) === current.state.draft.teamA),
                 ),
               ),
               get: current.state.draft.get.filter((id) =>
                 dataset.tables.ModelPlayers.some(
                   (p) =>
                     str(p.PlayerID) === id &&
-                    str(p.OnTeamID) === current.state.draft.teamB,
+                    (activeRosterScenario(
+                      current.state.filters[rosterScenariosKey],
+                    ) ||
+                      str(p.OnTeamID) === current.state.draft.teamB),
                 ),
               ),
             },
@@ -520,6 +662,46 @@ export default function App() {
           </div>
         </header>
         <div className="content">
+          <div className="toolbar">
+            {/* This explicit account-synced selector is separate from browsing opponents. */}
+            {d && w && (
+              <label className="control">
+                <span>My team</span>
+                <select
+                  aria-label="My team"
+                  value={w.state.preferredTeam}
+                  onChange={(event) =>
+                    updateState(
+                      selectMyTeam(wRef.current!.state, d, event.target.value),
+                    )
+                  }
+                >
+                  {d.tables.ModelTeams.map((team) => (
+                    <option key={str(team.TeamID)} value={str(team.TeamID)}>
+                      {str(team.TeamName)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+          {/* The visible mode applies consistently across roster/trade/search views and always offers an explicit return to live data. */}
+          {model?.simulation && w && (
+            <div className="notice warning" role="status">
+              <strong>Hypothetical: {model.simulation.scenario.name}</strong> ·
+              Player indices use the real snapshot.{" "}
+              {model.simulation.rebased &&
+                "Updated player data applied to saved moves."}
+              <button className="button" onClick={() => restoreScenario()}>
+                Return to live roster
+              </button>
+              {model.simulation.issues.map((issue) => (
+                <p key={issue}>
+                  {issue} Analysis is conditional until resolved.
+                </p>
+              ))}
+            </div>
+          )}
           <div className="page-heading">
             <div>
               <div className="eyebrow">
@@ -704,22 +886,43 @@ export default function App() {
           ) : model && w ? (
             <>
               {page === "overview" && (
-                <Overview
-                  m={model}
-                  grades={grades.get(w.state.preferredTeam) ?? []}
-                  team={w.state.preferredTeam}
-                  filters={w.state.filters}
-                  onFilters={(patch) =>
-                    updateState({ filters: { ...w.state.filters, ...patch } })
-                  }
-                />
+                <>
+                  <RosterSimulator
+                    real={realModel!}
+                    model={model}
+                    state={w.state}
+                    change={(raw) =>
+                      updateState({
+                        filters: {
+                          ...wRef.current!.state.filters,
+                          [rosterScenariosKey]: raw,
+                        },
+                      })
+                    }
+                  />
+                  <Overview
+                    m={model}
+                    grades={analysisGrades.get(w.state.preferredTeam) ?? []}
+                    team={w.state.preferredTeam}
+                    filters={w.state.filters}
+                    onFilters={(patch) =>
+                      updateState({
+                        filters: { ...wRef.current!.state.filters, ...patch },
+                      })
+                    }
+                  />
+                </>
               )}
               {page === "teams" && (
                 <TeamView
                   m={model}
-                  grades={grades}
-                  team={w.state.preferredTeam}
-                  change={(preferredTeam) => updateState({ preferredTeam })}
+                  grades={analysisGrades}
+                  team={w.state.filters.browsedTeam || w.state.preferredTeam}
+                  change={(browsedTeam) =>
+                    updateState({
+                      filters: { ...wRef.current!.state.filters, browsedTeam },
+                    })
+                  }
                 />
               )}
               {page === "players" && (
@@ -753,6 +956,17 @@ export default function App() {
                   m={model}
                   draft={w.state.draft}
                   state={w.state}
+                  restoreScenario={restoreScenario}
+                  forceTrade={forceScenarioTrade}
+                  // Store only the analysis preference against the latest account state, preserving unrelated selections.
+                  changeBasis={(basis) =>
+                    updateState({
+                      filters: {
+                        ...wRef.current!.state.filters,
+                        [lineupBasisKey]: basis,
+                      },
+                    })
+                  }
                   // Merge only this account-state key against the latest workspace, preserving unrelated filters.
                   saveTrades={(raw) =>
                     updateState({
@@ -762,8 +976,16 @@ export default function App() {
                       },
                     })
                   }
-                  lineupsRaw={w.state.filters[starterLineupsKey]}
-                  change={(draft) => updateState({ draft })}
+                  lineupsRaw={
+                    model.simulation?.lineupsRaw ??
+                    w.state.filters[starterLineupsKey]
+                  }
+                  change={(draft) =>
+                    updateState({
+                      ...selectMyTeam(wRef.current!.state, d!, draft.teamA),
+                      draft,
+                    })
+                  }
                 />
               )}
               {page === "model" && (
@@ -784,17 +1006,17 @@ export default function App() {
                     </p>
                   </Panel>
                   <EvidenceSettings
-                    m={model}
+                    m={realModel!}
                     filters={w.state.filters}
                     change={(patch) =>
                       updateState({ filters: { ...w.state.filters, ...patch } })
                     }
                   />
                   <ModelView
-                    m={model}
+                    m={realModel!}
                     tracking={
                       gemTracking.current?.owner === w.owner &&
-                      gemTracking.current.hash === model.dataset.hash
+                      gemTracking.current.hash === realModel?.dataset.hash
                         ? gemTracking.current.result
                         : null
                     }

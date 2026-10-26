@@ -65,10 +65,14 @@ export function irAssignments(m: Model, ids: string[]) {
   return bag
     .filter(
       (p) =>
-        p.irEligible ||
-        (p.slot === 21 &&
-          p.owner === owner &&
-          ["QUESTIONABLE", "DOUBTFUL"].includes(p.injury)),
+        // A temporary OUT designation alone must not place a hypothetical starter on modeled IR.
+        (!m.ignoreTemporaryAbsences ||
+          p.slot === 21 ||
+          ["INJURY_RESERVE", "IR"].includes(p.injury)) &&
+        (p.irEligible ||
+          (p.slot === 21 &&
+            p.owner === owner &&
+            ["QUESTIONABLE", "DOUBTFUL"].includes(p.injury))),
     )
     .sort(
       (a, b) =>
@@ -81,14 +85,35 @@ export function irAssignments(m: Model, ids: string[]) {
     .map((p) => p.id);
 }
 export function available(m: Model, p: Player, w: number, downside = false) {
+  // Hypotheticals include temporary absences, but actual IR slots/statuses stay excluded throughout the horizon.
+  if (
+    m.ignoreTemporaryAbsences &&
+    (p.slot === 21 || ["INJURY_RESERVE", "IR"].includes(p.injury))
+  )
+    return false;
+  const temporary =
+    m.ignoreTemporaryAbsences === true && (!p.out || p.injury === "OUT");
   return (
-    scheduled(m, p, w) &&
-    !(w === m.current && p.out) &&
+    // A known bye is bypassed; missing schedules and non-temporary restrictions still apply.
+    (scheduled(m, p, w) || (m.ignoreByeWeeks === true && p.bye === w)) &&
+    !(w === m.current && p.out && !temporary) &&
     // Imported return weeks are explicit conditional scenarios, never inferred missed-game estimates.
-    !(p.opportunity.returnWeek !== null && w < p.opportunity.returnWeek) &&
-    !(downside && p.uncertain)
+    !(
+      p.opportunity.returnWeek !== null &&
+      w < p.opportunity.returnWeek &&
+      !temporary
+    ) &&
+    !(downside && p.uncertain && !temporary)
   );
 }
+// Compare both sides of a hypothetical against the same bye-free scoring basis without mutating the live model.
+export const withoutByeWeeks = (m: Model): Model =>
+  m.ignoreByeWeeks ? m : { ...m, ignoreByeWeeks: true };
+// Apply the same roster-potential assumptions to both sides without mutating the live model or its recorded data.
+export const forHypotheticalScoring = (m: Model): Model =>
+  m.ignoreByeWeeks && m.ignoreTemporaryAbsences
+    ? m
+    : { ...m, ignoreByeWeeks: true, ignoreTemporaryAbsences: true };
 export interface Lineup {
   week: number;
   ids: (string | null)[];
