@@ -16,6 +16,7 @@ async function seed(
   bestRoster = false,
   incomingSignals = false,
   guided = false,
+  teamFilter = false,
 ) {
   const dataset: Dataset = JSON.parse(
     execFileSync(
@@ -59,6 +60,20 @@ async function seed(
            for(const [id,score,targets] of [[2,18,[8,8,8,8,8]],[301,10,[2,2,8,8,8]],[302,10,[2,2,2,2,2]]]) {
              Object.assign(d.tables.ModelPlayers.find(p=>p.PlayerID===id),{ActualPoints:score*5,Actual_PPG:score,Last3_PPG:score,ScoreSD:0,ESPN_Projected_PPG:score,ESPN_Projected_Total:score*17});
              d.tables.ModelHistory.filter(h=>h.PlayerID===id).forEach((h,i)=>Object.assign(h,{Points:score,Targets:targets[i]}));
+           }
+         }
+         // Only opponent-scope tests need more than one counterparty; all other browser fixtures stay unchanged.
+         if(${teamFilter}) {
+           d.tables.ModelContext[0].TeamCount=4;
+           for(const team of [3,4]) {
+             d.tables.ModelTeams.push({TeamID:team,TeamName:'Test '+team});
+             for(const baseID of [200,2]) {
+               const id=team*1000+baseID;
+               const base=d.tables.ModelPlayers.find(p=>p.PlayerID===baseID);
+               d.tables.ModelPlayers.push({...base,PlayerID:id,Player:'Team '+team+' '+base.Position,OnTeamID:team});
+               d.tables.ModelHistory.push(...d.tables.ModelHistory.filter(h=>h.PlayerID===baseID).map(h=>({...h,PlayerID:id})));
+               d.tables.ModelRosters.push({PlayerID:id,TeamID:team,LineupSlotID:baseID===200?0:4});
+             }
            }
          }
          process.stdout.write(JSON.stringify(await fromTables(d.tables,d.settings)));`,
@@ -2273,4 +2288,79 @@ test("shared lineup basis drives filtering ranking analyzer and saved restoratio
   await expect(basis).toHaveValue("marked-starters");
   await page.reload();
   await expect(basis).toHaveValue("marked-starters");
+});
+
+// Use the actual worker and saved-query store to prove opponent selection, stale results, restoration and reset behavior.
+test("opponent team checkboxes restrict packages and restore with saved searches", async ({
+  page,
+}) => {
+  await seed(page, false, false, false, false, true, true);
+  const search = panel(page);
+  // Keep the first multi-owner check on one page, then exercise package matching within the restricted scope.
+  await search.getByLabel("Search goal", { exact: true }).selectOption("custom");
+  await search.getByLabel("Create package", { exact: true }).uncheck();
+  await search
+    .getByText("Teams to search: All other teams", { exact: true })
+    .click();
+  const team = (name: string) =>
+    search.getByRole("checkbox", { name: `Search team: ${name}`, exact: true });
+  await expect(team("Test A")).toHaveCount(0);
+  for (const name of ["Test B", "Test 3", "Test 4"])
+    await expect(team(name)).toBeChecked();
+  await team("Test 4").uncheck();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  const rows = search.locator("tbody tr");
+  await expect(rows.filter({ hasText: "Test B" }).first()).toBeVisible();
+  await expect(rows.filter({ hasText: "Test 3" }).first()).toBeVisible();
+  await expect(rows.filter({ hasText: "Test 4" })).toHaveCount(0);
+  // Editing scope invalidates existing results rather than presenting them as matches under the new checkbox state.
+  await team("Test B").uncheck();
+  await expect(search.getByText(/Search inputs changed/)).toBeVisible();
+  await search.getByLabel("Create package", { exact: true }).check();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(rows.filter({ hasText: "Test 3" }).first()).toBeVisible();
+  await expect(rows.filter({ hasText: "Test B" })).toHaveCount(0);
+  await rows
+    .first()
+    .getByRole("button", { name: "Save trade", exact: true })
+    .click();
+  await expect
+    .poll(
+      async () =>
+        JSON.parse((await storedWorkspace(page)).state.filters.savedTrades)
+          .trades[0].query.discovery.teams,
+    )
+    .toEqual(["3"]);
+  await search
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .click();
+  for (const name of ["Test B", "Test 3", "Test 4"])
+    await expect(team(name)).toBeChecked();
+  const saved = page
+    .locator("section")
+    .filter({
+      has: page.getByRole("heading", { name: "Saved trades", exact: true }),
+    });
+  await saved.locator("summary").click();
+  await saved
+    .getByRole("button", { name: "Load saved trade", exact: true })
+    .click();
+  await expect(team("Test 3")).toBeChecked();
+  await expect(team("Test B")).not.toBeChecked();
+  await expect(team("Test 4")).not.toBeChecked();
+  await search
+    .getByRole("button", { name: "Clear team selection", exact: true })
+    .click();
+  await expect(
+    search.getByText(/Select at least one valid opposing fantasy team/),
+  ).toBeVisible();
+  await expect(
+    search.getByRole("button", { name: "Search", exact: true }),
+  ).toBeDisabled();
+  await search
+    .getByRole("button", { name: "Select all teams", exact: true })
+    .click();
+  await expect(
+    search.getByRole("button", { name: "Search", exact: true }),
+  ).toBeEnabled();
 });

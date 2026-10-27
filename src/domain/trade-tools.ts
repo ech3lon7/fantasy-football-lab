@@ -94,6 +94,9 @@ export function diagnoseTradeCandidate(
     reasons.push(
       "The candidate does not match current ownership in this analysis mode.",
     );
+  // Explain an excluded owner even when the manually entered trade is otherwise valid.
+  if (q.discovery?.teams && !q.discovery.teams.includes(draft.teamB))
+    reasons.push("The other fantasy team is excluded by Teams to search.");
   if (q.discovery?.target && !get.includes(q.discovery.target))
     reasons.push("The required incoming target is absent.");
   if (

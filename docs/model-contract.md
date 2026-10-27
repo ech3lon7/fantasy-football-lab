@@ -99,6 +99,10 @@ The roster simulator presents live and hypothetical player-card boards for the s
 Flexible-search scope now displays effective outgoing counts separately from the incoming count/range. An outgoing pool does not enable incoming packages. Zero qualified rows show how many index candidates were evaluated and rejected by weekly limits; the existing filters and scoring algorithms remain unchanged.
 
 
+## Opponent-team search scope
+
+Trade search optionally stores explicit opposing fantasy team IDs in `discovery.teams`. Omission searches all opponents; an empty selection is invalid and never means all. Only selected owners enter singles, package enumeration, near misses and recovery evaluation. Goal presets and saved queries preserve this scope; Clear filters restores all opponents. Changing scope invalidates old results through the existing query context. A required target on an excluded team produces an explicit input error; candidate diagnostics identify excluded counterparties. Older saved searches retain their all-opponent behavior. No player valuation, lineup scoring or manual trade ownership rule changes.
+
 ## Guided trade discovery and explicit recovery
 
 New search sessions use automatic index matching and allow 1–3 incoming players. Automatic means no hidden summed-index interval; existing surplus/points tests, valuations, roster legality, protections and availability rules are unchanged. Strict below/above offsets remain optional in Advanced search controls. Saved queries without an index mode retain strict matching.

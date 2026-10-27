@@ -31,6 +31,8 @@ import type { RosterScenario } from "./roster-scenarios";
 
 // Discovery settings are optional so saved fixed-package searches retain their original behavior.
 export interface DiscoveryOptions {
+  // Omitted means all opponents; an explicitly empty list must never silently widen the search.
+  teams?: string[];
   flexible?: { pool: string[]; minimum: number; maximum: number };
   // Optional incoming bounds allow one search to include singles and larger same-team packages.
   receive?: { minimum: number; maximum: number };
@@ -350,6 +352,30 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
     !["best-available", "marked-starters"].includes(q.lineupBasis)
   )
     errors.push("Choose a valid lineup scoring basis.");
+  // Validate the opponent scope before enumerating packages; only distinct, existing opposing fantasy teams are allowed.
+  const selectedTeams = q.discovery?.teams;
+  if (
+    selectedTeams !== undefined &&
+    (!selectedTeams.length ||
+      new Set(selectedTeams).size !== selectedTeams.length ||
+      selectedTeams.some(
+        (id) =>
+          id === "0" ||
+          id === q.teamA ||
+          !m.dataset.tables.ModelTeams.some((team) => str(team.TeamID) === id),
+      ))
+  )
+    errors.push(
+      "Select at least one valid opposing fantasy team to search, without duplicates.",
+    );
+  if (
+    q.discovery?.target &&
+    selectedTeams &&
+    !selectedTeams.includes(m.byId.get(q.discovery.target)?.owner ?? "")
+  )
+    errors.push(
+      "The required target belongs to an excluded team. Include that team or clear the target.",
+    );
   // Every unselected player is protected; validate the explicit candidate pool before generating subsets.
   const flexible = q.discovery?.flexible;
   const offered = flexible?.pool ?? q.give;
@@ -770,6 +796,11 @@ export function findTradeMatches(
   if (bounds.errors.length) throw Error(bounds.errors.join(" "));
   const teams = m.dataset.tables.ModelTeams.map((t) => str(t.TeamID))
     .filter((id) => id !== "0" && id !== q.teamA)
+    // Restrict owners before building singles or packages; excluded teams never enter evaluation or near misses.
+    .filter(
+      (id) =>
+        q.discovery?.teams === undefined || q.discovery.teams.includes(id),
+    )
     // A named target restricts both the counterparty and package membership, never combines owners.
     .filter(
       (id) =>

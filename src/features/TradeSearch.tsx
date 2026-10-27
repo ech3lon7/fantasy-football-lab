@@ -115,6 +115,11 @@ export function TradeSearch({
   );
   // Discovery is opt-in; default controls preserve fixed outgoing packages and the existing ranking.
   const [discovery, setDiscovery] = useState(initialDiscovery);
+  // Undefined keeps the default all-opponent search; an empty explicit selection disables searching until a team is chosen.
+  const [selectedTeams, setSelectedTeams] = useState<string[] | undefined>();
+  const opponents = m.dataset.tables.ModelTeams.filter(
+    (team) => str(team.TeamID) !== "0" && str(team.TeamID) !== draft.teamA,
+  );
   const [packages, setPackages] = useState(true),
     // Package searches can return singles as well as larger packages within these inclusive limits.
     [minimumCount, setMinimumCount] = useState(1),
@@ -203,8 +208,10 @@ export function TradeSearch({
       discovery.flexible ||
       discovery.target ||
       discovery.nearMisses ||
-      discovery.ranking !== "own"
+      discovery.ranking !== "own" ||
+      selectedTeams !== undefined
         ? {
+            teams: selectedTeams,
             receive: packages
               ? { minimum: minimumCount, maximum: count }
               : undefined,
@@ -285,6 +292,12 @@ export function TradeSearch({
       ...previous,
       pool: previous.pool.filter((id) => m.byId.get(id)?.owner === draft.teamA),
     }));
+    // Drop stale/self IDs after a team or import change, preserving an empty explicit scope rather than selecting everybody.
+    setSelectedTeams((previous) =>
+      previous?.filter((id) =>
+        opponents.some((team) => str(team.TeamID) === id),
+      ),
+    );
   }, [draft.teamA, m.dataset.hash]);
 
   // Parent saves capture the current query without persisting temporary result rows on every search.
@@ -295,6 +308,8 @@ export function TradeSearch({
   function restoreQuery(q: TradeSearchQuery) {
     setIndexMode(q.indexMode ?? "strict");
     setGoal(q.goal ?? "custom");
+    // Restore the saved opponent filter independently of the analyzer's one selected counterparty.
+    setSelectedTeams(q.discovery?.teams);
     setGoalPosition(q.incoming?.positions?.[0] ?? "WR");
     setBelow(String(q.below));
     setAbove(String(q.above));
@@ -532,6 +547,7 @@ export function TradeSearch({
     setPendingSearch(null);
     setGoal("custom");
     setIndexMode("automatic");
+    setSelectedTeams(undefined);
     setBelow("5");
     setAbove("5");
     setDiscovery((previous) => ({
@@ -783,6 +799,22 @@ export function TradeSearch({
 
   // Chips describe current controls; removing one invalidates old results through the existing context mechanism.
   const chips: { label: string; remove: () => void }[] = [
+    // Opponent scope participates in the query/context and can be removed without changing other criteria.
+    ...(selectedTeams !== undefined
+      ? [
+          {
+            label: `Teams: ${
+              selectedTeams.length
+                ? opponents
+                    .filter((team) => selectedTeams.includes(str(team.TeamID)))
+                    .map((team) => str(team.TeamName))
+                    .join(", ")
+                : "None selected"
+            }`,
+            remove: () => setSelectedTeams(undefined),
+          },
+        ]
+      : []),
     // Optional discovery criteria use the same removable chips and stale-result protection as existing filters.
     ...(discovery.flexible
       ? [
@@ -892,7 +924,7 @@ export function TradeSearch({
       <div className="trade-search-controls">
         <FilterHelp
           label="Search goal"
-          help="Choosing a preset resets screening filters and searches 1–3 incoming players with automatic index matching. Keeps your offered/protected players and required target. Improve scoring requires your gain ≥ +1 and theirs ≥ 0 points/week. Find a position also requires that position's scoring contribution to your optimized lineup to increase, including FLEX. Review value, depth and legality separately."
+          help="Choosing a preset resets screening filters and searches 1–3 incoming players with automatic index matching. Keeps your offered/protected players, required target and selected teams. Improve scoring requires your gain ≥ +1 and theirs ≥ 0 points/week. Find a position also requires that position's scoring contribution to your optimized lineup to increase, including FLEX. Review value, depth and legality separately."
         >
           <label className="control">
             <span>Search goal</span>
@@ -933,6 +965,66 @@ export function TradeSearch({
           </label>
         )}
       </div>
+      {/* Opponent checkboxes are a search-only scope; all other filters and manual trade selections remain independent. */}
+      <details className="trade-search-group">
+        <summary>
+          <FilterHelp
+            label="Teams to search"
+            help="Search only the checked fantasy teams. Applies to singles, packages, near misses and recovery suggestions. A required target must belong to a selected team. Select all teams restores the default scope."
+          >
+            <span>
+              Teams to search:{" "}
+              {selectedTeams === undefined
+                ? "All other teams"
+                : `${selectedTeams.length} of ${opponents.length} selected`}
+            </span>
+          </FilterHelp>
+        </summary>
+        <div className="toolbar">
+          <button
+            type="button"
+            className="subtle"
+            onClick={() => setSelectedTeams(undefined)}
+          >
+            Select all teams
+          </button>
+          <button
+            type="button"
+            className="subtle"
+            onClick={() => setSelectedTeams([])}
+          >
+            Clear team selection
+          </button>
+        </div>
+        <div className="trade-search-controls">
+          {opponents.map((team) => {
+            const id = str(team.TeamID);
+            return (
+              <label className="check" key={id}>
+                <input
+                  type="checkbox"
+                  aria-label={`Search team: ${str(team.TeamName)}`}
+                  checked={
+                    selectedTeams === undefined || selectedTeams.includes(id)
+                  }
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setSelectedTeams((previous) => {
+                      const selected =
+                        previous ??
+                        opponents.map((opponent) => str(opponent.TeamID));
+                      return checked
+                        ? [...selected, id]
+                        : selected.filter((teamID) => teamID !== id);
+                    });
+                  }}
+                />{" "}
+                {str(team.TeamName)}
+              </label>
+            );
+          })}
+        </div>
+      </details>
       <p>
         Receive{" "}
         {receive.minimum === receive.maximum
@@ -1475,6 +1567,7 @@ export function TradeSearch({
                 minimumCount,
                 count,
                 discovery,
+                selectedTeams,
                 signals,
                 incomingPositions,
                 minimumSignals,

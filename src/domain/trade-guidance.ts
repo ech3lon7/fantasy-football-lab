@@ -27,6 +27,8 @@ export function guidedQuery(
     above: 5,
     count: 3,
     discovery: {
+      // Goal presets preserve explicitly selected opponents, just like protected players and the required target.
+      teams: q.discovery?.teams,
       flexible: q.discovery?.flexible,
       target: q.discovery?.target,
       receive: { minimum: 1, maximum: 3 },

@@ -60,6 +60,8 @@ const querySchema = z
           })
           .strict()
           .optional(),
+        // Saved searches retain opponent scope; older entries without it continue to search every opponent.
+        teams: z.array(z.string()).min(1).max(100).optional(),
         target: z.string().optional(),
         ranking: z.enum(["own", "other", "balanced"]).optional(),
         nearMisses: z.boolean().optional(),
