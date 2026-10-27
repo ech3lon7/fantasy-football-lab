@@ -1,3 +1,4 @@
+import { TradeChains } from "./TradeChains";
 import { guidedQuery } from "../domain/trade-guidance";
 import {
   lineupBasisLabel,
@@ -94,6 +95,7 @@ export function TradeSearch({
     draft: Draft,
     summary: SavedTradeSummary,
     query: TradeSearchQuery,
+    context?: Model,
   ) => boolean | void;
   onQueryChange?: (query: TradeSearchQuery) => void;
   lineupBasis?: LineupBasis;
@@ -915,7 +917,7 @@ export function TradeSearch({
   ];
 
   // Controls express raw index matching; premiums and fairness remain visible only as separate evaluation outputs.
-  return (
+  const searchPanel = (
     <Panel
       title="Find matching trades"
       note={`Scoring basis: ${lineupBasisLabel(lineupBasis)}. Compare weekly gains, value and legality separately.`}
@@ -2337,5 +2339,19 @@ export function TradeSearch({
           </>
         )}
     </Panel>
+  );
+  // Chain planning shares only the explicit tradable pool and scoring basis; all ordinary search filters remain unchanged.
+  return (
+    <>
+      {searchPanel}
+      <TradeChains
+        m={m}
+        team={draft.teamA}
+        pool={discovery.flexible ? discovery.pool : draft.give}
+        basis={lineupBasis}
+        lineupsRaw={lineupsRaw}
+        save={save}
+      />
+    </>
   );
 }

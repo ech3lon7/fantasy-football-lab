@@ -56,6 +56,22 @@ export const rosterScenarioSchema = z
     sourceHash: z.string().max(100),
     // Freeze the original app starter plans with a saved recipe; later live lineup edits cannot change a restored checkpoint.
     baseLineups: z.string().max(32000).optional(),
+    // Saved chain prerequisites preserve live availability and the exact marked lineup carried into each future week.
+    retainLiveAvailability: z.boolean().optional(),
+    weeklyLineupCursor: z.number().int().min(0).max(100).optional(),
+    weeklyLineups: z
+      .array(
+        z
+          .object({
+            week: z.number().int().min(1).max(18),
+            team: z.string(),
+            ids: z.array(z.string()).max(100),
+            assignments: starterAssignmentsSchema,
+          })
+          .strict(),
+      )
+      .max(1800)
+      .optional(),
     // Compact ownership/IR-slot tuples freeze the roster baseline without copying player statistics or a dataset.
     baseRoster: z
       .array(z.tuple([z.string(), z.string(), z.number().nullable()]))
@@ -453,8 +469,10 @@ export function applyRosterScenario(
   const scenario = rosterScenarioSchema.parse(input),
     issues: string[] = [];
   const m: Model = {
-    // Set both availability policies before replaying moves; all workers and saved scenarios share the same assumptions.
-    ...forHypotheticalScoring(real),
+    // Ordinary hypotheticals retain their existing policy; saved live-chain prerequisites keep their scheduled-week assumptions.
+    ...(scenario.retainLiveAvailability
+      ? { ...real, ignoreByeWeeks: false, ignoreTemporaryAbsences: false }
+      : forHypotheticalScoring(real)),
     players: real.players.map((p) => ({ ...p, raw: { ...p.raw } })),
     dataset: { ...real.dataset, tables: { ...real.dataset.tables } },
   };
@@ -609,7 +627,8 @@ export function applyRosterScenario(
   m.analysisVersion += ":hypothetical-potential-2:simulation:" + signature;
   m.simulation = {
     scenario,
-    sourceDataset: real.dataset,
+    // Nested chain previews must keep the true imported source, rather than treating projected ownership as a new import.
+    sourceDataset: real.simulation?.sourceDataset ?? real.dataset,
     issues,
     lineupsRaw: plans,
     rebased: scenario.sourceHash !== real.dataset.hash,

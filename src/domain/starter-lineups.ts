@@ -258,6 +258,76 @@ export function directStarterImpact(
   after: string[],
   incoming: string[],
   raw?: string,
+): ReturnType<typeof singleStarterImpact> {
+  // Chain step two inherits step one's actual marked roles separately for each week, rather than resetting to imported starters.
+  const recipe = m.simulation?.scenario;
+  const carried =
+    recipe?.cursor === recipe?.weeklyLineupCursor
+      ? recipe?.weeklyLineups
+      : undefined;
+  if (
+    carried?.some((plan) => plan.team === team && m.weeks.includes(plan.week))
+  ) {
+    const context = {
+      ...m,
+      simulation: {
+        ...m.simulation!,
+        scenario: { ...m.simulation!.scenario, weeklyLineups: undefined },
+      },
+    };
+    const parts = m.weeks.map((week) => {
+      const plan = carried.find(
+        (entry) => entry.team === team && entry.week === week,
+      );
+      const plans = plan
+        ? saveStarterLineup(context, team, plan.ids, raw, plan.assignments)
+        : raw;
+      return directStarterImpact(
+        { ...context, weeks: [week] },
+        team,
+        after,
+        incoming,
+        plans,
+      );
+    });
+    const unique = (
+      key:
+        "errors" | "warnings" | "marked" | "replacements" | "promotedIncoming",
+    ): string[] => [...new Set(parts.flatMap((part) => part[key]))];
+    const total = (key: "expected" | "value"): number | null =>
+      parts.some((part) => part[key] === null)
+        ? null
+        : sum(parts.map((part) => part[key]!));
+    const expected = total("expected"),
+      value = total("value");
+    return {
+      ...parts[0],
+      source: parts[0].source + " · carried weekly roles",
+      errors: unique("errors"),
+      warnings: unique("warnings"),
+      marked: unique("marked"),
+      replacements: unique("replacements"),
+      promotedIncoming: unique("promotedIncoming"),
+      benchOutgoing: parts[0].benchOutgoing.filter((id) =>
+        parts.every((part) => part.benchOutgoing.includes(id)),
+      ),
+      weekly: parts.flatMap((part) => part.weekly),
+      expected,
+      value,
+      expectedPerWeek: expected === null ? null : expected / parts.length,
+      valuePerWeek: value === null ? null : value / parts.length,
+    };
+  }
+  return singleStarterImpact(m, team, after, incoming, raw);
+}
+
+// Ordinary one-trade scoring retains its existing implementation; weekly chain carry-forward calls it with one week at a time.
+function singleStarterImpact(
+  m: Model,
+  team: string,
+  after: string[],
+  incoming: string[],
+  raw?: string,
 ) {
   const selection = readStarterLineup(m, team, raw),
     afterSet = new Set(after);

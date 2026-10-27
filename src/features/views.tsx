@@ -1750,9 +1750,11 @@ export function TradeView({
     selected: Draft,
     summary: SavedTradeSummary,
     query?: TradeSearchQuery,
+    // A chain's second leg saves its prerequisite roster recipe without applying it to the current workspace.
+    context: Model = m,
   ) {
     try {
-      saveTrades(saveTrade(state, m, selected, summary, query));
+      saveTrades(saveTrade(state, context, selected, summary, query));
       setSaveMessage(
         "Trade saved. Duplicate packages update the existing entry while preserving its name, notes and original summary.",
       );

@@ -16,7 +16,7 @@ import {
   rosterExcess,
   irAssignments,
 } from "./lineups";
-import { evaluateTrade } from "./trades";
+import { evaluateTrade, type TradeResult } from "./trades";
 import {
   tradeImpact,
   readLineupBasis,
@@ -1096,21 +1096,25 @@ export function scoreTradeMatch(
   q: TradeSearchQuery,
   match: SearchMatch,
   lineupsRaw?: string,
+  // Chain search can reuse its already evaluated trade without repeating legal-roster and weekly calculations.
+  evaluated?: TradeResult,
 ): SearchRow {
   // Use the chosen subset rather than the draft/pool for every authoritative trade calculation.
   if (match.give) q = { ...q, give: [...match.give] };
-  const r = evaluateTrade(
-    m,
-    {
-      teamA: q.teamA,
-      teamB: match.teamB,
-      give: [...q.give],
-      get: [...match.get],
-    },
-    // Search scores are trade-only: legal waiver additions cannot change these gains, tests or injury warnings.
-    false,
-    lineupsRaw,
-  );
+  const r =
+    evaluated ??
+    evaluateTrade(
+      m,
+      {
+        teamA: q.teamA,
+        teamB: match.teamB,
+        give: [...q.give],
+        get: [...match.get],
+      },
+      // Search scores are trade-only: legal waiver additions cannot change these gains, tests or injury warnings.
+      false,
+      lineupsRaw,
+    );
   if (!r.valid)
     return {
       ...match,
