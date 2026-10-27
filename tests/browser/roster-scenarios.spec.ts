@@ -218,6 +218,7 @@ test("My team stays selected and hypothetical moves are independent, durable and
   await simulator
     .getByRole("button", { name: "Redo move", exact: true })
     .click();
+  await simulator.getByRole("button", { name: "Save to slot 1", exact: true }).click();
   await expect
     .poll(
       async () =>
@@ -291,6 +292,7 @@ test("simulation optimize and reset restore imported starters without modifying 
       exact: true,
     }),
   ).toHaveValue("Bench");
+  await page.getByRole("button", { name: "Save to slot 1", exact: true }).click();
   await expect
     .poll(
       async () =>
@@ -437,6 +439,7 @@ test("manual FLEX placement overrides scoring order and survives bye, edits and 
   await page.getByRole("dialog").getByRole("searchbox").fill("Main QB");
   await page.getByRole("button", { name: "Choose Main QB", exact: true }).click();
   await expect(flex.getByRole("link", { name: "Bye RB", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Save to slot 1", exact: true }).click();
   await expect.poll(async () => JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(4);
   await page.reload();
   await expect(page.getByRole("combobox", { name: "Lineup view", exact: true })).toHaveValue("marked");
@@ -493,6 +496,9 @@ test("forced trades update both simulated rosters and later searches and undo to
   await expect(page.getByLabel("Outgoing player 1", { exact: true }).locator('option[value="200"]')).toHaveCount(1);
   await expect(page.getByLabel("Outgoing player 1", { exact: true }).locator('option[value="101"]')).toHaveCount(0);
   await expect(page.getByLabel("Incoming player 1", { exact: true }).locator('option[value="101"]')).toHaveCount(1);
+  await page.goto("./#/overview");
+  await page.getByRole("button", { name: "Save to slot 1", exact: true }).click();
+  await page.goto("./#/trades");
   await expect.poll(async () => {
     const w = await stored(page);
     const collection = JSON.parse(w.state.filters.rosterScenarios);
@@ -513,7 +519,8 @@ test("forced trades update both simulated rosters and later searches and undo to
   await page.goto("./#/overview");
   await expect(page.getByLabel("Roster simulation", { exact: true })).not.toHaveValue("");
   await page.getByRole("button", { name: "Undo move", exact: true }).click();
-  await expect.poll(async () => JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(0);
+  await expect(page.getByText("0 / 1 moves applied", { exact: true })).toBeVisible();
+  expect(JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(1);
   await page.goto("./#/trades");
   await expect(page.getByLabel("Outgoing player 1", { exact: true }).locator('option[value="101"]')).toHaveCount(1);
   await expect(page.getByLabel("Incoming player 1", { exact: true }).locator('option[value="200"]')).toHaveCount(1);
@@ -616,4 +623,69 @@ test("hypothetical cards, overview, analyzer and search share temporary-injury t
   await expect(
     row.getByText(new RegExp(`Their Before ${other.replace(".", "\\.")} →`)),
   ).toBeVisible();
+});
+
+
+// Working changes survive in-app navigation but never replace stored recipes or any of the three slots without Save.
+test("three roster slots restore exact working points and require explicit saves", async ({ page }) => {
+  const dataset = await seed(page);
+  await page.getByRole("button", { name: "New simulation", exact: true }).click();
+  const slots = page.getByRole("region", { name: "Roster save slots", exact: true });
+  await expect(slots.getByRole("button", { name: /^Load slot/ })).toHaveCount(3);
+  for (const slot of [1, 2, 3]) await expect(slots.getByRole("button", { name: `Load slot ${slot}`, exact: true })).toBeDisabled();
+  expect((await stored(page)).state.filters.rosterScenarios).toBeUndefined();
+  await slots.getByRole("button", { name: "Save to slot 1", exact: true }).click();
+  await expect(slots.getByText("Current roster is saved.", { exact: true })).toBeVisible();
+  await page.getByText("Advanced roster moves", { exact: true }).click();
+  await page.getByRole("combobox", { name: "League player", exact: true }).selectOption("200");
+  await page.getByRole("button", { name: "Move player to selected team", exact: true }).click();
+  await expect(slots.getByText(/^Unsaved changes/)).toBeVisible();
+  expect(JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(0);
+  await page.goto("./#/trades");
+  await expect(page.getByLabel("Outgoing player 1", { exact: true }).locator('option[value="200"]')).toHaveCount(1);
+  // An unrelated persisted setting cannot accidentally save the roster draft.
+  await page.getByRole("combobox", { name: "Evaluate lineup impact using", exact: true }).selectOption("marked-starters");
+  await expect.poll(async () => (await stored(page)).state.filters.tradeLineupBasis).toBe("marked-starters");
+  expect(JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(0);
+  await page.goto("./#/overview");
+  await slots.getByRole("button", { name: "Save to slot 2", exact: true }).click();
+  await page.getByText("Advanced roster moves", { exact: true }).click();
+  await page.getByRole("combobox", { name: "League player", exact: true }).selectOption("200");
+  await page.getByRole("button", { name: "Cut player to available pool", exact: true }).click();
+  await slots.getByRole("button", { name: "Save to slot 3", exact: true }).click();
+  await expect.poll(async () => JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(2);
+  await slots.getByRole("button", { name: "Load slot 1", exact: true }).click();
+  await expect(page.getByText("0 / 0 moves applied", { exact: true })).toBeVisible();
+  expect(JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(2);
+  await slots.getByRole("button", { name: "Load slot 2", exact: true }).click();
+  await expect(page.getByText("1 / 1 moves applied", { exact: true })).toBeVisible();
+  await slots.getByRole("button", { name: "Save to slot 3", exact: true }).click();
+  await expect(slots.getByText("Current roster is saved.", { exact: true })).toBeVisible();
+  await expect.poll(async () => JSON.parse((await stored(page)).state.filters.rosterScenarios).snapshots.map((snapshot: { slot: number; scenario: { cursor: number } }) => [snapshot.slot, snapshot.scenario.cursor])).toEqual([[1, 0], [2, 1], [3, 1]]);
+  await page.reload();
+  await expect(page.getByText("1 / 1 moves applied", { exact: true })).toBeVisible();
+  expect((await stored(page)).dataset).toEqual(dataset);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await slots.screenshot({ path: "test-results/roster-save-slots-mobile.png" });
+});
+
+// Refresh requires an explicit discard of unsaved roster edits and returns to the most recently saved point.
+test("refresh warns about unsaved roster edits and preserves saved slots", async ({ page }) => {
+  await seed(page);
+  await page.getByRole("button", { name: "New simulation", exact: true }).click();
+  await page.getByRole("button", { name: "Save to slot 1", exact: true }).click();
+  await page.getByText("Advanced roster moves", { exact: true }).click();
+  await page.getByRole("combobox", { name: "League player", exact: true }).selectOption("200");
+  await page.getByRole("button", { name: "Move player to selected team", exact: true }).click();
+  await expect(page.getByText("1 / 1 moves applied", { exact: true })).toBeVisible();
+  const dialogPromise = page.waitForEvent("dialog");
+  const reload = page.reload();
+  const dialog = await dialogPromise;
+  expect(dialog.type()).toBe("beforeunload");
+  await dialog.accept();
+  await reload;
+  await expect(page.getByText("0 / 0 moves applied", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Load slot 1", exact: true })).toBeEnabled();
+  expect(JSON.parse((await stored(page)).state.filters.rosterScenarios).snapshots).toHaveLength(1);
 });

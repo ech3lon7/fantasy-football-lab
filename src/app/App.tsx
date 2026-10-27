@@ -39,6 +39,11 @@ import {
   readRosterScenarios,
   writeRosterScenarios,
   rosterScenariosKey,
+  rosterScenarioDirty,
+  saveRosterSnapshot,
+  scenarioRosterBase,
+  deleteRosterScenario,
+  type RosterSaveSlot,
   selectMyTeam,
   type RosterScenario,
 } from "../domain/roster-scenarios";
@@ -51,6 +56,7 @@ import {
   signOutFantasy,
   pull,
   sync,
+  acknowledgeSync,
   Conflict,
   type CloudConfig,
 } from "../sync/client";
@@ -135,21 +141,35 @@ export default function App() {
       result: Promise<GemTrackingState>;
     } | null>(null),
     syncBusy = useRef(false);
+  // Scenario edits remain in memory across routes; ordinary workspace/cloud saves never serialize this working draft.
+  const [rosterDraft, setRosterDraft] = useState<string | null>(null);
+  const rosterDraftRef = useRef<string | null>(null);
+  const scenarioRaw = rosterDraft ?? w?.state.filters[rosterScenariosKey];
+  const unsavedRosters = rosterScenarioDirty(
+    w?.state.filters[rosterScenariosKey],
+    scenarioRaw,
+  );
+  // Native unload protection covers refresh/close while ordinary in-app navigation preserves the draft.
+  useEffect(() => {
+    if (!unsavedRosters) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [unsavedRosters]);
   // Only analysis views receive projected ownership. The calculation worker and prospective journal still receive the real import.
   const model = useMemo(
     () =>
       realModel
         ? applyRosterScenario(
             realModel,
-            activeRosterScenario(w?.state.filters[rosterScenariosKey]),
+            activeRosterScenario(scenarioRaw),
             w?.state.filters[starterLineupsKey],
           )
         : null,
-    [
-      realModel,
-      w?.state.filters[rosterScenariosKey],
-      w?.state.filters[starterLineupsKey],
-    ],
+    [realModel, scenarioRaw, w?.state.filters[starterLineupsKey]],
   );
   const analysisGrades = useMemo(
     () => (model?.simulation ? teamsAssessment(model) : grades),
@@ -169,6 +189,11 @@ export default function App() {
         ...next,
         state: selectMyTeam(next.state, next.dataset, selected),
       };
+    }
+    // An account change must never expose another account's unsaved hypothetical roster.
+    if (wRef.current?.owner !== next?.owner) {
+      rosterDraftRef.current = null;
+      setRosterDraft(null);
     }
     wRef.current = next;
     setW(next);
@@ -332,14 +357,19 @@ export default function App() {
       await saveQueue.current;
       const next = await sync(client, current, force);
       if (wRef.current?.owner !== current.owner) return;
-      if (wRef.current !== current) {
-        setSyncStatus("Changes pending; sync again");
-        return;
-      }
-      commit(next);
+      // Preserve newer settings/imports while recording the revisions this sync actually committed.
+      const acknowledged = acknowledgeSync(wRef.current, current, next);
+      if (!acknowledged) return;
+      commit(acknowledged);
       setConflict(undefined);
-      setSyncStatus(wRef.current?.pendingState ? "Changes pending" : "Synced");
+      setSyncStatus(
+        wRef.current?.pendingState || wRef.current?.pendingDataset
+          ? "Changes pending; sync again"
+          : "Synced",
+      );
     } catch (e) {
+      // An obsolete request must not show another account's conflict or failure after switching accounts.
+      if (wRef.current?.owner !== current.owner) return;
       if (e instanceof Conflict) {
         setConflict(e.remote);
         setSyncStatus("Conflict");
@@ -379,13 +409,121 @@ export default function App() {
       );
     }
   }
+  // Validate staged edits without saving roster recipes; only an existing active-mode preference may persist separately.
+  function stageRosterScenarios(raw: string) {
+    const current = wRef.current;
+    if (!current) return false;
+    try {
+      const saved = readRosterScenarios(
+        current.state.filters[rosterScenariosKey],
+      );
+      if (!raw && saved.issue) {
+        updateState({
+          filters: { ...current.state.filters, [rosterScenariosKey]: "" },
+        });
+        rosterDraftRef.current = null;
+        setRosterDraft(null);
+        return true;
+      }
+      const read = readRosterScenarios(raw);
+      if (read.issue) throw Error(read.issue);
+      const validated = writeRosterScenarios(current.state, read.collection);
+      rosterDraftRef.current = validated;
+      setRosterDraft(validated);
+      if (
+        !saved.issue &&
+        saved.collection.active !== read.collection.active &&
+        (!read.collection.active ||
+          saved.collection.scenarios.some(
+            (scenario) => scenario.id === read.collection.active,
+          ))
+      ) {
+        updateState({
+          filters: {
+            ...current.state.filters,
+            [rosterScenariosKey]: writeRosterScenarios(current.state, {
+              ...saved.collection,
+              active: read.collection.active,
+            }),
+          },
+        });
+      }
+      setError("");
+      return true;
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not stage roster changes.",
+      );
+      return false;
+    }
+  }
+  // One Save click atomically commits the current recipe and chosen slot; other scenarios' drafts stay unsaved.
+  function saveScenarioSlot(slot: RosterSaveSlot) {
+    const current = wRef.current;
+    if (!current) return false;
+    try {
+      const next = saveRosterSnapshot(
+        current.state,
+        rosterDraftRef.current ??
+          current.state.filters[rosterScenariosKey] ??
+          "",
+        slot,
+        new Date().toISOString(),
+        realModel ? scenarioRosterBase(realModel) : undefined,
+      );
+      updateState({
+        filters: { ...current.state.filters, [rosterScenariosKey]: next.saved },
+      });
+      rosterDraftRef.current = next.working;
+      setRosterDraft(next.working);
+      setError("");
+      return true;
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not save roster snapshot.",
+      );
+      return false;
+    }
+  }
+  // Delete is an explicit management action; it never saves unrelated working roster changes.
+  function deleteScenario(id: string) {
+    const current = wRef.current;
+    if (!current) return false;
+    try {
+      const next = deleteRosterScenario(
+        current.state,
+        rosterDraftRef.current ??
+          current.state.filters[rosterScenariosKey] ??
+          "",
+        id,
+      );
+      updateState({
+        filters: { ...current.state.filters, [rosterScenariosKey]: next.saved },
+      });
+      rosterDraftRef.current = next.working;
+      setRosterDraft(next.working);
+      setError("");
+      return true;
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not delete roster scenario.",
+      );
+      return false;
+    }
+  }
   // Restoring a saved hypothetical trade recreates its own recipe, independently of subsequent edits to a named scenario.
   function restoreScenario(scenario?: RosterScenario) {
     const current = wRef.current;
     if (!current) return false;
     try {
       const read = readRosterScenarios(
-        current.state.filters[rosterScenariosKey],
+        rosterDraftRef.current ?? current.state.filters[rosterScenariosKey],
       );
       if (read.issue) throw Error(read.issue);
       const copy = scenario
@@ -398,13 +536,9 @@ export default function App() {
           ? [...read.collection.scenarios.filter((s) => s.id !== copy.id), copy]
           : read.collection.scenarios,
       };
-      updateState({
-        filters: {
-          ...current.state.filters,
-          [rosterScenariosKey]: writeRosterScenarios(current.state, collection),
-        },
-      });
-      return true;
+      return stageRosterScenarios(
+        writeRosterScenarios(current.state, collection),
+      );
     } catch (error) {
       setError(
         error instanceof Error
@@ -424,7 +558,7 @@ export default function App() {
           "Wait for the current import to finish before applying a hypothetical trade.",
         );
       const read = readRosterScenarios(
-        current.state.filters[rosterScenariosKey],
+        rosterDraftRef.current ?? current.state.filters[rosterScenariosKey],
       );
       if (read.issue) throw Error(read.issue);
       const selected = read.collection.scenarios.find(
@@ -444,7 +578,18 @@ export default function App() {
         selected,
         current.state.filters[starterLineupsKey],
       );
-      const next = appendScenarioTrade(projected, scenario, draft);
+      const next = appendScenarioTrade(
+        projected,
+        {
+          ...scenario,
+          baseLineups:
+            scenario.baseLineups ??
+            current.state.filters[starterLineupsKey] ??
+            "",
+          baseRoster: scenario.baseRoster ?? scenarioRosterBase(realModel),
+        },
+        draft,
+      );
       const collection = {
         ...read.collection,
         active: next.id,
@@ -453,11 +598,9 @@ export default function App() {
           : [...read.collection.scenarios, next],
       };
       const raw = writeRosterScenarios(current.state, collection);
-      // Clear the consumed draft so moved players cannot remain selected on their former ownership side.
-      updateState({
-        filters: { ...current.state.filters, [rosterScenariosKey]: raw },
-        draft: { ...draft, give: [], get: [] },
-      });
+      if (!stageRosterScenarios(raw)) return false;
+      // Clear the consumed trade draft without persisting the unsaved roster recipe.
+      updateState({ draft: { ...draft, give: [], get: [] } });
       setError("");
       return true;
     } catch (error) {
@@ -532,7 +675,8 @@ export default function App() {
                   (p) =>
                     str(p.PlayerID) === id &&
                     (activeRosterScenario(
-                      current.state.filters[rosterScenariosKey],
+                      rosterDraftRef.current ??
+                        current.state.filters[rosterScenariosKey],
                     ) ||
                       str(p.OnTeamID) === current.state.draft.teamA),
                 ),
@@ -542,7 +686,8 @@ export default function App() {
                   (p) =>
                     str(p.PlayerID) === id &&
                     (activeRosterScenario(
-                      current.state.filters[rosterScenariosKey],
+                      rosterDraftRef.current ??
+                        current.state.filters[rosterScenariosKey],
                     ) ||
                       str(p.OnTeamID) === current.state.draft.teamB),
                 ),
@@ -687,9 +832,19 @@ export default function App() {
           </div>
           {/* The visible mode applies consistently across roster/trade/search views and always offers an explicit return to live data. */}
           {model?.simulation && w && (
-            <div className="notice warning" role="status">
+            <div className="notice warning toolbar" role="status">
               <strong>Hypothetical: {model.simulation.scenario.name}</strong> ·
               Player indices use the real snapshot.{" "}
+              {rosterScenarioDirty(
+                w.state.filters[rosterScenariosKey],
+                scenarioRaw,
+                model.simulation.scenario.id,
+              ) && (
+                <span>
+                  Unsaved roster changes.{" "}
+                  <a href="#/overview">Save a roster slot on My team.</a>{" "}
+                </span>
+              )}
               {model.simulation.rebased &&
                 "Updated player data applied to saved moves."}
               <button className="button" onClick={() => restoreScenario()}>
@@ -890,15 +1045,17 @@ export default function App() {
                   <RosterSimulator
                     real={realModel!}
                     model={model}
-                    state={w.state}
-                    change={(raw) =>
-                      updateState({
-                        filters: {
-                          ...wRef.current!.state.filters,
-                          [rosterScenariosKey]: raw,
-                        },
-                      })
-                    }
+                    state={{
+                      ...w.state,
+                      filters: {
+                        ...w.state.filters,
+                        [rosterScenariosKey]: scenarioRaw ?? "",
+                      },
+                    }}
+                    savedRaw={w.state.filters[rosterScenariosKey]}
+                    change={stageRosterScenarios}
+                    saveSlot={saveScenarioSlot}
+                    deleteScenario={deleteScenario}
                   />
                   <Overview
                     m={model}

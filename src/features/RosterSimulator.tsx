@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { num, type AppState } from "../domain/contracts";
 import type { Model } from "../domain/valuation";
 import {
@@ -8,6 +8,11 @@ import {
   writeRosterScenarios,
   rosterScenariosKey,
   scenarioTeamImpact,
+  rosterSaveSlots,
+  rosterScenarioDirty,
+  loadRosterSnapshot,
+  scenarioRosterBase,
+  type RosterSaveSlot,
   type RosterScenario,
   type ScenarioMove,
 } from "../domain/roster-scenarios";
@@ -27,12 +32,18 @@ export function RosterSimulator({
   real,
   model,
   state,
+  savedRaw,
   change,
+  saveSlot,
+  deleteScenario,
 }: {
   real: Model;
   model: Model;
   state: AppState;
-  change: (raw: string) => void;
+  savedRaw?: string;
+  change: (raw: string) => boolean;
+  saveSlot: (slot: RosterSaveSlot) => boolean;
+  deleteScenario: (id: string) => boolean;
 }) {
   const read = readRosterScenarios(state.filters[rosterScenariosKey]),
     collection = read.collection;
@@ -42,6 +53,10 @@ export function RosterSimulator({
     [search, setSearch] = useState(""),
     [viewTeam, setViewTeam] = useState(""),
     [message, setMessage] = useState("");
+  // Names are working edits too; switching or loading a snapshot restores that recipe's own name.
+  useEffect(() => {
+    setName(current?.name ?? "");
+  }, [current?.id, current?.name]);
   const team = real.dataset.tables.ModelTeams.some(
     (t) => String(t.TeamID) === viewTeam,
   )
@@ -50,7 +65,7 @@ export function RosterSimulator({
   // All writes enforce the existing total cloud-state budget and report failures without discarding a saved scenario.
   function persist(next: typeof collection) {
     try {
-      change(writeRosterScenarios(state, next));
+      if (!change(writeRosterScenarios(state, next))) return false;
       setMessage("");
       return true;
     } catch (e) {
@@ -61,7 +76,16 @@ export function RosterSimulator({
   function update(next: RosterScenario) {
     return persist({
       ...collection,
-      scenarios: collection.scenarios.map((s) => (s.id === next.id ? next : s)),
+      scenarios: collection.scenarios.map((s) =>
+        s.id === next.id
+          ? {
+              ...next,
+              baseLineups:
+                next.baseLineups ?? state.filters[starterLineupsKey] ?? "",
+              baseRoster: next.baseRoster ?? scenarioRosterBase(real),
+            }
+          : s,
+      ),
     });
   }
   function move(action: ScenarioMove) {
@@ -156,7 +180,11 @@ export function RosterSimulator({
           <span>Simulation name</span>
           <input
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (current && e.target.value.trim())
+                update({ ...current, name: e.target.value });
+            }}
             maxLength={120}
             placeholder={current?.name ?? "Name your next moves"}
           />
@@ -171,6 +199,8 @@ export function RosterSimulator({
               team: state.preferredTeam,
               season: num(real.dataset.tables.ModelContext[0].Season),
               sourceHash: real.dataset.hash,
+              baseLineups: state.filters[starterLineupsKey] ?? "",
+              baseRoster: scenarioRosterBase(real),
               moves: [],
               cursor: 0,
             };
@@ -188,24 +218,8 @@ export function RosterSimulator({
         {current && (
           <>
             <button
-              className="button"
-              onClick={() =>
-                update({ ...current, name: name.trim() || current.name })
-              }
-            >
-              Save name
-            </button>
-            <button
               className="subtle"
-              onClick={() =>
-                persist({
-                  ...collection,
-                  active: "",
-                  scenarios: collection.scenarios.filter(
-                    (s) => s.id !== current.id,
-                  ),
-                })
-              }
+              onClick={() => deleteScenario(current.id)}
             >
               Delete simulation
             </button>
@@ -214,6 +228,93 @@ export function RosterSimulator({
       </div>
       {current && (
         <>
+          {/* Three explicit save slots preserve independent recipe checkpoints; ordinary roster edits never overwrite them. */}
+          <section aria-label="Roster save slots">
+            <h3>Roster save slots</h3>
+            <p
+              role="status"
+              className={
+                rosterScenarioDirty(
+                  savedRaw,
+                  state.filters[rosterScenariosKey],
+                  current.id,
+                )
+                  ? "warning-text"
+                  : "muted"
+              }
+            >
+              {rosterScenarioDirty(
+                savedRaw,
+                state.filters[rosterScenariosKey],
+                current.id,
+              )
+                ? "Unsaved changes — click Save to slot to keep this roster."
+                : "Current roster is saved."}
+            </p>
+            <p className="muted">
+              Snapshots restore ownership and exact starter slots. Player
+              forecasts use the current imported data.
+            </p>
+            <div className="three-col">
+              {rosterSaveSlots.map((slot) => {
+                const snapshot = collection.snapshots?.find(
+                  (saved) =>
+                    saved.scenario.id === current.id && saved.slot === slot,
+                );
+                return (
+                  <div className="metric" key={slot}>
+                    <h4>Slot {slot}</h4>
+                    <p>{snapshot ? snapshot.scenario.name : "Empty slot"}</p>
+                    {snapshot && (
+                      <small>
+                        Saved {new Date(snapshot.savedUTC).toLocaleString()}
+                      </small>
+                    )}
+                    <div className="toolbar">
+                      <button
+                        className="button primary"
+                        onClick={() => {
+                          if (!name.trim()) {
+                            setMessage(
+                              "Enter a simulation name before saving.",
+                            );
+                            return;
+                          }
+                          if (saveSlot(slot)) setMessage("");
+                        }}
+                      >
+                        Save to slot {slot}
+                      </button>
+                      <button
+                        className="button"
+                        disabled={!snapshot}
+                        onClick={() => {
+                          try {
+                            change(
+                              loadRosterSnapshot(
+                                state,
+                                state.filters[rosterScenariosKey] ?? "",
+                                current.id,
+                                slot,
+                              ),
+                            );
+                          } catch (error) {
+                            setMessage(
+                              error instanceof Error
+                                ? error.message
+                                : "Could not load roster snapshot.",
+                            );
+                          }
+                        }}
+                      >
+                        Load slot {slot}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
           {/* Undo and redo expose every intermediate roster without silently adding waiver players or altering earlier saved trade snapshots. */}
           <div className="toolbar">
             {/* Reuse the analyzer's existing player/package selectors rather than duplicate trade-entry controls. */}

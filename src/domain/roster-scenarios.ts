@@ -54,22 +54,45 @@ export const rosterScenarioSchema = z
     season: z.number().int(),
     team: z.string(),
     sourceHash: z.string().max(100),
+    // Freeze the original app starter plans with a saved recipe; later live lineup edits cannot change a restored checkpoint.
+    baseLineups: z.string().max(32000).optional(),
+    // Compact ownership/IR-slot tuples freeze the roster baseline without copying player statistics or a dataset.
+    baseRoster: z
+      .array(z.tuple([z.string(), z.string(), z.number().nullable()]))
+      .max(5000)
+      .optional(),
     moves: z.array(scenarioMoveSchema).max(100),
     cursor: z.number().int().min(0).max(100),
   })
   .strict()
   .refine((s) => s.cursor <= s.moves.length);
+// Each scenario has three independent checkpoints containing recipes only, never another dataset or recursive snapshots.
+export const rosterSaveSlots = [1, 2, 3] as const;
+export type RosterSaveSlot = (typeof rosterSaveSlots)[number];
+const snapshotSchema = z
+  .object({
+    slot: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    savedUTC: z.string().datetime(),
+    scenario: rosterScenarioSchema,
+  })
+  .strict();
 const collectionSchema = z
   .object({
     version: z.literal(1),
     active: z.string(),
     scenarios: z.array(rosterScenarioSchema).max(10),
+    snapshots: z.array(snapshotSchema).max(30).optional(),
   })
   .strict()
   .refine(
     (c) =>
       new Set(c.scenarios.map((s) => s.id)).size === c.scenarios.length &&
-      (!c.active || c.scenarios.some((s) => s.id === c.active)),
+      (!c.active || c.scenarios.some((s) => s.id === c.active)) &&
+      new Set((c.snapshots ?? []).map((s) => `${s.scenario.id}/${s.slot}`))
+        .size === (c.snapshots ?? []).length &&
+      (c.snapshots ?? []).every((snapshot) =>
+        c.scenarios.some((s) => s.id === snapshot.scenario.id),
+      ),
   );
 export type RosterScenario = z.infer<typeof rosterScenarioSchema>;
 export type ScenarioMove = z.infer<typeof scenarioMoveSchema>;
@@ -123,6 +146,131 @@ export function activeRosterScenario(raw?: string) {
   const read = readRosterScenarios(raw);
   return read.collection.scenarios.find((s) => s.id === read.collection.active);
 }
+// Store only roster identity and slots; player forecasts, scoring history and valuation inputs continue to come from the current import.
+export const scenarioRosterBase = (
+  m: Model,
+): NonNullable<RosterScenario["baseRoster"]> =>
+  m.players
+    .filter((p) => p.owner !== "0")
+    .map((p) => [p.id, p.owner, p.slot ?? null]);
+
+// Draft comparisons ignore navigation and slot metadata; only changed recipes need an explicit save.
+export function rosterScenarioDirty(
+  savedRaw: string | undefined,
+  workingRaw: string | undefined,
+  id?: string,
+) {
+  const saved = readRosterScenarios(savedRaw),
+    working = readRosterScenarios(workingRaw);
+  if (saved.issue || working.issue) return false;
+  const ids = id
+    ? [id]
+    : [
+        ...new Set(
+          [...saved.collection.scenarios, ...working.collection.scenarios].map(
+            (s) => s.id,
+          ),
+        ),
+      ];
+  return ids.some(
+    (key) =>
+      JSON.stringify(saved.collection.scenarios.find((s) => s.id === key)) !==
+      JSON.stringify(working.collection.scenarios.find((s) => s.id === key)),
+  );
+}
+
+// Saving commits only the selected scenario and one slot; unsaved work in another scenario remains a draft.
+export function saveRosterSnapshot(
+  state: AppState,
+  workingRaw: string,
+  slot: RosterSaveSlot,
+  savedUTC = new Date().toISOString(),
+  baseRoster?: RosterScenario["baseRoster"],
+) {
+  const saved = readRosterScenarios(state.filters[rosterScenariosKey]),
+    working = readRosterScenarios(workingRaw);
+  if (saved.issue || working.issue) throw Error(saved.issue || working.issue);
+  const current = working.collection.scenarios.find(
+    (s) => s.id === working.collection.active,
+  );
+  if (!current)
+    throw Error("Select a roster scenario before saving a snapshot.");
+  const scenario = rosterScenarioSchema.parse({
+    ...current,
+    baseLineups: current.baseLineups ?? state.filters.startingLineups ?? "",
+    baseRoster: current.baseRoster ?? baseRoster,
+  });
+  const snapshot = snapshotSchema.parse({ slot, savedUTC, scenario });
+  const snapshots = [
+    ...(saved.collection.snapshots ?? []).filter(
+      (s) => s.scenario.id !== scenario.id || s.slot !== slot,
+    ),
+    snapshot,
+  ];
+  const replace = (scenarios: RosterScenario[]) =>
+    scenarios.some((s) => s.id === scenario.id)
+      ? scenarios.map((s) => (s.id === scenario.id ? scenario : s))
+      : [...scenarios, scenario];
+  const persisted = {
+    ...saved.collection,
+    active: scenario.id,
+    scenarios: replace(saved.collection.scenarios),
+    snapshots,
+  };
+  const draft = {
+    ...working.collection,
+    scenarios: replace(working.collection.scenarios),
+    snapshots,
+  };
+  return {
+    saved: writeRosterScenarios(state, persisted),
+    working: writeRosterScenarios(state, draft),
+  };
+}
+
+// Loading changes only the working recipe, including exact assignments, both teams' trades and the undo cursor.
+export function loadRosterSnapshot(
+  state: AppState,
+  workingRaw: string,
+  id: string,
+  slot: RosterSaveSlot,
+) {
+  const read = readRosterScenarios(workingRaw);
+  if (read.issue) throw Error(read.issue);
+  const snapshot = read.collection.snapshots?.find(
+    (s) => s.scenario.id === id && s.slot === slot,
+  );
+  if (!snapshot) throw Error("This save slot is empty.");
+  return writeRosterScenarios(state, {
+    ...read.collection,
+    active: id,
+    scenarios: read.collection.scenarios.map((s) =>
+      s.id === id ? structuredClone(snapshot.scenario) : s,
+    ),
+  });
+}
+
+// Explicit deletion removes only that scenario and its slots from saved and working collections.
+export function deleteRosterScenario(
+  state: AppState,
+  workingRaw: string,
+  id: string,
+) {
+  const saved = readRosterScenarios(state.filters[rosterScenariosKey]),
+    working = readRosterScenarios(workingRaw);
+  if (saved.issue || working.issue) throw Error(saved.issue || working.issue);
+  const remove = (collection: ScenarioCollection): ScenarioCollection => ({
+    ...collection,
+    active: collection.active === id ? "" : collection.active,
+    scenarios: collection.scenarios.filter((s) => s.id !== id),
+    snapshots: collection.snapshots?.filter((s) => s.scenario.id !== id),
+  });
+  return {
+    saved: writeRosterScenarios(state, remove(saved.collection)),
+    working: writeRosterScenarios(state, remove(working.collection)),
+  };
+}
+
 // Undo/redo moves a cursor; making a new move discards only the abandoned redo branch.
 export function appendScenarioMove(
   s: RosterScenario,
@@ -314,7 +462,31 @@ export function applyRosterScenario(
   const teams = new Set(
     real.dataset.tables.ModelTeams.map((t) => str(t.TeamID)),
   );
-  let plans = lineupsRaw ?? "";
+  // Restore the saved ownership baseline before replaying moves, so a fresh import cannot silently change a saved roster point.
+  if (
+    scenario.baseRoster &&
+    scenario.season === num(real.dataset.tables.ModelContext[0].Season)
+  ) {
+    const baseline = new Map(
+      scenario.baseRoster.map(([id, owner, slot]) => [id, { owner, slot }]),
+    );
+    for (const [id, entry] of baseline) {
+      if (!m.byId.has(id) || !teams.has(entry.owner))
+        issues.push(
+          `Saved roster player ${id} or team is missing from the current import; the snapshot cannot be fully restored.`,
+        );
+    }
+    for (const player of m.players) {
+      const entry = baseline.get(player.id);
+      player.owner = entry && teams.has(entry.owner) ? entry.owner : "0";
+      player.slot = entry?.slot ?? 20;
+      player.raw.OnTeamID = player.owner;
+    }
+    m.dataset.tables.ModelRosters = m.players
+      .filter((p) => p.owner !== "0")
+      .map((p) => ({ TeamID: p.owner, PlayerID: p.id, LineupSlotID: p.slot }));
+  }
+  let plans = scenario.baseLineups ?? lineupsRaw ?? "";
   if (scenario.season !== num(real.dataset.tables.ModelContext[0].Season))
     issues.push(
       "This simulation belongs to a different season. Its moves were not applied.",
