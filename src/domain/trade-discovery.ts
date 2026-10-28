@@ -1,3 +1,4 @@
+import { surfaceFailures } from "./surface-appeal";
 import { cmpId, n, positions, sum } from "./contracts";
 import { irAssignments, lineup, teamsAssessment } from "./lineups";
 import { evaluateTrade } from "./trades";
@@ -116,7 +117,7 @@ export function discoveryFailures(
   row: SearchRow,
   q: TradeSearchQuery,
 ): string[] {
-  const reasons: string[] = [];
+  const reasons: string[] = [...surfaceFailures(row, q.surface)];
   // Receiving a position alone is not an upgrade: its optimized scoring contribution must increase.
   if (
     q.goal === "position" &&

@@ -1,3 +1,4 @@
+import { surfaceFailures } from "../domain/surface-appeal";
 import { findTradeRecoveries } from "../domain/trade-guidance";
 import { evaluate, type Model } from "../domain/valuation";
 import { applyRosterScenario } from "../domain/roster-scenarios";
@@ -170,6 +171,8 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
     const suggestions: SearchRow[] = [];
     // Weekly screening uses the evaluator's averages after every complete trade evaluation.
     if (request.query.weekly) stats.weeklyExcluded = 0;
+    // Report surface exclusions separately from modeled weekly-gain failures and raw index enumeration.
+    if (request.query.surface) stats.surfaceExcluded = 0;
     // This filter needs each complete evaluated package, including its required drops.
     if (request.query.usefulness) stats.usefulnessExcluded = 0;
     // Every exact match receives the same authoritative evaluation as a manually entered trade.
@@ -185,6 +188,8 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
       const failures = discoveryFailures(row, request.query);
       if (!failures.length) rows.push(row);
       else {
+        if (surfaceFailures(row, request.query.surface).length)
+          stats.surfaceExcluded = (stats.surfaceExcluded ?? 0) + 1;
         if (violatesProtection(row, request.query))
           stats.protectedExcluded = (stats.protectedExcluded ?? 0) + 1;
         if (

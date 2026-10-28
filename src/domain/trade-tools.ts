@@ -200,9 +200,13 @@ export function diagnoseTradeCandidate(
       ownGainPerWeek: scored.own,
       otherGainPerWeek: scored.other,
       warnings: scored.warnings,
+      // Diagnostics retain the same source-based evidence used by the executed surface filter.
+      surface: scored.surface,
       surplusTest: scored.surplus,
       pointsTest: scored.points,
-      note: "Value-test failures describe the deal; they do not by themselves exclude an index match. Passing candidates can be on later ranked pages.",
+      note: q.surface?.requireValueTests
+        ? "Both value tests are required by your surface filter. Passing candidates can be on later ranked pages."
+        : "Value-test failures describe the deal; they do not by themselves exclude an index match. Passing candidates can be on later ranked pages.",
     };
   }
   return { outgoing, incoming, reasons: [...new Set(reasons)] };

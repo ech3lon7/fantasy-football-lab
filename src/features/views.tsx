@@ -1661,6 +1661,7 @@ export function TradeView({
   restoreScenario,
   forceTrade,
   changeBasis,
+  saveSearchSettings,
 }: {
   m: Model;
   draft: Draft;
@@ -1671,8 +1672,9 @@ export function TradeView({
   restoreScenario?: (scenario?: RosterScenario) => boolean;
   forceTrade?: (draft: Draft) => boolean;
   changeBasis: (basis: LineupBasis) => void;
+  saveSearchSettings: (raw: string) => void;
 }) {
-  // One persisted preference controls both teams and both trade entry points.
+  // The manual analyzer and standard finder retain this preference; the chain planner owns a separate choice.
   const lineupBasis = readLineupBasis(state.filters[lineupBasisKey]);
   const [result, setResult] = useState<TradeResult | null>(null),
     [pending, setPending] = useState(false),
@@ -1920,7 +1922,7 @@ export function TradeView({
       {/* This selector changes interpretation only; forecasts, transaction legality and asking-price tests stay independent. */}
       <FilterHelp
         label="Evaluate lineup impact using"
-        help="Applies to both teams, search filters, ranking and the analyzer. Best available compares the strongest full rosters before and after. Marked starters uses saved/imported roles; a bench departure costs zero direct starting points. Byes follow the current live or hypothetical policy. Changing basis requires a new search."
+        help="Applies to both teams in the manual analyzer and standard finder, including its filters and ranking. The chain planner has its own independent basis. Best available compares the strongest full rosters before and after. Marked starters uses saved/imported roles; a bench departure costs zero direct starting points. Byes follow the current live or hypothetical policy. Changing basis requires a new search."
       >
         <Select
           label="Evaluate lineup impact using"
@@ -1983,6 +1985,8 @@ export function TradeView({
         onLineupBasisChange={changeBasis}
         onQueryChange={setSearchQuery}
         restore={restoreSearch}
+        settingsRaw={state.filters.tradeSearchSettings}
+        saveSettings={saveSearchSettings}
         save={saveSelection}
       />
       {/* Keep saving and browsing within the existing analyzer, without adding navigation or changing scoring. */}

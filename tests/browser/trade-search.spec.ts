@@ -1642,9 +1642,30 @@ test("large searches show progress and support cancel, restart and navigation", 
   ).toBeVisible();
   await expect(panel(page).locator("tbody tr")).toHaveCount(0);
   // A successful empty search has its own result message, rather than resembling cancellation or failure.
-  // Navigation remounts broad defaults; opt back into the strict single-player case being verified.
-  await panel(page).getByLabel("Search goal", { exact: true }).selectOption("custom");
-  await panel(page).getByLabel("Use strict index range", { exact: true }).check();
+  // Navigation remembers the independent finder controls, while results stay transient.
+  await expect(
+    panel(page).getByLabel("Below outgoing total (index points)", {
+      exact: true,
+    }),
+  ).toHaveValue("100");
+  await expect(
+    panel(page).getByLabel("Above outgoing total (index points)", {
+      exact: true,
+    }),
+  ).toHaveValue("500");
+  await panel(page)
+    .getByLabel("Below outgoing total (index points)", { exact: true })
+    .fill("5");
+  await panel(page)
+    .getByLabel("Above outgoing total (index points)", { exact: true })
+    .fill("5");
+  // Explicitly opt back into the strict single-player case being verified.
+  await panel(page)
+    .getByLabel("Search goal", { exact: true })
+    .selectOption("custom");
+  await panel(page)
+    .getByLabel("Use strict index range", { exact: true })
+    .check();
   await panel(page).getByLabel("Create package", { exact: true }).uncheck();
   await panel(page)
     .getByRole("button", { name: "Search", exact: true })

@@ -2000,3 +2000,55 @@ pre {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Animate only the two search disclosures; keep existing panel styling and respect reduced-motion preferences. */
+.search-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.search-section .panel-head > div {
+  width: 100%;
+}
+.search-section-toggle svg {
+  flex-shrink: 0;
+  transition: transform 220ms ease;
+}
+.search-section-toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.search-section-content {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms ease;
+}
+.search-section-content.is-open {
+  grid-template-rows: 1fr;
+}
+.search-section-content > div {
+  min-height: 0;
+  overflow: hidden;
+}
+.search-section-body {
+  visibility: visible;
+  transition: visibility 0s;
+}
+.search-section-content:not(.is-open) .search-section-body {
+  visibility: hidden;
+  transition-delay: 220ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .search-section-content,
+  .search-section-toggle svg,
+  .search-section-body {
+    transition: none;
+  }
+}

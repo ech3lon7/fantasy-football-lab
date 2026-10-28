@@ -32,14 +32,20 @@ export function guidedQuery(
       flexible: q.discovery?.flexible,
       target: q.discovery?.target,
       receive: { minimum: 1, maximum: 3 },
-      ranking: "balanced",
+      ranking: goal === "surface" ? "own" : "balanced",
     },
+    // Surface discovery requires your model gain while deliberately allowing their modeled gain to disagree with their surface appeal.
+    surface:
+      goal === "surface"
+        ? { metric: "both", minimum: 0, requireValueTests: false }
+        : undefined,
     weekly:
       goal === "explore"
         ? undefined
         : {
             own: { minimum: 1, maximum: null },
-            other: { minimum: 0, maximum: null },
+            other:
+              goal === "surface" ? undefined : { minimum: 0, maximum: null },
           },
     incoming:
       goal === "position"

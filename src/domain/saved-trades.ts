@@ -35,12 +35,23 @@ const querySchema = z
     // Optional guided-search metadata keeps old saved queries strictly bounded.
     lineupBasis: z.enum(lineupBases).optional(),
     indexMode: z.enum(["automatic", "strict"]).optional(),
-    goal: z.enum(["explore", "improve", "position", "custom"]).optional(),
+    goal: z
+      .enum(["explore", "improve", "position", "surface", "custom"])
+      .optional(),
     teamA: z.string(),
     give: z.array(z.string()).max(5),
     count: count.min(1),
     below: finite.nonnegative(),
     above: finite.nonnegative(),
+    // Persist surface discovery controls through the existing saved-query and private sync contract.
+    surface: z
+      .object({
+        metric: z.enum(["average", "projection", "both"]),
+        minimum: finite.nonnegative(),
+        requireValueTests: z.boolean(),
+      })
+      .strict()
+      .optional(),
     // Preserve the optional usefulness setting when a saved trade restores its search controls.
     usefulness: z.object({ minimum: finite.nonnegative() }).strict().optional(),
     // Optional discovery settings use the existing saved-search/sync contract; old saved trades need no migration.

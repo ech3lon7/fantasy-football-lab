@@ -1,4 +1,9 @@
 import {
+  surfaceAppeal,
+  type SurfaceEvidence,
+  type SurfaceFilter,
+} from "./surface-appeal";
+import {
   cmpId,
   n,
   num,
@@ -152,7 +157,7 @@ export interface TradeSearchQuery {
   give: string[];
   // Missing mode preserves strict index matching in legacy saved searches.
   indexMode?: "automatic" | "strict";
-  goal?: "explore" | "improve" | "position" | "custom";
+  goal?: "explore" | "improve" | "position" | "surface" | "custom";
   count: number;
   below: number;
   above: number;
@@ -162,6 +167,8 @@ export interface TradeSearchQuery {
   incoming?: IncomingFilter;
   usefulness?: { minimum: number };
   discovery?: DiscoveryOptions;
+  // Optional surface appeal screens source-based recipient lineups independently of our valuation model.
+  surface?: SurfaceFilter;
 }
 // Old saved searches keep their exact receive count; only an explicit range broadens package sizes.
 export function incomingCountRange(q: TradeSearchQuery) {
@@ -180,6 +187,7 @@ export interface SearchMatch {
   give?: string[];
 }
 export interface SearchRow extends SearchMatch {
+  surface?: SurfaceEvidence;
   // Compact before/after metadata travels with each result, never recomputed from a different live selection.
   lineupBasis?: LineupBasis;
   ownBefore?: number | null;
@@ -218,6 +226,7 @@ export interface SearchStats {
   incomingExcluded?: number;
   usefulnessExcluded?: number;
   protectedExcluded?: number;
+  surfaceExcluded?: number;
 }
 export interface SearchProgress {
   phase: "Finding matching packages" | "Evaluating trades" | "Sorting results";
@@ -306,6 +315,14 @@ export function tradeSearchContext(
     query.below,
     query.above,
     query.discovery ?? null,
+    // Invalid numeric edits also invalidate old results instead of collapsing into an unbounded/null preference.
+    query.surface
+      ? [
+          query.surface.metric,
+          String(query.surface.minimum),
+          query.surface.requireValueTests,
+        ]
+      : null,
     // Disabled controls do not affect existing searches; enabled changes invalidate old results.
     query.upgrade
       ? [
@@ -346,6 +363,16 @@ export function tradeSearchContext(
 // Missing indices block outgoing searches, while genuine zero remains a usable number.
 export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
   const errors: string[] = [];
+  if (
+    q.surface &&
+    (!["average", "projection", "both"].includes(q.surface.metric) ||
+      !Number.isFinite(q.surface.minimum) ||
+      q.surface.minimum < 0 ||
+      typeof q.surface.requireValueTests !== "boolean")
+  )
+    errors.push(
+      "Choose a valid surface metric and a nonnegative minimum apparent gain.",
+    );
   // Unknown basis values must not silently change a saved search's meaning.
   if (
     q.lineupBasis !== undefined &&
@@ -1170,6 +1197,23 @@ export function scoreTradeMatch(
                     return score(w.ids) - score(w.beforeIds);
                   }),
                 ) / m.weeks.length,
+        }
+      : {}),
+    ...(q.surface
+      ? {
+          surface: surfaceAppeal(
+            m,
+            {
+              teamA: q.teamA,
+              teamB: match.teamB,
+              give: q.give,
+              get: match.get,
+            },
+            r,
+            q.surface,
+            q.lineupBasis,
+            lineupsRaw,
+          ),
         }
       : {}),
     lineupBasis: impact.basis,

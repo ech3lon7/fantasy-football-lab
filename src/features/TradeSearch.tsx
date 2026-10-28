@@ -1,4 +1,10 @@
-import { TradeChains } from "./TradeChains";
+import { SurfaceAppealControls, SurfaceAppealView } from "./SurfaceAppeal";
+import type { SurfaceFilter } from "../domain/surface-appeal";
+import {
+  TradeChains,
+  type ChainDebugReport,
+  type ChainPreferences,
+} from "./TradeChains";
 import { guidedQuery } from "../domain/trade-guidance";
 import {
   lineupBasisLabel,
@@ -36,7 +42,8 @@ import {
   type WeeklyRange,
   type TradeSearchQuery,
 } from "../domain/trade-search";
-import { Panel } from "../ui/layout";
+import { SearchSection } from "../ui/SearchSection";
+import { TeamsOptions } from "../ui/layout";
 import { FilterHelp } from "../ui/FilterHelp";
 import { PlayerName } from "../ui/PlayerName";
 import { fmt, signed, Signal } from "../ui/components";
@@ -86,7 +93,11 @@ export function TradeSearch({
   lineupBasis = "best-available",
   onLineupBasisChange,
   restore,
+  settingsRaw,
+  saveSettings,
 }: {
+  settingsRaw?: string;
+  saveSettings?: (raw: string) => void;
   m: Model;
   draft: Draft;
   lineupsRaw?: string;
@@ -102,6 +113,22 @@ export function TradeSearch({
   onLineupBasisChange?: (basis: LineupBasis) => void;
   restore?: { id: string; query: TradeSearchQuery };
 }) {
+  // Restore each finder from its own preference record; never store ephemeral results or change the other finder's query.
+  const [initialSettings] = useState(() => {
+    try {
+      const value = JSON.parse(settingsRaw ?? "{}");
+      return value.version === 1 ? value : {};
+    } catch {
+      return {};
+    }
+  });
+  const [openFinder, setOpenFinder] = useState<"standard" | "chain" | null>(
+    "standard",
+  );
+  const [chainSettings, setChainSettings] = useState<
+    ChainPreferences | undefined
+  >(initialSettings.chain);
+  const lastSettings = useRef(settingsRaw ?? "");
   const [below, setBelow] = useState("5"),
     [above, setAbove] = useState("5");
   // New searches start broad; legacy saved searches restore their strict offsets explicitly.
@@ -111,6 +138,8 @@ export function TradeSearch({
   const [goal, setGoal] =
     useState<NonNullable<TradeSearchQuery["goal"]>>("explore");
   const [goalPosition, setGoalPosition] = useState<Position>("WR");
+  // Surface discovery is disabled for ordinary searches and restored explicitly from a saved query.
+  const [surface, setSurface] = useState<SurfaceFilter>();
   const [advanced, setAdvanced] = useState(false);
   const [pendingSearch, setPendingSearch] = useState<TradeSearchQuery | null>(
     null,
@@ -172,6 +201,8 @@ export function TradeSearch({
     query: TradeSearchQuery;
     context: string;
   } | null>(null);
+  // Chain diagnostics are transient and captured by the existing download; they never alter the workspace or ordinary search.
+  const chainDebug = useRef<ChainDebugReport | null>(null);
   const [diagnostic, setDiagnostic] = useState(""),
     [savedRow, setSavedRow] = useState("");
   const active = useRef<{ worker: Worker; id: string; context: string } | null>(
@@ -193,6 +224,7 @@ export function TradeSearch({
     give: draft.give,
     indexMode,
     goal,
+    surface,
     count: packages ? count : 1,
     // Disabled strict inputs cannot make an automatic search unsaveable; keep raw edits in the controls/debug report.
     below:
@@ -275,6 +307,51 @@ export function TradeSearch({
         ? { own: weeklyRange(ownWeekly), other: weeklyRange(otherWeekly) }
         : undefined,
   };
+  const standardControls = {
+    below,
+    above,
+    indexMode,
+    goal,
+    goalPosition,
+    surface,
+    advanced,
+    discovery,
+    selectedTeams,
+    packages,
+    minimumCount,
+    count,
+    signals,
+    incomingPositions,
+    minimumSignals,
+    minimumPositions,
+    upgradeOnly,
+    upgradeMode,
+    minimumUpgrade,
+    usefulnessOnly,
+    minimumUsefulness,
+    requiredUpgrades,
+    requiredStarters,
+    requiredBench,
+    ownWeekly,
+    otherWeekly,
+    deficitOnly,
+    deficitPosition,
+    deficitCeiling,
+  };
+  const settingsText = JSON.stringify({
+    version: 1,
+    standard: { query, controls: standardControls },
+    chain: chainSettings,
+  });
+  // Merge independently remembered chain and standard controls into one account-scoped workspace key, without saving search results.
+  const settingsReady = useRef(false);
+  useEffect(() => {
+    if (!settingsReady.current) return;
+    if (lastSettings.current !== settingsText) {
+      lastSettings.current = settingsText;
+      saveSettings?.(settingsText);
+    }
+  }, [settingsText, saveSettings]);
   // Display and progress labels follow the same incoming bounds used by discovery and saved searches.
   const receive = incomingCountRange(query);
   // Make outgoing pool sizes and incoming package sizes visible as separate search choices.
@@ -310,6 +387,7 @@ export function TradeSearch({
   function restoreQuery(q: TradeSearchQuery) {
     setIndexMode(q.indexMode ?? "strict");
     setGoal(q.goal ?? "custom");
+    setSurface(q.surface);
     // Restore the saved opponent filter independently of the analyzer's one selected counterparty.
     setSelectedTeams(q.discovery?.teams);
     setGoalPosition(q.incoming?.positions?.[0] ?? "WR");
@@ -362,6 +440,69 @@ export function TradeSearch({
     setMinimumSignals(String(q.incoming?.minimumSignals ?? 1));
     setMinimumPositions(String(q.incoming?.minimumPositions ?? 1));
   }
+  // Existing controls migrate once; later edits remain independent across route changes and reloads.
+  useEffect(() => {
+    const previous = initialSettings.standard;
+    if (previous?.query) {
+      restoreQuery(previous.query);
+      const c = previous.controls ?? {};
+      if (Object.hasOwn(c, "below")) setBelow(c.below);
+      if (Object.hasOwn(c, "above")) setAbove(c.above);
+      if (Object.hasOwn(c, "indexMode")) setIndexMode(c.indexMode);
+      if (Object.hasOwn(c, "goal")) setGoal(c.goal);
+      if (Object.hasOwn(c, "goalPosition")) setGoalPosition(c.goalPosition);
+      if (Object.hasOwn(c, "surface")) setSurface(c.surface);
+      if (Object.hasOwn(c, "advanced")) setAdvanced(c.advanced);
+      if (Object.hasOwn(c, "discovery")) setDiscovery(c.discovery);
+      if (Object.hasOwn(c, "selectedTeams")) setSelectedTeams(c.selectedTeams);
+      if (Object.hasOwn(c, "packages")) setPackages(c.packages);
+      if (Object.hasOwn(c, "minimumCount")) setMinimumCount(c.minimumCount);
+      if (Object.hasOwn(c, "count")) setCount(c.count);
+      if (Object.hasOwn(c, "signals")) setSignals(c.signals);
+      if (Object.hasOwn(c, "incomingPositions"))
+        setIncomingPositions(c.incomingPositions);
+      if (Object.hasOwn(c, "minimumSignals"))
+        setMinimumSignals(c.minimumSignals);
+      if (Object.hasOwn(c, "minimumPositions"))
+        setMinimumPositions(c.minimumPositions);
+      if (Object.hasOwn(c, "upgradeOnly")) setUpgradeOnly(c.upgradeOnly);
+      if (Object.hasOwn(c, "upgradeMode")) setUpgradeMode(c.upgradeMode);
+      if (Object.hasOwn(c, "minimumUpgrade"))
+        setMinimumUpgrade(c.minimumUpgrade);
+      if (Object.hasOwn(c, "usefulnessOnly"))
+        setUsefulnessOnly(c.usefulnessOnly);
+      if (Object.hasOwn(c, "minimumUsefulness"))
+        setMinimumUsefulness(c.minimumUsefulness);
+      if (Object.hasOwn(c, "requiredUpgrades"))
+        setRequiredUpgrades(c.requiredUpgrades);
+      if (Object.hasOwn(c, "requiredStarters"))
+        setRequiredStarters(c.requiredStarters);
+      if (Object.hasOwn(c, "requiredBench")) setRequiredBench(c.requiredBench);
+      if (Object.hasOwn(c, "ownWeekly")) setOwnWeekly(c.ownWeekly);
+      if (Object.hasOwn(c, "otherWeekly")) setOtherWeekly(c.otherWeekly);
+      if (Object.hasOwn(c, "deficitOnly")) setDeficitOnly(c.deficitOnly);
+      if (Object.hasOwn(c, "deficitPosition"))
+        setDeficitPosition(c.deficitPosition);
+      if (Object.hasOwn(c, "deficitCeiling"))
+        setDeficitCeiling(c.deficitCeiling);
+      onLineupBasisChange?.(readLineupBasis(previous.query.lineupBasis));
+      if (
+        previous.query.teamA &&
+        m.dataset.tables.ModelTeams.some(
+          (t) => str(t.TeamID) === previous.query.teamA,
+        )
+      )
+        change({
+          ...draft,
+          teamA: previous.query.teamA,
+          give: previous.query.give.filter(
+            (id: string) => m.byId.get(id)?.owner === previous.query.teamA,
+          ),
+          get: draft.teamA === previous.query.teamA ? draft.get : [],
+        });
+    }
+    settingsReady.current = true;
+  }, []);
   // Legacy saved queries retain their original criteria and expose the advanced controls for review.
   useEffect(() => {
     if (!restore) return;
@@ -548,6 +689,7 @@ export function TradeSearch({
     setJob(null);
     setPendingSearch(null);
     setGoal("custom");
+    setSurface(undefined);
     setIndexMode("automatic");
     setSelectedTeams(undefined);
     setBelow("5");
@@ -801,6 +943,18 @@ export function TradeSearch({
 
   // Chips describe current controls; removing one invalidates old results through the existing context mechanism.
   const chips: { label: string; remove: () => void }[] = [
+    // Surface restrictions can be removed without changing the outgoing pool or the other search controls.
+    ...(surface
+      ? [
+          {
+            label: `Surface appeal: ${surface.metric}; > 0 and ≥ ${surface.minimum}; ${surface.requireValueTests ? "both value tests required" : "value tests shown"}`,
+            remove: () => {
+              setSurface(undefined);
+              if (goal === "surface") setGoal("custom");
+            },
+          },
+        ]
+      : []),
     // Opponent scope participates in the query/context and can be removed without changing other criteria.
     ...(selectedTeams !== undefined
       ? [
@@ -918,15 +1072,82 @@ export function TradeSearch({
 
   // Controls express raw index matching; premiums and fairness remain visible only as separate evaluation outputs.
   const searchPanel = (
-    <Panel
+    <SearchSection
       title="Find matching trades"
-      note={`Scoring basis: ${lineupBasisLabel(lineupBasis)}. Compare weekly gains, value and legality separately.`}
+      open={openFinder === "standard"}
+      toggle={() =>
+        setOpenFinder((old) => (old === "standard" ? null : "standard"))
+      }
+      note={`Independent standard-search controls · Scoring basis: ${lineupBasisLabel(lineupBasis)}`}
     >
+      {/* Keep every standard search selection inside its own disclosure; none of these setters affects chain controls. */}
+      <div className="trade-search-controls">
+        <FilterHelp
+          label="Standard search team"
+          help="Choose the standard finder’s team and outgoing players. This also updates the manual analyzer; it does not change chain settings."
+        >
+          <label className="control">
+            <span>Standard search team</span>
+            <select
+              value={draft.teamA}
+              onChange={(e) =>
+                change({ ...draft, teamA: e.target.value, give: [], get: [] })
+              }
+            >
+              <TeamsOptions d={m.dataset} />
+            </select>
+          </label>
+        </FilterHelp>
+        <FilterHelp
+          label="Standard lineup impact basis"
+          help="Choose the scoring basis for this finder and the manual analyzer. The chain planner remembers its own independent choice."
+        >
+          <label className="control">
+            <span>Standard lineup impact basis</span>
+            <select
+              value={lineupBasis}
+              onChange={(e) =>
+                onLineupBasisChange?.(readLineupBasis(e.target.value))
+              }
+            >
+              <option value="best-available">Best available lineup</option>
+              <option value="marked-starters">Marked starters</option>
+            </select>
+          </label>
+        </FilterHelp>
+      </div>
+      <details className="trade-search-group">
+        <summary>
+          Standard fixed outgoing players ({draft.give.length}/5)
+        </summary>
+        {m.players
+          .filter((p) => p.owner === draft.teamA)
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((p) => (
+            <label className="check" key={p.id}>
+              <input
+                type="checkbox"
+                aria-label={`Standard outgoing player: ${p.name}`}
+                checked={draft.give.includes(p.id)}
+                disabled={!draft.give.includes(p.id) && draft.give.length >= 5}
+                onChange={(e) =>
+                  change({
+                    ...draft,
+                    give: e.target.checked
+                      ? [...draft.give, p.id]
+                      : draft.give.filter((id) => id !== p.id),
+                  })
+                }
+              />
+              {p.name} · {p.pos}
+            </label>
+          ))}
+      </details>
       {/* Goal presets are explicit, reversible shortcuts; advanced criteria remain available without changing valuations. */}
       <div className="trade-search-controls">
         <FilterHelp
           label="Search goal"
-          help="Choosing a preset resets screening filters and searches 1–3 incoming players with automatic index matching. Keeps your offered/protected players, required target and selected teams. Improve scoring requires your gain ≥ +1 and theirs ≥ 0 points/week. Find a position also requires that position's scoring contribution to your optimized lineup to increase, including FLEX. Review value, depth and legality separately."
+          help="Choosing a preset resets screening filters and searches 1–3 incoming players with automatic index matching. Keeps your offered/protected players, required target and selected teams. Surface appeal requires your gain ≥ +1, positive recipient gains under both surface sources, and leaves model value tests optional. Improve scoring requires your gain ≥ +1 and theirs ≥ 0 points/week. Find a position also requires that position's scoring contribution to your optimized lineup to increase, including FLEX. Review value, depth and legality separately."
         >
           <label className="control">
             <span>Search goal</span>
@@ -942,6 +1163,9 @@ export function TradeSearch({
               <option value="explore">Trade away these players</option>
               <option value="improve">Improve my weekly scoring</option>
               <option value="position">Find a position upgrade</option>
+              <option value="surface">
+                Improve my lineup with surface appeal
+              </option>
               <option value="custom">Custom search</option>
             </select>
           </label>
@@ -967,12 +1191,21 @@ export function TradeSearch({
           </label>
         )}
       </div>
+      {/* Source-based appeal is a separate filter; the recipient's modeled loss remains visible beside its apparent source-based gain. */}
+      <SurfaceAppealControls
+        value={surface}
+        week={m.current}
+        change={(value) => {
+          setSurface(value);
+          if (!value && goal === "surface") setGoal("custom");
+        }}
+      />
       {/* Opponent checkboxes are a search-only scope; all other filters and manual trade selections remain independent. */}
       <details className="trade-search-group">
         <summary>
           <FilterHelp
             label="Teams to search"
-            help="Search only the checked fantasy teams. Applies to singles, packages, near misses and recovery suggestions. A required target must belong to a selected team. Select all teams restores the default scope."
+            help="Standard finder scope only: applies to singles, packages, near misses and recovery suggestions. Chain teams are configured independently inside the chain planner. A required single-trade target must belong to a selected team."
           >
             <span>
               Teams to search:{" "}
@@ -1562,6 +1795,8 @@ export function TradeSearch({
                 },
               ),
               appVersion: import.meta.env.VITE_APP_VERSION,
+              // Include chain current/applied controls, per-leg evidence, rejection examples and stale status in the same debug file.
+              chainSearch: chainDebug.current,
               controls: {
                 below,
                 above,
@@ -1787,6 +2022,16 @@ export function TradeSearch({
                         )}
                       </small>
                     </th>
+                    {job.rows.some((row) => row.surface) && (
+                      <>
+                        <th className="fact">Their season-average gain</th>
+                        <th className="projection">
+                          Their ESPN Week{" "}
+                          {job.rows.find((row) => row.surface)?.surface?.week}{" "}
+                          gain
+                        </th>
+                      </>
+                    )}
                     <th>Value exchange / tests</th>
                     <th>Details / load</th>
                   </tr>
@@ -1831,6 +2076,20 @@ export function TradeSearch({
                       </td>
                       <td className="model">{scoring(row.own)}</td>
                       <td className="model">{scoring(row.other)}</td>
+                      {job.rows.some((candidate) => candidate.surface) && (
+                        <>
+                          <td className="fact">
+                            {row.surface?.average.gain == null
+                              ? "Unavailable"
+                              : scoring(row.surface.average.gain)}
+                          </td>
+                          <td className="projection">
+                            {row.surface?.projection.gain == null
+                              ? "Unavailable"
+                              : scoring(row.surface.projection.gain)}
+                          </td>
+                        </>
+                      )}
                       <td>
                         {row.grade}
                         <small>
@@ -1880,6 +2139,9 @@ export function TradeSearch({
                               </span>
                             </small>
                           </p>
+                          {row.surface && (
+                            <SurfaceAppealView value={row.surface} m={m} />
+                          )}
                           <OpponentIncentiveView
                             value={job.lineups?.[row.key]?.details?.incentive}
                           />
@@ -2224,6 +2486,9 @@ export function TradeSearch({
                       points/week · Incoming index:{" "}
                       <span className="model">{fmt(row.incoming)}</span>.
                     </p>
+                    {row.surface && (
+                      <SurfaceAppealView value={row.surface} m={m} />
+                    )}
                     {row.nearMiss?.reasons.map((reason) => (
                       <p key={reason} className="model">
                         {reason}
@@ -2266,6 +2531,14 @@ export function TradeSearch({
             <details className="search-exclusions">
               <summary>Why trades were excluded</summary>
               {/* Report post-evaluation filtering separately from index/positional eligibility. */}
+              {job.stats?.surfaceExcluded !== undefined && (
+                <p>
+                  Trades excluded by surface appeal, model-gain, legal-roster or
+                  optional value-test requirements: {job.stats.surfaceExcluded}.
+                  Missing selected surface data is excluded rather than treated
+                  as zero.
+                </p>
+              )}
               {job.stats?.protectedExcluded !== undefined && (
                 <p>
                   Packages excluded to protect your roster from automatic drops:{" "}
@@ -2338,9 +2611,9 @@ export function TradeSearch({
             </div>
           </>
         )}
-    </Panel>
+    </SearchSection>
   );
-  // Chain planning shares only the explicit tradable pool and scoring basis; all ordinary search filters remain unchanged.
+  // Chain initial values migrate once; its own state and persisted preferences no longer follow standard-search edits.
   return (
     <>
       {searchPanel}
@@ -2351,6 +2624,24 @@ export function TradeSearch({
         basis={lineupBasis}
         lineupsRaw={lineupsRaw}
         save={save}
+        selectedTeams={
+          initialSettings.standard?.query?.discovery?.teams ?? selectedTeams
+        }
+        initial={initialSettings.chain}
+        remember={(value) =>
+          setChainSettings((previous) =>
+            JSON.stringify(previous) === JSON.stringify(value)
+              ? previous
+              : value,
+          )
+        }
+        open={openFinder === "chain"}
+        toggle={() =>
+          setOpenFinder((old) => (old === "chain" ? null : "chain"))
+        }
+        debug={(value) => {
+          chainDebug.current = value;
+        }}
       />
     </>
   );

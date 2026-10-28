@@ -1125,6 +1125,14 @@ export default function App() {
                     })
                   }
                   // Merge only this account-state key against the latest workspace, preserving unrelated filters.
+                  saveSearchSettings={(raw) =>
+                    updateState({
+                      filters: {
+                        ...wRef.current!.state.filters,
+                        tradeSearchSettings: raw,
+                      },
+                    })
+                  }
                   saveTrades={(raw) =>
                     updateState({
                       filters: {
