@@ -947,12 +947,13 @@ export function findTradeMatches(
 }
 
 // Check the evaluator's trade-only legal roster; waiver claims never manufacture usefulness for an offered player.
-function packageUsefulness(
+export function packageUsefulness(
   m: Model,
   q: TradeSearchQuery,
   initial: string[],
   after: string[],
   ir: string[],
+  allowPartial = false,
 ): UsefulnessEvidence[] {
   if (!q.usefulness) return [];
   if (rosterExcess(m, after) > 0) return [];
@@ -1114,6 +1115,18 @@ function packageUsefulness(
     }
     states = next;
   }
+  // Explanations may show a partial set of genuine improvements; the search filter still requires every offer by default.
+  if (allowPartial)
+    return states.reduce<UsefulnessEvidence[]>(
+      (best, candidate) =>
+        candidate &&
+        (candidate.length > best.length ||
+          (candidate.length === best.length &&
+            sum(candidate.map((e) => e.gain)) > sum(best.map((e) => e.gain))))
+          ? candidate
+          : best,
+      [],
+    );
   return states[states.length - 1] ?? [];
 }
 

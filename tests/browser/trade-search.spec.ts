@@ -381,7 +381,7 @@ test("usefulness filters complete packages, explains the replacement and invalid
     ),
   ).toBeVisible();
   await minimum.fill("20.000001");
-  await expect(row.getByRole("button", { name: "Load trade" })).toBeDisabled();
+  await expect(row.getByRole("button", { name: "Load trade" })).toBeEnabled();
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
     search.getByText("0 index matches.", { exact: false }),
@@ -539,8 +539,18 @@ test("flexible targeted discovery ranks packages and saves the actual outgoing p
   await row
     .getByText("Why the other team might accept", { exact: true })
     .click();
-  await expect(row).toContainText("not an acceptance probability");
-  await expect(row).toContainText("Before grade:");
+  await expect(row).toContainText(/not an acceptance probability/i);
+  // Compact evidence is available with no upgrade/usefulness filters and retains named, numeric role comparisons.
+  const incentive = row
+    .getByText("Why the other team might accept", { exact: true })
+    .locator("..");
+  await expect(incentive).toContainText(/QB F →/);
+  await expect(incentive).toContainText("Starter:");
+  await expect(incentive).toContainText("Incoming QB");
+  await expect(incentive).toContainText("Main QB");
+  await expect(incentive).toContainText("+10.00 EPPG");
+  await expect(incentive).not.toContainText("Their surplus received:");
+  await incentive.screenshot({ path: "test-results/compact-trade-upgrades.png" });
   await row.getByRole("button", { name: "Save trade", exact: true }).click();
   const saved = JSON.parse(
     (await storedWorkspace(page)).state.filters.savedTrades,
@@ -640,6 +650,9 @@ test("near misses show evaluated package adjustments and explicit failed limits 
   await expect(
     suggestions.getByRole("link", { name: "Incoming QB", exact: true }).first(),
   ).toBeVisible();
+  // Even a stale, zero-exact-match result retains its evaluated alternatives when new filter input is invalid.
+  await search.getByLabel("Above outgoing total (index points)", { exact: true }).fill("");
+  await expect(suggestions.getByRole("button", { name: "Inspect this alternative", exact: true }).first()).toBeEnabled();
   await suggestions
     .getByRole("button", { name: "Inspect this alternative", exact: true })
     .first()
@@ -861,7 +874,7 @@ test("incoming Gem/Watch and position filters intersect without changing existin
   await search.getByLabel("Receive WR", { exact: true }).check();
   await expect(
     search.getByRole("button", { name: "Load trade" }).first(),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await run();
   await expect(search.locator("tbody tr")).toHaveCount(1);
   await expect(
@@ -1154,7 +1167,7 @@ test("weekly sliders filter exact averages for either or both teams without chan
   await otherToggle.check();
   await expect(
     first.getByRole("button", { name: "Load trade" }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await search
     .getByLabel("Their minimum weekly gain (points/week)", { exact: true })
     .fill("21");
@@ -1279,7 +1292,7 @@ test("positional-upgrade filter supports starter, depth, either and disabled beh
   await search
     .getByLabel("Minimum Expected PPG upgrade", { exact: true })
     .fill("22");
-  await expect(row.getByRole("button", { name: "Load trade" })).toBeDisabled();
+  await expect(row.getByRole("button", { name: "Load trade" })).toBeEnabled();
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
     search.getByText("0 index matches.", { exact: false }),
@@ -1374,8 +1387,8 @@ test("upgrade assignments never reuse an opposing player or label one offer as b
   await expect(
     search.getByText("13 index matches.", { exact: false }),
   ).toBeVisible();
-  const details = search.locator("tbody tr").first().locator("details");
-  await details.locator("summary").click();
+  const details = search.locator("tbody tr").first().locator("td > details").first();
+  await details.getByText("Trade details", { exact: true }).click();
   await expect(details.getByText(/Starter upgrade: Offer WR A/)).toContainText(
     "Their starter WR",
   );
@@ -1395,7 +1408,7 @@ test("upgrade assignments never reuse an opposing player or label one offer as b
   await expect(
     search.getByText("13 index matches.", { exact: false }),
   ).toBeVisible();
-  await details.locator("summary").click();
+  await details.getByText("Trade details", { exact: true }).click();
   await expect(
     details.getByText(/Starter upgrade:|Depth upgrade:/),
   ).toHaveCount(1);
@@ -1414,7 +1427,7 @@ test("upgrade assignments never reuse an opposing player or label one offer as b
   await expect(
     search.getByText("13 index matches.", { exact: false }),
   ).toBeVisible();
-  await details.locator("summary").click();
+  await details.getByText("Trade details", { exact: true }).click();
   await expect(details.getByText(/Starter upgrade: Bench QB/)).toHaveCount(1);
   await expect(details.getByText(/Depth upgrade: Bench QB/)).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1492,14 +1505,14 @@ test("single-player discovery agrees with the loaded analyzer and preserves outg
   await expect(search.getByText(/Search inputs changed/)).toBeVisible();
   await expect(
     search.getByRole("button", { name: "Load trade" }).first(),
-  ).toBeDisabled();
-  // Reverting an edit cannot revive a terminated search worker or stale pagination.
+  ).toBeEnabled();
+  // Reverting an edit leaves retained trade actions available without reviving stale pagination.
   await search
     .getByLabel("Above outgoing total (index points)", { exact: true })
     .fill("100");
   await expect(
     search.getByRole("button", { name: "Load trade" }).first(),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await search
     .getByLabel("Above outgoing total (index points)", { exact: true })
     .fill("");
@@ -1726,7 +1739,7 @@ test("deficit filtering selects one offered position and invalidates changed gra
   await search
     .getByLabel("Deficit position", { exact: true })
     .selectOption("WR");
-  await expect(row.getByRole("button", { name: "Load trade" })).toBeDisabled();
+  await expect(row.getByRole("button", { name: "Load trade" })).toBeEnabled();
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
     search.getByText("0 index matches.", { exact: false }),
@@ -1997,7 +2010,7 @@ test("upgrade counts require all requested starter and bench matches", async ({
   await expect(row.getByText(/Starter upgrade:/)).toHaveCount(1);
   await expect(row.getByText(/Depth upgrade:/)).toHaveCount(1);
   await search.getByLabel("Minimum bench upgrades", { exact: true }).fill("2");
-  await expect(row.getByRole("button", { name: "Load trade" })).toBeDisabled();
+  await expect(row.getByRole("button", { name: "Load trade" })).toBeEnabled();
   await expect(
     search.getByRole("button", { name: "Search", exact: true }),
   ).toBeDisabled();
@@ -2083,7 +2096,7 @@ test("best-at-position target compares the full roster and enforces distinct-pos
   ).toHaveValue("1");
   await expect(
     search.getByRole("button", { name: "Load trade" }).first(),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
     search.getByText("0 index matches.", { exact: false }),
@@ -2384,4 +2397,29 @@ test("opponent team checkboxes restrict packages and restore with saved searches
   await expect(
     search.getByRole("button", { name: "Search", exact: true }),
   ).toBeEnabled();
+});
+
+// Retained results remain actionable through invalid controls and outgoing edits, while saving the executed package and recalculating loaded trades.
+test("stale search results can be saved and loaded despite invalid edited filters", async ({ page }) => {
+  await seed(page);
+  const search = panel(page);
+  await search.getByLabel("Below outgoing total (index points)", {exact: true}).fill("1000");
+  await search.getByLabel("Above outgoing total (index points)", {exact: true}).fill("1000");
+  await search.getByRole("button", {name: "Search", exact: true}).click();
+  const row = search.locator("tbody tr").filter({has: page.getByRole("link", {name: "Incoming QB", exact: true})});
+  await expect(row).toBeVisible();
+  const displayedGain = await row.locator("td").nth(2).textContent();
+  await search.getByLabel("Above outgoing total (index points)", {exact: true}).fill("");
+  await page.getByLabel("Outgoing player 1", {exact: true}).selectOption("100");
+  await expect(search.getByText(/Search inputs changed/)).toBeVisible();
+  await expect(search.getByRole("button", {name: "Search", exact: true})).toBeDisabled();
+  await row.getByRole("button", {name: "Save trade", exact: true}).click();
+  const saved = JSON.parse((await storedWorkspace(page)).state.filters.savedTrades).trades[0];
+  expect(saved.draft).toEqual({teamA: "1", teamB: "2", give: ["101"], get: ["200"]});
+  expect(saved.query.above).toBe(1000);
+  expect(saved.original.own.toFixed(2)).toBe(displayedGain?.trim());
+  await row.getByRole("button", {name: "Load trade", exact: true}).click();
+  await expect(page.getByLabel("Outgoing player 1", {exact: true})).toHaveValue("101");
+  await expect(page.getByLabel("Incoming player 1", {exact: true})).toHaveValue("200");
+  await expect(page.getByRole("button", {name: "Save current trade", exact: true})).toBeEnabled();
 });

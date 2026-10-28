@@ -1,6 +1,9 @@
 import { expect, it } from "vitest";
 import { starterFixture, tradeSearchFixture } from "./fixtures";
 import { evaluate } from "../src/domain/valuation";
+import { fairChainFixture } from "./chain-fixture";
+import { teamsAssessment } from "../src/domain/lineups";
+import { advanceChainRoster } from "../src/domain/trade-chains";
 import { evaluateTrade } from "../src/domain/trades";
 import { initialState } from "../src/domain/contracts";
 import {
@@ -292,4 +295,114 @@ it("explains recipient incentives on demand without mutating the snapshot", asyn
   expect(
     incomplete.positions.some((position) => position.starterGain === null),
   ).toBe(true);
+});
+
+// Explanation is automatic with filters off, includes downgraded positions, and keeps distinct starters/backups without changing search qualification.
+it("reports affected before/after grades and partial distinct upgrades without an upgrade filter", async () => {
+  const d = await fairChainFixture(),
+    m = evaluate(d, d.settings);
+  m.byId.get("13")!.owner = "3";
+  m.byId.get("13")!.slot = 20;
+  const q: TradeSearchQuery = {
+    teamA: "1",
+    give: ["3", "8", "9"],
+    count: 1,
+    below: 1000,
+    above: 1000,
+  };
+  const row = scoreTradeMatch(m, q, {
+    key: "explanation",
+    teamB: "3",
+    get: ["5"],
+    incoming: 0,
+    outgoing: 0,
+    difference: 0,
+  });
+  const snapshot = JSON.stringify(m.players),
+    detail = opponentIncentive(m, q, row);
+  expect(q.upgrade).toBeUndefined();
+  expect(q.usefulness).toBeUndefined();
+  expect(detail.positions.map((p) => p.position)).toEqual(["RB", "WR", "TE"]);
+  expect(detail.positions.find((p) => p.position === "WR")).toMatchObject({
+    grade: "A",
+    afterGrade: "B",
+    starterGain: -1,
+  });
+  expect(detail.upgrades).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        offered: "9",
+        compared: "12",
+        group: "starter",
+        gain: 16,
+      }),
+      expect.objectContaining({
+        offered: "8",
+        compared: "13",
+        group: "depth",
+        gain: 15,
+      }),
+    ]),
+  );
+  expect(new Set(detail.upgrades.map((u) => u.offered)).size).toBe(
+    detail.upgrades.length,
+  );
+  expect(new Set(detail.upgrades.map((u) => u.compared)).size).toBe(
+    detail.upgrades.length,
+  );
+  expect(JSON.stringify(m.players)).toBe(snapshot);
+  // One weak offer must not hide a real improvement; the enabled all-useful search must still reject that same package.
+  m.byId.get("8")!.expected = 1;
+  m.byId.get("9")!.expected = 2;
+  const partial = opponentIncentive(m, q, row);
+  expect(partial.upgrades.map((u) => u.offered)).toEqual(["3"]);
+  const filtered = scoreTradeMatch(
+    m,
+    { ...q, usefulness: { minimum: 0 } },
+    row,
+  );
+  expect(filtered.usefulness).toEqual([]);
+});
+
+// A chain's second-step explanation starts from the first step's ownership and reuses the same Teams grade calculation.
+it("uses the advanced chain roster as the recipient grade baseline", async () => {
+  const d = await fairChainFixture(),
+    original = evaluate(d, d.settings);
+  const m = advanceChainRoster(original, {
+    teamA: "1",
+    teamB: "2",
+    give: ["3"],
+    get: ["2"],
+  });
+  const q: TradeSearchQuery = {
+    teamA: "1",
+    give: ["9"],
+    count: 1,
+    below: 1000,
+    above: 1000,
+  };
+  const row = scoreTradeMatch(m, q, {
+    key: "second",
+    teamB: "2",
+    get: ["10"],
+    incoming: 0,
+    outgoing: 0,
+    difference: 0,
+  });
+  const detail = opponentIncentive(m, q, row);
+  for (const p of detail.positions)
+    expect(p.grade).toBe(
+      teamsAssessment(m)
+        .get("2")!
+        .find((g) => g.position === p.position)!.grade,
+    );
+  expect(detail.upgrades).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        offered: "9",
+        compared: "13",
+        group: "starter",
+      }),
+    ]),
+  );
 });

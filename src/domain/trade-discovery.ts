@@ -9,6 +9,8 @@ import {
   findTradeMatches,
   incomingCountRange,
   matchesWeekly,
+  packageUsefulness,
+  type UsefulnessEvidence,
   tradeSearchBounds,
   type SearchMatch,
   type SearchRow,
@@ -223,9 +225,11 @@ export function retainSuggestion(
 export interface OpponentIncentive {
   summary: string;
   notes: string[];
+  upgrades: UsefulnessEvidence[];
   positions: {
     position: string;
     grade: string;
+    afterGrade: string;
     starterGain: number | null;
     backupGain: number | null;
   }[];
@@ -250,8 +254,39 @@ export function opponentIncentive(
     lineupsRaw,
   );
   if (!r.valid)
-    return { summary: "Unavailable", notes: r.errors, positions: [] };
+    return {
+      summary: "Unavailable",
+      notes: r.errors,
+      positions: [],
+      upgrades: [],
+    };
   const grades = teamsAssessment(m).get(row.teamB) ?? [];
+  // Reassess the legal post-trade ownership snapshot, including required drops, without changing forecasts or replacement pools.
+  const own = new Set(r.legalA),
+    other = new Set(r.legalB),
+    ir = new Set([...r.irA, ...r.irB]);
+  const players = m.players.map((p) => {
+    const owner = own.has(p.id)
+      ? q.teamA
+      : other.has(p.id)
+        ? row.teamB
+        : [q.teamA, row.teamB].includes(p.owner)
+          ? "0"
+          : p.owner;
+    const arrival = owner !== p.owner && owner !== "0";
+    return { ...p, owner, slot: ir.has(p.id) ? 21 : arrival ? 20 : p.slot };
+  });
+  const afterModel: Model = {
+    ...m,
+    players,
+    byId: new Map(players.map((p) => [p.id, p])),
+  };
+  const afterGrades = teamsAssessment(afterModel).get(row.teamB) ?? [];
+  const affected = new Set(
+    [...row.get, ...(row.give ?? q.give), ...r.dropsB].map(
+      (id) => m.byId.get(id)!.pos,
+    ),
+  );
   const roleRoster = (ids: string[]) => {
     const ir = new Set(irAssignments(m, ids));
     return ids.filter((id) => !ir.has(id));
@@ -262,6 +297,23 @@ export function opponentIncentive(
     after = lineup(m, afterIds, m.current, false, true, "expected");
   const original = new Set(before.ids),
     final = new Set(after.ids);
+  // Explain distinct starter/backup roles even with usefulness filtering off; missing or dropped arrivals cannot manufacture upgrades.
+  const offered = (row.give ?? q.give).filter(
+    (id) =>
+      afterIds.includes(id) &&
+      n(m.byId.get(id)?.expected) !== null &&
+      m.byId.get(id)!.available > 0,
+  );
+  const upgrades = offered.length
+    ? packageUsefulness(
+        m,
+        { ...q, give: offered, usefulness: { minimum: 0 } },
+        r.initialB,
+        r.legalB,
+        r.irB,
+        true,
+      )
+    : [];
   const changes = [...positions, "FLEX"]
     .map((position) => {
       const roleScore = (
@@ -300,11 +352,18 @@ export function opponentIncentive(
       return {
         position,
         grade: grades.find((g) => g.position === position)?.grade ?? "n.a.",
+        afterGrade:
+          afterGrades.find((g) => g.position === position)?.grade ?? "n.a.",
         starterGain: a === null || b === null ? null : b - a,
         backupGain: c === null || d === null ? null : d - c,
       };
     })
-    .filter((change) => change.starterGain !== 0 || change.backupGain !== 0);
+    .filter(
+      (change) =>
+        affected.has(change.position as (typeof positions)[number]) ||
+        (change.starterGain !== null && change.starterGain !== 0) ||
+        (change.backupGain !== null && change.backupGain !== 0),
+    );
   const notes = [
     `Their weekly gain (${lineupBasisLabel(q.lineupBasis)}): ${row.other === null ? "unavailable" : row.other.toFixed(2) + " points/week"}.`,
     `Their surplus received: ${r.outgoing.toFixed(2)}; surplus given: ${r.incoming.toFixed(2)}. Surplus is not a market price.`,
@@ -331,6 +390,7 @@ export function opponentIncentive(
             ? "Depth incentive; review scoring losses"
             : "Limited modeled incentive",
     notes,
+    upgrades,
     positions: changes,
   };
 }

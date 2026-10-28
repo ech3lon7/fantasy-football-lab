@@ -163,6 +163,26 @@ test("finds both chain modes, explains replacements, and saves individual steps 
     .getByRole("heading", { name: "Two-trade chain planner", exact: true })
     .scrollIntoViewIfNeeded();
   await page.screenshot({ path: "test-results/trade-chains-controls.png" });
+  // Each leg exposes the same compact automatic upgrade evidence, with step two based on the first trade's roster.
+  for (const step of [1, 2]) {
+    const leg = safe
+      .getByRole("heading", { name: new RegExp(`Step ${step} ·`) })
+      .locator("..");
+    await leg
+      .getByText("Why the other team might accept", { exact: true })
+      .click();
+    const incentive = leg
+      .getByText("Why the other team might accept", { exact: true })
+      .locator("..");
+    await expect(incentive).toContainText(/(?:RB|TE) [A-F][^ ]* →/);
+    await expect(incentive).toContainText("Starter:");
+    await expect(incentive).toContainText(/\+[0-9]+\.[0-9]{2} EPPG/);
+    await expect(incentive).not.toContainText("Their surplus received:");
+    if (step === 2)
+      await incentive.screenshot({
+        path: "test-results/compact-chain-upgrades.png",
+      });
+  }
   await safe
     .getByText("Step 2 lineup replacements and warnings", { exact: true })
     .click();
@@ -194,6 +214,20 @@ test("finds both chain modes, explains replacements, and saves individual steps 
     .getByRole("combobox", { name: "Chain mode", exact: true })
     .selectOption("speculative");
   await expect(page.getByText(/Chain results are stale/)).toBeVisible();
+  // Editing chain controls does not disable bookmarking either already evaluated step or alter its captured scoring basis.
+  await page.getByRole("combobox", {name: "Chain lineup impact basis", exact: true}).selectOption("marked-starters");
+  await expect(
+    safe.getByRole("button", { name: "Save step 1", exact: true }),
+  ).toBeEnabled();
+  await safe.getByRole("button", { name: "Save step 1", exact: true }).click();
+  await expect(
+    safe.getByRole("button", { name: "Save step 2", exact: true }),
+  ).toBeEnabled();
+  await safe.getByRole("button", { name: "Save step 2", exact: true }).click();
+  const resaved = JSON.parse((await stored(page)).state.filters.savedTrades).trades;
+  expect(resaved).toHaveLength(2);
+  expect(resaved.every((trade: {lineupBasis: string}) => trade.lineupBasis === "best-available")).toBe(true);
+  await page.getByRole("combobox", {name: "Chain lineup impact basis", exact: true}).selectOption("best-available");
   await page
     .getByRole("button", { name: "Search trade chains", exact: true })
     .click();

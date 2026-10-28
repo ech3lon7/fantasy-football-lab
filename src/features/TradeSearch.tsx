@@ -201,6 +201,8 @@ export function TradeSearch({
     query: TradeSearchQuery;
     context: string;
   } | null>(null);
+  // Retain the result's original valuation/roster context so later control edits never relabel saved figures as current.
+  const resultModel = useRef<Model | null>(null);
   // Chain diagnostics are transient and captured by the existing download; they never alter the workspace or ordinary search.
   const chainDebug = useRef<ChainDebugReport | null>(null);
   const [diagnostic, setDiagnostic] = useState(""),
@@ -511,7 +513,7 @@ export function TradeSearch({
     setAdvanced(true);
   }, [restore?.id]);
 
-  // Relevant input changes and unmount terminate synchronous worker work; stale rows cannot be loaded.
+  // Relevant input changes stop worker work; completed trade ideas remain available for saving and loading.
   useEffect(() => {
     // Once invalidated, reverting controls still requires a new worker rather than reviving terminated pages.
     setJob((previous) =>
@@ -534,6 +536,7 @@ export function TradeSearch({
     setSavedRow("");
     setDiagnostic("");
     appliedSearch.current = { query: structuredClone(query), context };
+    resultModel.current = m;
     setJob({ id, context, status: "running", rows: [], total: 0 });
     try {
       const worker = new Worker(
@@ -720,21 +723,35 @@ export function TradeSearch({
     setOtherWeekly({ enabled: false, minimum: "0", maximum: "" });
   }
 
-  // Fixed searches retain outgoing selections; flexible results load their actual subset into the normal analyzer.
+  // Loading copies the displayed package, not newly edited filters or outgoing selections; the analyzer recalculates it against current inputs.
   function load(row: SearchRow) {
-    if (
-      stale ||
-      job?.status !== "complete" ||
-      bounds.errors.length ||
-      row.get.some((id) => m.byId.get(id)?.owner !== row.teamB)
-    )
-      return;
+    const captured = appliedSearch.current?.query;
+    if (!captured) return;
     change({
-      ...draft,
+      teamA: captured.teamA,
       teamB: row.teamB,
-      give: [...(row.give ?? draft.give)],
+      give: [...(row.give ?? captured.give)],
       get: [...row.get],
     });
+  }
+
+  // A bookmark preserves the evaluated package, query and source context even after filters become stale or invalid.
+  function saveRow(row: SearchRow) {
+    const captured = appliedSearch.current?.query,
+      model = resultModel.current;
+    if (!save || !captured || !model) return;
+    const success = save(
+      {
+        teamA: captured.teamA,
+        teamB: row.teamB,
+        give: [...(row.give ?? captured.give)],
+        get: [...row.get],
+      },
+      summaryFromSearch(row),
+      captured,
+      model,
+    );
+    if (success !== false) setSavedRow(row.key);
   }
 
   // Fetch the next already-sorted page from the same completed search without rerunning calculations.
@@ -1926,8 +1943,9 @@ export function TradeSearch({
       )}
       {stale && (
         <p className="notice warning" role="status">
-          Search inputs changed. Search again; previous results cannot be
-          loaded.
+          Search inputs changed. Displayed figures belong to the previous
+          search. You can still save or load these trades; loading recalculates
+          current results.
         </p>
       )}
       {!stale && job?.status === "cancelled" && (
@@ -1940,7 +1958,8 @@ export function TradeSearch({
       )}
       {job &&
         (job.status === "complete" ||
-          (job.status === "stale" && job.rows.length > 0)) && (
+          (job.status === "stale" &&
+            (job.rows.length > 0 || !!job.suggestions?.length))) && (
           <>
             <p role="status">
               {job.total} index matches. Ranked by{" "}
@@ -2142,8 +2161,12 @@ export function TradeSearch({
                           {row.surface && (
                             <SurfaceAppealView value={row.surface} m={m} />
                           )}
+                          {/* Always explain recipient roles, even when optional upgrade filters are disabled. */}
                           <OpponentIncentiveView
+                            m={m}
                             value={job.lineups?.[row.key]?.details?.incentive}
+                            inspect={() => inspect(row)}
+                            stale={stale}
                           />
                           {/* Show the exact qualifying comparison instead of implying a guaranteed net improvement or acceptance. */}
                           {row.upgrades?.map((upgrade) => (
@@ -2414,41 +2437,14 @@ export function TradeSearch({
                             </p>
                           ))}
                         </details>
-                        <button
-                          className="subtle"
-                          disabled={stale || bounds.errors.length > 0}
-                          onClick={() => load(row)}
-                        >
+                        <button className="subtle" onClick={() => load(row)}>
                           Load trade
                         </button>
                         {save && (
                           <button
                             className="button primary"
                             aria-label="Save trade"
-                            disabled={
-                              stale ||
-                              job.status !== "complete" ||
-                              bounds.errors.length > 0
-                            }
-                            onClick={() => {
-                              if (
-                                !stale &&
-                                job.status === "complete" &&
-                                !bounds.errors.length
-                              ) {
-                                const success = save(
-                                  {
-                                    teamA: query.teamA,
-                                    teamB: row.teamB,
-                                    give: [...(row.give ?? query.give)],
-                                    get: [...row.get],
-                                  },
-                                  summaryFromSearch(row),
-                                  query,
-                                );
-                                if (success !== false) setSavedRow(row.key);
-                              }
-                            }}
+                            onClick={() => saveRow(row)}
                           >
                             <Bookmark size={16} aria-hidden="true" />{" "}
                             {savedRow === row.key ? "Saved" : "Save trade"}
@@ -2504,11 +2500,6 @@ export function TradeSearch({
                     <button
                       type="button"
                       className="subtle"
-                      disabled={
-                        stale ||
-                        job.status !== "complete" ||
-                        !!bounds.errors.length
-                      }
                       onClick={() => load(row)}
                     >
                       Inspect this alternative

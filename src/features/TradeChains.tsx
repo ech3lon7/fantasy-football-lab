@@ -19,6 +19,8 @@ import {
   type ChainDependencySettings,
   type ChainDependencyEvidence,
 } from "../domain/chain-plausibility";
+import { opponentIncentive } from "../domain/trade-discovery";
+import { OpponentIncentiveView } from "./TradeDiscovery";
 import { SurfaceAppealView } from "./SurfaceAppeal";
 import { applyRosterScenario, sourceDataset } from "../domain/roster-scenarios";
 import {
@@ -238,6 +240,8 @@ export function TradeChains({
   );
   const [detailError, setDetailError] = useState("");
   const active = useRef<Worker | null>(null);
+  // Save each displayed leg against its executed roster and starter plans, independently of subsequent chain-control edits.
+  const resultContext = useRef<{ model: Model; plans?: string } | null>(null);
   const query: ChainQuery = {
     team,
     pool,
@@ -412,6 +416,7 @@ export function TradeChains({
     if (errors.length) return;
     active.current?.terminate();
     const id = crypto.randomUUID();
+    resultContext.current = { model: m, plans: lineupsRaw };
     try {
       const worker = new Worker(
         new URL("../workers/trade-chains.worker.ts", import.meta.url),
@@ -495,26 +500,29 @@ export function TradeChains({
 
   // Reconstruct a leg's prerequisite only for inspection or saving; this never changes the app's working or saved roster.
   function legContext(chain: TradeChain, step: 1 | 2) {
+    const captured = resultContext.current ?? { model: m, plans: lineupsRaw };
     const model =
-      step === 1 ? m : applyRosterScenario(m, chain.afterFirst, lineupsRaw);
+      step === 1
+        ? captured.model
+        : applyRosterScenario(captured.model, chain.afterFirst, captured.plans);
     return {
       model,
-      plans: step === 1 ? lineupsRaw : model.simulation?.lineupsRaw,
+      plans: step === 1 ? captured.plans : model.simulation?.lineupsRaw,
     };
   }
   function legQuery(leg: ChainLeg): TradeSearchQuery {
     return {
-      teamA: team,
+      teamA: leg.draft.teamA,
       give: leg.draft.give,
       count: leg.draft.get.length,
       below: 0,
       above: 0,
       indexMode: "automatic",
-      lineupBasis: basis,
+      lineupBasis: leg.row.lineupBasis,
     };
   }
   function saveLeg(chain: TradeChain, step: 1 | 2) {
-    if (stale || !save) return;
+    if (!save) return;
     try {
       const leg = step === 1 ? chain.first : chain.second;
       const { model } = legContext(chain, step);
@@ -535,7 +543,11 @@ export function TradeChains({
     try {
       const leg = step === 1 ? chain.first : chain.second;
       const { model, plans } = legContext(chain, step);
-      const detail = searchLineupDetails(model, legQuery(leg), leg.row, plans);
+      // Step two uses its actual post-step-one roster for both named upgrades and affected position grades.
+      const detail = {
+        ...searchLineupDetails(model, legQuery(leg), leg.row, plans),
+        incentive: opponentIncentive(model, legQuery(leg), leg.row, plans),
+      };
       setDetails((previous) => ({ ...previous, [key]: detail }));
     } catch (error) {
       setDetailError(
@@ -1095,6 +1107,13 @@ export function TradeChains({
           Surplus: <Signal text={row.surplus} /> Points:{" "}
           <Signal text={row.points} /> · Legal modeled rosters.
         </p>
+        {/* Match the standard finder’s compact recipient upgrades on each independently evaluated chain leg. */}
+        <OpponentIncentiveView
+          m={m}
+          value={detail?.incentive}
+          inspect={() => inspect(chain, step)}
+          stale={stale}
+        />
         {/* Per-leg range and source comparisons show exact applied bounds and the recipient's actual legal lineup losses. */}
         {leg.indexWindow && (
           <p className="model">
@@ -1223,7 +1242,7 @@ export function TradeChains({
         {save && (
           <button
             className="button primary"
-            disabled={stale || saved.includes(key)}
+            disabled={saved.includes(key)}
             onClick={() => saveLeg(chain, step)}
           >
             <Bookmark size={16} aria-hidden="true" />

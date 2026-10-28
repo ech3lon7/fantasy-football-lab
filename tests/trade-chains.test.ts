@@ -591,6 +591,7 @@ it("rejects a 23.95-for-52 concession and checks recipient boundary values", asy
 });
 
 // A wide pool and several attractive but unusable stars previously exhausted the budget before trying balanced incoming packages.
+// This bounded integration search takes over five seconds on GitHub runners; allow 30 seconds for this case only, retaining every assertion.
 it("reaches every package size and finds valid chains with a ten-player pool and six opponents", async () => {
   const d = await fairChainFixture();
   const add = (id: number, owner: number, pos: string, points: number) => {
@@ -656,7 +657,7 @@ it("reaches every package size and finds valid chains with a ten-player pool and
     for (const leg of [chain.first, chain.second])
       expect(leg.recipient.failures).toEqual([]);
   expect(r.stats.bestFinalGain).toBeGreaterThanOrEqual(r.chains[0].gain);
-});
+}, 30000);
 
 // The explicit zero minimum permits a flat recipient, while null and even tiny losses remain failures.
 it("permits a flat recipient only at an explicit zero minimum", () => {

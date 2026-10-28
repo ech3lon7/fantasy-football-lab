@@ -2,7 +2,8 @@ import type { Draft } from "../domain/contracts";
 import type { Model } from "../domain/valuation";
 import type { OpponentIncentive } from "../domain/trade-discovery";
 import { FilterHelp } from "../ui/FilterHelp";
-import { signed } from "../ui/components";
+import { fmt, signed } from "../ui/components";
+import { PlayerName } from "../ui/PlayerName";
 
 // Keep exploratory controls local until an evaluated package is explicitly loaded or saved.
 export interface DiscoveryState {
@@ -228,39 +229,62 @@ export function TradeDiscoveryControls({
   );
 }
 
-// Evidence is explanatory, not an acceptance score; show positional gains and losses alongside the package's existing warnings.
+// Both finders show compact affected grades and distinct, legal starter/backup improvements independently of enabled filters.
 export function OpponentIncentiveView({
   value,
+  m,
+  inspect,
+  stale = false,
 }: {
   value?: OpponentIncentive;
+  m: Model;
+  inspect?: () => void;
+  stale?: boolean;
 }) {
-  if (!value) return null;
+  const name = (id: string | null) => {
+    const player = id ? m.byId.get(id) : undefined;
+    return player ? <PlayerName p={player} /> : "Previously vacant role";
+  };
   return (
-    <details>
+    <details
+      onToggle={(event) => {
+        if (event.currentTarget.open && !stale) inspect?.();
+      }}
+    >
       <summary>Why the other team might accept</summary>
-      <p>
-        {value.summary}. This is supporting evidence, not an acceptance
-        probability.
-      </p>
-      {value.notes.map((note, i) => (
-        <p key={i} className={i < 2 ? "model" : undefined}>
-          {note}
-        </p>
-      ))}
-      {value.positions.map((position) => (
-        <p key={position.position}>
-          {position.position} · Before grade:{" "}
-          <span className="model">{position.grade}</span> · Modeled starter
-          change: <span className="model">{signed(position.starterGain)}</span>{" "}
-          Expected PPG · Best-backup change:{" "}
-          <span className="model">
-            {position.backupGain === null
-              ? "Unavailable"
-              : signed(position.backupGain)}
-          </span>{" "}
-          Expected PPG.
-        </p>
-      ))}
+      {stale ? (
+        <p>Search again to inspect current upgrades.</p>
+      ) : !value ? (
+        <p role="status">Loading upgrade comparisons…</p>
+      ) : (
+        <>
+          {value.positions.map((position) => (
+            <p key={position.position}>
+              {position.position}{" "}
+              <span className="model">
+                {position.grade} → {position.afterGrade}
+              </span>
+            </p>
+          ))}
+          {value.upgrades.map((upgrade) => (
+            <p key={upgrade.offered}>
+              {upgrade.group === "starter" ? "Starter" : "Bench"}:{" "}
+              {name(upgrade.compared)} (
+              <span className="model">{fmt(upgrade.comparedPPG)}</span>) →{" "}
+              {name(upgrade.offered)} (
+              <span className="model">{fmt(upgrade.offeredPPG)}</span>) ·{" "}
+              <span className="model">{signed(upgrade.gain)} EPPG</span>
+            </p>
+          ))}
+          {!value.upgrades.length && (
+            <p>No confirmed starter or best-backup upgrades.</p>
+          )}
+          <small className="muted">
+            Position grades and role fit; net weekly gain is shown separately.
+            Not an acceptance probability.
+          </small>
+        </>
+      )}
     </details>
   );
 }
