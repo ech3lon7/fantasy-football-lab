@@ -22,6 +22,12 @@ import {
   type RosterScenario,
   type ScenarioMove,
 } from "./roster-scenarios";
+import {
+  managerAssessment,
+  managerFailures,
+  managerSettingsSchema,
+  type ManagerSettings,
+} from "./manager-expectations";
 import { surfaceAppeal, type SurfaceEvidence } from "./surface-appeal";
 import { tradeImpact } from "./trade-impact";
 import {
@@ -73,6 +79,7 @@ export interface ChainStep {
   teams?: string[];
   fit?: { deficit?: ChainFitRule; surplus?: ChainFitRule };
   indexWindow?: ChainIndexWindow;
+  manager?: ManagerSettings;
   surface?: ChainSurfaceFilter;
 }
 export interface ChainFitEvidence {
@@ -271,6 +278,7 @@ export interface ChainStats {
   rejectedFit: number;
   rejectedIndex: number;
   rejectedSurface: number;
+  rejectedManager?: number;
   rejectedDependency: number;
   dependencyEvaluated: number;
   dependencyPending: number;
@@ -459,6 +467,8 @@ export function chainErrors(m: Model, q: ChainQuery): string[] {
       errors.push(
         `${name} trade needs nonnegative finite index-window bounds.`,
       );
+    if (step.manager && !managerSettingsSchema.safeParse(step.manager).success)
+      errors.push(`${name} trade needs valid manager expectation settings.`);
     if (
       step.surface &&
       (!["average", "projection", "both"].includes(step.surface.metric) ||
@@ -947,6 +957,25 @@ export function searchTradeChains(
         leg.draft,
         config.indexWindow,
       );
+    // Stage-two callers supply the post-stage-one model; private final gain cannot rescue a failed recipient safeguard.
+    if (config.manager) {
+      leg.row.manager = managerAssessment(
+        model,
+        leg.draft,
+        result,
+        config.manager,
+      );
+      const failures = managerFailures(leg.row.manager, config.manager);
+      if (failures.length) {
+        stats.rejectedManager = (stats.rejectedManager ?? 0) + 1;
+        if (
+          plausibilityRejections.filter((entry) => entry.step === step).length <
+          5
+        )
+          plausibilityRejections.push({ step, draft: leg.draft, failures });
+        return false;
+      }
+    }
     if (!config.surface) return true;
     leg.surface = surfaceAppeal(
       model,

@@ -1,3 +1,4 @@
+import { DirectManagerAssessment } from "./Negotiations";
 import { FilterHelp } from "../ui/FilterHelp";
 import {
   lineupBases,
@@ -1662,6 +1663,7 @@ export function TradeView({
   forceTrade,
   changeBasis,
   saveSearchSettings,
+  saveManagerSettings,
 }: {
   m: Model;
   draft: Draft;
@@ -1673,6 +1675,7 @@ export function TradeView({
   forceTrade?: (draft: Draft) => boolean;
   changeBasis: (basis: LineupBasis) => void;
   saveSearchSettings: (raw: string) => void;
+  saveManagerSettings: (raw: string) => void;
 }) {
   // The manual analyzer and standard finder retain this preference; the chain planner owns a separate choice.
   const lineupBasis = readLineupBasis(state.filters[lineupBasisKey]);
@@ -1975,6 +1978,15 @@ export function TradeView({
         </div>
       )}
       {forceMessage && <p role="status">{forceMessage}</p>}
+      <DirectManagerAssessment
+        m={m}
+        draft={draft}
+        result={resultStamp === evaluationStamp ? result : null}
+        raw={state.filters.managerExpectations}
+        change={saveManagerSettings}
+        basis={lineupBasis}
+        lineupsRaw={lineupsRaw}
+      />
       {/* Search preserves the outgoing draft and loads only an explicitly selected counterparty/package. */}
       <TradeSearch
         m={m}

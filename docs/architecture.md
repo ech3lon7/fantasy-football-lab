@@ -387,3 +387,8 @@ Inspect the existing Trainwise Supabase project before deciding whether to reuse
 The functional model and import structure were checked against the delivered V5.2 workbook and its existing valuation, trade interpretation, position-grade and gem specifications. Trainwise’s local repository was inspected for its static PWA structure, IndexedDB behavior and Supabase authentication/sync pattern. Its append-only backup schema is deliberately not adopted for fantasy imports.
 
 The linked GitHub, Vite, SheetJS and Supabase documentation supports the platform constraints and security boundaries above. Formula weights, replacement pools, consolidation premium, grade thresholds and gem screens are the existing provisional model assumptions; this architecture does not claim they have been historically validated.
+
+
+## Manager expectations and trade journal
+
+An independently opt-in deterministic domain evaluator uses actual-average best lineups, distinct elite returns, five provisional manager presets and estimated acceptance ranges. Private EPPG/indices/tags and legacy surface filters are unchanged. Standard search, direct analysis and each chain stage own their controls. Negotiation/profile/immutable forecast records live outside the compact settings/dataset payload, account-scoped in IndexedDB and fantasy-only Supabase tables. Optional journal workbook/JSON imports never become runtime public assets. Source snapshots, role losses/gains and provisional assumptions remain inspectable.

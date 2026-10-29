@@ -1,3 +1,10 @@
+import { GroupedTradeRows } from "./TradeResultGroups";
+import {
+  ManagerControls,
+  ManagerEvidence,
+  useNegotiations,
+} from "./Negotiations";
+import type { ManagerSettings } from "../domain/manager-expectations";
 import { SurfaceAppealControls, SurfaceAppealView } from "./SurfaceAppeal";
 import type { SurfaceFilter } from "../domain/surface-appeal";
 import {
@@ -140,6 +147,9 @@ export function TradeSearch({
   const [goalPosition, setGoalPosition] = useState<Position>("WR");
   // Surface discovery is disabled for ordinary searches and restored explicitly from a saved query.
   const [surface, setSurface] = useState<SurfaceFilter>();
+  // Only profiles are shared; this finder owns its independent optional enablement and override.
+  const journal = useNegotiations();
+  const [manager, setManager] = useState<ManagerSettings>();
   const [advanced, setAdvanced] = useState(false);
   const [pendingSearch, setPendingSearch] = useState<TradeSearchQuery | null>(
     null,
@@ -227,6 +237,7 @@ export function TradeSearch({
     indexMode,
     goal,
     surface,
+    manager: manager ? { ...manager, profiles: journal.profiles } : undefined,
     count: packages ? count : 1,
     // Disabled strict inputs cannot make an automatic search unsaveable; keep raw edits in the controls/debug report.
     below:
@@ -316,6 +327,7 @@ export function TradeSearch({
     goal,
     goalPosition,
     surface,
+    manager,
     advanced,
     discovery,
     selectedTeams,
@@ -363,6 +375,8 @@ export function TradeSearch({
     discovery.nearMisses ||
     receive.minimum !== receive.maximum;
   const bounds = tradeSearchBounds(m, query);
+  if (manager && !journal.ready)
+    bounds.errors.push("Saved manager profiles are still loading.");
   const context = tradeSearchContext(m, query, lineupsRaw);
   const stale = !!job && (job.status === "stale" || job.context !== context);
   const running = !stale && job?.status === "running";
@@ -390,6 +404,7 @@ export function TradeSearch({
     setIndexMode(q.indexMode ?? "strict");
     setGoal(q.goal ?? "custom");
     setSurface(q.surface);
+    setManager(q.manager);
     // Restore the saved opponent filter independently of the analyzer's one selected counterparty.
     setSelectedTeams(q.discovery?.teams);
     setGoalPosition(q.incoming?.positions?.[0] ?? "WR");
@@ -454,6 +469,7 @@ export function TradeSearch({
       if (Object.hasOwn(c, "goal")) setGoal(c.goal);
       if (Object.hasOwn(c, "goalPosition")) setGoalPosition(c.goalPosition);
       if (Object.hasOwn(c, "surface")) setSurface(c.surface);
+      if (Object.hasOwn(c, "manager")) setManager(c.manager);
       if (Object.hasOwn(c, "advanced")) setAdvanced(c.advanced);
       if (Object.hasOwn(c, "discovery")) setDiscovery(c.discovery);
       if (Object.hasOwn(c, "selectedTeams")) setSelectedTeams(c.selectedTeams);
@@ -693,6 +709,7 @@ export function TradeSearch({
     setPendingSearch(null);
     setGoal("custom");
     setSurface(undefined);
+    setManager(undefined);
     setIndexMode("automatic");
     setSelectedTeams(undefined);
     setBelow("5");
@@ -1209,6 +1226,7 @@ export function TradeSearch({
         )}
       </div>
       {/* Source-based appeal is a separate filter; the recipient's modeled loss remains visible beside its apparent source-based gain. */}
+      <ManagerControls value={manager} change={setManager} />
       <SurfaceAppealControls
         value={surface}
         week={m.current}
@@ -2055,9 +2073,11 @@ export function TradeSearch({
                     <th>Details / load</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {job.rows.map((row) => (
-                    <tr key={row.key}>
+                <GroupedTradeRows
+                  rows={job.rows}
+                  m={resultModel.current ?? m}
+                  render={(row) => (
+                    <tr key={row.key} data-trade-result>
                       <td>
                         {names(row.get)}
                         {row.give && <small>Offer: {names(row.give)}</small>}
@@ -2122,6 +2142,13 @@ export function TradeSearch({
                         {row.warnings.length > 0 && (
                           <Signal text="CONDITIONAL" />
                         )}
+                        {row.manager && (
+                          <p className="model">
+                            {row.manager.range
+                              ? `Estimated acceptance ${row.manager.range[0]}–${row.manager.range[1]}%`
+                              : `Manager assessment: ${row.manager.status}`}
+                          </p>
+                        )}
                         <details
                           onToggle={(event) => {
                             if (event.currentTarget.open) inspect(row);
@@ -2158,6 +2185,26 @@ export function TradeSearch({
                               </span>
                             </small>
                           </p>
+                          {row.manager && (
+                            <ManagerEvidence
+                              value={row.manager}
+                              m={resultModel.current ?? m}
+                              draft={{
+                                teamA:
+                                  appliedSearch.current?.query.teamA ??
+                                  query.teamA,
+                                teamB: row.teamB,
+                                give:
+                                  row.give ??
+                                  appliedSearch.current?.query.give ??
+                                  query.give,
+                                get: row.get,
+                              }}
+                              basis={row.lineupBasis}
+                              lineupsRaw={lineupsRaw}
+                              allowLog={!stale}
+                            />
+                          )}
                           {row.surface && (
                             <SurfaceAppealView value={row.surface} m={m} />
                           )}
@@ -2452,8 +2499,8 @@ export function TradeSearch({
                         )}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
+                  )}
+                />
               </table>
             </div>
             {/* Alternatives remain separate from exact matches and disclose every unmet limit before loading. */}
@@ -2522,6 +2569,13 @@ export function TradeSearch({
             <details className="search-exclusions">
               <summary>Why trades were excluded</summary>
               {/* Report post-evaluation filtering separately from index/positional eligibility. */}
+              {job.stats?.managerExcluded !== undefined && (
+                <p>
+                  Manager-expectation exclusions: {job.stats.managerExcluded}.
+                  Missing evidence and safeguard failures remain distinct in
+                  evaluated near misses.
+                </p>
+              )}
               {job.stats?.surfaceExcluded !== undefined && (
                 <p>
                   Trades excluded by surface appeal, model-gain, legal-roster or

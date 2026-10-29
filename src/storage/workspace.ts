@@ -31,12 +31,20 @@ export async function save(w: Workspace) {
   const d = await db();
   await d.put("current", w, w.owner);
 }
-export async function remove(owner: string) {
+export async function remove(owner: string, eraseNegotiations = true) {
   const d = await db();
   // Clear the private account journal with its workspace, including sign-out and existing clear-account flows.
   const tx = d.transaction("current", "readwrite");
   await tx.store.delete(owner);
   await tx.store.delete(`gem-tracking:${owner}`);
+  // Explicit deletion includes private journal history; sign-out can retain account-scoped unsynced originals.
+  if (eraseNegotiations)
+    await tx.store.delete(
+      IDBKeyRange.bound(
+        `negotiations:${owner}:`,
+        `negotiations:${owner}:\uffff`,
+      ),
+    );
   await tx.done;
 }
 

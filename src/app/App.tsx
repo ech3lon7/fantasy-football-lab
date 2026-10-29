@@ -1,3 +1,4 @@
+import { NegotiationsProvider, TradeJournal } from "../features/Negotiations";
 import { starterLineupsKey } from "../domain/starter-lineups";
 import { lineupBasisKey } from "../domain/trade-impact";
 import { reconcileSavedTrades, savedTradesKey } from "../domain/saved-trades";
@@ -80,6 +81,7 @@ const nav = [
   ["teams", "League teams", Users],
   ["players", "Players", Search],
   ["trades", "Trade analyzer", ArrowLeftRight],
+  ["journal", "Trade journal", ArrowLeftRight],
   ["gems", "Gem screener", Diamond],
   ["weekly", "Weekly streamers", CalendarDays],
   ["model", "Model & audit", SlidersHorizontal],
@@ -344,6 +346,26 @@ export default function App() {
     w?.state.filters[evidenceKey],
     w?.state.filters[roleScenarioKey],
   ]);
+  // Journal record sync has independent revisions; expose its failures without changing workspace or saved-trade permissions.
+  useEffect(() => {
+    const notice = (event: Event) => {
+      const detail = (event as CustomEvent<{ owner: string; issue: string }>)
+        .detail;
+      if (detail.owner === wRef.current?.owner)
+        setSyncStatus(
+          (previous) =>
+            detail.issue ||
+            (previous.startsWith("Journal")
+              ? wRef.current?.pendingState || wRef.current?.pendingDataset
+                ? "Changes pending"
+                : "Synced"
+              : previous),
+        );
+    };
+    window.addEventListener("fantasy-journal-sync-status", notice);
+    return () =>
+      window.removeEventListener("fantasy-journal-sync-status", notice);
+  }, []);
   async function runSync(force = false) {
     const current = wRef.current;
     if (!client || !current || current.owner === "local") {
@@ -361,6 +383,8 @@ export default function App() {
       const acknowledged = acknowledgeSync(wRef.current, current, next);
       if (!acknowledged) return;
       commit(acknowledged);
+      // Journal sync uses separate record revisions and must not replace dataset/settings state.
+      window.dispatchEvent(new Event("fantasy-sync-negotiations"));
       setConflict(undefined);
       setSyncStatus(
         wRef.current?.pendingState || wRef.current?.pendingDataset
@@ -726,7 +750,7 @@ export default function App() {
         return;
       }
     }
-    if (owner) await remove(owner);
+    if (owner) await remove(owner, false);
     commit(null);
     setModel(null);
     setConflict(undefined);
@@ -1125,6 +1149,14 @@ export default function App() {
                     })
                   }
                   // Merge only this account-state key against the latest workspace, preserving unrelated filters.
+                  saveManagerSettings={(raw) =>
+                    updateState({
+                      filters: {
+                        ...wRef.current!.state.filters,
+                        managerExpectations: raw,
+                      },
+                    })
+                  }
                   saveSearchSettings={(raw) =>
                     updateState({
                       filters: {
@@ -1152,6 +1184,9 @@ export default function App() {
                     })
                   }
                 />
+              )}
+              {page === "journal" && (
+                <TradeJournal m={model} ownTeam={w.state.preferredTeam} />
               )}
               {page === "model" && (
                 <>
@@ -1260,5 +1295,13 @@ export default function App() {
     </div>
   );
   // Keep inspection state outside routed views so opening a card preserves each screen's draft.
-  return <PlayerPopoverProvider m={model}>{content}</PlayerPopoverProvider>;
+  return (
+    <NegotiationsProvider
+      key={w?.owner ?? "local"}
+      owner={w?.owner ?? "local"}
+      client={client}
+    >
+      <PlayerPopoverProvider m={model}>{content}</PlayerPopoverProvider>
+    </NegotiationsProvider>
+  );
 }

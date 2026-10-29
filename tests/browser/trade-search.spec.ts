@@ -8,6 +8,14 @@ import {
 import { evaluate } from "../../src/domain/valuation";
 import { evaluateTrade } from "../../src/domain/trades";
 
+// Group headers are separate from offers; expand every alternative when checking the full evaluated set.
+async function expandSearchAlternatives(search: Locator) {
+  await expect(search.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
+  await expect(search.getByRole("button", { name: "Loading results…", exact: true })).toHaveCount(0);
+  const buttons = search.getByRole("button", { name: /^Show \d+ (alternative offers involving|outgoing alternatives for) / });
+  for (let i = 0; i < 1000 && await buttons.count(); i++) await buttons.first().click();
+}
+
 // Seed only synthetic data and a known bench outgoing player through the app's normal local workspace store.
 async function seed(
   page: Page,
@@ -227,7 +235,7 @@ test("clear filters restores defaults and removes results while preserving playe
   await expect(
     search.getByRole("button", { name: "Search", exact: true }),
   ).toBeEnabled();
-  await expect(search.locator("tbody tr")).toHaveCount(0);
+  await expect(search.locator("tbody tr[data-trade-result]")).toHaveCount(0);
   await expect(
     search.getByLabel("Use strict index range", { exact: true }),
   ).not.toBeChecked();
@@ -313,7 +321,7 @@ test("clear filters restores defaults and removes results while preserving playe
   await expect(
     search.getByRole("button", { name: "Cancel", exact: true }),
   ).toHaveCount(0);
-  await expect(search.locator("tbody tr")).toHaveCount(0);
+  await expect(search.locator("tbody tr[data-trade-result]")).toHaveCount(0);
   await expect(
     search.getByLabel("Maximum players to receive", { exact: true }),
   ).toHaveValue("5");
@@ -347,7 +355,8 @@ test("usefulness filters complete packages, explains the replacement and invalid
   await expect(
     search.getByText("2 index matches.", { exact: false }),
   ).toBeVisible();
-  const row = search.locator("tbody tr").filter({
+  await expandSearchAlternatives(search);
+  const row = search.locator("tbody tr[data-trade-result]").filter({
     has: page.getByRole("link", { name: "Incoming QB", exact: true }),
   });
   await expect(
@@ -427,7 +436,8 @@ test("incoming range returns singles and packages together and restores saved bo
     search.getByText("67 index matches.", { exact: false }),
   ).toBeVisible();
   await search.getByRole("button", { name: "Show more", exact: true }).click();
-  const rows = search.locator("tbody tr");
+  await expandSearchAlternatives(search);
+  const rows = search.locator("tbody tr[data-trade-result]");
   await expect(rows).toHaveCount(67);
   const sizes = new Set<number>();
   let single: Locator | undefined;
@@ -529,7 +539,8 @@ test("flexible targeted discovery ranks packages and saves the actual outgoing p
   await expect(
     search.getByText("3 index matches.", { exact: false }),
   ).toBeVisible();
-  const rows = search.locator("tbody tr");
+  await expandSearchAlternatives(search);
+  const rows = search.locator("tbody tr[data-trade-result]");
   await expect(rows).toHaveCount(3);
   const row = rows.filter({
     has: page.locator("small").filter({ hasText: /^Offer: Main QB$/ }),
@@ -864,11 +875,11 @@ test("incoming Gem/Watch and position filters intersect without changing existin
     await expect(
       search.getByRole("button", { name: "Cancel", exact: true }),
     ).toHaveCount(0);
-    await expect(search.locator("tbody tr").first()).toBeVisible();
+    await expect(search.locator("tbody tr[data-trade-result]").first()).toBeVisible();
   };
   await run();
   const original = await search
-    .locator("tbody tr td:first-child")
+    .locator("tbody tr[data-trade-result] td:first-child")
     .allTextContents();
   await search.getByLabel("Gem", { exact: true }).check();
   await search.getByLabel("Receive WR", { exact: true }).check();
@@ -876,7 +887,7 @@ test("incoming Gem/Watch and position filters intersect without changing existin
     search.getByRole("button", { name: "Load trade" }).first(),
   ).toBeEnabled();
   await run();
-  await expect(search.locator("tbody tr")).toHaveCount(1);
+  await expect(search.locator("tbody tr[data-trade-result]")).toHaveCount(1);
   await expect(
     search
       .locator("tbody")
@@ -884,7 +895,7 @@ test("incoming Gem/Watch and position filters intersect without changing existin
   ).toBeVisible();
   await search.getByLabel("Watch", { exact: true }).check();
   await run();
-  await expect(search.locator("tbody tr")).toHaveCount(2);
+  await expect(search.locator("tbody tr[data-trade-result]")).toHaveCount(2);
   await search.getByLabel("Create package", { exact: true }).check();
   await search
     .getByLabel("Minimum players to receive", { exact: true })
@@ -899,7 +910,7 @@ test("incoming Gem/Watch and position filters intersect without changing existin
     .getByLabel("Minimum incoming position matches", { exact: true })
     .fill("2");
   await run();
-  await expect(search.locator("tbody tr")).toHaveCount(1);
+  await expect(search.locator("tbody tr[data-trade-result]")).toHaveCount(1);
   await expect(
     search
       .locator("tbody")
@@ -918,7 +929,7 @@ test("incoming Gem/Watch and position filters intersect without changing existin
   await search.getByLabel("Create package", { exact: true }).uncheck();
   await run();
   expect(
-    await search.locator("tbody tr td:first-child").allTextContents(),
+    await search.locator("tbody tr[data-trade-result] td:first-child").allTextContents(),
   ).toEqual(original);
 });
 
@@ -1159,7 +1170,8 @@ test("weekly sliders filter exact averages for either or both teams without chan
   await expect(
     search.getByRole("link", { name: "Incoming QB", exact: true }),
   ).toHaveCount(0);
-  const first = search.locator("tbody tr").first();
+  await expandSearchAlternatives(search);
+  const first = search.locator("tbody tr[data-trade-result]").first();
   await first.getByText("Trade details", { exact: true }).click();
   await expect(first.getByText(/Your horizon gain:/)).toContainText("+40.00");
   await expect(first.locator("td").nth(2)).toHaveText("+3.33");
@@ -1188,7 +1200,7 @@ test("weekly sliders filter exact averages for either or both teams without chan
   ).toBeVisible();
   await expect(
     search
-      .locator("tbody tr")
+      .locator("tbody tr[data-trade-result]")
       .getByRole("link", { name: "Incoming QB", exact: true }),
   ).toBeVisible();
   await search
@@ -1278,7 +1290,8 @@ test("positional-upgrade filter supports starter, depth, either and disabled beh
   await expect(
     search.getByText("13 index matches.", { exact: false }),
   ).toBeVisible();
-  const row = search.locator("tbody tr").filter({
+  await expandSearchAlternatives(search);
+  const row = search.locator("tbody tr[data-trade-result]").filter({
     has: page.getByRole("link", { name: "Incoming QB", exact: true }),
   });
   await row.getByText("Trade details", { exact: true }).click();
@@ -1387,7 +1400,8 @@ test("upgrade assignments never reuse an opposing player or label one offer as b
   await expect(
     search.getByText("13 index matches.", { exact: false }),
   ).toBeVisible();
-  const details = search.locator("tbody tr").first().locator("td > details").first();
+  await expandSearchAlternatives(search);
+  const details = search.locator("tbody tr[data-trade-result]").first().locator("td > details").first();
   await details.getByText("Trade details", { exact: true }).click();
   await expect(details.getByText(/Starter upgrade: Offer WR A/)).toContainText(
     "Their starter WR",
@@ -1459,7 +1473,8 @@ test("single-player discovery agrees with the loaded analyzer and preserves outg
   await expect(
     search.getByText("12 index matches.", { exact: false }),
   ).toBeVisible();
-  const row = search.locator("tbody tr").filter({
+  await expandSearchAlternatives(search);
+  const row = search.locator("tbody tr[data-trade-result]").filter({
     has: page.getByRole("link", { name: "Incoming QB", exact: true }),
   });
   await expect(row.locator("td").nth(2)).toHaveText("-10.83");
@@ -1555,12 +1570,15 @@ test("packages paginate complete results and load exactly the selected receive c
   await expect(
     search.getByText("66 index matches.", { exact: false }),
   ).toBeVisible();
-  await expect(search.locator("tbody tr")).toHaveCount(50);
+  await expandSearchAlternatives(search);
+  await expect(search.locator("tbody tr[data-trade-result]")).toHaveCount(50);
   await search.getByRole("button", { name: "Show more", exact: true }).click();
-  await expect(search.locator("tbody tr")).toHaveCount(66);
+  await expandSearchAlternatives(search);
+  await expect(search.locator("tbody tr[data-trade-result]")).toHaveCount(66);
   // An injured player remains discoverable and its uncertainty is explicit in the result details.
+  await expandSearchAlternatives(search);
   const injured = search
-    .locator("tbody tr")
+    .locator("tbody tr[data-trade-result]")
     .filter({
       has: page.getByRole("link", { name: "Search WR 0", exact: true }),
     })
@@ -1653,7 +1671,7 @@ test("large searches show progress and support cancel, restart and navigation", 
   await expect(
     panel(page).getByRole("button", { name: "Search", exact: true }),
   ).toBeVisible();
-  await expect(panel(page).locator("tbody tr")).toHaveCount(0);
+  await expect(panel(page).locator("tbody tr[data-trade-result]")).toHaveCount(0);
   // A successful empty search has its own result message, rather than resembling cancellation or failure.
   // Navigation remembers the independent finder controls, while results stay transient.
   await expect(
@@ -1731,7 +1749,8 @@ test("deficit filtering selects one offered position and invalidates changed gra
   await expect(
     search.getByText("12 index matches.", { exact: false }),
   ).toBeVisible();
-  const row = search.locator("tbody tr").first();
+  await expandSearchAlternatives(search);
+  const row = search.locator("tbody tr[data-trade-result]").first();
   await row.getByText("Trade details", { exact: true }).click();
   await expect(row.getByText(/Their QB grade:/)).toContainText(
     "F (required F or lower)",
@@ -1795,7 +1814,8 @@ test("opponent search gains use full rosters while details retain both impact me
   await expect(
     search.getByText("1 index matches.", { exact: false }),
   ).toBeVisible();
-  const row = search.locator("tbody tr");
+  await expandSearchAlternatives(search);
+  const row = search.locator("tbody tr[data-trade-result]");
   await expect(row.locator("td").nth(3)).toHaveText("+5.00");
   await row.getByText("Trade details", { exact: true }).click();
   await expect(
@@ -1896,7 +1916,8 @@ test("trade details show named weekly scoring replacements from the captured lin
   await expect(
     search.getByText("12 index matches.", { exact: false }),
   ).toBeVisible();
-  const row = search.locator("tbody tr").filter({
+  await expandSearchAlternatives(search);
+  const row = search.locator("tbody tr[data-trade-result]").filter({
     has: page.getByRole("link", { name: "Synthetic 2", exact: true }),
   });
   await row.getByText("Trade details", { exact: true }).click();
@@ -2005,7 +2026,8 @@ test("upgrade counts require all requested starter and bench matches", async ({
   await expect(
     search.getByText("13 index matches.", { exact: false }),
   ).toBeVisible();
-  const row = search.locator("tbody tr").first();
+  await expandSearchAlternatives(search);
+  const row = search.locator("tbody tr[data-trade-result]").first();
   await row.getByText("Trade details", { exact: true }).click();
   await expect(row.getByText(/Starter upgrade:/)).toHaveCount(1);
   await expect(row.getByText(/Depth upgrade:/)).toHaveCount(1);
@@ -2108,7 +2130,8 @@ test("best-at-position target compares the full roster and enforces distinct-pos
   await expect(
     search.getByText("13 index matches.", { exact: false }),
   ).toBeVisible();
-  const row = search.locator("tbody tr").first();
+  await expandSearchAlternatives(search);
+  const row = search.locator("tbody tr[data-trade-result]").first();
   await row.getByText("Trade details", { exact: true }).click();
   await expect(
     row.getByText(/Best-at-position upgrade: Bench QB/),
@@ -2183,7 +2206,7 @@ test("guided search defaults to automatic singles and packages and configures tr
   await page.screenshot({ path: "test-results/trade-goal-search.png" });
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(search.getByText(/\d+ index matches\. Ranked by/)).toBeVisible();
-  await expect(search.locator("tbody tr")).not.toHaveCount(0);
+  await expect(search.locator("tbody tr[data-trade-result]")).not.toHaveCount(0);
   await search
     .getByLabel("Search goal", { exact: true })
     .selectOption("improve");
@@ -2271,7 +2294,8 @@ test("shared lineup basis drives filtering ranking analyzer and saved restoratio
   await expect(
     search.getByText("1 index matches.", { exact: false }),
   ).toBeVisible();
-  const row = search.locator("tbody tr");
+  await expandSearchAlternatives(search);
+  const row = search.locator("tbody tr[data-trade-result]");
   await expect(row.locator("td").nth(3)).toHaveText("+20.00");
   const own = await row.locator("td").nth(2).innerText();
   await row.getByRole("button", { name: "Load trade", exact: true }).click();
@@ -2343,7 +2367,8 @@ test("opponent team checkboxes restrict packages and restore with saved searches
     await expect(team(name)).toBeChecked();
   await team("Test 4").uncheck();
   await search.getByRole("button", { name: "Search", exact: true }).click();
-  const rows = search.locator("tbody tr");
+  await expandSearchAlternatives(search);
+  const rows = search.locator("tbody tr[data-trade-result]");
   await expect(rows.filter({ hasText: "Test B" }).first()).toBeVisible();
   await expect(rows.filter({ hasText: "Test 3" }).first()).toBeVisible();
   await expect(rows.filter({ hasText: "Test 4" })).toHaveCount(0);
@@ -2406,7 +2431,8 @@ test("stale search results can be saved and loaded despite invalid edited filter
   await search.getByLabel("Below outgoing total (index points)", {exact: true}).fill("1000");
   await search.getByLabel("Above outgoing total (index points)", {exact: true}).fill("1000");
   await search.getByRole("button", {name: "Search", exact: true}).click();
-  const row = search.locator("tbody tr").filter({has: page.getByRole("link", {name: "Incoming QB", exact: true})});
+  await expandSearchAlternatives(search);
+  const row = search.locator("tbody tr[data-trade-result]").filter({has: page.getByRole("link", {name: "Incoming QB", exact: true})});
   await expect(row).toBeVisible();
   const displayedGain = await row.locator("td").nth(2).textContent();
   await search.getByLabel("Above outgoing total (index points)", {exact: true}).fill("");

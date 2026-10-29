@@ -1,4 +1,10 @@
 import {
+  managerAssessment,
+  managerSettingsSchema,
+  type ManagerSettings,
+  type ManagerAssessment,
+} from "./manager-expectations";
+import {
   surfaceAppeal,
   type SurfaceEvidence,
   type SurfaceFilter,
@@ -42,7 +48,7 @@ export interface DiscoveryOptions {
   // Optional incoming bounds allow one search to include singles and larger same-team packages.
   receive?: { minimum: number; maximum: number };
   target?: string;
-  ranking?: "own" | "other" | "balanced";
+  ranking?: "own" | "other" | "balanced" | "acceptance";
   nearMisses?: boolean;
 }
 
@@ -168,6 +174,8 @@ export interface TradeSearchQuery {
   usefulness?: { minimum: number };
   discovery?: DiscoveryOptions;
   // Optional surface appeal screens source-based recipient lineups independently of our valuation model.
+  // Manager expectations are a separate opt-in evaluator; old surface settings retain their meaning.
+  manager?: ManagerSettings;
   surface?: SurfaceFilter;
 }
 // Old saved searches keep their exact receive count; only an explicit range broadens package sizes.
@@ -187,6 +195,7 @@ export interface SearchMatch {
   give?: string[];
 }
 export interface SearchRow extends SearchMatch {
+  manager?: ManagerAssessment;
   surface?: SurfaceEvidence;
   // Compact before/after metadata travels with each result, never recomputed from a different live selection.
   lineupBasis?: LineupBasis;
@@ -227,6 +236,7 @@ export interface SearchStats {
   usefulnessExcluded?: number;
   protectedExcluded?: number;
   surfaceExcluded?: number;
+  managerExcluded?: number;
 }
 export interface SearchProgress {
   phase: "Finding matching packages" | "Evaluating trades" | "Sorting results";
@@ -316,6 +326,7 @@ export function tradeSearchContext(
     query.above,
     query.discovery ?? null,
     // Invalid numeric edits also invalidate old results instead of collapsing into an unbounded/null preference.
+    query.manager ?? null,
     query.surface
       ? [
           query.surface.metric,
@@ -363,6 +374,8 @@ export function tradeSearchContext(
 // Missing indices block outgoing searches, while genuine zero remains a usable number.
 export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
   const errors: string[] = [];
+  if (q.manager && !managerSettingsSchema.safeParse(q.manager).success)
+    errors.push("Choose valid manager expectation settings.");
   if (
     q.surface &&
     (!["average", "projection", "both"].includes(q.surface.metric) ||
@@ -422,7 +435,7 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
     );
   if (
     q.discovery?.ranking &&
-    !["own", "other", "balanced"].includes(q.discovery.ranking)
+    !["own", "other", "balanced", "acceptance"].includes(q.discovery.ranking)
   )
     errors.push("Choose a recognized trade ranking.");
   if (q.discovery?.target) {
@@ -1210,6 +1223,22 @@ export function scoreTradeMatch(
                     return score(w.ids) - score(w.beforeIds);
                   }),
                 ) / m.weeks.length,
+        }
+      : {}),
+    // Capture the same legal roster/drop decisions used for private scoring, while evaluating visible averages separately.
+    ...(q.manager
+      ? {
+          manager: managerAssessment(
+            m,
+            {
+              teamA: q.teamA,
+              teamB: match.teamB,
+              give: q.give,
+              get: match.get,
+            },
+            r,
+            q.manager,
+          ),
         }
       : {}),
     ...(q.surface

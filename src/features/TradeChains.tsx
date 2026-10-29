@@ -1,3 +1,9 @@
+import { GroupedChains } from "./TradeResultGroups";
+import {
+  ManagerControls,
+  ManagerEvidence,
+  useNegotiations,
+} from "./Negotiations";
 import { useEffect, useRef, useState } from "react";
 import { Bookmark, LoaderCircle } from "lucide-react";
 import {
@@ -177,6 +183,7 @@ export function TradeChains({
   );
   const [loss, setLoss] = useState(initial?.controls.loss ?? "3"),
     [gain, setGain] = useState(initial?.controls.gain ?? "5");
+  const journal = useNegotiations();
   const [first, setFirst] = useState<ChainQuery["first"]>(
     initial?.query.first ?? {
       offer: { minimum: 1, maximum: 3 },
@@ -249,8 +256,20 @@ export function TradeChains({
     pricePolicy,
     maximumLoss: loss.trim() ? Number(loss) : NaN,
     minimumGain: gain.trim() ? Number(gain) : NaN,
-    first: { ...first, teams: firstOverride ? first.teams : selectedTeams },
-    second: { ...second, teams: secondOverride ? second.teams : selectedTeams },
+    first: {
+      ...first,
+      teams: firstOverride ? first.teams : selectedTeams,
+      manager: first.manager
+        ? { ...first.manager, profiles: journal.profiles }
+        : undefined,
+    },
+    second: {
+      ...second,
+      teams: secondOverride ? second.teams : selectedTeams,
+      manager: second.manager
+        ? { ...second.manager, profiles: journal.profiles }
+        : undefined,
+    },
     basis,
     depth,
     dependency: {
@@ -332,6 +351,8 @@ export function TradeChains({
   ]);
   const stale = !!job && job.context !== context;
   const errors = chainErrors(m, query);
+  if ((query.first.manager || query.second.manager) && !journal.ready)
+    errors.push("Saved manager profiles are still loading.");
   // Capture executed preferences separately from current edits, so stale results and per-leg overrides remain auditable.
   useEffect(() => {
     const report: ChainDebugReport = {
@@ -755,6 +776,11 @@ export function TradeChains({
           )}
         </div>
         <div>
+          <ManagerControls
+            label={`${label} match manager expectations`}
+            value={value.manager}
+            change={(manager) => change({ ...value, manager })}
+          />
           <FilterHelp
             label={`${label} surface appeal`}
             help="Require the recipient's actual-average or imported ESPN-weekly lineup to improve after losses and drops. Both sources must independently pass when selected. This never forces positive own gain on a permitted speculative first leg."
@@ -1125,6 +1151,14 @@ export function TradeChains({
             </span>
             . <Signal text={leg.indexWindow.passed ? "PASS" : "FAIL"} />
           </p>
+        )}
+        {leg.row.manager && (
+          <ManagerEvidence
+            value={leg.row.manager}
+            m={legContext(chain, step).model}
+            draft={leg.draft}
+            allowLog={false}
+          />
         )}
         {leg.surface && (
           <details>
@@ -1743,14 +1777,16 @@ export function TradeChains({
             </p>
             <p>
               Dependency exclusions: {job.result.stats.rejectedDependency}.
-              Index-window exclusions: {job.result.stats.rejectedIndex}. Surface
-              exclusions: {job.result.stats.rejectedSurface}. Required-price
-              failures: {job.result.stats.rejectedValue}. Surplus/deficit
-              exclusions: {job.result.stats.rejectedFit ?? 0}. Roster/protection
-              failures: {job.result.stats.rejectedRoster}. Scoring/mode/gain
-              failures: {job.result.stats.rejectedGain}. Recipient
-              fairness/benefit failures: {job.result.stats.rejectedRecipient}.
-              Eligible first trades: {job.result.stats.firstEligible}; explored:{" "}
+              Manager-expectation exclusions:{" "}
+              {job.result.stats.rejectedManager ?? 0}. Index-window exclusions:{" "}
+              {job.result.stats.rejectedIndex}. Surface exclusions:{" "}
+              {job.result.stats.rejectedSurface}. Required-price failures:{" "}
+              {job.result.stats.rejectedValue}. Surplus/deficit exclusions:{" "}
+              {job.result.stats.rejectedFit ?? 0}. Roster/protection failures:{" "}
+              {job.result.stats.rejectedRoster}. Scoring/mode/gain failures:{" "}
+              {job.result.stats.rejectedGain}. Recipient fairness/benefit
+              failures: {job.result.stats.rejectedRecipient}. Eligible first
+              trades: {job.result.stats.firstEligible}; explored:{" "}
               {job.result.stats.firstExplored}.
             </p>
             <p>
@@ -1818,42 +1854,48 @@ export function TradeChains({
               </p>
             ))}
           </details>
-          {job.result.chains.map((chain, i) => (
-            <article className="trade-search-group" key={chain.key}>
-              <h3>
-                Chain {i + 1} · {chain.mode === "safe" ? "Safe" : "Speculative"}{" "}
-                ·{" "}
-                <span className="model">{signed(chain.gain)} EPPG overall</span>
-                {(chain.first.row.warnings.length > 0 ||
-                  chain.second.row.warnings.length > 0) && (
-                  <Signal text="CONDITIONAL" />
+          <GroupedChains
+            chains={job.result.chains}
+            m={resultContext.current?.model ?? m}
+            render={(chain, i) => (
+              <article className="trade-search-group" key={chain.key}>
+                <h3>
+                  Chain {i + 1} ·{" "}
+                  {chain.mode === "safe" ? "Safe" : "Speculative"} ·{" "}
+                  <span className="model">
+                    {signed(chain.gain)} EPPG overall
+                  </span>
+                  {(chain.first.row.warnings.length > 0 ||
+                    chain.second.row.warnings.length > 0) && (
+                    <Signal text="CONDITIONAL" />
+                  )}
+                </h3>
+                <p className="model">
+                  Your roster: {fmt(chain.before)} → {fmt(chain.intermediate)} →{" "}
+                  {fmt(chain.after)} EPPG.
+                </p>
+                <p>
+                  {chain.mode === "safe"
+                    ? "First trade improves scoring even if the follow-up never happens."
+                    : `If the follow-up fails, step one leaves you at ${fmt(chain.intermediate)} EPPG (${signed(chain.first.row.own)}).`}
+                </p>
+                {chain.dependency && (
+                  <>
+                    <p className="model">
+                      Connected route:{" "}
+                      {chain.dependency.route === "retrade"
+                        ? "Re-trade acquisition"
+                        : "Keep-and-release"}
+                      .
+                    </p>
+                    {dependencyDetails(chain.dependency)}
+                  </>
                 )}
-              </h3>
-              <p className="model">
-                Your roster: {fmt(chain.before)} → {fmt(chain.intermediate)} →{" "}
-                {fmt(chain.after)} EPPG.
-              </p>
-              <p>
-                {chain.mode === "safe"
-                  ? "First trade improves scoring even if the follow-up never happens."
-                  : `If the follow-up fails, step one leaves you at ${fmt(chain.intermediate)} EPPG (${signed(chain.first.row.own)}).`}
-              </p>
-              {chain.dependency && (
-                <>
-                  <p className="model">
-                    Connected route:{" "}
-                    {chain.dependency.route === "retrade"
-                      ? "Re-trade acquisition"
-                      : "Keep-and-release"}
-                    .
-                  </p>
-                  {dependencyDetails(chain.dependency)}
-                </>
-              )}
-              {renderLeg(chain, 1)}
-              {renderLeg(chain, 2)}
-            </article>
-          ))}
+                {renderLeg(chain, 1)}
+                {renderLeg(chain, 2)}
+              </article>
+            )}
+          />
         </>
       )}
     </SearchSection>

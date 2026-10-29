@@ -13,7 +13,7 @@ export interface DiscoveryState {
   maximum: string;
   target: string;
   targetSearch: string;
-  ranking: "own" | "other" | "balanced";
+  ranking: "own" | "other" | "balanced" | "acceptance";
   nearMisses: boolean;
 }
 export const initialDiscovery: DiscoveryState = {
@@ -96,6 +96,9 @@ export function TradeDiscoveryControls({
               <option value="own">Your weekly gain</option>
               <option value="other">Their weekly gain</option>
               <option value="balanced">Benefit to both teams</option>
+              <option value="acceptance">
+                Estimated acceptance (when enabled)
+              </option>
             </select>
           </label>
         </FilterHelp>

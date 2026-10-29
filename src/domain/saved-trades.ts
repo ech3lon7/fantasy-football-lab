@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { managerSettingsSchema } from "./manager-expectations";
 import {
   cmpId,
   draftSchema,
@@ -44,6 +45,8 @@ const querySchema = z
     below: finite.nonnegative(),
     above: finite.nonnegative(),
     // Persist surface discovery controls through the existing saved-query and private sync contract.
+    // New optional rules do not reinterpret a saved legacy surface-gain minimum.
+    manager: managerSettingsSchema.optional(),
     surface: z
       .object({
         metric: z.enum(["average", "projection", "both"]),
@@ -74,7 +77,7 @@ const querySchema = z
         // Saved searches retain opponent scope; older entries without it continue to search every opponent.
         teams: z.array(z.string()).min(1).max(100).optional(),
         target: z.string().optional(),
-        ranking: z.enum(["own", "other", "balanced"]).optional(),
+        ranking: z.enum(["own", "other", "balanced", "acceptance"]).optional(),
         nearMisses: z.boolean().optional(),
       })
       .strict()

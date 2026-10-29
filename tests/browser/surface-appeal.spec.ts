@@ -112,7 +112,7 @@ test("finds surface-appeal trades, explains source lineups, and restores saved c
   ).not.toBeChecked();
   await panel.getByRole("button", { name: "Search", exact: true }).click();
   await expect(panel.getByText(/1 index matches/)).toBeVisible();
-  const row = panel.locator("table.trade-search-results > tbody > tr");
+  const row = panel.locator("table.trade-search-results > tbody > tr[data-trade-result]");
   await expect(row).toHaveCount(1);
   await expect(
     row.getByRole("cell", { name: "+12.50", exact: true }),
@@ -259,7 +259,7 @@ test("keeps missing projections unavailable and filters each selected source ind
     .fill("8");
   await panel.getByRole("button", { name: "Search", exact: true }).click();
   await expect(panel.getByText(/1 index matches/)).toBeVisible();
-  const row = panel.locator("table.trade-search-results > tbody > tr");
+  const row = panel.locator("table.trade-search-results > tbody > tr[data-trade-result]");
   await expect(row.locator(":scope > td.fact")).toHaveText("+8.00");
   await expect(row.locator(":scope > td.projection")).toHaveText("Unavailable");
 });

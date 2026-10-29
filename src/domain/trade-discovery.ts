@@ -1,3 +1,4 @@
+import { managerFailures } from "./manager-expectations";
 import { surfaceFailures } from "./surface-appeal";
 import { cmpId, n, positions, sum } from "./contracts";
 import { irAssignments, lineup, teamsAssessment } from "./lineups";
@@ -119,7 +120,10 @@ export function discoveryFailures(
   row: SearchRow,
   q: TradeSearchQuery,
 ): string[] {
-  const reasons: string[] = [...surfaceFailures(row, q.surface)];
+  const reasons: string[] = [
+    ...surfaceFailures(row, q.surface),
+    ...managerFailures(row.manager, q.manager),
+  ];
   // Receiving a position alone is not an upgrade: its optimized scoring contribution must increase.
   if (
     q.goal === "position" &&
@@ -181,6 +185,13 @@ export function compareDiscoveryRows(
   b: SearchRow,
   ranking = "own",
 ) {
+  // Acceptance ordering is explicit; a private-scoring sort is never silently replaced.
+  if (ranking === "acceptance")
+    return (
+      (b.manager?.range ? b.manager.band! : -Infinity) -
+        (a.manager?.range ? a.manager.band! : -Infinity) ||
+      compareSearchRows(a, b)
+    );
   if (ranking === "own") return compareSearchRows(a, b);
   const usable = (row: SearchRow) => row.own !== null && row.other !== null;
   if (usable(a) !== usable(b)) return usable(a) ? -1 : 1;
