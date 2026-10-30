@@ -10,6 +10,18 @@ import type { Model, Player } from "./valuation";
 import type { TradeResult } from "./trades";
 import type { SearchRow } from "./trade-search";
 
+// Retire legacy scoring restrictions at restoration boundaries without enabling the replacement or changing unrelated filters.
+export function withoutLegacySurface<
+  T extends { surface?: unknown; goal?: string },
+>(query: T): T {
+  const current = { ...query };
+  delete current.surface;
+  return {
+    ...current,
+    ...(query.goal === "surface" ? { goal: "custom" } : {}),
+  } as T;
+}
+
 // Surface preferences are optional discovery criteria, never a new player valuation or an acceptance probability.
 export interface SurfaceFilter {
   metric: "average" | "projection" | "both";

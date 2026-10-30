@@ -188,8 +188,8 @@ it("separates bye-neutral averages from the imported week's real projection avai
   expect(m.ignoreByeWeeks).toBe(true);
 });
 
-// Explicit presets, saved-query round trips, diagnostics contexts and recovery all retain the same optional surface criteria.
-it("persists and validates surface controls without changing legacy queries", async () => {
+// Historical surface calculations remain auditable, but saved search restoration drops the retired restrictions.
+it("retains historical calculations and removes retired saved-query restrictions", async () => {
   const { m, q, match, d, draft } = await sample();
   const preset = guidedQuery({ ...q, surface: undefined }, "surface");
   expect(preset.surface).toEqual(q.surface);
@@ -199,7 +199,7 @@ it("persists and validates surface controls without changing legacy queries", as
   expect(preset.indexMode).toBe("automatic");
   const row = scoreTradeMatch(m, q, match);
   const raw = saveTrade(initialState(d), m, draft, summaryFromSearch(row), q);
-  expect(readSavedTrades(raw).trades[0].query?.surface).toEqual(q.surface);
+  expect(readSavedTrades(raw).trades[0].query?.surface).toBeUndefined();
   const invalid: SurfaceFilter = { ...q.surface!, minimum: NaN };
   expect(
     tradeSearchBounds(m, { ...q, surface: invalid }).errors.join(" "),

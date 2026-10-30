@@ -35,6 +35,25 @@ async function seed(page: Page, missing = false) {
     requestId: crypto.randomUUID(),
     stateRequestId: crypto.randomUUID(),
   };
+  // Simulate previously saved legacy controls; they must not silently filter this restored search.
+  const legacy = { metric: "both", minimum: 9999, requireValueTests: true };
+  w.state.filters.tradeSearchSettings = JSON.stringify({
+    version: 1,
+    standard: {
+      query: {
+        teamA: "1",
+        give: ["1"],
+        count: 1,
+        below: 5,
+        above: 5,
+        indexMode: "automatic",
+        discovery: { target: "2" },
+        goal: "surface",
+        surface: legacy,
+      },
+      controls: { goal: "surface", surface: legacy },
+    },
+  });
   await page.route("https://a.espncdn.com/**", (route) => route.abort());
   await page.goto("./");
   await page.evaluate(async (value) => {
@@ -54,23 +73,12 @@ async function seed(page: Page, missing = false) {
   }, w);
   await page.reload();
   await page.getByRole("link", { name: "Trade analyzer", exact: true }).click();
-  const panel = page
-    .locator("section.panel")
-    .filter({
-      has: page.getByRole("heading", {
-        name: "Find matching trades",
-        exact: true,
-      }),
-    });
-  await expect(
-    panel.getByRole("checkbox", {
-      name: "Find trades with surface appeal",
+  const panel = page.locator("section.panel").filter({
+    has: page.getByRole("heading", {
+      name: "Find matching trades",
       exact: true,
     }),
-  ).not.toBeChecked();
-  await panel
-    .getByRole("combobox", { name: "Search goal", exact: true })
-    .selectOption("surface");
+  });
   await panel.getByText("Advanced search controls", { exact: true }).click();
   await panel
     .getByRole("checkbox", { name: "Create package", exact: true })
@@ -98,45 +106,35 @@ async function stored(page: Page) {
   });
 }
 
-// A genuine model/source disagreement remains discoverable, its exact sources are inspectable, and optional strict value gates are honored.
-test("finds surface-appeal trades, explains source lineups, and restores saved controls", async ({
+// The old minimum and preset cannot hide trades after preferences or saved trades are restored.
+test("retires legacy surface restrictions from preferences and saved trades", async ({
   page,
 }) => {
   const panel = await seed(page);
   const original = await stored(page);
+  const toggle = panel.getByRole("checkbox", {
+    name: "Enable Surface Trading",
+    exact: true,
+  });
+  await expect(toggle).not.toBeChecked();
+  await expect(
+    panel.getByRole("combobox", { name: "Search goal", exact: true }),
+  ).toHaveValue("custom");
   await expect(
     panel.getByRole("checkbox", {
-      name: "Require both model value tests",
+      name: "Find trades with surface appeal",
       exact: true,
     }),
-  ).not.toBeChecked();
+  ).toHaveCount(0);
+  await expect(
+    panel.getByRole("spinbutton", {
+      name: "Minimum apparent lineup gain",
+      exact: true,
+    }),
+  ).toHaveCount(0);
   await panel.getByRole("button", { name: "Search", exact: true }).click();
   await expect(panel.getByText(/1 index matches/)).toBeVisible();
-  const row = panel.locator("table.trade-search-results > tbody > tr[data-trade-result]");
-  await expect(row).toHaveCount(1);
-  await expect(
-    row.getByRole("cell", { name: "+12.50", exact: true }),
-  ).toBeVisible();
-  await expect(
-    row.getByRole("cell", { name: "-2.50", exact: true }),
-  ).toBeVisible();
-  await expect(row.locator(":scope > td.fact")).toHaveText("+8.00");
-  await expect(row.locator(":scope > td.projection")).toHaveText("+3.00");
-  await expect(row.getByText("FAIL", { exact: true })).toHaveCount(2);
-  await row.getByText("Trade details", { exact: true }).click();
-  const evidence = row.getByLabel("Surface appeal evidence", { exact: true });
-  await expect(evidence).toContainText("Season-average lineup (PPG)");
-  await expect(
-    evidence.getByRole("cell", { name: "22.00", exact: true }),
-  ).toBeVisible();
-  await expect(
-    evidence.getByRole("cell", { name: "27.00", exact: true }),
-  ).toBeVisible();
-  await evidence
-    .getByText("Surface lineup player comparisons", { exact: true })
-    .click();
-  await expect(evidence).toContainText("Chain Starter RB");
-  await expect(evidence).toContainText("0.00 (unfilled)");
+  const row = panel.locator("tr[data-trade-result]");
   await row.getByRole("button", { name: "Save trade", exact: true }).click();
   await expect
     .poll(
@@ -146,36 +144,31 @@ test("finds surface-appeal trades, explains source lineups, and restores saved c
         ).trades.length,
     )
     .toBe(1);
-  const saved = JSON.parse((await stored(page)).state.filters.savedTrades)
-    .trades[0];
-  expect(saved.query.surface).toEqual({
+  let workspace = await stored(page);
+  const saved = JSON.parse(workspace.state.filters.savedTrades);
+  expect(saved.trades[0].query.surface).toBeUndefined();
+  const summary = saved.trades[0].original;
+  saved.trades[0].query.surface = {
     metric: "both",
-    minimum: 0,
-    requireValueTests: false,
-  });
-  expect((await stored(page)).dataset).toEqual(original.dataset);
-  await panel
-    .getByRole("checkbox", {
-      name: "Require both model value tests",
-      exact: true,
-    })
-    .check();
-  await expect(panel.getByText(/Search inputs changed/)).toBeVisible();
-  await panel.getByRole("button", { name: "Search", exact: true }).click();
-  await expect(panel.getByText(/0 index matches/)).toBeVisible();
-  await panel.getByText("Why trades were excluded", { exact: true }).click();
-  await expect(
-    panel.getByText(/Trades excluded by surface appeal/),
-  ).toBeVisible();
-  await panel
-    .getByRole("button", { name: "Clear filters", exact: true })
-    .click();
-  await expect(
-    panel.getByRole("checkbox", {
-      name: "Find trades with surface appeal",
-      exact: true,
-    }),
-  ).not.toBeChecked();
+    minimum: 9999,
+    requireValueTests: true,
+  };
+  saved.trades[0].query.goal = "surface";
+  workspace.state.filters.savedTrades = JSON.stringify(saved);
+  // Reinsert a historical saved recipe through IndexedDB, then restore it through the normal Load saved trade action.
+  await page.evaluate(async (value) => {
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const r = indexedDB.open("fantasy-football-lab", 1);
+      r.onsuccess = () => resolve(r.result);
+    });
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction("current", "readwrite");
+      tx.objectStore("current").put(value, "local");
+      tx.oncomplete = () => resolve();
+    });
+    db.close();
+  }, workspace);
+  await page.reload();
   const card = page
     .locator("details")
     .filter({
@@ -187,79 +180,64 @@ test("finds surface-appeal trades, explains source lineups, and restores saved c
   await card
     .getByRole("button", { name: "Load saved trade", exact: true })
     .click();
-  await expect(
-    panel.getByRole("checkbox", {
-      name: "Find trades with surface appeal",
-      exact: true,
-    }),
-  ).toBeChecked();
-  await expect(
-    panel.getByRole("combobox", { name: "Surface metric", exact: true }),
-  ).toHaveValue("both");
-  await expect(
-    panel.getByRole("checkbox", {
-      name: "Require both model value tests",
-      exact: true,
-    }),
-  ).not.toBeChecked();
-  await page
-    .getByRole("heading", { name: "Find matching trades", exact: true })
-    .scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "test-results/surface-appeal-controls.png" });
+  await expect(toggle).not.toBeChecked();
+  await panel.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(panel.getByText(/1 index matches/)).toBeVisible();
+  workspace = await stored(page);
+  expect(workspace.dataset).toEqual(original.dataset);
+  expect(
+    JSON.parse(workspace.state.filters.savedTrades).trades[0].original,
+  ).toEqual(summary);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(391);
 });
 
-// Missing ESPN data cannot become a zero-based bargain; selecting Average alone explicitly changes the required source.
-test("keeps missing projections unavailable and filters each selected source independently", async ({
+// The redesigned evaluator is the sole opt-in; unavailable weekly projections cannot reactivate retired source-gain gates.
+test("uses one optional Surface Trading control per tool and per chain stage", async ({
   page,
 }) => {
   const panel = await seed(page, true);
-  await panel
-    .getByRole("checkbox", {
-      name: "Show near misses and adjustments",
-      exact: true,
-    })
-    .check();
-  await panel.getByRole("button", { name: "Search", exact: true }).click();
-  await expect(panel.getByText(/0 index matches/)).toBeVisible();
-  await panel.getByText(/Near misses and possible adjustments/).click();
+  const toggle = panel.getByRole("checkbox", {
+    name: "Enable Surface Trading",
+    exact: true,
+  });
+  await toggle.check();
   await expect(
-    panel
-      .getByText("Their ESPN weekly-projection lineup gain is unavailable.", {
-        exact: true,
-      })
-      .first(),
+    panel.getByRole("combobox", { name: "Recipient preset", exact: true }),
   ).toBeVisible();
   await expect(
-    panel
-      .getByLabel("Surface appeal evidence")
-      .first()
-      .getByRole("cell", { name: "Unavailable", exact: true })
+    page
+      .getByRole("checkbox", { name: "Enable Surface Trading", exact: true })
       .first(),
-  ).toBeVisible();
-  await panel
-    .getByRole("combobox", { name: "Surface metric", exact: true })
-    .selectOption("average");
-  await panel
-    .getByRole("spinbutton", {
-      name: "Minimum apparent lineup gain",
-      exact: true,
-    })
-    .fill("8.1");
-  await panel.getByRole("button", { name: "Search", exact: true }).click();
-  await expect(panel.getByText(/0 index matches/)).toBeVisible();
-  await panel
-    .getByRole("spinbutton", {
-      name: "Minimum apparent lineup gain",
-      exact: true,
-    })
-    .fill("8");
+  ).not.toBeChecked();
+  await expect
+    .poll(
+      async () =>
+        JSON.parse((await stored(page)).state.filters.tradeSearchSettings)
+          .standard.query.manager?.version,
+    )
+    .toBe(1);
+  await toggle.uncheck();
   await panel.getByRole("button", { name: "Search", exact: true }).click();
   await expect(panel.getByText(/1 index matches/)).toBeVisible();
-  const row = panel.locator("table.trade-search-results > tbody > tr[data-trade-result]");
-  await expect(row.locator(":scope > td.fact")).toHaveText("+8.00");
-  await expect(row.locator(":scope > td.projection")).toHaveText("Unavailable");
+  await page
+    .getByRole("button", { name: "Two-trade chain planner", exact: true })
+    .click();
+  await expect(
+    page.getByRole("checkbox", {
+      name: "First trade: Enable Surface Trading",
+      exact: true,
+    }),
+  ).not.toBeChecked();
+  await expect(
+    page.getByRole("checkbox", {
+      name: "Second trade: Enable Surface Trading",
+      exact: true,
+    }),
+  ).not.toBeChecked();
+  await expect(
+    page.getByRole("checkbox", { name: /surface appeal/i }),
+  ).toHaveCount(0);
 });

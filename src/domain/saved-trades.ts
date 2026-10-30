@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { withoutLegacySurface } from "./surface-appeal";
 import { managerSettingsSchema } from "./manager-expectations";
 import {
   cmpId,
@@ -44,8 +45,7 @@ const querySchema = z
     count: count.min(1),
     below: finite.nonnegative(),
     above: finite.nonnegative(),
-    // Persist surface discovery controls through the existing saved-query and private sync contract.
-    // New optional rules do not reinterpret a saved legacy surface-gain minimum.
+    // Accept historical query shapes, then retire their source-gain restrictions without changing original result summaries.
     manager: managerSettingsSchema.optional(),
     surface: z
       .object({
@@ -113,7 +113,8 @@ const querySchema = z
       .strict()
       .optional(),
   })
-  .strict();
+  .strict()
+  .transform(withoutLegacySurface);
 
 // Store compact summaries rather than historical datasets or large weekly lineup objects.
 const summarySchema = z

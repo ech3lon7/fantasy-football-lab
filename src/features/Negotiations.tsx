@@ -204,11 +204,11 @@ export function NegotiationsProvider({
   );
 }
 
-// Opt-in controls have no effect on any private player metric, saved legacy surface filter or other tool's settings.
+// Opt-in controls have no effect on any private player metric, other tool's settings.
 export function ManagerControls({
   value,
   change,
-  label = "Match manager expectations",
+  label = "Enable Surface Trading",
 }: {
   value?: ManagerSettings;
   change: (next?: ManagerSettings) => void;
@@ -217,7 +217,7 @@ export function ManagerControls({
   const journal = useNegotiations();
   return (
     <fieldset className="trade-search-group">
-      <legend>Manager expectations</legend>
+      <legend>Surface Trading</legend>
       <FilterHelp
         label={label}
         help="Use actual season averages, elite-return safeguards and the recipient's saved preset. Overall surface scoring gain is a preference, not a mandatory minimum. Estimated acceptance is provisional. Other enabled filters still apply."

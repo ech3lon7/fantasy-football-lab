@@ -157,7 +157,7 @@ test("keeps direct/search toggles independent and freezes an explicitly logged f
   await seed(page);
   await page.getByRole("link", { name: "Trade analyzer", exact: true }).click();
   const toggles = page.getByRole("checkbox", {
-    name: "Match manager expectations",
+    name: "Enable Surface Trading",
     exact: true,
   });
   await expect(toggles).toHaveCount(2);

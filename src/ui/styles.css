@@ -2052,3 +2052,36 @@ pre {
     transition: none;
   }
 }
+
+/* Trade result hierarchy indents identifiers and controls by 24px per level; numeric table columns keep their existing positions. */
+.trade-search-results .trade-result-row > td { padding: 0; }
+.trade-result-cell { padding: 13px 12px; }
+.trade-result-name {
+  position: relative;
+  padding-left: calc(12px + var(--result-depth) * 24px);
+}
+.trade-result-name::before {
+  content: "";
+  position: absolute;
+  left: calc(12px + (var(--result-depth) - 1) * 24px);
+  top: 8px;
+  bottom: 8px;
+  border-left: 1px solid var(--line);
+  pointer-events: none;
+}
+/* Disclosure buttons inherit the app typography instead of native browser button styling. */
+.trade-result-toggle {
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+}
+.trade-chain-group { margin-top: 12px; }
+.trade-chain-nested {
+  margin-left: 12px;
+  padding-left: 11px;
+  border-left: 1px solid var(--line);
+}

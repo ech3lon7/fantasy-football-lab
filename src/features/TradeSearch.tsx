@@ -5,8 +5,8 @@ import {
   useNegotiations,
 } from "./Negotiations";
 import type { ManagerSettings } from "../domain/manager-expectations";
-import { SurfaceAppealControls, SurfaceAppealView } from "./SurfaceAppeal";
-import type { SurfaceFilter } from "../domain/surface-appeal";
+import { SurfaceAppealView } from "./SurfaceAppeal";
+import { withoutLegacySurface } from "../domain/surface-appeal";
 import {
   TradeChains,
   type ChainDebugReport,
@@ -145,8 +145,6 @@ export function TradeSearch({
   const [goal, setGoal] =
     useState<NonNullable<TradeSearchQuery["goal"]>>("explore");
   const [goalPosition, setGoalPosition] = useState<Position>("WR");
-  // Surface discovery is disabled for ordinary searches and restored explicitly from a saved query.
-  const [surface, setSurface] = useState<SurfaceFilter>();
   // Only profiles are shared; this finder owns its independent optional enablement and override.
   const journal = useNegotiations();
   const [manager, setManager] = useState<ManagerSettings>();
@@ -236,7 +234,6 @@ export function TradeSearch({
     give: draft.give,
     indexMode,
     goal,
-    surface,
     manager: manager ? { ...manager, profiles: journal.profiles } : undefined,
     count: packages ? count : 1,
     // Disabled strict inputs cannot make an automatic search unsaveable; keep raw edits in the controls/debug report.
@@ -326,7 +323,6 @@ export function TradeSearch({
     indexMode,
     goal,
     goalPosition,
-    surface,
     manager,
     advanced,
     discovery,
@@ -402,8 +398,7 @@ export function TradeSearch({
   // Explicit saved-trade loading restores every search control; ordinary rerenders never reset user edits.
   function restoreQuery(q: TradeSearchQuery) {
     setIndexMode(q.indexMode ?? "strict");
-    setGoal(q.goal ?? "custom");
-    setSurface(q.surface);
+    setGoal(withoutLegacySurface(q).goal ?? "custom");
     setManager(q.manager);
     // Restore the saved opponent filter independently of the analyzer's one selected counterparty.
     setSelectedTeams(q.discovery?.teams);
@@ -466,9 +461,9 @@ export function TradeSearch({
       if (Object.hasOwn(c, "below")) setBelow(c.below);
       if (Object.hasOwn(c, "above")) setAbove(c.above);
       if (Object.hasOwn(c, "indexMode")) setIndexMode(c.indexMode);
-      if (Object.hasOwn(c, "goal")) setGoal(c.goal);
+      if (Object.hasOwn(c, "goal"))
+        setGoal(c.goal === "surface" ? "custom" : c.goal);
       if (Object.hasOwn(c, "goalPosition")) setGoalPosition(c.goalPosition);
-      if (Object.hasOwn(c, "surface")) setSurface(c.surface);
       if (Object.hasOwn(c, "manager")) setManager(c.manager);
       if (Object.hasOwn(c, "advanced")) setAdvanced(c.advanced);
       if (Object.hasOwn(c, "discovery")) setDiscovery(c.discovery);
@@ -521,7 +516,7 @@ export function TradeSearch({
     }
     settingsReady.current = true;
   }, []);
-  // Legacy saved queries retain their original criteria and expose the advanced controls for review.
+  // Restored queries keep unrelated criteria; retired surface restrictions are deliberately ignored.
   useEffect(() => {
     if (!restore) return;
     onLineupBasisChange?.(readLineupBasis(restore.query.lineupBasis));
@@ -708,7 +703,6 @@ export function TradeSearch({
     setJob(null);
     setPendingSearch(null);
     setGoal("custom");
-    setSurface(undefined);
     setManager(undefined);
     setIndexMode("automatic");
     setSelectedTeams(undefined);
@@ -977,18 +971,6 @@ export function TradeSearch({
 
   // Chips describe current controls; removing one invalidates old results through the existing context mechanism.
   const chips: { label: string; remove: () => void }[] = [
-    // Surface restrictions can be removed without changing the outgoing pool or the other search controls.
-    ...(surface
-      ? [
-          {
-            label: `Surface appeal: ${surface.metric}; > 0 and ≥ ${surface.minimum}; ${surface.requireValueTests ? "both value tests required" : "value tests shown"}`,
-            remove: () => {
-              setSurface(undefined);
-              if (goal === "surface") setGoal("custom");
-            },
-          },
-        ]
-      : []),
     // Opponent scope participates in the query/context and can be removed without changing other criteria.
     ...(selectedTeams !== undefined
       ? [
@@ -1132,23 +1114,6 @@ export function TradeSearch({
             </select>
           </label>
         </FilterHelp>
-        <FilterHelp
-          label="Standard lineup impact basis"
-          help="Choose the scoring basis for this finder and the manual analyzer. The chain planner remembers its own independent choice."
-        >
-          <label className="control">
-            <span>Standard lineup impact basis</span>
-            <select
-              value={lineupBasis}
-              onChange={(e) =>
-                onLineupBasisChange?.(readLineupBasis(e.target.value))
-              }
-            >
-              <option value="best-available">Best available lineup</option>
-              <option value="marked-starters">Marked starters</option>
-            </select>
-          </label>
-        </FilterHelp>
       </div>
       <details className="trade-search-group">
         <summary>
@@ -1181,7 +1146,7 @@ export function TradeSearch({
       <div className="trade-search-controls">
         <FilterHelp
           label="Search goal"
-          help="Choosing a preset resets screening filters and searches 1–3 incoming players with automatic index matching. Keeps your offered/protected players, required target and selected teams. Surface appeal requires your gain ≥ +1, positive recipient gains under both surface sources, and leaves model value tests optional. Improve scoring requires your gain ≥ +1 and theirs ≥ 0 points/week. Find a position also requires that position's scoring contribution to your optimized lineup to increase, including FLEX. Review value, depth and legality separately."
+          help="Choosing a preset resets screening filters and searches 1–3 incoming players with automatic index matching. Keeps your offered/protected players, required target and selected teams. Improve scoring requires your gain ≥ +1 and theirs ≥ 0 points/week. Find a position also requires that position's scoring contribution to your optimized lineup to increase, including FLEX. Review value, depth and legality separately."
         >
           <label className="control">
             <span>Search goal</span>
@@ -1197,9 +1162,6 @@ export function TradeSearch({
               <option value="explore">Trade away these players</option>
               <option value="improve">Improve my weekly scoring</option>
               <option value="position">Find a position upgrade</option>
-              <option value="surface">
-                Improve my lineup with surface appeal
-              </option>
               <option value="custom">Custom search</option>
             </select>
           </label>
@@ -1225,16 +1187,8 @@ export function TradeSearch({
           </label>
         )}
       </div>
-      {/* Source-based appeal is a separate filter; the recipient's modeled loss remains visible beside its apparent source-based gain. */}
+      {/* One optional Surface Trading evaluator replaces the retired source-gain controls. */}
       <ManagerControls value={manager} change={setManager} />
-      <SurfaceAppealControls
-        value={surface}
-        week={m.current}
-        change={(value) => {
-          setSurface(value);
-          if (!value && goal === "surface") setGoal("custom");
-        }}
-      />
       {/* Opponent checkboxes are a search-only scope; all other filters and manual trade selections remain independent. */}
       <details className="trade-search-group">
         <summary>
@@ -2571,17 +2525,9 @@ export function TradeSearch({
               {/* Report post-evaluation filtering separately from index/positional eligibility. */}
               {job.stats?.managerExcluded !== undefined && (
                 <p>
-                  Manager-expectation exclusions: {job.stats.managerExcluded}.
+                  Surface Trading exclusions: {job.stats.managerExcluded}.
                   Missing evidence and safeguard failures remain distinct in
                   evaluated near misses.
-                </p>
-              )}
-              {job.stats?.surfaceExcluded !== undefined && (
-                <p>
-                  Trades excluded by surface appeal, model-gain, legal-roster or
-                  optional value-test requirements: {job.stats.surfaceExcluded}.
-                  Missing selected surface data is excluded rather than treated
-                  as zero.
                 </p>
               )}
               {job.stats?.protectedExcluded !== undefined && (

@@ -259,7 +259,7 @@ Source architecture: [Fantasy Football GUI Architecture](Fantasy%20Football%20GU
 ## Surface manager redesign delivery
 
 1. Add versioned pure classification, distinct main/compensation matching and provisional range rules with boundary/monotonicity tests.
-2. Add opt-in independent direct/standard/per-stage chain adapters; retain legacy filters and default behavior.
+2. Add opt-in independent direct/standard/per-stage chain adapters; retire legacy surface restrictions on restoration and preserve all unrelated filters/default behavior.
 3. Add compact numerical evidence and grouped alternatives without changing Save/Load access.
 4. Add private journal/profile import, explicit immutable forecast logging, record-revision sync and conflict handling.
 5. Verify disabled parity, counter direction, snapshot preservation, real-only outcome tracking, hypothetical contexts, migration/RLS, browser workflows, production build and publication privacy. No version bump, commit or deployment is automatic.

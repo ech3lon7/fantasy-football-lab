@@ -143,6 +143,16 @@ test("finds both chain modes, explains replacements, and saves individual steps 
     .first();
   await expect(safe).toHaveCount(1);
   await expect(speculative).toHaveCount(1);
+  // Chain team groups use the same animated, reversible 24px hierarchy without changing the underlying plans.
+  const teamGroup = page.locator(".trade-chain-group").first();
+  const groupToggle = teamGroup.locator(":scope > button");
+  const content = teamGroup.locator(":scope > .trade-chain-reveal");
+  expect(await content.evaluate((e) => { const style = getComputedStyle(e); return parseFloat(style.marginLeft) + parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth); })).toBe(24);
+  await groupToggle.click();
+  await expect(content).toHaveCount(0);
+  await groupToggle.click();
+  await expect(safe).toBeVisible();
+
   // Connected results explain the acquired asset's measured share and provisional minimum directly in the saved worker result.
   await safe.getByText("How trade 1 enables trade 2", { exact: true }).click();
   await expect(safe.getByText(/Acquired contribution:/)).toContainText(
@@ -311,9 +321,9 @@ test("isolates scopes and presets, retains optional fit settings and remembers b
   await standard
     .getByRole("combobox", { name: "Search goal", exact: true })
     .selectOption("improve");
-  await standard
+  await page
     .getByRole("combobox", {
-      name: "Standard lineup impact basis",
+      name: "Evaluate lineup impact using",
       exact: true,
     })
     .selectOption("marked-starters");
@@ -470,7 +480,7 @@ test("isolates scopes and presets, retains optional fit settings and remembers b
     .click();
   await expect(
     page.getByRole("combobox", {
-      name: "Standard lineup impact basis",
+      name: "Evaluate lineup impact using",
       exact: true,
     }),
   ).toHaveValue("marked-starters");
@@ -633,18 +643,8 @@ test("persists independent per-leg plausibility and materiality controls with ex
   await page
     .getByRole("spinbutton", { name: "First trade index above", exact: true })
     .fill("4");
-  await page
-    .getByRole("checkbox", { name: "Second trade surface appeal", exact: true })
-    .check();
-  await page
-    .getByRole("combobox", { name: "Second trade surface metric", exact: true })
-    .selectOption("average");
-  await page
-    .getByRole("spinbutton", {
-      name: "Second trade minimum surface gain",
-      exact: true,
-    })
-    .fill("1.5");
+  // Each leg retains its own optional redesigned Surface Trading evaluator.
+  await page.getByRole("checkbox", { name: "Second trade: Enable Surface Trading", exact: true }).check();
   await page
     .getByRole("spinbutton", {
       name: "Maximum recipient value loss (%)",
@@ -687,11 +687,11 @@ test("persists independent per-leg plausibility and materiality controls with ex
     }),
   ).toHaveValue("7");
   await expect(
-    page.getByRole("combobox", {
-      name: "Second trade surface metric",
+    page.getByRole("checkbox", {
+      name: "Second trade: Enable Surface Trading",
       exact: true,
     }),
-  ).toHaveValue("average");
+  ).toBeChecked();
   await page.getByText("Chain dependency", { exact: true }).click();
   await expect(
     page.getByRole("combobox", { name: "Dependency route", exact: true }),
@@ -720,7 +720,7 @@ test("persists independent per-leg plausibility and materiality controls with ex
   ).not.toBeChecked();
   await expect(
     page.getByRole("checkbox", {
-      name: "Second trade surface appeal",
+      name: "Second trade: Enable Surface Trading",
       exact: true,
     }),
   ).not.toBeChecked();
@@ -733,4 +733,23 @@ test("persists independent per-leg plausibility and materiality controls with ex
       exact: true,
     }),
   ).toHaveValue("2");
+});
+
+// Bulk changes persist in this planner only and never change the standard outgoing draft.
+test("selects all chain pool players and preserves the standard finder", async ({ page }) => {
+  await seed(page);
+  const original = await stored(page);
+  const pool = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Chain tradable pool/ }) });
+  await pool.locator("summary").click();
+  const players = pool.getByRole("checkbox", { name: /^Chain tradable player:/ });
+  const count = Math.min(await players.count(), 12);
+  await pool.getByRole("button", { name: /^Select all/ }).click();
+  await expect(pool.locator('input[type="checkbox"]:checked')).toHaveCount(count);
+  await expect.poll(async () => JSON.parse((await stored(page)).state.filters.tradeSearchSettings).chain.query.pool.length).toBe(count);
+  expect((await stored(page)).state.draft).toEqual(original.state.draft);
+  await page.reload();
+  await page.getByRole("button", { name: "Two-trade chain planner", exact: true }).click();
+  await pool.locator("summary").click();
+  await expect(pool.locator('input[type="checkbox"]:checked')).toHaveCount(count);
+  await expect(pool.getByRole("button", { name: /^Select all/ })).toBeDisabled();
 });

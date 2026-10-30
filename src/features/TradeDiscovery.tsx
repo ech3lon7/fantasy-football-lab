@@ -166,6 +166,35 @@ export function TradeDiscoveryControls({
               Tradable pool ({value.pool.length} selected; everyone else
               protected)
             </summary>
+            {/* Bulk selection preserves current choices and fills the visible roster order within the existing 12-player cap. */}
+            <FilterHelp
+              label="Select all tradable players"
+              help="Keep current selections and add players in the displayed order, up to the existing 12-player pool limit. Any remaining players stay protected."
+            >
+              <button
+                type="button"
+                className="subtle"
+                disabled={
+                  value.pool.length >= 12 ||
+                  owned.every((p) => value.pool.includes(p.id))
+                }
+                onClick={() =>
+                  change({
+                    ...value,
+                    pool: [
+                      ...new Set([
+                        ...value.pool.filter((id) =>
+                          owned.some((p) => p.id === id),
+                        ),
+                        ...owned.map((p) => p.id),
+                      ]),
+                    ].slice(0, 12),
+                  })
+                }
+              >
+                Select all{owned.length > 12 ? " (up to 12)" : ""}
+              </button>
+            </FilterHelp>
             <div className="trade-search-controls">
               {owned.map((p) => (
                 <label className="check" key={p.id}>

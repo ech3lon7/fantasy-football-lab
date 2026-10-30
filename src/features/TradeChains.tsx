@@ -28,6 +28,7 @@ import {
 import { opponentIncentive } from "../domain/trade-discovery";
 import { OpponentIncentiveView } from "./TradeDiscovery";
 import { SurfaceAppealView } from "./SurfaceAppeal";
+import { withoutLegacySurface } from "../domain/surface-appeal";
 import { applyRosterScenario, sourceDataset } from "../domain/roster-scenarios";
 import {
   summaryFromSearch,
@@ -67,7 +68,7 @@ const chainFilterScope = {
     "optional surplus/deficit targeting",
     "required chain dependency and materiality",
     "per-leg raw index windows",
-    "per-leg recipient surface comparisons",
+    "per-leg Surface Trading",
   ],
   "Single-trade only": [
     "search goal",
@@ -77,7 +78,7 @@ const chainFilterScope = {
     "positional upgrades",
     "usefulness",
     "Gem/Watch",
-    "standard-finder surface filters",
+    "standard-finder Surface Trading",
     "near misses/recovery",
   ],
 };
@@ -185,16 +186,20 @@ export function TradeChains({
     [gain, setGain] = useState(initial?.controls.gain ?? "5");
   const journal = useNegotiations();
   const [first, setFirst] = useState<ChainQuery["first"]>(
-    initial?.query.first ?? {
-      offer: { minimum: 1, maximum: 3 },
-      receive: { minimum: 1, maximum: 3 },
-    },
+    withoutLegacySurface(
+      initial?.query.first ?? {
+        offer: { minimum: 1, maximum: 3 },
+        receive: { minimum: 1, maximum: 3 },
+      },
+    ),
   );
   const [second, setSecond] = useState<ChainQuery["second"]>(
-    initial?.query.second ?? {
-      offer: { minimum: 1, maximum: 3 },
-      receive: { minimum: 1, maximum: 3 },
-    },
+    withoutLegacySurface(
+      initial?.query.second ?? {
+        offer: { minimum: 1, maximum: 3 },
+        receive: { minimum: 1, maximum: 3 },
+      },
+    ),
   );
   const [depth, setDepth] = useState<ChainQuery["depth"]>(
     initial?.query.depth ?? "standard",
@@ -777,78 +782,10 @@ export function TradeChains({
         </div>
         <div>
           <ManagerControls
-            label={`${label} match manager expectations`}
+            label={`${label}: Enable Surface Trading`}
             value={value.manager}
             change={(manager) => change({ ...value, manager })}
           />
-          <FilterHelp
-            label={`${label} surface appeal`}
-            help="Require the recipient's actual-average or imported ESPN-weekly lineup to improve after losses and drops. Both sources must independently pass when selected. This never forces positive own gain on a permitted speculative first leg."
-          >
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={!!value.surface}
-                onChange={(e) =>
-                  change({
-                    ...value,
-                    surface: e.target.checked
-                      ? { metric: "both", minimumGain: 0 }
-                      : undefined,
-                  })
-                }
-              />
-              {label} surface appeal
-            </label>
-          </FilterHelp>
-          {value.surface && (
-            <>
-              <FilterHelp
-                label={`${label} surface metric`}
-                help="Season-average rates are bye-neutral. ESPN's imported weekly projection uses real scheduled availability even in a hypothetical. Neither replaces Expected PPG or establishes acceptance odds."
-              >
-                <label className="control">
-                  <span>{label} surface metric</span>
-                  <select
-                    value={value.surface.metric}
-                    onChange={(e) =>
-                      change({
-                        ...value,
-                        surface: {
-                          ...value.surface!,
-                          metric: e.target.value as NonNullable<
-                            ChainQuery["first"]["surface"]
-                          >["metric"],
-                        },
-                      })
-                    }
-                  >
-                    <option value="both">Both — each must improve</option>
-                    <option value="average">Actual season average</option>
-                    <option value="projection">
-                      ESPN Week {m.current} projection
-                    </option>
-                  </select>
-                </label>
-              </FilterHelp>
-              {number(
-                `${label} minimum surface gain`,
-                Number.isFinite(value.surface.minimumGain)
-                  ? String(value.surface.minimumGain)
-                  : "",
-                (text) =>
-                  change({
-                    ...value,
-                    surface: {
-                      ...value.surface!,
-                      minimumGain: text.trim() ? Number(text) : NaN,
-                    },
-                  }),
-                0,
-                "Recipient lineup gain for every selected source. Zero requires strictly positive gain; positive thresholds are inclusive. Missing evidence does not pass.",
-              )}
-            </>
-          )}
         </div>
       </div>
       {/* Surplus and deficit checks are independently optional on each leg; absent/disabled rules never narrow the search. */}
@@ -1287,6 +1224,10 @@ export function TradeChains({
     );
   };
 
+  // Reuse the displayed roster order for bulk selection without changing the chain's independent pool or search limits.
+  const poolPlayers = m.players
+    .filter((p) => p.owner === team)
+    .sort((a, b) => a.name.localeCompare(b.name));
   return (
     <SearchSection
       title="Two-trade chain planner"
@@ -1424,27 +1365,48 @@ export function TradeChains({
       )}
       <details className="trade-search-group">
         <summary>Chain tradable pool ({pool.length}/12)</summary>
-        {m.players
-          .filter((p) => p.owner === team)
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map((p) => (
-            <label className="check" key={p.id}>
-              <input
-                type="checkbox"
-                aria-label={`Chain tradable player: ${p.name}`}
-                checked={pool.includes(p.id)}
-                disabled={!pool.includes(p.id) && pool.length >= 12}
-                onChange={(e) =>
-                  setPool((old) =>
-                    e.target.checked
-                      ? [...old, p.id]
-                      : old.filter((id) => id !== p.id),
-                  )
-                }
-              />
-              {p.name} · {p.pos} · <span className="model">{fmt(p.index)}</span>
-            </label>
-          ))}
+        <FilterHelp
+          label="Select all chain tradable players"
+          help="Keep current chain selections and add players in the displayed order, up to the existing 12-player pool limit. This does not change the standard search pool."
+        >
+          <button
+            type="button"
+            className="subtle"
+            disabled={
+              pool.length >= 12 || poolPlayers.every((p) => pool.includes(p.id))
+            }
+            onClick={() =>
+              setPool((old) =>
+                [
+                  ...new Set([
+                    ...old.filter((id) => poolPlayers.some((p) => p.id === id)),
+                    ...poolPlayers.map((p) => p.id),
+                  ]),
+                ].slice(0, 12),
+              )
+            }
+          >
+            Select all{poolPlayers.length > 12 ? " (up to 12)" : ""}
+          </button>
+        </FilterHelp>
+        {poolPlayers.map((p) => (
+          <label className="check" key={p.id}>
+            <input
+              type="checkbox"
+              aria-label={`Chain tradable player: ${p.name}`}
+              checked={pool.includes(p.id)}
+              disabled={!pool.includes(p.id) && pool.length >= 12}
+              onChange={(e) =>
+                setPool((old) =>
+                  e.target.checked
+                    ? [...old, p.id]
+                    : old.filter((id) => id !== p.id),
+                )
+              }
+            />
+            {p.name} · {p.pos} · <span className="model">{fmt(p.index)}</span>
+          </label>
+        ))}
       </details>
       <details className="trade-search-group">
         <summary>
@@ -1600,7 +1562,7 @@ export function TradeChains({
         {/* Reset keeps the established defaults and selections; hover help makes its stricter thresholds explicit. */}
         <FilterHelp
           label="Clear chain filters"
-          help="Restore defaults: final gain 5 EPPG, recipient gain 1 EPPG, maximum concession 10%, required price tests, and no position targeting. Restore dependency to either route, 25% contribution and +2 interaction; disable optional per-leg windows/surface filters. Keep your team, pool, opponent scope and scoring basis. Choose Very lenient for broader discovery."
+          help="Restore defaults: final gain 5 EPPG, recipient gain 1 EPPG, maximum concession 10%, required price tests, and no position targeting. Restore dependency to either route, 25% contribution and +2 interaction; disable optional per-leg windows/Surface Trading. Keep your team, pool, opponent scope and scoring basis. Choose Very lenient for broader discovery."
         >
           <button
             className="subtle"
@@ -1777,10 +1739,9 @@ export function TradeChains({
             </p>
             <p>
               Dependency exclusions: {job.result.stats.rejectedDependency}.
-              Manager-expectation exclusions:{" "}
+              Surface Trading exclusions:{" "}
               {job.result.stats.rejectedManager ?? 0}. Index-window exclusions:{" "}
-              {job.result.stats.rejectedIndex}. Surface exclusions:{" "}
-              {job.result.stats.rejectedSurface}. Required-price failures:{" "}
+              {job.result.stats.rejectedIndex}. Required-price failures:{" "}
               {job.result.stats.rejectedValue}. Surplus/deficit exclusions:{" "}
               {job.result.stats.rejectedFit ?? 0}. Roster/protection failures:{" "}
               {job.result.stats.rejectedRoster}. Scoring/mode/gain failures:{" "}

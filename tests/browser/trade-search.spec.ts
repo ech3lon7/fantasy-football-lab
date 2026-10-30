@@ -519,6 +519,11 @@ test("flexible targeted discovery ranks packages and saves the actual outgoing p
     .getByLabel("Find outgoing combinations", { exact: true })
     .check();
   await search.getByText(/Tradable pool \(1 selected/).click();
+  // Bulk selection includes the displayed roster; deselecting a player still restores explicit protection.
+  const pool = search.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Tradable pool/ }) });
+  await pool.getByRole("button", { name: "Select all", exact: true }).click();
+  await expect(search.getByLabel("Tradable Synthetic 1", { exact: true })).toBeChecked();
+  await search.getByLabel("Tradable Synthetic 1", { exact: true }).uncheck();
   await search.getByLabel("Tradable Main QB", { exact: true }).check();
   await expect(
     search.getByLabel("Tradable Synthetic 1", { exact: true }),
@@ -1401,7 +1406,7 @@ test("upgrade assignments never reuse an opposing player or label one offer as b
     search.getByText("13 index matches.", { exact: false }),
   ).toBeVisible();
   await expandSearchAlternatives(search);
-  const details = search.locator("tbody tr[data-trade-result]").first().locator("td > details").first();
+  const details = search.locator("tbody tr[data-trade-result]").first().locator("td details").first();
   await details.getByText("Trade details", { exact: true }).click();
   await expect(details.getByText(/Starter upgrade: Offer WR A/)).toContainText(
     "Their starter WR",
@@ -2275,6 +2280,11 @@ test("shared lineup basis drives filtering ranking analyzer and saved restoratio
     name: "Evaluate lineup impact using",
     exact: true,
   });
+  // One shared analyzer/finder selector remains; the chain planner keeps its independent control.
+  await expect(basis).toHaveCount(1);
+  await expect(
+    page.getByRole("combobox", { name: "Standard lineup impact basis", exact: true }),
+  ).toHaveCount(0);
   await expect(basis).toHaveValue("best-available");
   await search.getByLabel("Use strict index range", { exact: true }).uncheck();
   await search
@@ -2448,4 +2458,39 @@ test("stale search results can be saved and loaded despite invalid edited filter
   await expect(page.getByLabel("Outgoing player 1", {exact: true})).toHaveValue("101");
   await expect(page.getByLabel("Incoming player 1", {exact: true})).toHaveValue("200");
   await expect(page.getByRole("button", {name: "Save current trade", exact: true})).toBeEnabled();
+});
+
+// Nested expansions preserve numerical columns, independent target state, keyboard controls and a motion-free accessibility option.
+test("result expansions indent names smoothly without shifting numerical columns", async ({ page }) => {
+  await seed(page);
+  const search = panel(page);
+  await search.getByLabel("Use strict index range", { exact: true }).uncheck();
+  await search.getByLabel("Create package", { exact: true }).check();
+  await search.getByLabel("Minimum players to receive", { exact: true }).selectOption("2");
+  await search.getByLabel("Maximum players to receive", { exact: true }).selectOption("2");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(search.getByText("66 index matches.", { exact: false })).toBeVisible();
+  const buttons = search.getByRole("button", { name: /^Show .*alternative offers involving/ });
+  await buttons.first().click();
+  const nested = search.locator('tr[data-trade-result][data-result-depth="2"]').first();
+  await expect(nested).toBeVisible();
+  const root = search.locator('tr[data-trade-result][data-result-depth="1"]').first();
+  const rootPadding = await root.locator('.trade-result-name').evaluate((e) => parseFloat(getComputedStyle(e).paddingLeft));
+  const childPadding = await nested.locator('.trade-result-name').evaluate((e) => parseFloat(getComputedStyle(e).paddingLeft));
+  expect(childPadding - rootPadding).toBe(24);
+  expect(await nested.locator('.trade-result-name').evaluate((e) => getComputedStyle(e, '::before').borderLeftWidth)).toBe('1px');
+  const rootX = (await root.locator('td').nth(1).boundingBox())!.x;
+  expect((await nested.locator('td').nth(1).boundingBox())!.x).toBeCloseTo(rootX, 1);
+  await buttons.first().click();
+  await expect(search.getByRole("button", { name: /^Hide .*alternative offers involving/ })).toHaveCount(2);
+  await page.evaluate(async () => { await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))); });
+  await search.locator('table.trade-search-results').screenshot({ path: "test-results/trade-result-hierarchy.png" });
+  // Reduced motion closes immediately without losing the ability to reopen the same offers.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const close = search.getByRole("button", { name: /^Hide .*alternative offers involving/ }).first();
+  await close.press("Enter");
+  await expect(search.getByRole("button", { name: /^Hide .*alternative offers involving/ })).toHaveCount(1);
+  expect(await page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length)).toBe(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(391);
 });

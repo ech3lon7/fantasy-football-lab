@@ -169,3 +169,24 @@ it("preserves corrupt state and rejects missing ownership, invalid filters and o
     "sync storage is full",
   );
 });
+
+// Retiring a legacy source filter preserves all other search choices and never enables the replacement automatically.
+it("drops retired surface restrictions without altering unrelated saved-query settings", async () => {
+  const { withoutLegacySurface } = await import("../src/domain/surface-appeal");
+  const original = {
+    surface: { metric: "both", minimum: 9999 },
+    goal: "surface",
+    teams: ["2"],
+    manager: undefined,
+  };
+  const migrated = withoutLegacySurface(original);
+  expect(migrated).toEqual({
+    goal: "custom",
+    teams: ["2"],
+    manager: undefined,
+  });
+  expect(original.surface.minimum).toBe(9999);
+  expect(
+    withoutLegacySurface({ manager: { version: 1 }, goal: "explore" }),
+  ).toEqual({ manager: { version: 1 }, goal: "explore" });
+});
