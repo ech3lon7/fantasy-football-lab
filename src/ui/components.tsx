@@ -358,7 +358,7 @@ export const extendedColumns: Column<Player>[] = [
     label: "Data status",
     value: (p) => `${p.status}; ${p.baselineStatus}`,
   },
-  { key: "id", label: "Player ID", kind: "fact", value: (p) => p.id },
+  // Player identifiers remain internal; evaluation tables show football context instead.
   // New evidence follows the existing columns so established column selections keep their order.
   {
     key: "recentCarries",

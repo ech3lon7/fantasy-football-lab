@@ -93,6 +93,7 @@ test("trade names inspect both players without changing the draft", async ({
   await expect(dialog).toHaveAttribute("data-layout", "popover");
   await expect(page).toHaveURL(/#\/trades$/);
   await expect(dialog.locator(".player-popover-owner")).toContainText("Test A");
+  await expect(dialog).not.toContainText("Player ID");
   const missing = dialog
     .locator(".player-popover-metrics > div")
     .filter({ has: page.getByText("ESPN Week 6", { exact: true }) });
@@ -209,7 +210,7 @@ test("player comparisons accept typed names and suggestions and preserve selecti
     }),
     third = comparison.getByRole("combobox", { name: "Player 3", exact: true });
   await first.fill("synthetic 1");
-  await second.fill("Synthetic 2 · WR · 2");
+  await second.fill("Synthetic 2 · WR · TEST");
   await page
     .getByRole("textbox", { name: "Search players", exact: true })
     .fill("Synthetic 1");
@@ -243,7 +244,7 @@ test("player comparisons accept typed names and suggestions and preserve selecti
     )
     .toBe(",,100");
   await page.reload();
-  await expect(third).toHaveValue("Synthetic 100 · QB · 100");
+  await expect(third).toHaveValue("Synthetic 100 · QB · TEST");
   await expect(first).toHaveValue("");
   await expect(second).toHaveValue("");
   await expect(comparison.locator("tbody tr")).toHaveCount(1);

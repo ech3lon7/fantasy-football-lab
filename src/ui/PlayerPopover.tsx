@@ -294,7 +294,8 @@ function PlayerInspection({ p, m }: { p: Player; m: Model }) {
   return (
     <>
       <p className="fact player-popover-owner">
-        {owner} · Player ID {p.id}
+        {/* Ownership is useful context; internal player identifiers stay hidden. */}
+        {owner}
       </p>
       <p>
         <span className="fact">Injury: {p.injury}</span>

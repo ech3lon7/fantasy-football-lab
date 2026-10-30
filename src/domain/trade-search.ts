@@ -305,6 +305,7 @@ export function tradeSearchContext(
   return JSON.stringify([
     tradeImpactVersion,
     lineupScoringVersion,
+    "departure-aware-upgrades-v1",
     readLineupBasis(query.lineupBasis),
     workspace,
     m.dataset.hash,
@@ -664,15 +665,41 @@ export function meetsUpgradeRequirements(
   );
 }
 
+// Pair same-position arrivals and departures strongest-first, once per player; weaker retained teammates cannot disguise a downgrade.
+function departureComparisons(m: Model, give: string[], departures: string[]) {
+  const strongest = (a: Player, b: Player) =>
+    (b.expected ?? Infinity) - (a.expected ?? Infinity) || cmpId(a.id, b.id);
+  const comparisons = new Map<string, string>();
+  for (const position of new Set(give.map((id) => m.byId.get(id)!.pos))) {
+    const offered = give
+      .map((id) => m.byId.get(id)!)
+      .filter((p) => p.pos === position)
+      .sort(strongest);
+    const leaving = departures
+      .map((id) => m.byId.get(id)!)
+      .filter((p) => p.pos === position)
+      .sort(strongest);
+    leaving
+      .slice(0, offered.length)
+      .forEach((player, index) =>
+        comparisons.set(offered[index].id, player.id),
+      );
+  }
+  return comparisons;
+}
+
 // Assign fixed offered players to distinct current opponents before any players leave in the trade.
 export function offeredUpgrades(
   m: Model,
   q: TradeSearchQuery,
   teamB: string,
   lineupsRaw?: string,
+  departures: string[] = [],
 ): UpgradeEvidence[] {
   if (!q.upgrade) return [];
   const filter = q.upgrade;
+  // Enumeration first checks general fit; complete packages then account for the actual surrendered positional counterpart.
+  const replacements = departureComparisons(m, q.give, departures);
   // Best-roster fit ignores lineup designations and includes IR; unknown forecasts invalidate only their position.
   if (filter.mode === "best") {
     const roster = m.players.filter((player) => player.owner === teamB);
@@ -770,6 +797,18 @@ export function offeredUpgrades(
       for (let i = 0; i < offered.length; i++) {
         const player = offered[i];
         if (mask & (1 << i) || player.pos !== opponent.pos) continue;
+        // Beat the surrendered counterpart as well as the role; a departing starter cannot be replaced by a weaker reference.
+        const departure = replacements.get(player.id);
+        const departurePPG = departure
+          ? (m.byId.get(departure)!.expected ?? Infinity)
+          : null;
+        if (
+          departurePPG !== null &&
+          (player.expected! <= departurePPG ||
+            player.expected! - departurePPG < filter.minimum ||
+            (starterIds.has(departure!) && opponent.expected! < departurePPG))
+        )
+          continue;
         const gain = player.expected! - opponent.expected!;
         if (gain <= 0 || gain < filter.minimum) continue;
         const candidate = [
@@ -915,6 +954,23 @@ export function findTradeMatches(
             return;
           }
           const get = chosen.map((p) => p.id).sort(cmpId);
+          // Recheck the actual package: team-level fit cannot know which stronger players will be surrendered.
+          const packageUpgrades =
+            q.upgrade &&
+            get.some((id) =>
+              q.give.some(
+                (offered) => m.byId.get(offered)!.pos === m.byId.get(id)!.pos,
+              ),
+            )
+              ? offeredUpgrades(m, q, teamB, lineupsRaw, get)
+              : upgrades;
+          if (
+            packageUpgrades &&
+            !meetsUpgradeRequirements(m, q, packageUpgrades)
+          ) {
+            stats.upgradeExcluded!++;
+            return;
+          }
           matches.push({
             key: JSON.stringify([teamB, get]),
             teamB,
@@ -922,7 +978,7 @@ export function findTradeMatches(
             incoming: total,
             outgoing: bounds.outgoing,
             difference: total - bounds.outgoing,
-            ...(upgrades ? { upgrades } : {}),
+            ...(packageUpgrades ? { upgrades: packageUpgrades } : {}),
             ...(deficit ? { deficit } : {}),
           });
           stats.matched++;
@@ -1056,6 +1112,12 @@ export function packageUsefulness(
   const offered = q.give
     .map((id) => m.byId.get(id)!)
     .sort((a, b) => cmpId(a.id, b.id));
+  // Apply the same departure-aware reference to automatic explanations and all-offer usefulness checks, including required drops.
+  const replacements = departureComparisons(
+    m,
+    q.give,
+    initial.filter((id) => !after.includes(id)),
+  );
   let states: (UsefulnessEvidence[] | undefined)[] = Array(1 << offered.length);
   states[0] = [];
   // A role is consumed once, and the bitmask consumes each offer once; larger gains only break equal-coverage ties.
@@ -1070,6 +1132,20 @@ export function packageUsefulness(
       for (let i = 0; i < offered.length; i++) {
         const player = offered[i];
         if (mask & (1 << i)) continue;
+        // Keep genuine promotions from depth, but a weaker return cannot replace a stronger departing counterpart and claim an upgrade.
+        const departure = replacements.get(player.id);
+        const departurePPG = departure
+          ? (m.byId.get(departure)!.expected ?? Infinity)
+          : null;
+        if (
+          departurePPG !== null &&
+          (player.expected! <= departurePPG ||
+            player.expected! - departurePPG < q.usefulness.minimum ||
+            (beforeStarters.has(departure!) &&
+              (role.id ? (m.byId.get(role.id)!.expected ?? -Infinity) : 0) <
+                departurePPG))
+        )
+          continue;
         const starter = finalStarters.has(player.id);
         if (!starter && num(m.dataset.tables.ModelContext[0].BenchSlots) <= 0)
           continue;
@@ -1199,6 +1275,10 @@ export function scoreTradeMatch(
   });
   return {
     ...match,
+    // Scored/direct inspections must use the complete package too, rather than retaining a broad team-level comparison.
+    ...(q.upgrade
+      ? { upgrades: offeredUpgrades(m, q, match.teamB, lineupsRaw, match.get) }
+      : {}),
     // Use the same legal roster and drop proposals already used for this package's authoritative scoring.
     ...(q.usefulness
       ? { usefulness: packageUsefulness(m, q, r.initialB, r.legalB, r.irB) }

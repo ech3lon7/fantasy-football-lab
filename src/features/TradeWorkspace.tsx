@@ -297,9 +297,27 @@ export function TradeLineupField({
               ? m.byId.get(before[index]!)
               : undefined;
             const changed = !!weekly && before[index] !== after[index];
+            // Classify the departing occupant, not the incoming player's origin; both teams follow the same rule.
+            const tradedAway =
+              changed &&
+              !!previous &&
+              (side === "own" ? draft.give : draft.get).includes(previous.id);
+            // A player already in this team's before-lineup is shifting starter slots, not being promoted from the bench.
+            // The red departure marker keeps priority when the former slot occupant is traded away.
+            const starterShift =
+              changed &&
+              !tradedAway &&
+              !!after[index] &&
+              before.includes(after[index]);
+            const changeKind = tradedAway
+              ? "trade"
+              : starterShift
+                ? "starter-shift"
+                : "lineup";
             return (
               <article
-                className={`trade-field-player${changed ? " is-changed" : ""}`}
+                className={`trade-field-player${changed ? ` is-changed is-${changeKind}-change` : ""}`}
+                data-change-kind={changed ? changeKind : undefined}
                 key={`${slot}-${index}`}
                 aria-label={`${slot}: ${player?.name ?? "Unfilled"}${changed ? ", changed" : ""}`}
               >
@@ -333,7 +351,14 @@ export function TradeLineupField({
         {stage === "after" && weekly
           ? "Changed slots highlighted"
           : "Before-trade starters"}
-        . Player values are model Expected PPG; the top strip averages all
+        .{" "}
+        {weekly && (
+          <>
+            Red: traded-away player replaced. Yellow: starter-to-starter shift.
+            Blue: other lineup adjustment.{" "}
+          </>
+        )}
+        Player values are model Expected PPG; the top strip averages all
         remaining weeks.
       </small>
       {!weekly && !pending && (

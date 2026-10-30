@@ -277,8 +277,9 @@ function SavedTradeCard({
         <button className="subtle" onClick={() => edit(trade.id, name, notes)}>
           Save details
         </button>
+        {/* Saved offers use the same explicit Load button as search results. */}
         <button
-          className="subtle"
+          className="button"
           disabled={!sameSeason || !owned}
           onClick={load}
         >

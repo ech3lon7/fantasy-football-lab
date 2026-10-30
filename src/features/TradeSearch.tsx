@@ -2628,8 +2628,9 @@ export function TradeSearch({
                               ))}
                             </details>
                             <div className="trade-result-actions">
+                              {/* Loading has the same visible button affordance as saving. */}
                               <button
-                                className="subtle"
+                                className="button"
                                 onClick={() => load(row)}
                               >
                                 Load trade

@@ -503,7 +503,7 @@ export function PlayerList({
         : p.owner === owner),
   );
   // Suggestion labels disambiguate duplicate names while a unique full name can also be typed directly.
-  const comparisonLabel = (p: Player) => `${p.name} · ${p.pos} · ${p.id}`;
+  const comparisonLabel = (p: Player) => `${p.name} · ${p.pos} · ${p.nfl}`;
   return (
     <>
       <div className="toolbar">
@@ -610,11 +610,12 @@ export function PlayerList({
                           (p) => p.name.toLowerCase() === normalized,
                         );
                       // Ambiguous or unfinished text never becomes a guessed player or leaves stale comparison stats visible.
-                      const match =
-                        m.players.find(
-                          (p) =>
-                            comparisonLabel(p).toLowerCase() === normalized,
-                        ) ?? (exact.length === 1 ? exact[0] : undefined);
+                      const labeled = m.players.filter(
+                        (p) => comparisonLabel(p).toLowerCase() === normalized,
+                      );
+                      const match = labeled.length === 1
+                        ? labeled[0]
+                        : exact.length === 1 ? exact[0] : undefined;
                       const nextId = match?.id ?? "";
                       setComparisonNames((names) => ({
                         ...names,
@@ -690,7 +691,7 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
           <span className="position-label">{p.pos}</span>
           <h2>{p.name}</h2>
           <p>
-            {p.nfl} · Player ID {p.id} ·{" "}
+            {p.nfl} ·{" "}
             {p.owner === "0"
               ? "Available / waivers"
               : str(
@@ -1920,25 +1921,7 @@ export function TradeView({
             )}
           </div>
         ))}
-        <details>
-          <summary>Optional player IDs</summary>
-          <label className="control">
-            <span>Comma-separated IDs</span>
-            <input
-              aria-label={isA ? "Outgoing IDs" : "Incoming IDs"}
-              value={ids.join(", ")}
-              onChange={(e) =>
-                choose(
-                  e.target.value
-                    .split(",")
-                    .map((x) => x.trim())
-                    .filter(Boolean)
-                    .slice(0, 5),
-                )
-              }
-            />
-          </label>
-        </details>
+        {/* Players are selected by name above; internal IDs are never an input. */}
       </div>
     );
   }
@@ -3039,14 +3022,14 @@ export function ModelView({
               label: "Selected candidates",
               value: (p) =>
                 p.candidates
-                  .map((x) => `${x.name} (${x.id}): ${fmt(x.value)}`)
+                  .map((x) => `${x.name}: ${fmt(x.value)}`)
                   .join("; "),
               // Replacement candidates expose the same stats as rostered players.
               render: (p) =>
                 p.candidates.map((x, i) => (
                   <span key={x.id}>
                     {i > 0 && "; "}
-                    <PlayerName p={x} /> ({x.id}): {fmt(x.value)}
+                    <PlayerName p={x} />: {fmt(x.value)}
                   </span>
                 )),
             },
@@ -3071,7 +3054,7 @@ export function ModelView({
             <DataTable
               rows={m.dataset.tables[name]}
               id={(r) => JSON.stringify(r)}
-              columns={Object.keys(m.dataset.tables[name][0] ?? {}).map(
+              columns={Object.keys(m.dataset.tables[name][0] ?? {}).filter((key) => key !== "PlayerID").map(
                 (key) => ({
                   key,
                   label: key,

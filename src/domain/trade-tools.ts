@@ -141,7 +141,7 @@ export function diagnoseTradeCandidate(
     !meetsUpgradeRequirements(
       m,
       child,
-      offeredUpgrades(m, child, draft.teamB, lineupsRaw),
+      offeredUpgrades(m, child, draft.teamB, lineupsRaw, get),
     )
   )
     reasons.push("Opponent positional-upgrade requirements are not met.");

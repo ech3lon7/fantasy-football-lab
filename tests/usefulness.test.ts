@@ -1,8 +1,10 @@
 import { expect, it } from "vitest";
+import { opponentIncentive } from "../src/domain/trade-discovery";
 import { starterFixture } from "./fixtures";
 import { evaluate, type Model } from "../src/domain/valuation";
 import {
   scoreTradeMatch,
+  findTradeMatches,
   tradeSearchBounds,
   tradeSearchContext,
   type TradeSearchQuery,
@@ -278,4 +280,91 @@ it("supports usefulness across all one-through-five package sizes in both direct
       expect(result.usefulness, `${give} for ${get}`).toHaveLength(give);
       expect(new Set(result.usefulness!.map((e) => e.role)).size).toBe(give);
     }
+});
+
+// A weaker return cannot borrow a retained teammate's lower score to disguise losing the better same-position player.
+it("compares Tuten with the departing Bijan rather than a weaker retained RB", async () => {
+  const { m, q } = await sample();
+  Object.assign(m.dataset.tables.ModelContext[0], {
+    QBSlots: 0,
+    WRSlots: 0,
+    RBSlots: 2,
+  });
+  for (const [id, expected, owner, slot] of [
+    ["100", 14.71, "1", 20],
+    ["102", 19.49, "2", 2],
+    ["103", 10, "2", 2],
+    ["105", 8, "2", 20],
+  ] as const)
+    Object.assign(m.byId.get(id)!, {
+      pos: "RB",
+      expected,
+      value: expected,
+      owner,
+      slot,
+    });
+  m.byId.get("104")!.owner = "0";
+  m.dataset.tables.ModelRosters = m.players
+    .filter((p) => p.owner !== "0")
+    .map((p) => ({
+      PlayerID: Number(p.id),
+      TeamID: Number(p.owner),
+      LineupSlotID: p.slot,
+    }));
+  const request: TradeSearchQuery = {
+    ...q,
+    give: ["100"],
+    upgrade: { mode: "starter", minimum: 0 },
+  };
+  const matches = () => findTradeMatches(m, request).matches;
+  // The weaker arrival still improves the retained RB in isolation, but not the RB actually surrendered.
+  expect(matches().some((row) => row.get.includes("102"))).toBe(false);
+  const downgraded = score(m, request, ["102"]);
+  expect(downgraded.upgrades).toEqual([]);
+  expect(downgraded.usefulness).toEqual([]);
+  expect(opponentIncentive(m, request, downgraded).upgrades).toEqual([]);
+  // Disabling fit filters keeps the possible trade and its honest negative scoring impact available for inspection.
+  expect(
+    findTradeMatches(m, {
+      ...request,
+      upgrade: undefined,
+      usefulness: undefined,
+    }).matches.some((row) => row.get.includes("102")),
+  ).toBe(true);
+  // Matching scores are not an upgrade, and the departing starter's bye cannot lower the comparison floor.
+  m.byId.get("100")!.expected = 19.49;
+  m.byId.get("102")!.bye = m.current;
+  expect(matches().some((row) => row.get.includes("102"))).toBe(false);
+  // A genuinely stronger return qualifies against Bijan's original score, independently of bye-week timing.
+  m.byId.get("100")!.expected = 20.49;
+  expect(
+    matches().find((row) => row.get.includes("102"))?.upgrades,
+  ).toMatchObject([{ offered: "100", compared: "102", gain: 1 }]);
+  expect(score(m, request, ["102"]).usefulness).toMatchObject([
+    { offered: "100", compared: "102", gain: 1 },
+  ]);
+});
+
+// Multi-player packages retain independent real upgrades without reusing the stronger departure as a weaker comparison.
+it("reserves the strongest return for the strongest departure and keeps a second genuine upgrade", async () => {
+  const { m, q } = await sample();
+  Object.assign(m.byId.get("101")!, { pos: "QB", expected: 18, value: 18 });
+  Object.assign(m.byId.get("102")!, { expected: 25, value: 25 });
+  // QB 100 (20) replaces departing QB 102 (25); QB 101 (18) can still improve original backup 103 (10).
+  const row = score(m, q, ["102"]);
+  expect(row.usefulness).toEqual([]);
+  const details = opponentIncentive(m, q, row);
+  expect(details.upgrades).toMatchObject([
+    { offered: "101", compared: "103", gain: 8 },
+  ]);
+  expect(
+    opponentIncentive(m, { ...q, give: [...q.give].reverse() }, row).upgrades,
+  ).toEqual(details.upgrades);
+  // Raising the main return above the departing starter restores both distinct roles with no index or forecast formula changes.
+  m.byId.get("100")!.expected = 26;
+  const upgraded = score(m, q, ["102"]);
+  expect(upgraded.usefulness).toMatchObject([
+    { offered: "100", compared: "102", gain: 1 },
+    { offered: "101", compared: "103", gain: 8 },
+  ]);
 });

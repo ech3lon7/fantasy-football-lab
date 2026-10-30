@@ -1342,10 +1342,15 @@ test("positional-upgrade filter supports starter, depth, either and disabled beh
     }
     await search.getByRole("button", { name: "Search", exact: true }).click();
     await expect(
-      search.getByText("13 index matches.", { exact: false }),
+      search.getByText("12 index matches.", { exact: false }),
     ).toBeVisible();
-    await row.getByText("Trade details", { exact: true }).click();
-    await expect(row.getByText(/Depth upgrade: Bench QB/)).toContainText(
+    // The starter departure fails +22: inspect the actual backup exchange, not that now-excluded trade.
+    await expandSearchAlternatives(search);
+    const backupTrade = search.locator("tbody tr[data-trade-result]").filter({
+      has: page.getByRole("link", { name: "Depth QB", exact: true }),
+    });
+    await backupTrade.getByText("Trade details", { exact: true }).click();
+    await expect(backupTrade.getByText(/Depth upgrade: Bench QB/)).toContainText(
       "+25.00 Expected PPG",
     );
   }
@@ -1414,7 +1419,10 @@ test("upgrade assignments never reuse an opposing player or label one offer as b
     search.getByText("13 index matches.", { exact: false }),
   ).toBeVisible();
   await expandSearchAlternatives(search);
-  const details = search.locator("tbody tr[data-trade-result]").first().locator("td details").first();
+  // Use a cross-position departure so this assertion tests distinct WR assignments rather than a WR-for-WR downgrade.
+  const details = search.locator("tbody tr[data-trade-result]").filter({
+    has: page.getByRole("link", { name: "Incoming QB", exact: true }),
+  }).locator("td details").first();
   await details.getByText("Trade details", { exact: true }).click();
   await expect(details.getByText(/Starter upgrade: Offer WR A/)).toContainText(
     "Their starter WR",
@@ -2039,7 +2047,7 @@ test("upgrade counts require all requested starter and bench matches", async ({
   await search.getByLabel("Minimum bench upgrades", { exact: true }).fill("1");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
-    search.getByText("13 index matches.", { exact: false }),
+    search.getByText("4 index matches.", { exact: false }),
   ).toBeVisible();
   await expandSearchAlternatives(search);
   const row = search.locator("tbody tr[data-trade-result]").first();
@@ -2123,7 +2131,7 @@ test("best-at-position target compares the full roster and enforces distinct-pos
     .fill("6");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
-    search.getByText("13 index matches.", { exact: false }),
+    search.getByText("12 index matches.", { exact: false }),
   ).toBeVisible();
   await search
     .getByLabel("Upgrade target", { exact: true })
@@ -2554,4 +2562,67 @@ test("compact workspace previews authoritative scoring and weekly roles without 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Standard filters", exact: true })).toBeFocused();
   await expect(search.getByLabel("Search goal", { exact: true })).toBeHidden();
+});
+
+
+// Replacement colors describe who left the selected team, while internal promotions stay blue on either side.
+test("trade workspace hides ID controls and distinguishes traded departures from internal lineup moves", async ({ page }) => {
+  await seed(page);
+  await expect(page.getByText("Optional player IDs", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Outgoing IDs", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Incoming IDs", { exact: true })).toHaveCount(0);
+  const incoming = page.getByLabel("Incoming player 1", { exact: true });
+  await incoming.selectOption("2");
+  const field = page.getByRole("region", { name: "Visual lineup impact", exact: true });
+  const ownQB = field.getByRole("article", { name: /^QB: Main QB,/ });
+  await expect(ownQB.locator(".trade-field-replacement")).toHaveText("Replaces Bench QB");
+  await expect(ownQB).toHaveAttribute("data-change-kind", "trade");
+  await expect(ownQB.locator(".trade-field-replacement")).toHaveCSS("color", "rgb(185, 28, 28)");
+  await expect(ownQB.locator("strong.model")).toHaveCSS("color", "rgb(157, 23, 77)");
+  await field.getByRole("button", { name: "Their team", exact: true }).click();
+  const otherQB = field.getByRole("article", { name: /^QB: Bench QB,/ });
+  await expect(otherQB.locator(".trade-field-replacement")).toHaveText("Replaces Incoming QB");
+  await expect(otherQB).toHaveAttribute("data-change-kind", "lineup");
+  await expect(otherQB.locator(".trade-field-replacement")).toHaveCSS("color", "rgb(29, 78, 216)");
+  // The same opponent slot becomes a traded-departure replacement when that former occupant is in the exchange.
+  await incoming.selectOption("200");
+  await expect(otherQB).toHaveAttribute("data-change-kind", "trade");
+  await expect(otherQB.locator(".trade-field-replacement")).toHaveCSS("color", "rgb(185, 28, 28)");
+  const search = panel(page);
+  await search.getByLabel("Below outgoing total (index points)", { exact: true }).fill("1000");
+  await search.getByLabel("Above outgoing total (index points)", { exact: true }).fill("1000");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  const load = search.getByRole("button", { name: "Load trade", exact: true }).first();
+  await expect(load).toHaveClass(/\bbutton\b/);
+  await expect(load).toBeEnabled();
+  await load.click();
+  await expect(incoming).not.toHaveValue("");
+});
+
+
+// A retained WR moves from WR to FLEX; the incoming starter and the departing QB retain their separate blue/red meanings.
+test("starter-to-starter lineup shifts are yellow while promotions and traded departures keep their colors", async ({ page }) => {
+  const dataset = await seed(page, false, true);
+  // Make the received WR stronger than both current starters so the fixture actually creates a WR-to-FLEX shift.
+  Object.assign(dataset.tables.ModelPlayers.find(p => p.PlayerID === 2)!, {
+    ActualPoints: 90, Actual_PPG: 18, Last3_PPG: 18, ScoreSD: 0,
+    ESPN_Projected_PPG: 18, ESPN_Projected_Total: 306,
+  });
+  dataset.tables.ModelHistory.filter(h => h.PlayerID === 2).forEach(h => { h.Points = 18; });
+  await replaceSnapshot(page, dataset);
+  await page.getByLabel("Incoming player 1", { exact: true }).selectOption("2");
+  const field = page.getByRole("region", { name: "Visual lineup impact", exact: true });
+  const shifted = field.getByRole("article", { name: /^FLEX: Offer WR A,/ });
+  await expect(shifted.locator(".trade-field-replacement")).toHaveText("Replaces Offer WR B");
+  await expect(shifted).toHaveAttribute("data-change-kind", "starter-shift");
+  await expect(shifted).toHaveCSS("border-top-color", "rgb(202, 138, 4)");
+  await expect(shifted).toHaveCSS("background-color", "rgb(254, 252, 232)");
+  await expect(shifted.locator("strong.model")).toHaveCSS("color", "rgb(157, 23, 77)");
+  await expect(field.getByRole("article", { name: /^QB: Main QB,/ })).toHaveAttribute("data-change-kind", "trade");
+  await expect(field.getByRole("article", { name: /^WR: Their starter WR,/ })).toHaveAttribute("data-change-kind", "lineup");
+  // Switching teams applies the same rule locally; another team's former starter is an arrival here, not an internal shift.
+  await field.getByRole("button", { name: "Their team", exact: true }).click();
+  const promoted = field.getByRole("article", { name: /^QB: Bench QB,/ });
+  await expect(promoted).toHaveAttribute("data-change-kind", "lineup");
+  await expect(promoted.locator(".trade-field-replacement")).toHaveCSS("color", "rgb(29, 78, 216)");
 });
