@@ -1,3 +1,13 @@
+import {
+  TradePortrait,
+  TradeScoreStrip,
+  TradeLineupField,
+  TradeFiltersButton,
+  TradeFiltersDrawer,
+  type TradeWorkspaceMode,
+  type TradeWorkspacePreview,
+  type TradeChainPool,
+} from "./TradeWorkspace";
 import { DirectManagerAssessment } from "./Negotiations";
 import { FilterHelp } from "../ui/FilterHelp";
 import {
@@ -1653,10 +1663,10 @@ export function Weekly({ m }: { m: Model }) {
   );
 }
 export function TradeView({
-  m,
-  draft,
-  change,
-  lineupsRaw,
+  m: baseModel,
+  draft: baseDraft,
+  change: commitDraft,
+  lineupsRaw: basePlans,
   state,
   saveTrades,
   restoreScenario,
@@ -1677,8 +1687,32 @@ export function TradeView({
   saveSearchSettings: (raw: string) => void;
   saveManagerSettings: (raw: string) => void;
 }) {
+  // Inspection is a read-only view of a captured offer; only explicit editing/loading commits a new search draft.
+  const [preview, setPreview] = useState<TradeWorkspacePreview>();
+  const [chainPool, setChainPool] = useState<TradeChainPool>();
+  const [workspaceMode, setWorkspaceMode] =
+    useState<TradeWorkspaceMode>("standard");
+  const [manualFilters, setManualFilters] = useState(false),
+    [analysisOpen, setAnalysisOpen] = useState(false),
+    [savedOpen, setSavedOpen] = useState(false);
+  const m = preview?.model ?? baseModel,
+    draft = preview?.draft ?? baseDraft,
+    lineupsRaw = preview ? preview.plans : basePlans;
+  const change = (next: Draft) => {
+    setPreview(undefined);
+    commitDraft(next);
+  };
+  useEffect(() => {
+    setPreview(undefined);
+  }, [
+    baseModel.dataset.hash,
+    baseModel.analysisVersion,
+    basePlans,
+    JSON.stringify(baseModel.settings),
+  ]);
   // The manual analyzer and standard finder retain this preference; the chain planner owns a separate choice.
-  const lineupBasis = readLineupBasis(state.filters[lineupBasisKey]);
+  const lineupBasis =
+    preview?.basis ?? readLineupBasis(state.filters[lineupBasisKey]);
   const [result, setResult] = useState<TradeResult | null>(null),
     [pending, setPending] = useState(false),
     [message, setMessage] = useState(""),
@@ -1744,6 +1778,7 @@ export function TradeView({
     return () => worker.terminate();
   }, [
     m.dataset.hash,
+    m.analysisVersion,
     JSON.stringify(m.settings),
     JSON.stringify(draft),
     m.evidenceRaw,
@@ -1773,6 +1808,7 @@ export function TradeView({
   }
   // Loading is an explicit draft replacement; newer data/settings continue to determine current results.
   function loadSaved(trade: SavedTrade) {
+    setWorkspaceMode(trade.query ? "standard" : null);
     // Storage or recipe failures must not load a draft against the wrong roster context.
     if (restoreScenario?.(trade.scenario) === false) return;
     change(trade.draft);
@@ -1794,7 +1830,9 @@ export function TradeView({
     return (
       <div className="trade-side">
         <div className="eyebrow">
-          {isA ? "YOUR TEAM · OUTGOING" : "COUNTERPARTY · INCOMING"}
+          {isA
+            ? `You offer · ${ids.length} players`
+            : `You receive · ${ids.length} players`}
         </div>
         <Select
           label={isA ? "Your team" : "Other team"}
@@ -1810,19 +1848,29 @@ export function TradeView({
           <TeamsOptions d={m.dataset} />
         </Select>
         {/* Roster-search help follows the same compact treatment as the other player filters. */}
-        <FilterHelp label="Search this roster">
-          <label className="control">
-            <span>Search this roster</span>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter player names…"
-            />
-          </label>
-        </FilterHelp>
+        <details className="trade-roster-search">
+          <summary>Find a player</summary>
+          <FilterHelp label="Search this roster">
+            <label className="control">
+              <span>Search this roster</span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Filter player names…"
+              />
+            </label>
+          </FilterHelp>
+        </details>
         {/* Native options stay selectable; each chosen player gets a separate clickable name. */}
         {Array.from({ length: 5 }, (_, i) => (
-          <div className="trade-player-slot" key={i}>
+          <div
+            className={`trade-player-slot${ids[i] ? " has-player" : ""}`}
+            key={i}
+            hidden={i > ids.length}
+          >
+            {m.byId.get(ids[i]) && (
+              <TradePortrait key={ids[i]} player={m.byId.get(ids[i])!} />
+            )}
             <div className="trade-select-row">
               <span>{i + 1}</span>
               <select
@@ -1861,6 +1909,13 @@ export function TradeView({
             {m.byId.get(ids[i]) && (
               <div className="trade-selected-player">
                 <PlayerName p={m.byId.get(ids[i])!} />
+                <small>
+                  {m.byId.get(ids[i])!.pos} · {m.byId.get(ids[i])!.nfl}
+                </small>
+                <strong className="model">
+                  {fmt(m.byId.get(ids[i])!.expected)}{" "}
+                  <small>Expected PPG</small>
+                </strong>
               </div>
             )}
           </div>
@@ -1887,7 +1942,7 @@ export function TradeView({
       </div>
     );
   }
-  const r = result?.valid ? result : null,
+  const r = result?.valid && resultStamp === evaluationStamp ? result : null,
     primary = r ? tradeImpact(r, lineupBasis)! : null,
     alternative = r
       ? tradeImpact(
@@ -1921,531 +1976,790 @@ export function TradeView({
           ))
         : "None";
   return (
-    <>
-      {/* This selector changes interpretation only; forecasts, transaction legality and asking-price tests stay independent. */}
-      <FilterHelp
-        label="Evaluate lineup impact using"
-        help="Applies to both teams in the manual analyzer and standard finder, including its filters and ranking. The chain planner has its own independent basis. Best available compares the strongest full rosters before and after. Marked starters uses saved/imported roles; a bench departure costs zero direct starting points. Byes follow the current live or hypothetical policy. Changing basis requires a new search."
-      >
-        <Select
-          label="Evaluate lineup impact using"
-          value={lineupBasis}
-          change={(value) => changeBasis(readLineupBasis(value))}
-        >
-          {lineupBases.map((basis) => (
-            <option key={basis} value={basis}>
-              {lineupBasisLabel(basis)}
-              {basis === "best-available" ? " — recommended" : ""}
-            </option>
-          ))}
-        </Select>
-      </FilterHelp>
-      <p className="muted">
-        Model Expected points/week · {lineupBasisLabel(lineupBasis)} ·{" "}
-        {m.current}–{m.final} ({m.weeks.length} weeks) ·{" "}
-        {m.ignoreByeWeeks
-          ? "Byes and temporary injury absences ignored; IR excluded"
-          : "Scheduled bye and availability rules"}
-      </p>
-      <div className="trade-builder">
-        {side(true)}
-        <div className="trade-swap">
-          <ArrowLeftRight size={23} />
-        </div>
-        {side(false)}
-      </div>
-      {/* Forcing records completion regardless of price/lineup verdicts; ownership validation still protects the simulation. */}
-      {forceTrade && (
-        <div className="toolbar">
-          <FilterHelp
-            label="Apply trade to hypothetical roster"
-            help="Assume this trade is completed, regardless of its grade. Updates both simulated teams and future searches as one undoable move. Creates a simulation if needed. Arrivals stay on the bench; no automatic drops or live league transactions occur. Load a search result first to apply that particular package."
+    <div className="trade-workspace">
+      <div className="trade-workspace-toolbar">
+        <div className="trade-mode-tabs" aria-label="Trade tool">
+          <button
+            type="button"
+            aria-pressed={workspaceMode === null}
+            onClick={() => {
+              setWorkspaceMode(null);
+              setPreview(undefined);
+            }}
           >
-            <button
-              className="button"
-              disabled={scenarioTradeErrors(m, draft).length > 0}
-              onClick={() => {
-                const exchange = `${draft.give.map((id) => m.byId.get(id)!.name).join(" + ")} ↔ ${draft.get.map((id) => m.byId.get(id)!.name).join(" + ")}`;
-                if (forceTrade(draft))
-                  setForceMessage(
-                    `Applied hypothetical trade: ${exchange}. Both rosters and subsequent trade searches now use the new ownership.`,
-                  );
-              }}
-            >
-              Apply trade to hypothetical roster
-            </button>
-          </FilterHelp>
+            Manual analyzer
+          </button>
+          <button
+            type="button"
+            aria-label="Find matching trades"
+            aria-expanded={workspaceMode === "standard"}
+            aria-pressed={workspaceMode === "standard"}
+            onClick={() => {
+              setWorkspaceMode("standard");
+              setPreview(undefined);
+            }}
+          >
+            Find trades
+          </button>
+          <button
+            type="button"
+            aria-label="Two-trade chain planner"
+            aria-expanded={workspaceMode === "chain"}
+            aria-pressed={workspaceMode === "chain"}
+            onClick={() => {
+              setWorkspaceMode("chain");
+              setPreview(undefined);
+            }}
+          >
+            Chain planner
+          </button>
         </div>
-      )}
-      {forceMessage && <p role="status">{forceMessage}</p>}
-      <DirectManagerAssessment
-        m={m}
-        draft={draft}
-        result={resultStamp === evaluationStamp ? result : null}
-        raw={state.filters.managerExpectations}
-        change={saveManagerSettings}
-        basis={lineupBasis}
-        lineupsRaw={lineupsRaw}
-      />
-      {/* Search preserves the outgoing draft and loads only an explicitly selected counterparty/package. */}
-      <TradeSearch
-        m={m}
-        draft={draft}
-        lineupsRaw={lineupsRaw}
-        change={change}
-        lineupBasis={lineupBasis}
-        onLineupBasisChange={changeBasis}
-        onQueryChange={setSearchQuery}
-        restore={restoreSearch}
-        settingsRaw={state.filters.tradeSearchSettings}
-        saveSettings={saveSearchSettings}
-        save={saveSelection}
-      />
-      {/* Keep saving and browsing within the existing analyzer, without adding navigation or changing scoring. */}
-      <div className="toolbar">
-        <button
-          className="button primary"
-          aria-label="Save current trade"
-          disabled={!r || pending || resultStamp !== evaluationStamp}
-          onClick={() => {
-            if (r)
-              saveSelection(
-                draft,
-                summaryFromTrade(r, lineupBasis),
-                searchQuery ? { ...searchQuery, lineupBasis } : undefined,
+        <div className="trade-workspace-tools">
+          <button
+            type="button"
+            className="subtle"
+            aria-expanded={analysisOpen}
+            onClick={() => {
+              setAnalysisOpen((open) => !open);
+              requestAnimationFrame(() =>
+                document
+                  .querySelector(".trade-full-analysis")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" }),
               );
-          }}
-        >
-          <Bookmark size={16} aria-hidden="true" />{" "}
-          {saveMessage.startsWith("Trade saved.")
-            ? "Saved"
-            : "Save current trade"}
-        </button>
-      </div>
-      {saveMessage && <p aria-live="polite">{saveMessage}</p>}
-      <SavedTrades
-        m={m}
-        state={state}
-        lineupsRaw={lineupsRaw}
-        change={saveTrades}
-        load={loadSaved}
-      />
-      {pending && (
-        <div className="notice" role="status">
-          Evaluating both rosters and proposed transactions…
-        </div>
-      )}
-      {message && (
-        <p role="alert" className="notice danger">
-          {message}
-        </p>
-      )}
-      {result && !result.valid && (
-        <div className="notice">{result.errors.join(" ")}</div>
-      )}
-      {r && (
-        <>
-          <Panel
-            title="Surplus exchange"
-            note="Your perspective. Deal grade excludes the consolidation premium and lineup impact."
+            }}
           >
-            <div className={`deal-heading ${tone}`}>
-              <div>
-                <span className="eyebrow">SURPLUS DEAL GRADE</span>
-                <h2>{r.grade}</h2>
-                {r.uncertainty.length > 0 && <Signal text="CONDITIONAL" />}
-              </div>
-              <strong>
-                {r.advantage === null ? "Percentage n.a." : pct(r.advantage)}
-              </strong>
+            Full trade analysis
+          </button>
+          <button
+            type="button"
+            className="subtle"
+            aria-expanded={savedOpen}
+            onClick={() => {
+              setSavedOpen((open) => !open);
+              requestAnimationFrame(() =>
+                document
+                  .querySelector(".trade-saved-drawer")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+              );
+            }}
+          >
+            Saved trades
+          </button>
+        </div>
+      </div>
+      {workspaceMode === "chain" && !preview ? (
+        <p className="trade-chain-intro">
+          Search a chain, then inspect either step to compare its teams and
+          lineups. Each step uses its own before-trade roster.
+        </p>
+      ) : (
+        <TradeScoreStrip
+          m={m}
+          draft={draft}
+          impact={pending || resultStamp !== evaluationStamp ? null : primary}
+          pending={pending}
+          label={preview?.label}
+        />
+      )}
+      <div className="trade-workspace-grid">
+        <div className="trade-workspace-left">
+          <div className="trade-workspace-controls">
+            <div
+              className="trade-workspace-basis"
+              hidden={workspaceMode === "chain"}
+            >
+              {/* This selector changes interpretation only; forecasts, transaction legality and asking-price tests stay independent. */}
+              <FilterHelp
+                label="Evaluate lineup impact using"
+                help="Applies to both teams in the manual analyzer and standard finder, including its filters and ranking. The chain planner has its own independent basis. Best available compares the strongest full rosters before and after. Marked starters uses saved/imported roles; a bench departure costs zero direct starting points. Byes follow the current live or hypothetical policy. Changing basis requires a new search."
+              >
+                <Select
+                  label="Evaluate lineup impact using"
+                  value={lineupBasis}
+                  change={(value) => {
+                    setPreview(undefined);
+                    changeBasis(readLineupBasis(value));
+                  }}
+                >
+                  {lineupBases.map((basis) => (
+                    <option key={basis} value={basis}>
+                      {lineupBasisLabel(basis)}
+                      {basis === "best-available" ? " — recommended" : ""}
+                    </option>
+                  ))}
+                </Select>
+              </FilterHelp>
+              <p className="muted">
+                Model Expected points/week · {lineupBasisLabel(lineupBasis)} ·{" "}
+                {m.current}–{m.final} ({m.weeks.length} weeks) ·{" "}
+                {m.ignoreByeWeeks
+                  ? "Byes and temporary injury absences ignored; IR excluded"
+                  : "Scheduled bye and availability rules"}
+              </p>
             </div>
-            <div className="advantage-labels">
-              <span>Favors the other team</span>
-              <b>Even</b>
-              <span>Favors you</span>
+            {preview && (
+              <p className="trade-preview-caption">
+                <span>{preview.label}</span>
+                <button
+                  className="subtle"
+                  type="button"
+                  onClick={() => setPreview(undefined)}
+                >
+                  Return to draft
+                </button>
+              </p>
+            )}
+          </div>
+          {/* Chain configuration stays independent; inspecting a leg never turns its prerequisite into a real draft. */}
+          {workspaceMode === "chain" && !preview ? (
+            <section className="panel trade-chain-pool">
+              <h3>Chain trade pool</h3>
+              <p>Choose your pool in Chain filters, then inspect a result.</p>
+              <div className="trade-chain-pool-cards">
+                {(chainPool?.pool ?? []).map((id) => {
+                  const player = baseModel.byId.get(id);
+                  return (
+                    player && (
+                      <article key={id}>
+                        <TradePortrait player={player} />
+                        <PlayerName p={player} />
+                        <strong className="model">
+                          {fmt(player.expected)} Expected PPG
+                        </strong>
+                      </article>
+                    )
+                  );
+                })}
+              </div>
+            </section>
+          ) : (
+            <>
+              <fieldset
+                className="trade-preview-offer"
+                disabled={workspaceMode === "chain"}
+              >
+                <div className="trade-builder">
+                  {side(true)}
+                  <div className="trade-swap">
+                    <ArrowLeftRight size={23} />
+                  </div>
+                  {side(false)}
+                </div>
+              </fieldset>
+              {/* Forcing records completion regardless of price/lineup verdicts; ownership validation still protects the simulation. */}
+              {forceTrade && !preview?.prerequisite && (
+                <div className="toolbar">
+                  <FilterHelp
+                    label="Apply trade to hypothetical roster"
+                    help="Assume this trade is completed, regardless of its grade. Updates both simulated teams and future searches as one undoable move. Creates a simulation if needed. Arrivals stay on the bench; no automatic drops or live league transactions occur. Load a search result first to apply that particular package."
+                  >
+                    <button
+                      className="button"
+                      disabled={scenarioTradeErrors(m, draft).length > 0}
+                      onClick={() => {
+                        const exchange = `${draft.give.map((id) => m.byId.get(id)!.name).join(" + ")} ↔ ${draft.get.map((id) => m.byId.get(id)!.name).join(" + ")}`;
+                        if (forceTrade(draft))
+                          setForceMessage(
+                            `Applied hypothetical trade: ${exchange}. Both rosters and subsequent trade searches now use the new ownership.`,
+                          );
+                      }}
+                    >
+                      Apply trade to hypothetical roster
+                    </button>
+                  </FilterHelp>
+                </div>
+              )}
+              {forceMessage && <p role="status">{forceMessage}</p>}
+              <TradeLineupField
+                m={m}
+                draft={draft}
+                impact={
+                  pending || resultStamp !== evaluationStamp ? null : primary
+                }
+                basis={lineupBasis}
+                plans={lineupsRaw}
+                pending={pending}
+              />
+            </>
+          )}
+          <div className="trade-workspace-save">
+            <div>
+              <span>Value exchange</span>
+              <strong className="model">{r?.grade ?? "Choose an offer"}</strong>
+              {r && r.uncertainty.length > 0 && <Signal text="CONDITIONAL" />}
+            </div>
+            {/* Keep saving and browsing within the existing analyzer, without adding navigation or changing scoring. */}
+            <div className="toolbar">
+              <button
+                className="button primary"
+                aria-label="Save current trade"
+                disabled={
+                  !r ||
+                  pending ||
+                  resultStamp !== evaluationStamp ||
+                  (workspaceMode === "chain" && !preview)
+                }
+                onClick={() => {
+                  if (r)
+                    saveSelection(
+                      draft,
+                      summaryFromTrade(r, lineupBasis),
+                      (preview?.query ?? searchQuery)
+                        ? { ...(preview?.query ?? searchQuery)!, lineupBasis }
+                        : undefined,
+                    );
+                }}
+              >
+                <Bookmark size={16} aria-hidden="true" />{" "}
+                {saveMessage.startsWith("Trade saved.")
+                  ? "Saved"
+                  : "Save current trade"}
+              </button>
+            </div>
+            {saveMessage && <p aria-live="polite">{saveMessage}</p>}
+          </div>
+        </div>
+        <div className="trade-workspace-right">
+          {/* Search preserves the outgoing draft and loads only an explicitly selected counterparty/package. */}
+          <TradeSearch
+            m={baseModel}
+            draft={baseDraft}
+            lineupsRaw={basePlans}
+            change={change}
+            workspaceMode={workspaceMode}
+            onModeChange={(mode) => {
+              setWorkspaceMode(mode);
+              setPreview(undefined);
+            }}
+            onClearPreview={() => setPreview(undefined)}
+            onPreview={setPreview}
+            onChainPool={setChainPool}
+            lineupBasis={readLineupBasis(state.filters[lineupBasisKey])}
+            onLineupBasisChange={changeBasis}
+            onQueryChange={setSearchQuery}
+            restore={restoreSearch}
+            settingsRaw={state.filters.tradeSearchSettings}
+            saveSettings={saveSearchSettings}
+            save={saveSelection}
+          />
+          <section
+            className="panel trade-manual-panel"
+            hidden={workspaceMode !== null}
+          >
+            <div className="panel-head">
+              <h2>Manual trade overview</h2>
+              <TradeFiltersButton
+                scope="Manual"
+                open={manualFilters}
+                toggle={() => setManualFilters((open) => !open)}
+              />
             </div>
             <div
-              className={`advantage-bar ${tone}`}
-              role="meter"
-              aria-label="Surplus advantage"
-              aria-valuemin={-100}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(Math.max(-1, Math.min(1, bar)) * 100)}
-              aria-valuetext={
-                r.advantage === null
-                  ? r.grade
-                  : `${pct(r.advantage)} surplus advantage`
-              }
+              className={`trade-finder-layout${manualFilters ? " filters-open" : ""}`}
             >
-              <i
-                style={{
-                  left: bar >= 0 ? "50%" : `${50 + Math.max(-1, bar) * 50}%`,
-                  width: `${Math.abs(Math.max(-1, Math.min(1, bar))) * 50}%`,
-                }}
-              />
-              <b />
-            </div>
-            <p className="muted">
-              Bar caps at ±100%; the percentage and grade remain uncapped. A
-              large percentage can represent a small absolute gain.
-            </p>
-            <div className="metric-grid">
-              <Metric label="Outgoing surplus points" value={fmt(r.outgoing)} />
-              <Metric label="Incoming surplus points" value={fmt(r.incoming)} />
-              <Metric label="Surplus difference" value={signed(r.difference)} />
-              <Metric
-                label="Needed to enter fair band"
-                value={fmt(r.neededFair)}
-              />
-            </div>
-          </Panel>
-          {/* Primary and alternate summaries are selected in the domain; each keeps its own before/after baseline. */}
-          <Panel
-            title="Expected team gain per week"
-            note={`${lineupBasisLabel(lineupBasis)} · Average model Expected points over Weeks ${m.current}–${m.final}. Required drops included; waiver proposals excluded. ${m.ignoreByeWeeks ? "Byes and temporary injury absences ignored; IR excluded." : "Scheduled bye, injury and IR rules retained."}`}
-          >
-            <div className="metric-grid two">
-              <Metric
-                label="Your gain / week"
-                value={signed(primary!.own.expectedPerWeek)}
-              />
-              <Metric
-                label="Their gain / week"
-                value={signed(primary!.other.expectedPerWeek)}
-              />
-            </div>
-            {(
-              [
-                ["Your", primary!.own],
-                ["Their", primary!.other],
-              ] as const
-            ).map(([label, impact]) => (
-              <div key={label}>
-                <p className="model">
-                  <strong>{label} Expected points/week:</strong> Before{" "}
-                  {fmt(impact.beforePerWeek)} → After {fmt(impact.afterPerWeek)}{" "}
-                  · Gain {signed(impact.expectedPerWeek)}
-                </p>
-                <p className="muted">{impact.source}</p>
-                {[...impact.errors, ...impact.warnings].map((issue) => (
-                  <p className="notice warning" key={issue}>
-                    {issue}
-                  </p>
-                ))}
-                <details>
-                  <summary>
-                    {label} weekly lineups · {lineupBasisLabel(lineupBasis)}
-                  </summary>
-                  {impact.weekly.map((week) => (
-                    <div key={week.week}>
-                      <p>
-                        <strong>Week {week.week}:</strong>{" "}
-                        <span className="model">
-                          {fmt(week.beforeExpected)} → {fmt(week.afterExpected)}{" "}
-                          ({signed(week.expectedGain)})
-                        </span>{" "}
-                        expected points.
-                      </p>
-                      <p>
-                        Before:{" "}
-                        {names(
-                          week.beforeIds.filter((id): id is string => !!id),
-                        )}
-                        . After:{" "}
-                        {names(week.ids.filter((id): id is string => !!id))}.
-                      </p>
-                    </div>
-                  ))}
-                </details>
-              </div>
-            ))}
-          </Panel>
-          {/* The alternative is explanatory only and cannot silently supply the selected search's numbers. */}
-          <details>
-            <summary>
-              Compare with {lineupBasisLabel(alternative!.basis)}
-            </summary>
-            <p className="muted">
-              This uses a different starting baseline. Its gain cannot be added
-              to the primary Before total.
-            </p>
-            {(
-              [
-                ["Your", alternative!.own],
-                ["Their", alternative!.other],
-              ] as const
-            ).map(([label, impact]) => (
-              <Panel
-                key={label}
-                title={`${label} ${alternative!.basis === "marked-starters" ? "direct starter impact" : "best available lineup"}`}
-                note={impact.source}
+              <TradeFiltersDrawer
+                scope="Manual"
+                open={manualFilters}
+                close={() => setManualFilters(false)}
               >
-                <Metric
-                  label="Expected scoring gain / week"
-                  value={signed(impact.expectedPerWeek)}
+                <DirectManagerAssessment
+                  m={m}
+                  draft={draft}
+                  result={resultStamp === evaluationStamp ? result : null}
+                  raw={state.filters.managerExpectations}
+                  change={saveManagerSettings}
+                  basis={lineupBasis}
+                  lineupsRaw={lineupsRaw}
                 />
-                <p className="model">
-                  Before {fmt(impact.beforePerWeek)} → After{" "}
-                  {fmt(impact.afterPerWeek)} · Gain{" "}
-                  {signed(impact.expectedPerWeek)} points/week
+              </TradeFiltersDrawer>
+              <div className="trade-finder-main">
+                <h3>{r?.grade ?? "Build your offer"}</h3>
+                <p className="muted">
+                  Compare both teams above. Inspect the lineup on the left, then
+                  review value, legality and conditions separately.
                 </p>
-                <p>
-                  Existing bench replacements: {names(impact.replacements)}.
-                  Modeled incoming starters: {names(impact.promotedIncoming)}.
-                </p>
-                <details>
-                  <summary>{label} alternative weekly lineups</summary>
-                  {impact.weekly.map((week) => (
-                    <div key={week.week}>
-                      <p>
-                        <strong>Week {week.week}:</strong>{" "}
-                        <span className="model">
-                          {fmt(week.beforeExpected)} → {fmt(week.afterExpected)}{" "}
-                          ({signed(week.expectedGain)})
-                        </span>
-                      </p>
-                      <p>
-                        Before:{" "}
-                        {names(
-                          week.beforeIds.filter((id): id is string => !!id),
-                        )}
-                        . After:{" "}
-                        {names(week.ids.filter((id): id is string => !!id))}.
-                      </p>
+                {r && (
+                  <>
+                    <div className="trade-compact-tests">
+                      <Signal text={`${r.surplusTest} · surplus-value test`} />
+                      <Signal text={`${r.pointsTest} · fantasy-points test`} />
+                      <Signal
+                        text={`${r.legality ? "PASS" : "FAIL"} · roster legality`}
+                      />
                     </div>
-                  ))}
-                </details>
-                {[...impact.errors, ...impact.warnings].map((issue) => (
-                  <p className="notice warning" key={issue}>
-                    {issue}
+                    <p>
+                      Required drops · Yours: {names(r.dropsA)} · Theirs:{" "}
+                      {names(r.dropsB)}
+                    </p>
+                    {r.uncertainty.length > 0 && (
+                      <p className="notice warning">
+                        {r.uncertainty.join("; ")}
+                      </p>
+                    )}
+                  </>
+                )}
+                {pending && (
+                  <div className="notice" role="status">
+                    Evaluating both rosters and proposed transactions…
+                  </div>
+                )}
+                {message && (
+                  <p role="alert" className="notice danger">
+                    {message}
                   </p>
-                ))}
-              </Panel>
-            ))}
-          </details>
-          {/* The former all-roster optimization remains separate for hypothetical future backup/bye coverage. */}
-          <details>
-            <summary>Modeled future coverage impact (includes bench)</summary>
+                )}
+                {result && !result.valid && (
+                  <div className="notice">{result.errors.join(" ")}</div>
+                )}
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => setAnalysisOpen(true)}
+                >
+                  Show full trade analysis
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <details
+        className="trade-full-analysis"
+        open={analysisOpen}
+        onToggle={(event) => setAnalysisOpen(event.currentTarget.open)}
+      >
+        <summary>Detailed trade calculations</summary>
+        {r && (
+          <>
             <Panel
-              title="Optimized future lineups and coverage"
-              note="Assumes the app can start any available rostered player. This may include a benched QB during a bye; it is separate from your direct starter score."
+              title="Surplus exchange"
+              note="Your perspective. Deal grade excludes the consolidation premium and lineup impact."
             >
+              <div className={`deal-heading ${tone}`}>
+                <div>
+                  <span className="eyebrow">SURPLUS DEAL GRADE</span>
+                  <h2>{r.grade}</h2>
+                  {r.uncertainty.length > 0 && <Signal text="CONDITIONAL" />}
+                </div>
+                <strong>
+                  {r.advantage === null ? "Percentage n.a." : pct(r.advantage)}
+                </strong>
+              </div>
+              <div className="advantage-labels">
+                <span>Favors the other team</span>
+                <b>Even</b>
+                <span>Favors you</span>
+              </div>
+              <div
+                className={`advantage-bar ${tone}`}
+                role="meter"
+                aria-label="Surplus advantage"
+                aria-valuemin={-100}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(Math.max(-1, Math.min(1, bar)) * 100)}
+                aria-valuetext={
+                  r.advantage === null
+                    ? r.grade
+                    : `${pct(r.advantage)} surplus advantage`
+                }
+              >
+                <i
+                  style={{
+                    left: bar >= 0 ? "50%" : `${50 + Math.max(-1, bar) * 50}%`,
+                    width: `${Math.abs(Math.max(-1, Math.min(1, bar))) * 50}%`,
+                  }}
+                />
+                <b />
+              </div>
+              <p className="muted">
+                Bar caps at ±100%; the percentage and grade remain uncapped. A
+                large percentage can represent a small absolute gain.
+              </p>
               <div className="metric-grid">
                 <Metric
-                  label="Your modeled coverage gain / week"
-                  value={signed(r.a.expectedPerWeek)}
+                  label="Outgoing surplus points"
+                  value={fmt(r.outgoing)}
                 />
                 <Metric
-                  label="Their modeled coverage gain / week"
-                  value={signed(r.b.expectedPerWeek)}
+                  label="Incoming surplus points"
+                  value={fmt(r.incoming)}
                 />
                 <Metric
-                  label="Your downside value gain total"
-                  value={signed(r.a.downside)}
+                  label="Surplus difference"
+                  value={signed(r.difference)}
                 />
                 <Metric
-                  label="Their downside value gain total"
-                  value={signed(r.b.downside)}
+                  label="Needed to enter fair band"
+                  value={fmt(r.neededFair)}
                 />
               </div>
             </Panel>
-          </details>
-          {/* Current provider references are kept distinct from model surplus and lineup gains. */}
-          <Panel title="Market reference" note={r.market.status}>
-            <div className="metric-grid two">
-              <Metric
-                label="Outgoing external value"
-                value={fmt(r.market.outgoing)}
-              />
-              <Metric
-                label="Incoming external value"
-                value={fmt(r.market.incoming)}
-              />
-            </div>
-            <p>
-              {r.market.source || "No complete comparable source supplied."}{" "}
-              Provider units differ from surplus points. These sums do not apply
-              the consolidation premium and do not predict whether a manager
-              will accept.
-            </p>
-          </Panel>
-          <Panel
-            title="Requirements and conditions"
-            note="Package requirements are separate from the deal grade."
-          >
-            <div className="three-col">
-              <div className="requirement">
-                <Signal text={`${r.surplusTest} · surplus-value test`} />
-                <p>
-                  Actual {fmt(r.actualSurplus)} / required{" "}
-                  {fmt(r.requiredSurplus)} surplus points
-                </p>
-                <strong className="model">
-                  Shortfall {fmt(r.surplusShortfall)}
-                </strong>
-              </div>
-              <div className="requirement">
-                <Signal text={`${r.pointsTest} · fantasy-points test`} />
-                <p>
-                  Actual {fmt(r.actualPoints)} / required{" "}
-                  {fmt(r.requiredPoints)} adjusted points
-                </p>
-                <strong className="model">
-                  Shortfall {fmt(r.pointsShortfall)}
-                </strong>
-              </div>
-              <div className="requirement">
-                <Signal
-                  text={`${r.legality ? "PASS" : "FAIL"} · roster legality`}
+            {/* Primary and alternate summaries are selected in the domain; each keeps its own before/after baseline. */}
+            <Panel
+              title="Expected team gain per week"
+              note={`${lineupBasisLabel(lineupBasis)} · Average model Expected points over Weeks ${m.current}–${m.final}. Required drops included; waiver proposals excluded. ${m.ignoreByeWeeks ? "Byes and temporary injury absences ignored; IR excluded." : "Scheduled bye, injury and IR rules retained."}`}
+            >
+              <div className="metric-grid two">
+                <Metric
+                  label="Your gain / week"
+                  value={signed(primary!.own.expectedPerWeek)}
                 />
-                <p>
-                  {draft.give.length === draft.get.length
-                    ? "Equal size: no premium."
-                    : `${fmt(m.settings.Premium * 100, 0)}% applied once to the smaller package.`}
-                </p>
-                <p>
-                  Drop replacement cost:{" "}
-                  <span className="model">{fmt(r.dropCost)} points</span>
-                </p>
+                <Metric
+                  label="Their gain / week"
+                  value={signed(primary!.other.expectedPerWeek)}
+                />
               </div>
-            </div>
-            {r.uncertainty.length > 0 ? (
-              <div className="notice warning">
-                CONDITIONAL: {r.uncertainty.join("; ")}.
-              </div>
-            ) : (
-              <p>No flagged uncertainty.</p>
-            )}
-          </Panel>
-          <Panel
-            title={`Weekly lineup impact · ${lineupBasisLabel(lineupBasis)}`}
-            note={`Same selected basis as search and headline totals: ${lineupBasisLabel(lineupBasis)}. Model Expected points, not ESPN’s weekly forecast.`}
-          >
-            <DataTable
-              rows={primary!.own.weekly.map((w, i) => ({
-                ...w,
-                their: primary!.other.weekly[i].expectedGain,
-              }))}
-              id={(w) => str(w.week)}
-              columns={[
-                {
-                  key: "week",
-                  label: "Week",
-                  kind: "fact",
-                  value: (w) => w.week,
-                },
-                {
-                  key: "before",
-                  label: "Your before expected",
-                  kind: "model",
-                  value: (w) => w.beforeExpected,
-                },
-                {
-                  key: "after",
-                  label: "Your after expected",
-                  kind: "model",
-                  value: (w) => w.afterExpected,
-                },
-                {
-                  key: "gain",
-                  label: "Your expected gain",
-                  kind: "model",
-                  value: (w) => w.expectedGain,
-                },
-                {
-                  key: "their",
-                  label: "Their expected gain",
-                  kind: "model",
-                  value: (w) => w.their,
-                },
-                {
-                  key: "value",
-                  label: "Your value gain",
-                  kind: "model",
-                  value: (w) => w.valueGain,
-                },
-                {
-                  key: "unfilled",
-                  label: "Your unfilled slots",
-                  kind: "model",
-                  value: (w) => w.unfilled,
-                },
-              ]}
-            />
-            <details>
-              <summary>Inspect your before/after starters</summary>
-              {primary!.own.weekly.map((w) => (
-                <p key={w.week}>
-                  <b>Week {w.week}:</b>{" "}
-                  <span>
-                    Before:{" "}
-                    {w.beforeIds
-                      .map((id) => (id ? m.byId.get(id)?.name : "Unfilled"))
-                      .join(" · ")}
-                    . After:{" "}
-                  </span>
-                  {/* Keep every automatically selected incoming upgrade or replacement inspectable. */}
-                  {w.ids.map((id, i) => (
-                    <span key={i}>
-                      {i > 0 && " · "}
-                      {w.slots[i]}:{" "}
-                      {id && m.byId.get(id) ? (
-                        <PlayerName p={m.byId.get(id)!} />
-                      ) : (
-                        "Unfilled"
-                      )}
-                    </span>
+              {(
+                [
+                  ["Your", primary!.own],
+                  ["Their", primary!.other],
+                ] as const
+              ).map(([label, impact]) => (
+                <div key={label}>
+                  <p className="model">
+                    <strong>{label} Expected points/week:</strong> Before{" "}
+                    {fmt(impact.beforePerWeek)} → After{" "}
+                    {fmt(impact.afterPerWeek)} · Gain{" "}
+                    {signed(impact.expectedPerWeek)}
+                  </p>
+                  <p className="muted">{impact.source}</p>
+                  {[...impact.errors, ...impact.warnings].map((issue) => (
+                    <p className="notice warning" key={issue}>
+                      {issue}
+                    </p>
                   ))}
-                </p>
+                  <details>
+                    <summary>
+                      {label} weekly lineups · {lineupBasisLabel(lineupBasis)}
+                    </summary>
+                    {impact.weekly.map((week) => (
+                      <div key={week.week}>
+                        <p>
+                          <strong>Week {week.week}:</strong>{" "}
+                          <span className="model">
+                            {fmt(week.beforeExpected)} →{" "}
+                            {fmt(week.afterExpected)} (
+                            {signed(week.expectedGain)})
+                          </span>{" "}
+                          expected points.
+                        </p>
+                        <p>
+                          Before:{" "}
+                          {names(
+                            week.beforeIds.filter((id): id is string => !!id),
+                          )}
+                          . After:{" "}
+                          {names(week.ids.filter((id): id is string => !!id))}.
+                        </p>
+                      </div>
+                    ))}
+                  </details>
+                </div>
+              ))}
+            </Panel>
+            {/* The alternative is explanatory only and cannot silently supply the selected search's numbers. */}
+            <details>
+              <summary>
+                Compare with {lineupBasisLabel(alternative!.basis)}
+              </summary>
+              <p className="muted">
+                This uses a different starting baseline. Its gain cannot be
+                added to the primary Before total.
+              </p>
+              {(
+                [
+                  ["Your", alternative!.own],
+                  ["Their", alternative!.other],
+                ] as const
+              ).map(([label, impact]) => (
+                <Panel
+                  key={label}
+                  title={`${label} ${alternative!.basis === "marked-starters" ? "direct starter impact" : "best available lineup"}`}
+                  note={impact.source}
+                >
+                  <Metric
+                    label="Expected scoring gain / week"
+                    value={signed(impact.expectedPerWeek)}
+                  />
+                  <p className="model">
+                    Before {fmt(impact.beforePerWeek)} → After{" "}
+                    {fmt(impact.afterPerWeek)} · Gain{" "}
+                    {signed(impact.expectedPerWeek)} points/week
+                  </p>
+                  <p>
+                    Existing bench replacements: {names(impact.replacements)}.
+                    Modeled incoming starters: {names(impact.promotedIncoming)}.
+                  </p>
+                  <details>
+                    <summary>{label} alternative weekly lineups</summary>
+                    {impact.weekly.map((week) => (
+                      <div key={week.week}>
+                        <p>
+                          <strong>Week {week.week}:</strong>{" "}
+                          <span className="model">
+                            {fmt(week.beforeExpected)} →{" "}
+                            {fmt(week.afterExpected)} (
+                            {signed(week.expectedGain)})
+                          </span>
+                        </p>
+                        <p>
+                          Before:{" "}
+                          {names(
+                            week.beforeIds.filter((id): id is string => !!id),
+                          )}
+                          . After:{" "}
+                          {names(week.ids.filter((id): id is string => !!id))}.
+                        </p>
+                      </div>
+                    ))}
+                  </details>
+                  {[...impact.errors, ...impact.warnings].map((issue) => (
+                    <p className="notice warning" key={issue}>
+                      {issue}
+                    </p>
+                  ))}
+                </Panel>
               ))}
             </details>
-          </Panel>
-          <Panel
-            title="Required changes and optional pickups"
-            note="Waiver claims are proposals. Their gains are not attributed to the trade alone."
-          >
-            <div className="two-col">
-              <div>
-                <h3>Your roster</h3>
-                <p>Required drops: {names(r.dropsA)}</p>
-                <p>IR assignments: {names(r.irA)}</p>
-                <p>Proposed waiver adds: {names(r.addsA)}</p>
-                <p>
-                  Additional waiver expected gain:{" "}
-                  <span className="model">
-                    {signed(r.a.waiverExpected)} total points
-                  </span>
-                </p>
-              </div>
-              <div>
-                <h3>Other roster</h3>
-                <p>Required drops: {names(r.dropsB)}</p>
-                <p>IR assignments: {names(r.irB)}</p>
-                <p>Proposed waiver adds: {names(r.addsB)}</p>
-                <p>
-                  Additional waiver expected gain:{" "}
-                  <span className="model">
-                    {signed(r.b.waiverExpected)} total points
-                  </span>
-                </p>
-              </div>
-            </div>
+            {/* The former all-roster optimization remains separate for hypothetical future backup/bye coverage. */}
             <details>
-              <summary>Counts and current-week backup depth</summary>
-              <Depth
-                m={m}
-                before={r.initialA}
-                after={r.legalA}
-                otherBefore={r.initialB}
-                otherAfter={r.legalB}
-              />
+              <summary>Modeled future coverage impact (includes bench)</summary>
+              <Panel
+                title="Optimized future lineups and coverage"
+                note="Assumes the app can start any available rostered player. This may include a benched QB during a bye; it is separate from your direct starter score."
+              >
+                <div className="metric-grid">
+                  <Metric
+                    label="Your modeled coverage gain / week"
+                    value={signed(r.a.expectedPerWeek)}
+                  />
+                  <Metric
+                    label="Their modeled coverage gain / week"
+                    value={signed(r.b.expectedPerWeek)}
+                  />
+                  <Metric
+                    label="Your downside value gain total"
+                    value={signed(r.a.downside)}
+                  />
+                  <Metric
+                    label="Their downside value gain total"
+                    value={signed(r.b.downside)}
+                  />
+                </div>
+              </Panel>
             </details>
-          </Panel>
-        </>
-      )}
-    </>
+            {/* Current provider references are kept distinct from model surplus and lineup gains. */}
+            <Panel title="Market reference" note={r.market.status}>
+              <div className="metric-grid two">
+                <Metric
+                  label="Outgoing external value"
+                  value={fmt(r.market.outgoing)}
+                />
+                <Metric
+                  label="Incoming external value"
+                  value={fmt(r.market.incoming)}
+                />
+              </div>
+              <p>
+                {r.market.source || "No complete comparable source supplied."}{" "}
+                Provider units differ from surplus points. These sums do not
+                apply the consolidation premium and do not predict whether a
+                manager will accept.
+              </p>
+            </Panel>
+            <Panel
+              title="Requirements and conditions"
+              note="Package requirements are separate from the deal grade."
+            >
+              <div className="three-col">
+                <div className="requirement">
+                  <Signal text={`${r.surplusTest} · surplus-value test`} />
+                  <p>
+                    Actual {fmt(r.actualSurplus)} / required{" "}
+                    {fmt(r.requiredSurplus)} surplus points
+                  </p>
+                  <strong className="model">
+                    Shortfall {fmt(r.surplusShortfall)}
+                  </strong>
+                </div>
+                <div className="requirement">
+                  <Signal text={`${r.pointsTest} · fantasy-points test`} />
+                  <p>
+                    Actual {fmt(r.actualPoints)} / required{" "}
+                    {fmt(r.requiredPoints)} adjusted points
+                  </p>
+                  <strong className="model">
+                    Shortfall {fmt(r.pointsShortfall)}
+                  </strong>
+                </div>
+                <div className="requirement">
+                  <Signal
+                    text={`${r.legality ? "PASS" : "FAIL"} · roster legality`}
+                  />
+                  <p>
+                    {draft.give.length === draft.get.length
+                      ? "Equal size: no premium."
+                      : `${fmt(m.settings.Premium * 100, 0)}% applied once to the smaller package.`}
+                  </p>
+                  <p>
+                    Drop replacement cost:{" "}
+                    <span className="model">{fmt(r.dropCost)} points</span>
+                  </p>
+                </div>
+              </div>
+              {r.uncertainty.length > 0 ? (
+                <div className="notice warning">
+                  CONDITIONAL: {r.uncertainty.join("; ")}.
+                </div>
+              ) : (
+                <p>No flagged uncertainty.</p>
+              )}
+            </Panel>
+            <Panel
+              title={`Weekly lineup impact · ${lineupBasisLabel(lineupBasis)}`}
+              note={`Same selected basis as search and headline totals: ${lineupBasisLabel(lineupBasis)}. Model Expected points, not ESPN’s weekly forecast.`}
+            >
+              <DataTable
+                rows={primary!.own.weekly.map((w, i) => ({
+                  ...w,
+                  their: primary!.other.weekly[i].expectedGain,
+                }))}
+                id={(w) => str(w.week)}
+                columns={[
+                  {
+                    key: "week",
+                    label: "Week",
+                    kind: "fact",
+                    value: (w) => w.week,
+                  },
+                  {
+                    key: "before",
+                    label: "Your before expected",
+                    kind: "model",
+                    value: (w) => w.beforeExpected,
+                  },
+                  {
+                    key: "after",
+                    label: "Your after expected",
+                    kind: "model",
+                    value: (w) => w.afterExpected,
+                  },
+                  {
+                    key: "gain",
+                    label: "Your expected gain",
+                    kind: "model",
+                    value: (w) => w.expectedGain,
+                  },
+                  {
+                    key: "their",
+                    label: "Their expected gain",
+                    kind: "model",
+                    value: (w) => w.their,
+                  },
+                  {
+                    key: "value",
+                    label: "Your value gain",
+                    kind: "model",
+                    value: (w) => w.valueGain,
+                  },
+                  {
+                    key: "unfilled",
+                    label: "Your unfilled slots",
+                    kind: "model",
+                    value: (w) => w.unfilled,
+                  },
+                ]}
+              />
+              <details>
+                <summary>Inspect your before/after starters</summary>
+                {primary!.own.weekly.map((w) => (
+                  <p key={w.week}>
+                    <b>Week {w.week}:</b>{" "}
+                    <span>
+                      Before:{" "}
+                      {w.beforeIds
+                        .map((id) => (id ? m.byId.get(id)?.name : "Unfilled"))
+                        .join(" · ")}
+                      . After:{" "}
+                    </span>
+                    {/* Keep every automatically selected incoming upgrade or replacement inspectable. */}
+                    {w.ids.map((id, i) => (
+                      <span key={i}>
+                        {i > 0 && " · "}
+                        {w.slots[i]}:{" "}
+                        {id && m.byId.get(id) ? (
+                          <PlayerName p={m.byId.get(id)!} />
+                        ) : (
+                          "Unfilled"
+                        )}
+                      </span>
+                    ))}
+                  </p>
+                ))}
+              </details>
+            </Panel>
+            <Panel
+              title="Required changes and optional pickups"
+              note="Waiver claims are proposals. Their gains are not attributed to the trade alone."
+            >
+              <div className="two-col">
+                <div>
+                  <h3>Your roster</h3>
+                  <p>Required drops: {names(r.dropsA)}</p>
+                  <p>IR assignments: {names(r.irA)}</p>
+                  <p>Proposed waiver adds: {names(r.addsA)}</p>
+                  <p>
+                    Additional waiver expected gain:{" "}
+                    <span className="model">
+                      {signed(r.a.waiverExpected)} total points
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <h3>Other roster</h3>
+                  <p>Required drops: {names(r.dropsB)}</p>
+                  <p>IR assignments: {names(r.irB)}</p>
+                  <p>Proposed waiver adds: {names(r.addsB)}</p>
+                  <p>
+                    Additional waiver expected gain:{" "}
+                    <span className="model">
+                      {signed(r.b.waiverExpected)} total points
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <details>
+                <summary>Counts and current-week backup depth</summary>
+                <Depth
+                  m={m}
+                  before={r.initialA}
+                  after={r.legalA}
+                  otherBefore={r.initialB}
+                  otherAfter={r.legalB}
+                />
+              </details>
+            </Panel>
+          </>
+        )}
+      </details>
+      <details
+        className="trade-saved-drawer"
+        open={savedOpen}
+        onToggle={(event) => setSavedOpen(event.currentTarget.open)}
+      >
+        <summary>Browse saved trades</summary>
+        <SavedTrades
+          m={baseModel}
+          state={state}
+          lineupsRaw={basePlans}
+          change={saveTrades}
+          load={loadSaved}
+        />
+      </details>
+    </div>
   );
 }
+
 function Depth({
   m,
   before,

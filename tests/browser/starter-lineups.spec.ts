@@ -1,3 +1,4 @@
+import { openTradeDetails, openTradeFilters } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { starterLineupsKey } from "../../src/domain/starter-lineups";
@@ -199,6 +200,8 @@ test("bench trades keep direct points unchanged while exchange grade and coverag
 }) => {
   await seed(page);
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await page
     .getByLabel("Outgoing player 1", { exact: true })
     .selectOption("101");
@@ -220,7 +223,7 @@ test("bench trades keep direct points unchanged while exchange grade and coverag
     })
     .locator("strong");
   await expect(gain).toHaveText("0.00");
-  await expect(page.getByText("Horrible deal", { exact: true })).toBeVisible();
+  await expect(page.locator(".trade-full-analysis").getByRole("heading", { name: "Horrible deal", exact: true })).toBeVisible();
   await page
     .getByText("Modeled future coverage impact (includes bench)", {
       exact: true,
@@ -252,6 +255,8 @@ test("bench trades keep direct points unchanged while exchange grade and coverag
   await page.getByRole("button", { name: "Save lineup", exact: true }).click();
   await expect(page.getByText(/Lineup source: Saved app lineup/)).toBeVisible();
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await page.getByText("Compare with Marked starters", { exact: true }).click();
   await expect(gain).toHaveText(/^-/);
   await expect(
@@ -260,5 +265,5 @@ test("bench trades keep direct points unchanged while exchange grade and coverag
   await expect(
     page.getByLabel("Incoming player 1", { exact: true }),
   ).toHaveValue("200");
-  await expect(page.getByText("Horrible deal", { exact: true })).toBeVisible();
+  await expect(page.locator(".trade-full-analysis").getByRole("heading", { name: "Horrible deal", exact: true })).toBeVisible();
 });

@@ -1,3 +1,4 @@
+import { openTradeDetails, openTradeFilters } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import {
@@ -68,6 +69,8 @@ test("trade names inspect both players without changing the draft", async ({
 }) => {
   await seed(page);
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   const outgoing = page.getByRole("combobox", {
     name: "Outgoing player 1",
     exact: true,

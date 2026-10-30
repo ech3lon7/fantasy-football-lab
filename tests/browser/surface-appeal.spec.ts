@@ -1,3 +1,4 @@
+import { openTradeDetails, openTradeFilters } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import {
@@ -73,6 +74,8 @@ async function seed(page: Page, missing = false) {
   }, w);
   await page.reload();
   await page.getByRole("link", { name: "Trade analyzer", exact: true }).click();
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   const panel = page.locator("section.panel").filter({
     has: page.getByRole("heading", {
       name: "Find matching trades",
@@ -169,8 +172,10 @@ test("retires legacy surface restrictions from preferences and saved trades", as
     db.close();
   }, workspace);
   await page.reload();
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   const card = page
-    .locator("details")
+    .locator("details:not(.trade-saved-drawer):not(.trade-full-analysis)")
     .filter({
       has: page.locator("summary", {
         hasText: "Chain Starter RB → Chain Bridge WR",
@@ -207,11 +212,11 @@ test("uses one optional Surface Trading control per tool and per chain stage", a
   await expect(
     panel.getByRole("combobox", { name: "Recipient preset", exact: true }),
   ).toBeVisible();
-  await expect(
-    page
-      .getByRole("checkbox", { name: "Enable Surface Trading", exact: true })
-      .first(),
-  ).not.toBeChecked();
+  // The manual opt-in remains off behind its own independent filter drawer.
+  await page.getByRole("button", { name: "Manual analyzer", exact: true }).click();
+  await openTradeFilters(page, "Manual");
+  await expect(page.getByRole("checkbox", { name: "Enable Surface Trading", exact: true })).not.toBeChecked();
+  await page.getByRole("button", { name: "Find matching trades", exact: true }).click();
   await expect
     .poll(
       async () =>
@@ -225,6 +230,7 @@ test("uses one optional Surface Trading control per tool and per chain stage", a
   await page
     .getByRole("button", { name: "Two-trade chain planner", exact: true })
     .click();
+  await openTradeFilters(page, "Chain");
   await expect(
     page.getByRole("checkbox", {
       name: "First trade: Enable Surface Trading",

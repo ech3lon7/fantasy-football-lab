@@ -1,3 +1,4 @@
+import { openTradeDetails, openTradeFilters } from "./trade-workspace-helpers";
 import { test, expect } from "@playwright/test";
 import packageInfo from "../../package.json" with { type: "json" };
 // Match the release's authoritative package metadata in browser acceptance checks.
@@ -111,6 +112,8 @@ test("real workbook import, screens, roster and trade flow", async ({
   await expect(appVersion).toContainText("Commit");
   await expect(appVersion.locator("time")).toHaveAttribute("datetime", /Z$/);
   await page.getByRole("link", { name: "Trade analyzer", exact: true }).click();
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await page
     .getByLabel("Outgoing player 1", { exact: true })
     .selectOption({ index: 1 });

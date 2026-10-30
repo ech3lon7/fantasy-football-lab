@@ -1,3 +1,8 @@
+import {
+  TradeFiltersButton,
+  TradeFiltersDrawer,
+  type TradeWorkspacePreview,
+} from "./TradeWorkspace";
 import { GroupedChains } from "./TradeResultGroups";
 import {
   ManagerControls,
@@ -142,7 +147,15 @@ export function TradeChains({
   remember,
   open,
   toggle,
+  onPreview,
+  onPool,
 }: {
+  onPool?: (value: {
+    team: string;
+    pool: string[];
+    basis: LineupBasis;
+  }) => void;
+  onPreview?: (value: TradeWorkspacePreview) => void;
   initial?: ChainPreferences;
   remember?: (value: ChainPreferences) => void;
   open: boolean;
@@ -162,6 +175,7 @@ export function TradeChains({
   ) => boolean | void;
 }) {
   // Seed once from the previous selections; subsequent single-trade edits cannot change any chain option.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [team, setTeam] = useState(initial?.query.team ?? initialTeam);
   const [pool, setPool] = useState(initial?.query.pool ?? [...initialPool]);
   const [basis, setBasis] = useState(initial?.query.basis ?? initialBasis);
@@ -314,6 +328,10 @@ export function TradeChains({
   useEffect(() => {
     remember?.(preference);
   }, [preferenceText]);
+  // Publish only the visual chain pool; this never changes the manual or standard-search selections.
+  useEffect(() => {
+    onPool?.({ team, pool, basis });
+  }, [team, pool.join(","), basis]);
   const queryText = JSON.stringify(query);
   useEffect(() => {
     if (!presetQuery.current) presetQuery.current = queryText;
@@ -1026,6 +1044,26 @@ export function TradeChains({
         <h4>
           Step {step} · {teamName(leg.draft.teamB)}
         </h4>
+        {onPreview && (
+          <button
+            type="button"
+            className="subtle"
+            onClick={() => {
+              const { model, plans } = legContext(chain, step);
+              onPreview({
+                prerequisite: step === 2,
+                key,
+                draft: leg.draft,
+                model,
+                plans,
+                basis: leg.row.lineupBasis ?? basis,
+                label: `Chain step ${step} preview`,
+              });
+            }}
+          >
+            Inspect step {step}
+          </button>
+        )}
         <p>
           Offer: {names(leg.draft.give)}. Receive: {names(leg.draft.get)}.
         </p>
@@ -1234,631 +1272,661 @@ export function TradeChains({
       open={open}
       toggle={toggle}
       note={`Independent chain controls · ${lineupBasisLabel(basis)} · ${m.simulation ? "Hypothetical roster" : "Imported roster"}`}
+      compact
+      action={
+        <TradeFiltersButton
+          scope="Chain"
+          open={filtersOpen}
+          toggle={() => setFiltersOpen((value) => !value)}
+        />
+      }
     >
-      {/* Each search owns its team, basis, outgoing pool and opponents, copied only once from prior selections. */}
-      <div className="trade-search-controls">
-        <FilterHelp
-          label="Chain team"
-          help="Choose the team for this chain only. Its own tradable pool, team scopes and results remain independent of the standard finder."
+      <div
+        className={`trade-finder-layout${filtersOpen ? " filters-open" : ""}`}
+      >
+        <TradeFiltersDrawer
+          scope="Chain"
+          open={filtersOpen}
+          close={() => setFiltersOpen(false)}
         >
-          <label className="control">
-            <span>Chain team</span>
-            <select value={team} onChange={(e) => setTeam(e.target.value)}>
-              <TeamsOptions d={m.dataset} />
-            </select>
-          </label>
-        </FilterHelp>
-        <FilterHelp
-          label="Chain lineup impact basis"
-          help="Best available uses each full roster’s strongest lineup; Marked starters uses saved or imported starter roles. Both legs and both teams use this chain’s own basis."
-        >
-          <label className="control">
-            <span>Chain lineup impact basis</span>
-            <select
-              value={basis}
-              onChange={(e) => setBasis(e.target.value as LineupBasis)}
+          {/* Each search owns its team, basis, outgoing pool and opponents, copied only once from prior selections. */}
+          <div className="trade-search-controls">
+            <FilterHelp
+              label="Chain team"
+              help="Choose the team for this chain only. Its own tradable pool, team scopes and results remain independent of the standard finder."
             >
-              <option value="best-available">Best available lineup</option>
-              <option value="marked-starters">Marked starters</option>
-            </select>
-          </label>
-        </FilterHelp>
-        <FilterHelp
-          label="Chain preset"
-          help="Preset thresholds range from easier to stricter discovery. Selecting one changes your final minimum, recipient gain and price-test requirement; automatic recipient concession is capped at 10%. Dependency and per-leg optional filters are preserved. All gains are inclusive minimums. Optional surplus/deficit targeting stays disabled unless you enable it. Editing any query setting marks the preset Custom."
-        >
-          <label className="control">
-            <span>Chain preset</span>
-            <select
-              value={preset}
-              onChange={(e) => {
-                const id = e.target.value;
-                if (id === "custom") {
-                  setPreset(id);
-                  return;
+              <label className="control">
+                <span>Chain team</span>
+                <select value={team} onChange={(e) => setTeam(e.target.value)}>
+                  <TeamsOptions d={m.dataset} />
+                </select>
+              </label>
+            </FilterHelp>
+            <FilterHelp
+              label="Chain lineup impact basis"
+              help="Best available uses each full roster’s strongest lineup; Marked starters uses saved or imported starter roles. Both legs and both teams use this chain’s own basis."
+            >
+              <label className="control">
+                <span>Chain lineup impact basis</span>
+                <select
+                  value={basis}
+                  onChange={(e) => setBasis(e.target.value as LineupBasis)}
+                >
+                  <option value="best-available">Best available lineup</option>
+                  <option value="marked-starters">Marked starters</option>
+                </select>
+              </label>
+            </FilterHelp>
+            <FilterHelp
+              label="Chain preset"
+              help="Preset thresholds range from easier to stricter discovery. Selecting one changes your final minimum, recipient gain and price-test requirement; automatic recipient concession is capped at 10%. Dependency and per-leg optional filters are preserved. All gains are inclusive minimums. Optional surplus/deficit targeting stays disabled unless you enable it. Editing any query setting marks the preset Custom."
+            >
+              <label className="control">
+                <span>Chain preset</span>
+                <select
+                  value={preset}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (id === "custom") {
+                      setPreset(id);
+                      return;
+                    }
+                    const next = applyChainPreset(query, id);
+                    presetQuery.current = JSON.stringify(next);
+                    setGain(String(next.minimumGain));
+                    setRecipientLoss(
+                      String(next.recipient!.maximumValueLossPct * 100),
+                    );
+                    setRecipientGain(String(next.recipient!.minimumGain));
+                    setPricePolicy(next.pricePolicy!);
+                    setPreset(id);
+                  }}
+                >
+                  <option value="custom">Custom</option>
+                  {chainPresets.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </FilterHelp>
+            <FilterHelp
+              label="Chain price tests"
+              help="Required rejects a candidate unless both existing price tests pass on each step. Warning only keeps the calculated tests visible without excluding a trade. Roster legality, protected players, recipient limits and scoring requirements always apply."
+            >
+              <label className="control">
+                <span>Chain price tests</span>
+                <select
+                  value={pricePolicy}
+                  onChange={(e) =>
+                    setPricePolicy(e.target.value as typeof pricePolicy)
+                  }
+                >
+                  <option value="required">Both must pass</option>
+                  <option value="warnings">Warnings only</option>
+                </select>
+              </label>
+            </FilterHelp>
+          </div>
+          {/* Dependency stays required in every preset; all new controls remain local to this planner. */}
+          <details className="trade-search-group">
+            <summary>Chain dependency</summary>
+            <div className="trade-search-controls">
+              <FilterHelp
+                label="Dependency route"
+                help="Trade 1 must materially fund trade 2 or provide retained coverage that makes the second trade better. Unrelated upgrades do not qualify. Either allows both routes; contribution and interaction are separate evidence."
+              >
+                <label className="control">
+                  <span>Dependency route</span>
+                  <select
+                    value={dependencyRoute}
+                    onChange={(e) =>
+                      setDependencyRoute(
+                        e.target.value as ChainDependencySettings["route"],
+                      )
+                    }
+                  >
+                    <option value="either">Either connected route</option>
+                    <option value="retrade">Re-trade acquisition</option>
+                    <option value="retain">Keep-and-release</option>
+                  </select>
+                </label>
+              </FilterHelp>
+              {number(
+                "Minimum acquired contribution (%)",
+                acquiredShare,
+                setAcquiredShare,
+                0.1,
+                "Minimum acquired share of the second offer for the re-trade route. Zero-index packages use a separately labeled remaining-points fallback. A token card does not qualify. Provisional default 25%.",
+                100,
+              )}
+              {number(
+                "Minimum interaction gain (EPPG)",
+                interactionGain,
+                setInteractionGain,
+                0.1,
+                "Keep-and-release: trade 2's gain after trade 1 minus its gain when performed alone. Example: +5 after coverage versus −3 alone gives +8 interaction. Provisional default +2.",
+              )}
+            </div>
+          </details>
+          {Number(recipientLoss) > 10 && (
+            <p className="notice warning">
+              Custom recipient concession: {recipientLoss}%. This explicitly
+              allows larger value losses than the 10% preset cap and may produce
+              implausible offers.
+            </p>
+          )}
+          <details className="trade-search-group">
+            <summary>Chain tradable pool ({pool.length}/12)</summary>
+            <FilterHelp
+              label="Select all chain tradable players"
+              help="Keep current chain selections and add players in the displayed order, up to the existing 12-player pool limit. This does not change the standard search pool."
+            >
+              <button
+                type="button"
+                className="subtle"
+                disabled={
+                  pool.length >= 12 ||
+                  poolPlayers.every((p) => pool.includes(p.id))
                 }
-                const next = applyChainPreset(query, id);
-                presetQuery.current = JSON.stringify(next);
-                setGain(String(next.minimumGain));
-                setRecipientLoss(
-                  String(next.recipient!.maximumValueLossPct * 100),
-                );
-                setRecipientGain(String(next.recipient!.minimumGain));
-                setPricePolicy(next.pricePolicy!);
-                setPreset(id);
-              }}
-            >
-              <option value="custom">Custom</option>
-              {chainPresets.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </FilterHelp>
-        <FilterHelp
-          label="Chain price tests"
-          help="Required rejects a candidate unless both existing price tests pass on each step. Warning only keeps the calculated tests visible without excluding a trade. Roster legality, protected players, recipient limits and scoring requirements always apply."
-        >
-          <label className="control">
-            <span>Chain price tests</span>
-            <select
-              value={pricePolicy}
-              onChange={(e) =>
-                setPricePolicy(e.target.value as typeof pricePolicy)
-              }
-            >
-              <option value="required">Both must pass</option>
-              <option value="warnings">Warnings only</option>
-            </select>
-          </label>
-        </FilterHelp>
-      </div>
-      {/* Dependency stays required in every preset; all new controls remain local to this planner. */}
-      <details className="trade-search-group">
-        <summary>Chain dependency</summary>
-        <div className="trade-search-controls">
-          <FilterHelp
-            label="Dependency route"
-            help="Trade 1 must materially fund trade 2 or provide retained coverage that makes the second trade better. Unrelated upgrades do not qualify. Either allows both routes; contribution and interaction are separate evidence."
-          >
-            <label className="control">
-              <span>Dependency route</span>
-              <select
-                value={dependencyRoute}
-                onChange={(e) =>
-                  setDependencyRoute(
-                    e.target.value as ChainDependencySettings["route"],
+                onClick={() =>
+                  setPool((old) =>
+                    [
+                      ...new Set([
+                        ...old.filter((id) =>
+                          poolPlayers.some((p) => p.id === id),
+                        ),
+                        ...poolPlayers.map((p) => p.id),
+                      ]),
+                    ].slice(0, 12),
                   )
                 }
               >
-                <option value="either">Either connected route</option>
-                <option value="retrade">Re-trade acquisition</option>
-                <option value="retain">Keep-and-release</option>
-              </select>
-            </label>
-          </FilterHelp>
-          {number(
-            "Minimum acquired contribution (%)",
-            acquiredShare,
-            setAcquiredShare,
-            0.1,
-            "Minimum acquired share of the second offer for the re-trade route. Zero-index packages use a separately labeled remaining-points fallback. A token card does not qualify. Provisional default 25%.",
-            100,
-          )}
-          {number(
-            "Minimum interaction gain (EPPG)",
-            interactionGain,
-            setInteractionGain,
-            0.1,
-            "Keep-and-release: trade 2's gain after trade 1 minus its gain when performed alone. Example: +5 after coverage versus −3 alone gives +8 interaction. Provisional default +2.",
-          )}
-        </div>
-      </details>
-      {Number(recipientLoss) > 10 && (
-        <p className="notice warning">
-          Custom recipient concession: {recipientLoss}%. This explicitly allows
-          larger value losses than the 10% preset cap and may produce
-          implausible offers.
-        </p>
-      )}
-      <details className="trade-search-group">
-        <summary>Chain tradable pool ({pool.length}/12)</summary>
-        <FilterHelp
-          label="Select all chain tradable players"
-          help="Keep current chain selections and add players in the displayed order, up to the existing 12-player pool limit. This does not change the standard search pool."
-        >
-          <button
-            type="button"
-            className="subtle"
-            disabled={
-              pool.length >= 12 || poolPlayers.every((p) => pool.includes(p.id))
-            }
-            onClick={() =>
-              setPool((old) =>
-                [
-                  ...new Set([
-                    ...old.filter((id) => poolPlayers.some((p) => p.id === id)),
-                    ...poolPlayers.map((p) => p.id),
-                  ]),
-                ].slice(0, 12),
-              )
-            }
-          >
-            Select all{poolPlayers.length > 12 ? " (up to 12)" : ""}
-          </button>
-        </FilterHelp>
-        {poolPlayers.map((p) => (
-          <label className="check" key={p.id}>
-            <input
-              type="checkbox"
-              aria-label={`Chain tradable player: ${p.name}`}
-              checked={pool.includes(p.id)}
-              disabled={!pool.includes(p.id) && pool.length >= 12}
-              onChange={(e) =>
-                setPool((old) =>
-                  e.target.checked
-                    ? [...old, p.id]
-                    : old.filter((id) => id !== p.id),
-                )
-              }
-            />
-            {p.name} · {p.pos} · <span className="model">{fmt(p.index)}</span>
-          </label>
-        ))}
-      </details>
-      <details className="trade-search-group">
-        <summary>
-          Chain teams to search ({selectedTeams?.length ?? "all"})
-        </summary>
-        <div className="button-row">
-          <button
-            className="subtle"
-            onClick={() => setSelectedTeams(undefined)}
-          >
-            Select all chain teams
-          </button>
-          <button className="subtle" onClick={() => setSelectedTeams([])}>
-            Clear chain team selection
-          </button>
-        </div>
-        {opponents.map((t) => {
-          const id = str(t.TeamID);
-          return (
-            <label className="check" key={id}>
-              <input
-                type="checkbox"
-                aria-label={`Chain search team: ${str(t.TeamName)}`}
-                checked={
-                  selectedTeams === undefined || selectedTeams.includes(id)
-                }
-                onChange={(e) =>
-                  setSelectedTeams((previous) => {
-                    const selected =
-                      previous ?? opponents.map((t) => str(t.TeamID));
-                    return e.target.checked
-                      ? [...selected, id]
-                      : selected.filter((value) => value !== id);
-                  })
-                }
-              />
-              {str(t.TeamName)}
-            </label>
-          );
-        })}
-      </details>
-      <details>
-        <summary>Which filters apply to chains?</summary>
-        {Object.entries(chainFilterScope).map(([label, fields]) => (
-          <p key={label}>
-            <strong>{label}:</strong> {fields.join(", ")}.
+                Select all{poolPlayers.length > 12 ? " (up to 12)" : ""}
+              </button>
+            </FilterHelp>
+            {poolPlayers.map((p) => (
+              <label className="check" key={p.id}>
+                <input
+                  type="checkbox"
+                  aria-label={`Chain tradable player: ${p.name}`}
+                  checked={pool.includes(p.id)}
+                  disabled={!pool.includes(p.id) && pool.length >= 12}
+                  onChange={(e) =>
+                    setPool((old) =>
+                      e.target.checked
+                        ? [...old, p.id]
+                        : old.filter((id) => id !== p.id),
+                    )
+                  }
+                />
+                {p.name} · {p.pos} ·{" "}
+                <span className="model">{fmt(p.index)}</span>
+              </label>
+            ))}
+          </details>
+          <details className="trade-search-group">
+            <summary>
+              Chain teams to search ({selectedTeams?.length ?? "all"})
+            </summary>
+            <div className="button-row">
+              <button
+                className="subtle"
+                onClick={() => setSelectedTeams(undefined)}
+              >
+                Select all chain teams
+              </button>
+              <button className="subtle" onClick={() => setSelectedTeams([])}>
+                Clear chain team selection
+              </button>
+            </div>
+            {opponents.map((t) => {
+              const id = str(t.TeamID);
+              return (
+                <label className="check" key={id}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Chain search team: ${str(t.TeamName)}`}
+                    checked={
+                      selectedTeams === undefined || selectedTeams.includes(id)
+                    }
+                    onChange={(e) =>
+                      setSelectedTeams((previous) => {
+                        const selected =
+                          previous ?? opponents.map((t) => str(t.TeamID));
+                        return e.target.checked
+                          ? [...selected, id]
+                          : selected.filter((value) => value !== id);
+                      })
+                    }
+                  />
+                  {str(t.TeamName)}
+                </label>
+              );
+            })}
+          </details>
+          <details>
+            <summary>Which filters apply to chains?</summary>
+            {Object.entries(chainFilterScope).map(([label, fields]) => (
+              <p key={label}>
+                <strong>{label}:</strong> {fields.join(", ")}.
+              </p>
+            ))}
+            <p>
+              Recipient, roster and gain checks apply separately on each step.
+              Price tests are required or advisory according to this planner’s
+              own control.
+            </p>
+          </details>
+          <p>
+            Tradable pool: {names(pool)}. Other original roster players stay
+            protected. Newly acquired players may also be offered in step two.
           </p>
-        ))}
-        <p>
-          Recipient, roster and gain checks apply separately on each step. Price
-          tests are required or advisory according to this planner’s own
-          control.
-        </p>
-      </details>
-      <p>
-        Tradable pool: {names(pool)}. Other original roster players stay
-        protected. Newly acquired players may also be offered in step two.
-      </p>
-      <div className="trade-search-controls">
-        <FilterHelp
-          label="Chain mode"
-          help="Safe refers to your positive first-step scoring gain. Speculative allows your flat or losing first step within the temporary-loss limit. Recipient concession/gain checks apply on both steps; price checks follow Chain price tests. These are modeled preferences, not acceptance guarantees."
-        >
-          <label className="control">
-            <span>Chain mode</span>
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value as ChainQuery["mode"])}
+          <div className="trade-search-controls">
+            <FilterHelp
+              label="Chain mode"
+              help="Safe refers to your positive first-step scoring gain. Speculative allows your flat or losing first step within the temporary-loss limit. Recipient concession/gain checks apply on both steps; price checks follow Chain price tests. These are modeled preferences, not acceptance guarantees."
             >
-              <option value="both">Safe and speculative</option>
-              <option value="safe">Safe only</option>
-              <option value="speculative">Speculative only</option>
-            </select>
-          </label>
-        </FilterHelp>
-        {number("Maximum temporary loss (EPPG)", loss, setLoss, 0)}
-        {number("Minimum final gain (EPPG)", gain, setGain, 0.1)}
-        {number(
-          "Maximum recipient value loss (%)",
-          recipientLoss,
-          setRecipientLoss,
-          0,
-          "Each recipient must receive at least (1 − this percentage) of the comparable surplus they surrender. Equal-size trades use raw index sums. Unequal trades scale the smaller package once by the existing consolidation premium before comparing concessions; both raw and adjusted numbers are shown. Default 10% is a provisional preference, not a market price or validated acceptance probability. Existing price tests remain unchanged.",
-          100,
-        )}
-        {number(
-          "Minimum recipient gain (EPPG)",
-          recipientGain,
-          setRecipientGain,
-          0,
-          "Each step must improve its recipient's lineup on the selected scoring basis by at least this many average points/week, after required drops and without waiver additions. Zero permits a flat result but never a scoring loss. This applies to safe and speculative chains independently of your final gain.",
-        )}
-        <FilterHelp
-          label="Chain search depth"
-          help="Standard and deeper searches retain deferred bridges and interleave acquired positions, players, teams, package sizes and modes. Follow-ups share remaining work as branches finish. Deeper expands the allowance; the result states whether exploration finished."
-        >
-          <label className="control">
-            <span>Chain search depth</span>
-            <select
-              value={depth}
-              onChange={(e) => setDepth(e.target.value as ChainQuery["depth"])}
+              <label className="control">
+                <span>Chain mode</span>
+                <select
+                  value={mode}
+                  onChange={(e) =>
+                    setMode(e.target.value as ChainQuery["mode"])
+                  }
+                >
+                  <option value="both">Safe and speculative</option>
+                  <option value="safe">Safe only</option>
+                  <option value="speculative">Speculative only</option>
+                </select>
+              </label>
+            </FilterHelp>
+            {number("Maximum temporary loss (EPPG)", loss, setLoss, 0)}
+            {number("Minimum final gain (EPPG)", gain, setGain, 0.1)}
+            {number(
+              "Maximum recipient value loss (%)",
+              recipientLoss,
+              setRecipientLoss,
+              0,
+              "Each recipient must receive at least (1 − this percentage) of the comparable surplus they surrender. Equal-size trades use raw index sums. Unequal trades scale the smaller package once by the existing consolidation premium before comparing concessions; both raw and adjusted numbers are shown. Default 10% is a provisional preference, not a market price or validated acceptance probability. Existing price tests remain unchanged.",
+              100,
+            )}
+            {number(
+              "Minimum recipient gain (EPPG)",
+              recipientGain,
+              setRecipientGain,
+              0,
+              "Each step must improve its recipient's lineup on the selected scoring basis by at least this many average points/week, after required drops and without waiver additions. Zero permits a flat result but never a scoring loss. This applies to safe and speculative chains independently of your final gain.",
+            )}
+            <FilterHelp
+              label="Chain search depth"
+              help="Standard and deeper searches retain deferred bridges and interleave acquired positions, players, teams, package sizes and modes. Follow-ups share remaining work as branches finish. Deeper expands the allowance; the result states whether exploration finished."
             >
-              <option value="standard">Standard</option>
-              <option value="deeper">Deeper</option>
-            </select>
-          </label>
-        </FilterHelp>
-      </div>
-      {stepControls(
-        "First trade",
-        first,
-        setFirst,
-        firstOverride,
-        setFirstOverride,
-      )}
-      {stepControls(
-        "Second trade",
-        second,
-        setSecond,
-        secondOverride,
-        setSecondOverride,
-      )}
-      {errors.map((error) => (
-        <p className="notice warning" key={error}>
-          {error}
-        </p>
-      ))}
-      <div className="button-row">
-        <button
-          className="button primary"
-          disabled={!!errors.length || job?.status === "running"}
-          onClick={search}
-        >
-          {job?.status === "running" ? (
-            <LoaderCircle size={16} aria-hidden="true" />
-          ) : null}
-          Search trade chains
-        </button>
-        {job?.status === "running" && (
+              <label className="control">
+                <span>Chain search depth</span>
+                <select
+                  value={depth}
+                  onChange={(e) =>
+                    setDepth(e.target.value as ChainQuery["depth"])
+                  }
+                >
+                  <option value="standard">Standard</option>
+                  <option value="deeper">Deeper</option>
+                </select>
+              </label>
+            </FilterHelp>
+          </div>
+          {stepControls(
+            "First trade",
+            first,
+            setFirst,
+            firstOverride,
+            setFirstOverride,
+          )}
+          {stepControls(
+            "Second trade",
+            second,
+            setSecond,
+            secondOverride,
+            setSecondOverride,
+          )}
+          {errors.map((error) => (
+            <p className="notice warning" key={error}>
+              {error}
+            </p>
+          ))}
+        </TradeFiltersDrawer>
+        <div className="trade-finder-main">
+          <div className="button-row">
+            <button
+              className="button primary"
+              disabled={!!errors.length || job?.status === "running"}
+              onClick={search}
+            >
+              {job?.status === "running" ? (
+                <LoaderCircle size={16} aria-hidden="true" />
+              ) : null}
+              Search trade chains
+            </button>
+            {job?.status === "running" && (
+              <button
+                className="button"
+                onClick={() => {
+                  active.current?.terminate();
+                  active.current = null;
+                  setJob((previous) =>
+                    previous ? { ...previous, status: "cancelled" } : previous,
+                  );
+                }}
+              >
+                Cancel chain search
+              </button>
+            )}
+            {/* Reset keeps the established defaults and selections; hover help makes its stricter thresholds explicit. */}
+            <FilterHelp
+              label="Clear chain filters"
+              help="Restore defaults: final gain 5 EPPG, recipient gain 1 EPPG, maximum concession 10%, required price tests, and no position targeting. Restore dependency to either route, 25% contribution and +2 interaction; disable optional per-leg windows/Surface Trading. Keep your team, pool, opponent scope and scoring basis. Choose Very lenient for broader discovery."
+            >
+              <button
+                className="subtle"
+                onClick={() => {
+                  active.current?.terminate();
+                  active.current = null;
+                  setJob(null);
+                  setDependencyRoute(defaultChainDependency.route);
+                  setAcquiredShare(
+                    String(defaultChainDependency.minimumAcquiredShare * 100),
+                  );
+                  setInteractionGain(
+                    String(defaultChainDependency.minimumInteractionGain),
+                  );
+                  setMode("both");
+                  setLoss("3");
+                  setGain("5");
+                  setPricePolicy("required");
+                  setPreset("custom");
+                  setFirst({
+                    offer: { minimum: 1, maximum: 3 },
+                    receive: { minimum: 1, maximum: 3 },
+                  });
+                  setSecond({
+                    offer: { minimum: 1, maximum: 3 },
+                    receive: { minimum: 1, maximum: 3 },
+                  });
+                  setDepth("standard");
+                  setFirstOverride(false);
+                  setSecondOverride(false);
+                  setRecipientLoss(
+                    String(defaultChainRecipient.maximumValueLossPct * 100),
+                  );
+                  setRecipientGain(String(defaultChainRecipient.minimumGain));
+                }}
+              >
+                Clear chain filters
+              </button>
+            </FilterHelp>
+          </div>
+          {/* A chain-local debug action remains available while the independent standard finder is collapsed. */}
           <button
             className="button"
             onClick={() => {
-              active.current?.terminate();
-              active.current = null;
-              setJob((previous) =>
-                previous ? { ...previous, status: "cancelled" } : previous,
+              const report = {
+                ...tradeDebugReport(
+                  m,
+                  {
+                    teamA: team,
+                    give: pool,
+                    count: 1,
+                    below: 0,
+                    above: 0,
+                    indexMode: "automatic",
+                    lineupBasis: basis,
+                  },
+                  { teamA: team, teamB: "", give: pool, get: [] },
+                  lineupsRaw,
+                  null,
+                  { status: job?.status ?? "not searched", stale },
+                ),
+                // Existing build stamps distinguish deployments that share the same user-managed app version.
+                appVersion: import.meta.env.VITE_APP_VERSION,
+                appBuild: {
+                  build: import.meta.env.VITE_APP_BUILD,
+                  commit: import.meta.env.VITE_APP_COMMIT,
+                  builtAt: import.meta.env.VITE_APP_BUILT_AT,
+                },
+                chainSearch: debugValue.current,
+              };
+              const url = URL.createObjectURL(
+                new Blob([JSON.stringify(report, null, 2)], {
+                  type: "application/json",
+                }),
               );
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = "fantasy-chain-debug.json";
+              link.click();
+              setTimeout(() => URL.revokeObjectURL(url), 0);
             }}
           >
-            Cancel chain search
+            Download chain debug
           </button>
-        )}
-        {/* Reset keeps the established defaults and selections; hover help makes its stricter thresholds explicit. */}
-        <FilterHelp
-          label="Clear chain filters"
-          help="Restore defaults: final gain 5 EPPG, recipient gain 1 EPPG, maximum concession 10%, required price tests, and no position targeting. Restore dependency to either route, 25% contribution and +2 interaction; disable optional per-leg windows/Surface Trading. Keep your team, pool, opponent scope and scoring basis. Choose Very lenient for broader discovery."
-        >
-          <button
-            className="subtle"
-            onClick={() => {
-              active.current?.terminate();
-              active.current = null;
-              setJob(null);
-              setDependencyRoute(defaultChainDependency.route);
-              setAcquiredShare(
-                String(defaultChainDependency.minimumAcquiredShare * 100),
-              );
-              setInteractionGain(
-                String(defaultChainDependency.minimumInteractionGain),
-              );
-              setMode("both");
-              setLoss("3");
-              setGain("5");
-              setPricePolicy("required");
-              setPreset("custom");
-              setFirst({
-                offer: { minimum: 1, maximum: 3 },
-                receive: { minimum: 1, maximum: 3 },
-              });
-              setSecond({
-                offer: { minimum: 1, maximum: 3 },
-                receive: { minimum: 1, maximum: 3 },
-              });
-              setDepth("standard");
-              setFirstOverride(false);
-              setSecondOverride(false);
-              setRecipientLoss(
-                String(defaultChainRecipient.maximumValueLossPct * 100),
-              );
-              setRecipientGain(String(defaultChainRecipient.minimumGain));
-            }}
-          >
-            Clear chain filters
-          </button>
-        </FilterHelp>
-      </div>
-      {/* A chain-local debug action remains available while the independent standard finder is collapsed. */}
-      <button
-        className="button"
-        onClick={() => {
-          const report = {
-            ...tradeDebugReport(
-              m,
-              {
-                teamA: team,
-                give: pool,
-                count: 1,
-                below: 0,
-                above: 0,
-                indexMode: "automatic",
-                lineupBasis: basis,
-              },
-              { teamA: team, teamB: "", give: pool, get: [] },
-              lineupsRaw,
-              null,
-              { status: job?.status ?? "not searched", stale },
-            ),
-            // Existing build stamps distinguish deployments that share the same user-managed app version.
-            appVersion: import.meta.env.VITE_APP_VERSION,
-            appBuild: {
-              build: import.meta.env.VITE_APP_BUILD,
-              commit: import.meta.env.VITE_APP_COMMIT,
-              builtAt: import.meta.env.VITE_APP_BUILT_AT,
-            },
-            chainSearch: debugValue.current,
-          };
-          const url = URL.createObjectURL(
-            new Blob([JSON.stringify(report, null, 2)], {
-              type: "application/json",
-            }),
-          );
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = "fantasy-chain-debug.json";
-          link.click();
-          setTimeout(() => URL.revokeObjectURL(url), 0);
-        }}
-      >
-        Download chain debug
-      </button>
-      {job?.status === "running" && (
-        <p className="notice" role="status">
-          {job.stats?.phase ?? "Starting chain search"} ·{" "}
-          {job.stats?.evaluated ?? 0} trades evaluated ·{" "}
-          {job.stats?.firstExplored ?? 0} first steps explored.
-        </p>
-      )}
-      {job?.status === "cancelled" && (
-        <p role="status">
-          Chain search cancelled. No roster changes were applied.
-        </p>
-      )}
-      {stale && (
-        <p className="notice warning">
-          Chain results are stale. Search again with the current roster and
-          controls.
-        </p>
-      )}
-      {job?.error && <p className="notice warning">{job.error}</p>}
-      {detailError && <p role="status">{detailError}</p>}
-      {job?.result && (
-        <>
-          <p role="status">
-            {job.result.stats.found} qualifying chains found; showing the best{" "}
-            {job.result.chains.length} within the explored candidates.{" "}
-            {job.result.stats.evaluated} trades evaluated in{" "}
-            {fmt((job.elapsed ?? 0) / 1000)} seconds.
-            {job.result.stats.limited && " Search coverage is incomplete."}
-          </p>
-          {/* Exhaustive exploration and a capped display are separate statuses; neither changes any acceptance threshold. */}
-          <p className="notice warning">
-            {job.result.stats.limited
-              ? "Work budget reached: unexplored possibilities remain."
-              : "All eligible combinations within these selected sizes and teams were examined."}{" "}
-            {job.result.stats.resultCapped &&
-              "Display capped at the best 30 qualifying chains. "}
-            Results are modeled possibilities, not agreed trades. Opponent gains
-            and value concessions must satisfy the recipient checks on each
-            step. No automatic waiver additions.
-          </p>
-          {!job.result.chains.length && (
-            <p>
-              {job.result.stats.limited
-                ? "No qualifying chains found within the explored work. This does not prove none exist; try deeper search or broader sizes/teams."
-                : "No chains meet all applied rules within the fully searched eligible sizes and teams. Review the exclusions below or adjust your filters."}
+          {job?.status === "running" && (
+            <p className="notice" role="status">
+              {job.stats?.phase ?? "Starting chain search"} ·{" "}
+              {job.stats?.evaluated ?? 0} trades evaluated ·{" "}
+              {job.stats?.firstExplored ?? 0} first steps explored.
             </p>
           )}
-          {/* A failed final-gain threshold is distinct from never finding an acceptable pair of trades. */}
-          {!job.result.chains.length &&
-            job.result.stats.bestFinalGain !== null && (
-              <p className="model">
-                Best inspected chain passing the other checks:{" "}
-                {signed(job.result.stats.bestFinalGain)} EPPG overall. Requested
-                minimum: {fmt(job.query.minimumGain)} EPPG. This is the best
-                inspected result, not proof of a global maximum.
+          {job?.status === "cancelled" && (
+            <p role="status">
+              Chain search cancelled. No roster changes were applied.
+            </p>
+          )}
+          {stale && (
+            <p className="notice warning">
+              Chain results are stale. Search again with the current roster and
+              controls.
+            </p>
+          )}
+          {job?.error && <p className="notice warning">{job.error}</p>}
+          {detailError && <p role="status">{detailError}</p>}
+          {job?.result && (
+            <>
+              <p role="status">
+                {job.result.stats.found} qualifying chains found; showing the
+                best {job.result.chains.length} within the explored candidates.{" "}
+                {job.result.stats.evaluated} trades evaluated in{" "}
+                {fmt((job.elapsed ?? 0) / 1000)} seconds.
+                {job.result.stats.limited && " Search coverage is incomplete."}
               </p>
-            )}
-          <details>
-            <summary>Chain search exclusions</summary>
-            {/* Show remaining work and exact stopping limits alongside rejection counts instead of implying a zero-result proof. */}
-            <p>
-              Search coverage:{" "}
-              {job.result.stats.limited ? "incomplete" : "complete"}.
-              First-trade stream:{" "}
-              {job.result.stats.coverage.first.complete
-                ? "exhausted"
-                : "unfinished"}
-              . Follow-up branches completed:{" "}
-              {job.result.stats.coverage.followups.completed}; unfinished:{" "}
-              {job.result.stats.coverage.followups.unfinished}; deferred first
-              trades: {job.result.stats.coverage.followups.deferred}. Stop
-              reasons:{" "}
-              {job.result.stats.coverage.stopReasons
-                .map((reason) => reason.replaceAll("-", " "))
-                .join(", ") || "streams exhausted"}
-              .
-            </p>
-            <p>
-              Full evaluations: first{" "}
-              {job.result.stats.coverage.first.evaluated}, follow-up{" "}
-              {job.result.stats.coverage.followups.evaluated}; counterfactual{" "}
-              {job.result.stats.dependencyEvaluated} (included in the shared
-              allowance). Pending dependency evaluations:{" "}
-              {job.result.stats.dependencyPending}. Candidate scans: first{" "}
-              {job.result.stats.coverage.first.scanned}, follow-up{" "}
-              {job.result.stats.coverage.followups.scanned}. Unused evaluation
-              allowance: {job.result.stats.coverage.unusedEvaluations}; unused
-              scan allowance: {job.result.stats.coverage.unusedScans}. Search
-              method: {job.result.stats.searchVersion}.
-            </p>
-            <p>
-              Dependency exclusions: {job.result.stats.rejectedDependency}.
-              Surface Trading exclusions:{" "}
-              {job.result.stats.rejectedManager ?? 0}. Index-window exclusions:{" "}
-              {job.result.stats.rejectedIndex}. Required-price failures:{" "}
-              {job.result.stats.rejectedValue}. Surplus/deficit exclusions:{" "}
-              {job.result.stats.rejectedFit ?? 0}. Roster/protection failures:{" "}
-              {job.result.stats.rejectedRoster}. Scoring/mode/gain failures:{" "}
-              {job.result.stats.rejectedGain}. Recipient fairness/benefit
-              failures: {job.result.stats.rejectedRecipient}. Eligible first
-              trades: {job.result.stats.firstEligible}; explored:{" "}
-              {job.result.stats.firstExplored}.
-            </p>
-            <p>
-              Obvious recipient-value mismatches rejected before full scoring:{" "}
-              {job.result.stats.rejectedRecipientBeforeScoring}. These do not
-              consume the full-evaluation budget.
-            </p>
-            <p>
-              Fully evaluated first-trade sizes:{" "}
-              {Object.entries(job.result.stats.firstEvaluatedBySize)
-                .map(([size, count]) => `${size}: ${count}`)
-                .join("; ") || "None"}
-              .
-            </p>
-            <p>
-              Fully evaluated follow-up sizes:{" "}
-              {Object.entries(job.result.stats.secondEvaluatedBySize)
-                .map(([size, count]) => `${size}: ${count}`)
-                .join("; ") || "None"}
-              .
-            </p>
-            <p className="muted">
-              Up to five recipient-rejection examples per step are shown below
-              and included in Download search debug.
-            </p>
-            {/* A small separate sample explains disconnected pairs and per-leg plausibility failures without implying exhaustive coverage. */}
-            {job.result.plausibilityRejections.map((entry, i) => (
-              <div key={`plausibility:${i}`}>
+              {/* Exhaustive exploration and a capped display are separate statuses; neither changes any acceptance threshold. */}
+              <p className="notice warning">
+                {job.result.stats.limited
+                  ? "Work budget reached: unexplored possibilities remain."
+                  : "All eligible combinations within these selected sizes and teams were examined."}{" "}
+                {job.result.stats.resultCapped &&
+                  "Display capped at the best 30 qualifying chains. "}
+                Results are modeled possibilities, not agreed trades. Opponent
+                gains and value concessions must satisfy the recipient checks on
+                each step. No automatic waiver additions.
+              </p>
+              {!job.result.chains.length && (
                 <p>
-                  Step {entry.step}: {names(entry.draft.give)} →{" "}
-                  {names(entry.draft.get)}. {entry.failures.join(" ")}
+                  {job.result.stats.limited
+                    ? "No qualifying chains found within the explored work. This does not prove none exist; try deeper search or broader sizes/teams."
+                    : "No chains meet all applied rules within the fully searched eligible sizes and teams. Review the exclusions below or adjust your filters."}
                 </p>
-                {entry.indexWindow && (
+              )}
+              {/* A failed final-gain threshold is distinct from never finding an acceptable pair of trades. */}
+              {!job.result.chains.length &&
+                job.result.stats.bestFinalGain !== null && (
                   <p className="model">
-                    Incoming {fmt(entry.indexWindow.incoming)}; required{" "}
-                    <span className="input">
-                      {fmt(entry.indexWindow.minimum)}–
-                      {fmt(entry.indexWindow.maximum)}
-                    </span>
-                    .
+                    Best inspected chain passing the other checks:{" "}
+                    {signed(job.result.stats.bestFinalGain)} EPPG overall.
+                    Requested minimum: {fmt(job.query.minimumGain)} EPPG. This
+                    is the best inspected result, not proof of a global maximum.
                   </p>
                 )}
-                {entry.surface && (
-                  <SurfaceAppealView value={entry.surface} m={m} />
-                )}
-              </div>
-            ))}
-            {job.result.dependencyRejections.map((entry, i) => (
-              <div key={`dependency:${i}`}>
+              <details>
+                <summary>Chain search exclusions</summary>
+                {/* Show remaining work and exact stopping limits alongside rejection counts instead of implying a zero-result proof. */}
                 <p>
-                  Disconnected / insufficient enabling impact:{" "}
-                  {names(entry.first.give)} → {names(entry.first.get)}; then{" "}
-                  {names(entry.second.give)} → {names(entry.second.get)}.
-                </p>
-                {dependencyDetails(entry.evidence)}
-              </div>
-            ))}
-            {job.result.recipientRejections.map((entry, i) => (
-              <p key={i} className="model">
-                Step {entry.step} · {teamName(entry.draft.teamB)} · Offer{" "}
-                {names(entry.draft.give)} for {names(entry.draft.get)}:{" "}
-                {entry.evidence.failures.join(" ")}
-                {!entry.evidence.scored &&
-                  " Rejected on value before lineup scoring; recipient EPPG was not calculated."}
-              </p>
-            ))}
-          </details>
-          <GroupedChains
-            chains={job.result.chains}
-            m={resultContext.current?.model ?? m}
-            render={(chain, i) => (
-              <article className="trade-search-group" key={chain.key}>
-                <h3>
-                  Chain {i + 1} ·{" "}
-                  {chain.mode === "safe" ? "Safe" : "Speculative"} ·{" "}
-                  <span className="model">
-                    {signed(chain.gain)} EPPG overall
-                  </span>
-                  {(chain.first.row.warnings.length > 0 ||
-                    chain.second.row.warnings.length > 0) && (
-                    <Signal text="CONDITIONAL" />
-                  )}
-                </h3>
-                <p className="model">
-                  Your roster: {fmt(chain.before)} → {fmt(chain.intermediate)} →{" "}
-                  {fmt(chain.after)} EPPG.
+                  Search coverage:{" "}
+                  {job.result.stats.limited ? "incomplete" : "complete"}.
+                  First-trade stream:{" "}
+                  {job.result.stats.coverage.first.complete
+                    ? "exhausted"
+                    : "unfinished"}
+                  . Follow-up branches completed:{" "}
+                  {job.result.stats.coverage.followups.completed}; unfinished:{" "}
+                  {job.result.stats.coverage.followups.unfinished}; deferred
+                  first trades: {job.result.stats.coverage.followups.deferred}.
+                  Stop reasons:{" "}
+                  {job.result.stats.coverage.stopReasons
+                    .map((reason) => reason.replaceAll("-", " "))
+                    .join(", ") || "streams exhausted"}
+                  .
                 </p>
                 <p>
-                  {chain.mode === "safe"
-                    ? "First trade improves scoring even if the follow-up never happens."
-                    : `If the follow-up fails, step one leaves you at ${fmt(chain.intermediate)} EPPG (${signed(chain.first.row.own)}).`}
+                  Full evaluations: first{" "}
+                  {job.result.stats.coverage.first.evaluated}, follow-up{" "}
+                  {job.result.stats.coverage.followups.evaluated};
+                  counterfactual {job.result.stats.dependencyEvaluated}{" "}
+                  (included in the shared allowance). Pending dependency
+                  evaluations: {job.result.stats.dependencyPending}. Candidate
+                  scans: first {job.result.stats.coverage.first.scanned},
+                  follow-up {job.result.stats.coverage.followups.scanned}.
+                  Unused evaluation allowance:{" "}
+                  {job.result.stats.coverage.unusedEvaluations}; unused scan
+                  allowance: {job.result.stats.coverage.unusedScans}. Search
+                  method: {job.result.stats.searchVersion}.
                 </p>
-                {chain.dependency && (
-                  <>
-                    <p className="model">
-                      Connected route:{" "}
-                      {chain.dependency.route === "retrade"
-                        ? "Re-trade acquisition"
-                        : "Keep-and-release"}
-                      .
+                <p>
+                  Dependency exclusions: {job.result.stats.rejectedDependency}.
+                  Surface Trading exclusions:{" "}
+                  {job.result.stats.rejectedManager ?? 0}. Index-window
+                  exclusions: {job.result.stats.rejectedIndex}. Required-price
+                  failures: {job.result.stats.rejectedValue}. Surplus/deficit
+                  exclusions: {job.result.stats.rejectedFit ?? 0}.
+                  Roster/protection failures: {job.result.stats.rejectedRoster}.
+                  Scoring/mode/gain failures: {job.result.stats.rejectedGain}.
+                  Recipient fairness/benefit failures:{" "}
+                  {job.result.stats.rejectedRecipient}. Eligible first trades:{" "}
+                  {job.result.stats.firstEligible}; explored:{" "}
+                  {job.result.stats.firstExplored}.
+                </p>
+                <p>
+                  Obvious recipient-value mismatches rejected before full
+                  scoring: {job.result.stats.rejectedRecipientBeforeScoring}.
+                  These do not consume the full-evaluation budget.
+                </p>
+                <p>
+                  Fully evaluated first-trade sizes:{" "}
+                  {Object.entries(job.result.stats.firstEvaluatedBySize)
+                    .map(([size, count]) => `${size}: ${count}`)
+                    .join("; ") || "None"}
+                  .
+                </p>
+                <p>
+                  Fully evaluated follow-up sizes:{" "}
+                  {Object.entries(job.result.stats.secondEvaluatedBySize)
+                    .map(([size, count]) => `${size}: ${count}`)
+                    .join("; ") || "None"}
+                  .
+                </p>
+                <p className="muted">
+                  Up to five recipient-rejection examples per step are shown
+                  below and included in Download search debug.
+                </p>
+                {/* A small separate sample explains disconnected pairs and per-leg plausibility failures without implying exhaustive coverage. */}
+                {job.result.plausibilityRejections.map((entry, i) => (
+                  <div key={`plausibility:${i}`}>
+                    <p>
+                      Step {entry.step}: {names(entry.draft.give)} →{" "}
+                      {names(entry.draft.get)}. {entry.failures.join(" ")}
                     </p>
-                    {dependencyDetails(chain.dependency)}
-                  </>
+                    {entry.indexWindow && (
+                      <p className="model">
+                        Incoming {fmt(entry.indexWindow.incoming)}; required{" "}
+                        <span className="input">
+                          {fmt(entry.indexWindow.minimum)}–
+                          {fmt(entry.indexWindow.maximum)}
+                        </span>
+                        .
+                      </p>
+                    )}
+                    {entry.surface && (
+                      <SurfaceAppealView value={entry.surface} m={m} />
+                    )}
+                  </div>
+                ))}
+                {job.result.dependencyRejections.map((entry, i) => (
+                  <div key={`dependency:${i}`}>
+                    <p>
+                      Disconnected / insufficient enabling impact:{" "}
+                      {names(entry.first.give)} → {names(entry.first.get)}; then{" "}
+                      {names(entry.second.give)} → {names(entry.second.get)}.
+                    </p>
+                    {dependencyDetails(entry.evidence)}
+                  </div>
+                ))}
+                {job.result.recipientRejections.map((entry, i) => (
+                  <p key={i} className="model">
+                    Step {entry.step} · {teamName(entry.draft.teamB)} · Offer{" "}
+                    {names(entry.draft.give)} for {names(entry.draft.get)}:{" "}
+                    {entry.evidence.failures.join(" ")}
+                    {!entry.evidence.scored &&
+                      " Rejected on value before lineup scoring; recipient EPPG was not calculated."}
+                  </p>
+                ))}
+              </details>
+              <GroupedChains
+                chains={job.result.chains}
+                m={resultContext.current?.model ?? m}
+                render={(chain, i) => (
+                  <article className="trade-search-group" key={chain.key}>
+                    <h3>
+                      Chain {i + 1} ·{" "}
+                      {chain.mode === "safe" ? "Safe" : "Speculative"} ·{" "}
+                      <span className="model">
+                        {signed(chain.gain)} EPPG overall
+                      </span>
+                      {(chain.first.row.warnings.length > 0 ||
+                        chain.second.row.warnings.length > 0) && (
+                        <Signal text="CONDITIONAL" />
+                      )}
+                    </h3>
+                    <p className="model">
+                      Your roster: {fmt(chain.before)} →{" "}
+                      {fmt(chain.intermediate)} → {fmt(chain.after)} EPPG.
+                    </p>
+                    <p>
+                      {chain.mode === "safe"
+                        ? "First trade improves scoring even if the follow-up never happens."
+                        : `If the follow-up fails, step one leaves you at ${fmt(chain.intermediate)} EPPG (${signed(chain.first.row.own)}).`}
+                    </p>
+                    {chain.dependency && (
+                      <>
+                        <p className="model">
+                          Connected route:{" "}
+                          {chain.dependency.route === "retrade"
+                            ? "Re-trade acquisition"
+                            : "Keep-and-release"}
+                          .
+                        </p>
+                        {dependencyDetails(chain.dependency)}
+                      </>
+                    )}
+                    {renderLeg(chain, 1)}
+                    {renderLeg(chain, 2)}
+                  </article>
                 )}
-                {renderLeg(chain, 1)}
-                {renderLeg(chain, 2)}
-              </article>
-            )}
-          />
-        </>
-      )}
+              />
+            </>
+          )}
+        </div>
+      </div>
     </SearchSection>
   );
 }

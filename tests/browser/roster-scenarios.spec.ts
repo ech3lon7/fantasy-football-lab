@@ -1,3 +1,4 @@
+import { openTradeDetails, openTradeFilters } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import {
@@ -233,6 +234,8 @@ test("My team stays selected and hypothetical moves are independent, durable and
   ).toBeVisible();
   await expect(page.getByLabel("My team", { exact: true })).toHaveValue("1");
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await expect(
     page
       .getByLabel("Outgoing player 1", { exact: true })
@@ -328,6 +331,8 @@ test("saved hypothetical trades restore their own recipe and debug exports conta
     .getByRole("button", { name: "Move player to selected team", exact: true })
     .click();
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await page
     .getByLabel("Outgoing player 1", { exact: true })
     .selectOption("102");
@@ -348,6 +353,8 @@ test("saved hypothetical trades restore their own recipe and debug exports conta
   await page.goto("./#/overview");
   await page.getByRole("button", { name: "Undo move", exact: true }).click();
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   const savedPanel = page.locator("section").filter({
     has: page.getByRole("heading", { name: "Saved trades", exact: true }),
   });
@@ -462,6 +469,8 @@ test("hypothetical search ignores byes and returning to live restores scheduled 
   await seed(page, true);
   await page.getByRole("button", { name: "New simulation", exact: true }).click();
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await page.getByLabel("Outgoing player 1", { exact: true }).selectOption("401");
   const search = page.locator("section").filter({ has: page.getByRole("heading", { name: "Find matching trades", exact: true }) });
   async function run() {
@@ -479,6 +488,8 @@ test("hypothetical search ignores byes and returning to live restores scheduled 
   await page.goto("./#/overview");
   await page.getByLabel("Roster simulation", { exact: true }).selectOption("");
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   const live = await run();
   await expect(live.locator("td").nth(2)).toHaveText(/[-−]7\.92/);
   await expect(search.getByText(/Hypothetical: byes ignored/)).toHaveCount(0);
@@ -488,6 +499,8 @@ test("hypothetical search ignores byes and returning to live restores scheduled 
 test("forced trades update both simulated rosters and later searches and undo together", async ({ page }) => {
   const dataset = await seed(page);
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   const apply = page.getByRole("button", { name: "Apply trade to hypothetical roster", exact: true });
   await expect(apply).toBeEnabled();
   await apply.click();
@@ -499,6 +512,8 @@ test("forced trades update both simulated rosters and later searches and undo to
   await page.goto("./#/overview");
   await page.getByRole("button", { name: "Save to slot 1", exact: true }).click();
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await expect.poll(async () => {
     const w = await stored(page);
     const collection = JSON.parse(w.state.filters.rosterScenarios);
@@ -506,6 +521,8 @@ test("forced trades update both simulated rosters and later searches and undo to
   }).toBe("trade");
   expect((await stored(page)).dataset).toEqual(dataset);
   await page.reload();
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await expect(page.getByLabel("Outgoing player 1", { exact: true }).locator('option[value="200"]')).toHaveCount(1);
   await page.getByLabel("Outgoing player 1", { exact: true }).selectOption("200");
   const search = page.locator("section").filter({ has: page.getByRole("heading", { name: "Find matching trades", exact: true }) });
@@ -522,6 +539,8 @@ test("forced trades update both simulated rosters and later searches and undo to
   await expect(page.getByText("0 / 1 moves applied", { exact: true })).toBeVisible();
   expect(JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(1);
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await expect(page.getByLabel("Outgoing player 1", { exact: true }).locator('option[value="101"]')).toHaveCount(1);
   await expect(page.getByLabel("Incoming player 1", { exact: true }).locator('option[value="200"]')).toHaveCount(1);
   await page.goto("./#/overview");
@@ -576,6 +595,8 @@ test("hypothetical cards, overview, analyzer and search share temporary-injury t
   ).toBeVisible();
   const other = (await after.locator(".sim-score strong").innerText()).trim();
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await page
     .getByRole("combobox", { name: "Evaluate lineup impact using", exact: true })
     .selectOption("best-available");
@@ -642,6 +663,8 @@ test("three roster slots restore exact working points and require explicit saves
   await expect(slots.getByText(/^Unsaved changes/)).toBeVisible();
   expect(JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(0);
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await expect(page.getByLabel("Outgoing player 1", { exact: true }).locator('option[value="200"]')).toHaveCount(1);
   // An unrelated persisted setting cannot accidentally save the roster draft.
   await page.getByRole("combobox", { name: "Evaluate lineup impact using", exact: true }).selectOption("marked-starters");

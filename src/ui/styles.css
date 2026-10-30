@@ -2085,3 +2085,269 @@ pre {
   padding-left: 11px;
   border-left: 1px solid var(--line);
 }
+
+/* Option 1 is scoped to the trade route: compact navigation and page chrome leave room for the two working panes. */
+@media (min-width: 1101px) {
+  .trade-page .sidebar { width: 88px; padding: 18px 8px; }
+  .trade-page > main { margin-left: 88px; width: calc(100% - 88px); }
+  .trade-page .brand { justify-content: center; margin-bottom: 20px; }
+  .trade-page .brand > span, .trade-page .workspace-tag, .trade-page .sidebar-bottom p, .trade-page .sidebar-bottom > svg { display: none; }
+  .trade-page nav > a { flex-direction: column; justify-content: center; gap: 5px; padding: 9px 3px; font-size: 10px; text-align: center; }
+  .trade-page nav > a > svg:last-child:not(:first-child) { display: none; }
+  .trade-page .sidebar-bottom { padding: 12px 2px 0; }
+  .trade-page .sync-pill { font-size: 10px; flex-wrap: wrap; justify-content: center; }
+}
+.trade-page .content { max-width: none; padding: 12px 16px 16px; }
+.trade-page .topbar { height: 46px; padding: 0 16px; }
+.trade-page .page-heading { margin-bottom: 10px; }
+.trade-page .page-heading h1 { font-size: 24px; margin-bottom: 2px; }
+.trade-page .page-heading .eyebrow, .trade-page .page-heading p { display: none; }
+.trade-page .content > .toolbar { margin-bottom: 8px; }
+.trade-page .footer { margin-top: 14px; }
+
+/* The workbench keeps chosen offers/lineups alongside a separately scrollable finder; scoring stays pinned above both. */
+.trade-workspace { --trade-pane-height: clamp(550px, calc(100dvh - 230px), 940px); min-width: 0; }
+.trade-workspace [hidden] { display: none !important; }
+.trade-workspace-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid var(--line); background: #fff; padding: 0 8px; }
+.trade-mode-tabs { display: flex; gap: 6px; }
+.trade-mode-tabs button { padding: 13px 14px; background: transparent; border-bottom: 3px solid transparent; font-weight: 600; color: var(--muted); }
+.trade-mode-tabs button[aria-pressed="true"] { color: var(--ink); border-color: #3b8a66; }
+.trade-workspace-tools { display: flex; }
+.trade-score-strip { display: grid; grid-template-columns: 1fr 1fr; position: sticky; top: 0; z-index: 9; background: #fafcf8; border-bottom: 1px solid var(--line); padding: 12px 14px 6px; gap: 4px 20px; }
+.trade-score-team { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.trade-score-team > div:first-child { min-width: 0; }
+.trade-score-team strong { font-size: 13px; }
+.trade-score-team small { display: block; font-size: 10px; color: var(--muted); }
+.trade-score-values { display: flex; align-items: center; gap: 10px; white-space: nowrap; font-size: 18px; }
+.trade-score-values strong { font-size: 22px; }
+.trade-score-values b { padding: 6px 9px; background: #f8e7ed; border-radius: 4px; font-size: 17px; }
+.trade-score-context { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
+.trade-workspace-grid { display: grid; grid-template-columns: minmax(400px, .95fr) minmax(500px, 1.05fr); gap: 14px; padding-top: 12px; align-items: start; }
+.trade-workspace-left, .trade-workspace-right { min-width: 0; height: var(--trade-pane-height); }
+.trade-workspace-left { overflow: auto; overscroll-behavior: contain; padding-right: 2px; }
+.trade-workspace-right { overflow: hidden; }
+.trade-workspace-basis .control { display: flex; align-items: center; gap: 8px; margin: 0 0 7px; }
+.trade-workspace-basis .control > span { font-size: 10px; }
+.trade-workspace-basis select { padding: 5px 8px; min-height: 28px; font-size: 11px; max-width: 230px; }
+.trade-workspace-basis > p { display: none; }
+.trade-preview-caption { display: flex; align-items: center; justify-content: space-between; margin: 0 0 6px; font-size: 11px; color: var(--muted); }
+
+/* Selected-player cards reuse the existing editable selectors and inspection links; only the next unused slot takes space. */
+.trade-workspace .trade-builder { gap: 10px; margin-bottom: 10px; }
+.trade-workspace .trade-side { padding: 12px; border-radius: 7px; min-width: 0; }
+.trade-workspace .trade-side .eyebrow { font-size: 13px; letter-spacing: 0; color: var(--ink); margin-bottom: 7px; }
+.trade-workspace .trade-side .control { margin-bottom: 7px; }
+.trade-workspace .trade-side .control > span { font-size: 10px; margin-bottom: 3px; }
+.trade-workspace .trade-side input, .trade-workspace .trade-side select { min-height: 29px; padding: 5px 7px; font-size: 11px; min-width: 0; }
+.trade-workspace .trade-side > details { font-size: 10px; margin-top: 5px; }
+.trade-workspace .trade-swap { display: none; }
+.trade-workspace .trade-player-slot { margin: 8px 0; }
+.trade-workspace .trade-player-slot.has-player { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 3px 8px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.trade-workspace .has-player > .trade-portrait { grid-row: 1 / 3; grid-column: 1; align-self: center; }
+.trade-workspace .has-player .trade-selected-player { grid-column: 2; grid-row: 1; min-width: 0; margin: 0; }
+.trade-workspace .trade-selected-player > a { display: block; font-size: 12px; font-weight: 600; }
+.trade-workspace .trade-selected-player > small { font-size: 10px; color: var(--muted); margin-right: 8px; }
+.trade-workspace .trade-selected-player > strong { display: block; font-size: 14px; }
+.trade-workspace .trade-selected-player strong small { font-size: 9px; font-weight: 400; }
+.trade-workspace .trade-select-row { grid-column: 2; grid-row: 2; gap: 3px; margin: 0; }
+.trade-workspace .trade-select-row > span { display: none; }
+.trade-workspace .trade-select-row select { width: 100%; max-width: 100%; font-size: 10px; padding: 3px; }
+.trade-workspace .trade-select-row button { padding: 3px; }
+.trade-portrait { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 48px; flex-shrink: 0; border-radius: 6px; background: #f1f4ef; color: #6b7d72; overflow: hidden; }
+.trade-portrait img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+
+/* A single read-only field shows the evaluator's chosen week's roles; totals above remain remaining-season averages. */
+.trade-lineup-panel { background: #fff; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.trade-field-heading, .trade-field-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; }
+.trade-field-heading h3 { margin: 0; font-size: 14px; }
+.trade-field-controls { border-top: 1px solid #edf0e8; font-size: 10px; padding-top: 5px; padding-bottom: 5px; }
+.trade-field-controls > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trade-field-controls select { padding: 3px; min-height: 25px; width: 45px; font-size: 10px; }
+.trade-view-switch { display: inline-flex; flex-shrink: 0; gap: 2px; }
+.trade-view-switch button { background: transparent; color: var(--muted); padding: 5px 7px; border-bottom: 2px solid transparent; font-size: 10px; }
+.trade-view-switch button[aria-pressed="true"] { color: var(--ink); border-bottom-color: #3b8a66; font-weight: 700; }
+.trade-field { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; padding: 22px 16px; background-color: #e9f1e5; background-size: cover; background-position: center; }
+.trade-field-player { min-width: 0; text-align: center; padding: 5px 4px; background: #ffffffeb; border: 1px solid transparent; border-radius: 6px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.trade-field-player.is-changed { border-color: var(--purple); }
+.trade-field-player > small { font-size: 9px; }
+.trade-field-player .trade-portrait { height: 40px; width: 40px; }
+.trade-field-player .player-name { font-size: 10px; line-height: 1.3; overflow-wrap: anywhere; }
+.trade-field-player > strong { font-size: 13px; }
+.trade-field-player .trade-field-replacement { font-size: 8px; line-height: 1.3; color: var(--purple); }
+.trade-field-footnote { display: block; font-size: 10px; color: var(--muted); padding: 6px 10px; }
+.trade-lineup-panel > .muted { display: block; padding: 0 10px 8px; font-size: 10px; }
+.trade-workspace-save { display: flex; align-items: center; justify-content: space-between; position: sticky; bottom: 0; z-index: 3; gap: 10px; padding: 9px 10px; margin-top: 9px; background: #fff; border: 1px solid var(--line); border-radius: 6px; }
+.trade-workspace-save > div:first-child { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; font-size: 11px; }
+.trade-workspace-save .toolbar { margin: 0; }
+.trade-workspace-save > p { font-size: 10px; margin: 0; }
+
+/* Each finder keeps its own mounted side drawer and results; a push layout prevents overlays from blocking ordinary result actions. */
+.trade-workspace .trade-finder-section { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; margin: 0; padding: 0; overflow: hidden; }
+.trade-workspace .trade-finder-section[hidden], .trade-workspace .trade-manual-panel[hidden] { display: none; }
+.trade-workspace .trade-finder-section .panel-head { margin: 0; padding: 10px 12px; gap: 10px; border-bottom: 1px solid var(--line); align-items: center; }
+.trade-workspace .trade-finder-section .panel-head > div { width: auto; }
+.trade-workspace .trade-finder-section .panel-head h2 { font-size: 15px; margin-bottom: 1px; }
+.trade-workspace .trade-finder-section .panel-head p { font-size: 9px; margin: 0; }
+.trade-workspace .trade-filters-toggle { min-height: 32px; padding: 5px 9px; flex-shrink: 0; }
+.trade-workspace .trade-finder-section .search-section-content, .trade-workspace .trade-finder-section .search-section-content > div, .trade-workspace .trade-finder-section .search-section-body { height: 100%; min-height: 0; }
+.trade-workspace .trade-finder-section .search-section-content { display: block; }
+.trade-finder-layout { display: grid; grid-template-columns: 0px minmax(0, 1fr); height: 100%; min-height: 0; overflow: hidden; transition: grid-template-columns 250ms ease; }
+.trade-finder-layout.filters-open { grid-template-columns: min(320px, 46%) minmax(0, 1fr); }
+.trade-filters-drawer { min-width: 0; overflow: hidden; visibility: hidden; }
+.filters-open > .trade-filters-drawer { visibility: visible; border-right: 1px solid var(--line); background: #fafbf7; }
+.trade-filters-drawer-inner { min-width: 240px; height: 100%; overflow: auto; overscroll-behavior: contain; padding: 10px; }
+.trade-drawer-heading { display: flex; align-items: center; justify-content: space-between; position: sticky; top: -10px; background: #fafbf7; z-index: 4; margin-bottom: 8px; }
+.trade-drawer-heading h3 { font-size: 14px; margin: 0; }
+.trade-filters-drawer .trade-search-controls, .trade-filters-drawer .three-col, .trade-filters-drawer .two-col { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.trade-filters-drawer .control { width: 100%; margin-bottom: 5px; }
+.trade-filters-drawer .control > span { font-size: 11px; }
+.trade-filters-drawer .control input, .trade-filters-drawer .control select { width: 100%; min-width: 0; padding: 7px 8px; min-height: 32px; }
+.trade-filters-drawer .check { white-space: normal; font-size: 11px; }
+.trade-filters-drawer details, .trade-filters-drawer fieldset { margin: 6px 0; padding: 8px; }
+.trade-filters-drawer p, .trade-filters-drawer small { font-size: 10px; }
+.trade-finder-main { min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 10px; }
+.trade-finder-main > .toolbar, .trade-finder-main > .button-row { position: sticky; top: -10px; z-index: 5; background: #fff; padding: 7px 0; margin: 0 0 5px; gap: 6px; }
+.trade-finder-main > .toolbar .button, .trade-finder-main > .button-row .button { font-size: 10px; min-height: 31px; padding: 6px 8px; }
+.trade-finder-main > p { margin-bottom: 8px; font-size: 11px; }
+.trade-finder-main .table-wrap { max-width: 100%; }
+.trade-workspace .trade-search-results { min-width: 0; table-layout: fixed; font-size: 11px; }
+.trade-workspace .trade-search-results th { white-space: normal; overflow-wrap: anywhere; font-size: 9px; padding: 8px 5px; }
+.trade-workspace .trade-search-results th:first-child { width: 28%; }
+.trade-workspace .trade-search-results th:nth-child(2) { width: 12%; }
+.trade-workspace .trade-search-results th:nth-child(3), .trade-workspace .trade-search-results th:nth-child(4) { width: 11%; }
+.trade-workspace .trade-search-results th:nth-child(5) { width: 16%; }
+.trade-workspace .trade-search-results td { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.trade-workspace .trade-search-results td:first-child { min-width: 0; max-width: none; width: auto; }
+.trade-workspace .trade-result-cell { padding: 8px 5px; }
+.trade-workspace .trade-result-name { padding-left: calc(5px + var(--result-depth) * 24px); }
+.trade-workspace .trade-result-name::before { left: calc(5px + (var(--result-depth) - 1) * 24px); }
+.trade-workspace .trade-search-results td small { font-size: 9px; }
+.trade-workspace .trade-search-results tbody th { padding: 0; }
+.trade-workspace .trade-search-results tbody th button { padding: 10px 8px; font-size: 10px; white-space: normal; }
+.trade-workspace .trade-search-results .is-selected > td { background: #eef8ed; }
+.trade-result-package { display: flex; align-items: center; gap: 6px; }
+.trade-result-faces { display: flex; flex-shrink: 0; }
+.trade-result-faces .trade-portrait { width: 24px; height: 27px; margin-left: -6px; }
+.trade-result-faces .trade-portrait:first-child { margin-left: 0; }
+.trade-preview-button { font-size: 9px; padding: 3px 0; }
+.trade-workspace .trade-search-results td .button { padding: 4px 5px; min-height: 29px; font-size: 9px; gap: 3px; }
+.trade-workspace .trade-search-results td .button svg { width: 12px; }
+.trade-workspace .trade-search-results td .subtle { font-size: 9px; padding: 3px; }
+.trade-workspace .trade-search-results details { min-width: 0; max-width: none; margin-top: 3px; padding-top: 3px; }
+.trade-details-close { display: none; }
+.trade-workspace .trade-result-details[open] { position: fixed; z-index: 65; right: 16px; top: 80px; bottom: 20px; width: min(560px, calc(100vw - 32px)); overflow: auto; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px #152c2926; padding: 18px; font-size: 13px; }
+.trade-workspace .trade-result-details[open] > summary { position: sticky; top: -18px; background: #fff; padding: 10px 0; font-size: 14px; font-weight: 700; }
+.trade-workspace .trade-result-details[open] > .trade-details-close { display: block; margin-left: auto; font-size: 12px; }
+.trade-workspace .trade-search-results .trade-result-details[open] small { font-size: 11px; }
+.trade-workspace .trade-result-details[open] table { table-layout: auto; font-size: 12px; }
+.trade-manual-panel { height: 100%; padding: 0; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.trade-manual-panel .panel-head { padding: 12px; margin: 0; }
+.trade-compact-tests { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.trade-full-analysis, .trade-saved-drawer { margin-top: 12px; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+.trade-full-analysis > summary, .trade-saved-drawer > summary { font-weight: 600; font-size: 12px; }
+
+/* Responsive stacking keeps all controls accessible instead of shrinking cards into unreadable miniatures. */
+@media (max-width: 1250px) {
+  .trade-workspace-grid { grid-template-columns: minmax(330px, .9fr) minmax(400px, 1.1fr); }
+  .trade-score-team { flex-wrap: wrap; gap: 5px; }
+  .trade-score-values { font-size: 16px; }
+  .trade-field { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 12px; }
+}
+@media (max-width: 1000px) {
+  .trade-workspace { --trade-pane-height: auto; }
+  .trade-workspace-grid { grid-template-columns: minmax(0, 1fr); }
+  .trade-workspace-left, .trade-workspace-right { height: auto; overflow: visible; }
+  .trade-workspace .trade-finder-section { min-height: 500px; height: min(750px, 80dvh); }
+  .trade-workspace .trade-manual-panel { min-height: 300px; }
+  .trade-score-strip { position: static; }
+  .trade-workspace-toolbar { flex-wrap: wrap; }
+}
+@media (max-width: 600px) {
+  .trade-page .content { padding: 10px; }
+  .trade-score-strip { grid-template-columns: 1fr; padding: 10px; }
+  .trade-score-team { flex-wrap: nowrap; }
+  .trade-score-values { gap: 5px; font-size: 14px; }
+  .trade-score-values strong { font-size: 18px; }
+  .trade-score-values b { font-size: 14px; padding: 4px; }
+  .trade-mode-tabs { width: 100%; gap: 0; justify-content: space-between; }
+  .trade-mode-tabs button { padding: 10px 6px; font-size: 12px; }
+  .trade-workspace .trade-builder { gap: 7px; }
+  .trade-workspace .trade-side { padding: 8px; }
+  .trade-workspace .trade-player-slot.has-player { grid-template-columns: 1fr; }
+  .trade-workspace .has-player > .trade-portrait { grid-row: 1; grid-column: 1; justify-self: center; }
+  .trade-workspace .has-player .trade-selected-player { grid-row: 2; grid-column: 1; text-align: center; }
+  .trade-workspace .has-player .trade-select-row { grid-row: 3; grid-column: 1; }
+  .trade-field { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .trade-field-controls { flex-wrap: wrap; }
+  .trade-field-heading { flex-wrap: wrap; }
+  .trade-finder-layout.filters-open { grid-template-columns: min(280px, 76%) minmax(0, 1fr); }
+  .trade-workspace-save { flex-wrap: wrap; }
+  .trade-workspace .trade-search-results { min-width: 580px; }
+}
+@media (prefers-reduced-motion: reduce) { .trade-finder-layout { transition: none; } }
+
+/* Chain cards describe only that planner; a read-only inspected leg cannot overwrite the single-trade builder. */
+.trade-preview-offer { border: 0; padding: 0; margin: 0; min-width: 0; }
+.trade-preview-offer:disabled select, .trade-preview-offer:disabled input { opacity: .75; }
+.trade-chain-intro { margin: 0; padding: 14px; background: #fafcf8; font-size: 12px; }
+.trade-chain-pool-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.trade-chain-pool-cards article { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; border: 1px solid var(--line); border-radius: 6px; padding: 8px; font-size: 11px; }
+.trade-chain-pool-cards strong { display: block; width: 100%; font-size: 11px; }
+
+/* Open result details retain load/save in their own footer, so the drawer cannot cover these actions. */
+.trade-result-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.trade-workspace .trade-result-cell:has(> .trade-result-details[open]) > .trade-result-actions { position: fixed; z-index: 66; right: 32px; bottom: 25px; width: min(525px, calc(100vw - 65px)); padding: 8px; background: #fff; border-top: 1px solid var(--line); }
+.trade-workspace .trade-result-details[open] { padding-bottom: 80px; }
+
+/* Keep league identity in the top bar and expose optional roster search on demand, leaving the field visible on desktop. */
+@media (min-width: 1101px) {
+  .trade-page .content > .toolbar { position: absolute; top: 4px; right: 190px; z-index: 12; margin: 0; }
+  .trade-page .content > .toolbar .control { display: flex; align-items: center; gap: 7px; margin: 0; }
+  .trade-page .content > .toolbar .control > span { font-size: 10px; margin: 0; }
+  .trade-page .content > .toolbar select { min-height: 32px; padding: 5px 8px; font-size: 11px; width: 175px; }
+}
+.trade-workspace .trade-roster-search { margin: 5px 0; padding: 0; border: 0; }
+.trade-workspace .trade-roster-search > summary { font-size: 10px; color: var(--muted); }
+.trade-workspace .trade-roster-search .control { margin-top: 5px; }
+.trade-workspace .trade-search-results { font-size: 12px; }
+.trade-workspace .trade-search-results thead th small { display: none; }
+.trade-workspace .trade-search-results th { font-size: 10px; }
+.trade-workspace .filters-open .trade-search-results { min-width: 580px; }
+@media (max-width: 1000px) { .trade-workspace-save { position: static; } }
+
+/* When filters are open, details stay over the results side so the independent filter drawer remains usable. */
+@media (min-width: 1001px) {
+  .trade-workspace .filters-open .trade-result-details[open] { width: min(380px, calc((100vw - 120px) * .525 - 320px)); }
+  .trade-workspace .filters-open .trade-result-cell:has(> .trade-result-details[open]) > .trade-result-actions { width: min(345px, calc((100vw - 120px) * .525 - 355px)); }
+}
+
+/* Consolidate the desktop title into the existing top bar; preserve source freshness beside the mode controls. */
+@media (min-width: 1101px) {
+  .trade-page .breadcrumb { visibility: hidden; }
+  .trade-page .page-heading { height: 0; margin: 0; padding: 0; }
+  .trade-page .page-heading h1 { position: absolute; top: 10px; left: 104px; margin: 0; font-size: 22px; }
+  .trade-page .page-heading .snapshot { position: absolute; right: 265px; top: 59px; font-size: 9px; text-align: right; }
+  .trade-page .page-heading .snapshot > span { display: none; }
+  .trade-page .page-heading .snapshot small { margin: 0; font-size: 9px; }
+  .trade-page .content > .toolbar { right: 320px; }
+  .trade-page .content > .toolbar .control { flex-direction: row; }
+}
+.trade-workspace-basis .control { flex-direction: row; gap: 6px; min-width: 0; }
+.trade-workspace-left > .toolbar { margin: 6px 0; }
+
+/* Remove inherited disclosure gaps inside compact cards; the save strip remains in flow and cannot cover a lineup card. */
+.trade-workspace .trade-side > details > summary { margin-bottom: 0; }
+.trade-workspace .trade-side > details { padding-top: 5px; }
+.trade-workspace .trade-side > .trade-roster-search { padding-top: 0; }
+.trade-workspace .trade-field { padding-top: 12px; padding-bottom: 12px; }
+.trade-workspace-save { position: static; }
+
+/* Keep basis and return-to-draft on one compact line, preserving more height for two-player packages and the full field. */
+.trade-workspace { --trade-pane-height: clamp(550px, calc(100dvh - 205px), 940px); }
+.trade-workspace-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; margin-bottom: 7px; }
+.trade-workspace-controls .trade-workspace-basis { min-width: 0; }
+.trade-workspace-controls .trade-workspace-basis .control { margin: 0; }
+.trade-workspace-controls .trade-preview-caption { margin: 0; flex-shrink: 0; }
+.trade-workspace-controls .trade-preview-caption > span { display: none; }
+@media (max-width: 1000px) { .trade-workspace { --trade-pane-height: auto; } }
+@media (max-width: 600px) { .trade-workspace-controls { flex-wrap: wrap; } }

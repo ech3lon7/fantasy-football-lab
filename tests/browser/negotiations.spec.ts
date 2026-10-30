@@ -1,3 +1,4 @@
+import { openTradeDetails, openTradeFilters } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { build } from "vite";
@@ -118,7 +119,7 @@ test("imports documented offers privately and retains outcomes/profiles on reloa
     page.getByRole("status").filter({ hasText: "Saved." }),
   ).toBeVisible();
   const profile = page
-    .locator("details")
+    .locator("details:not(.trade-saved-drawer):not(.trade-full-analysis)")
     .filter({ has: page.locator("summary").filter({ hasText: /^Chain B ·/ }) })
     .first();
   await profile.locator("summary").first().click();
@@ -156,15 +157,19 @@ test("keeps direct/search toggles independent and freezes an explicitly logged f
 }) => {
   await seed(page);
   await page.getByRole("link", { name: "Trade analyzer", exact: true }).click();
-  const toggles = page.getByRole("checkbox", {
-    name: "Enable Surface Trading",
-    exact: true,
-  });
-  await expect(toggles).toHaveCount(2);
-  await expect(toggles.nth(0)).not.toBeChecked();
-  await expect(toggles.nth(1)).not.toBeChecked();
-  await toggles.nth(0).check();
-  await expect(toggles.nth(1)).not.toBeChecked();
+  await openTradeDetails(page);
+  await openTradeFilters(page);
+  // Each optional assessment is reached through its own mode and filter drawer.
+  const searchToggle = page.getByRole("checkbox", { name: "Enable Surface Trading", exact: true });
+  await expect(searchToggle).not.toBeChecked();
+  await page.getByRole("button", { name: "Manual analyzer", exact: true }).click();
+  await openTradeFilters(page, "Manual");
+  const directToggle = page.getByRole("checkbox", { name: "Enable Surface Trading", exact: true });
+  await expect(directToggle).not.toBeChecked();
+  await directToggle.check();
+  await page.getByRole("button", { name: "Find matching trades", exact: true }).click();
+  await expect(searchToggle).not.toBeChecked();
+  await page.getByRole("button", { name: "Manual analyzer", exact: true }).click();
   const assessment = page.getByRole("region", {
     name: "Manager expectations assessment",
     exact: true,

@@ -763,7 +763,7 @@ export default function App() {
       !!d && (!d.sourceUTC || Date.now() - Date.parse(d.sourceUTC) > 86400000),
     page = route.split("/")[0];
   const content = (
-    <div className="app-shell">
+    <div className={`app-shell${page === "trades" ? " trade-page" : ""}`}>
       <aside className={`sidebar ${mobile ? "open" : ""}`}>
         <a className="brand" href="#/overview">
           <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" />

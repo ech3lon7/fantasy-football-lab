@@ -1,3 +1,5 @@
+import { tradeImpact } from "../../src/domain/trade-impact";
+import { openTradeDetails, openTradeFilters } from "./trade-workspace-helpers";
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import {
@@ -121,6 +123,8 @@ async function seed(
   }, w);
   await page.reload();
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await expect(
     page.getByRole("heading", { name: "Find matching trades", exact: true }),
   ).toBeVisible();
@@ -383,6 +387,7 @@ test("usefulness filters complete packages, explains the replacement and invalid
     ),
   ).toBe(true);
   await search.screenshot({ path: "test-results/trade-usefulness-mobile.png" });
+  await row.getByRole("button", { name: "Close details", exact: true }).click();
   await openExclusions(search);
   await expect(
     search.getByText(
@@ -858,6 +863,7 @@ async function replaceSnapshot(page: Page, dataset: Dataset) {
     db.close();
   }, dataset);
   await page.reload();
+  if (page.url().includes("#/trades")) { await openTradeDetails(page); await openTradeFilters(page); }
 }
 
 // Exercise real model labels and the existing search worker, including OR labels, intersected positions and package counts.
@@ -994,6 +1000,8 @@ test("saved trades persist names notes and original results and restore the save
     (await storedWorkspace(page)).state.filters.savedTrades,
   ).trades[0].original;
   await page.reload();
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await expect(saved.getByText(/WR target ·/)).toBeVisible();
   await saved.locator("summary").click();
   await expect(
@@ -1673,6 +1681,8 @@ test("large searches show progress and support cancel, restart and navigation", 
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await page.goto("./#/overview");
   await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await expect(
     panel(page).getByRole("button", { name: "Search", exact: true }),
   ).toBeVisible();
@@ -2493,4 +2503,55 @@ test("result expansions indent names smoothly without shifting numerical columns
   expect(await page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length)).toBe(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(391);
+});
+
+
+// Inspection compares an executed offer without replacing the protected search draft or recomputing any scoring in the UI.
+test("compact workspace previews authoritative scoring and weekly roles without changing the search draft", async ({ page }) => {
+  const dataset = await seed(page);
+  const search = panel(page);
+  await search.getByLabel("Below outgoing total (index points)", { exact: true }).fill("1000");
+  await search.getByLabel("Above outgoing total (index points)", { exact: true }).fill("1000");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  const row = search.locator("tr[data-trade-result]").first();
+  await expect(row).toBeVisible();
+  const before = await storedWorkspace(page);
+  const inspect = row.getByRole("button", { name: /^Preview trade / });
+  const key = JSON.parse((await inspect.getAttribute("aria-label"))!.slice("Preview trade ".length));
+  const teamB = key[0], give = key.length === 3 ? key[1] : before.state.draft.give, get = key.length === 3 ? key[2] : key[1];
+  const model = evaluate(dataset, dataset.settings);
+  const calculated = evaluateTrade(model, { teamA: "1", teamB, give, get }, true);
+  expect(calculated.valid).toBe(true);
+  if (!calculated.valid) throw Error("Expected valid fixture trade");
+  await page.getByRole("button", { name: "Close standard filters", exact: true }).click();
+  await inspect.click();
+  const strip = page.getByRole("region", { name: "Trade scoring summary", exact: true });
+  await expect(strip).toHaveAttribute("aria-busy", "false");
+  const own = strip.locator(".trade-score-team").first();
+  await expect(own).toContainText(tradeImpact(calculated, "best-available")!.own.beforePerWeek!.toFixed(2));
+  await expect(own).toContainText(tradeImpact(calculated, "best-available")!.own.afterPerWeek!.toFixed(2));
+  await expect(own.locator(".trade-score-values b")).toHaveText((calculated.potentialA.expectedPerWeek! > 0 ? "+" : "") + calculated.potentialA.expectedPerWeek!.toFixed(2));
+  const field = page.getByRole("region", { name: "Visual lineup impact", exact: true });
+  await expect(field).toHaveAttribute("aria-busy", "false");
+  // The exact selected-week roles, rather than a separate optimizer, supply the displayed player cards.
+  const firstWeek = calculated.potentialA.weekly[0];
+  await field.getByRole("combobox", { name: "Trade board week", exact: true }).selectOption(String(firstWeek.week));
+  for (const id of firstWeek.ids.filter(Boolean))
+    await expect(field.getByRole("link", { name: model.byId.get(id!)!.name, exact: true })).toBeVisible();
+  await field.getByRole("button", { name: "Their team", exact: true }).click();
+  await field.getByRole("button", { name: "Before", exact: true }).click();
+  const theirWeek = calculated.potentialB.weekly.find(w => w.week === firstWeek.week)!;
+  for (const id of theirWeek.beforeIds.filter(Boolean))
+    await expect(field.getByRole("link", { name: model.byId.get(id!)!.name, exact: true })).toBeVisible();
+  const after = await storedWorkspace(page);
+  expect(after.state.draft).toEqual(before.state.draft);
+  expect(after.state.filters.tradeSearchSettings).toEqual(before.state.filters.tradeSearchSettings);
+  await page.getByRole("button", { name: "Return to draft", exact: true }).click();
+  await expect(page.getByLabel("Incoming player 1", { exact: true })).toHaveValue("");
+  // Escape closes only this tool's drawer and returns keyboard focus to its trigger.
+  await openTradeFilters(page);
+  await search.getByLabel("Search goal", { exact: true }).focus();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Standard filters", exact: true })).toBeFocused();
+  await expect(search.getByLabel("Search goal", { exact: true })).toBeHidden();
 });
