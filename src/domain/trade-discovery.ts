@@ -1,5 +1,6 @@
 import { managerFailures } from "./manager-expectations";
 import { surfaceFailures } from "./surface-appeal";
+import { deficitProtectionFailures } from "./trade-safeguards";
 import { cmpId, n, positions, sum } from "./contracts";
 import { irAssignments, lineup, teamsAssessment } from "./lineups";
 import { evaluateTrade } from "./trades";
@@ -121,6 +122,8 @@ export function discoveryFailures(
   q: TradeSearchQuery,
 ): string[] {
   const reasons: string[] = [
+    // A strong overall gain cannot excuse a weak return for a deficit-position best player.
+    ...deficitProtectionFailures(row.deficitProtection, q.deficitProtection),
     ...surfaceFailures(row, q.surface),
     ...managerFailures(row.manager, q.manager),
   ];

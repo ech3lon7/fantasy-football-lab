@@ -131,6 +131,8 @@ async function seed(
   if (guided) return dataset;
   const search = panel(page);
   await search.getByLabel("Search goal", { exact: true }).selectOption("custom");
+  // Existing filter-isolation cases opt out explicitly; the dedicated safeguard workflow below verifies its enabled path.
+  await search.getByLabel("Standard search: Protect their weak positions", { exact: true }).uncheck();
   await search.getByLabel("Use strict index range", { exact: true }).check();
   await search.getByLabel("Create package", { exact: true }).uncheck();
   return dataset;
@@ -142,6 +144,52 @@ const panel = (page: Page) =>
       exact: true,
     }),
   });
+
+// Legacy saved minimums cannot hide straight swaps, and the recipient safeguard uses the actual worker and persists independently.
+test("restores packages with singles and persists adjustable recipient protection", async ({ page }) => {
+  await seed(page);
+  const workspace = await storedWorkspace(page);
+  const preferences = JSON.parse(workspace.state.filters.tradeSearchSettings);
+  preferences.standard.query.discovery = { receive: { minimum: 2, maximum: 2 } };
+  Object.assign(preferences.standard.controls, { packages: true, minimumCount: 2, count: 2 });
+  workspace.state.filters.tradeSearchSettings = JSON.stringify(preferences);
+  await page.evaluate(async (value) => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const request = indexedDB.open("fantasy-football-lab", 1); request.onsuccess = () => resolve(request.result); });
+    await new Promise<void>((resolve) => { const tx = db.transaction("current", "readwrite"); tx.objectStore("current").put(value, "local"); tx.oncomplete = () => resolve(); });
+    db.close();
+  }, workspace);
+  await page.reload();
+  await openTradeDetails(page);
+  await openTradeFilters(page);
+  const search = panel(page);
+  await expect(search.getByLabel("Minimum players to receive", { exact: true })).toHaveCount(0);
+  await expect(search.locator("p").filter({ hasText: /^Receive 1–2 players\./ })).toBeVisible();
+  await search.getByLabel("Use strict index range", { exact: true }).uncheck();
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(search.getByText("78 index matches.", { exact: false })).toBeVisible();
+  await search.getByLabel("Create package", { exact: true }).uncheck();
+  await search.getByLabel("Receive QB", { exact: true }).check();
+  const guard = search.getByLabel("Standard search: Protect their weak positions", { exact: true });
+  await guard.check();
+  const minimum = search.getByLabel("Standard search: Minimum positional gain", { exact: true });
+  await expect(minimum).toHaveValue("2");
+  await expect(search.getByLabel("Standard search: Deficit grade cutoff", { exact: true })).toHaveValue("C+");
+  await minimum.fill("30");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(search.getByText("0 index matches.", { exact: false })).toBeVisible();
+  await openExclusions(search);
+  await expect(search.getByText(/Trades excluded for insufficient improvement at their weak position: 1/)).toBeVisible();
+  await minimum.fill("2");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(search.getByText("1 index matches.", { exact: false })).toBeVisible();
+  await expect.poll(async () => JSON.parse((await storedWorkspace(page)).state.filters.tradeSearchSettings).standard.query.deficitProtection.minimum).toBe(2);
+  // Capture the new controls at normal zoom using only this test's synthetic roster.
+  await search.locator(".trade-search-controls").filter({ has: page.getByLabel("Standard search: Protect their weak positions", { exact: true }) }).last().screenshot({ path: "test-results/recipient-protection-controls.png" });
+  await minimum.fill("");
+  await expect(search.getByRole("button", { name: "Search", exact: true })).toBeDisabled();
+  await guard.uncheck();
+  await expect(search.getByRole("button", { name: "Search", exact: true })).toBeEnabled();
+});
 
 // Zero qualified rows must explain that enumeration succeeded; outgoing pools do not implicitly enable multi-player returns.
 test("pooled search shows its actual incoming scope and explains weekly-limit exclusions", async ({
@@ -291,7 +339,7 @@ test("clear filters restores defaults and removes results while preserving playe
   ).toBeChecked();
   await expect(
     search.getByLabel("Minimum players to receive", { exact: true }),
-  ).toHaveValue("1");
+  ).toHaveCount(0);
   await expect(
     search.getByLabel("Maximum players to receive", { exact: true }),
   ).toHaveValue("2");
@@ -426,7 +474,7 @@ test("incoming range returns singles and packages together and restores saved bo
   await search.getByLabel("Create package", { exact: true }).check();
   await expect(
     search.getByLabel("Minimum players to receive", { exact: true }),
-  ).toHaveValue("1");
+  ).toHaveCount(0);
   await expect(
     search.getByLabel("Maximum players to receive", { exact: true }),
   ).toHaveValue("3");
@@ -469,9 +517,9 @@ test("incoming range returns singles and packages together and restores saved bo
   await expect(
     page.getByLabel("Incoming player 2", { exact: true }),
   ).toHaveValue("");
-  // Changing the range invalidates old results; loading the saved search restores both endpoints rather than its result's size.
+  // Changing the maximum invalidates old results; loading restores it while singles remain eligible.
   await search
-    .getByLabel("Minimum players to receive", { exact: true })
+    .getByLabel("Maximum players to receive", { exact: true })
     .selectOption("2");
   const collection = page
     .locator("section")
@@ -484,20 +532,15 @@ test("incoming range returns singles and packages together and restores saved bo
     .click();
   await expect(
     search.getByLabel("Minimum players to receive", { exact: true }),
-  ).toHaveValue("1");
+  ).toHaveCount(0);
   await expect(
     search.getByLabel("Maximum players to receive", { exact: true }),
   ).toHaveValue("3");
-  await search
-    .getByLabel("Minimum players to receive", { exact: true })
-    .selectOption("4");
-  await expect(
-    search.getByRole("button", { name: "Search", exact: true }),
-  ).toBeDisabled();
-  await expect(search).toContainText("minimum no greater than maximum");
-  await search
-    .getByLabel("Minimum players to receive", { exact: true })
-    .selectOption("1");
+  // No hidden minimum can exclude a straight swap when the maximum changes.
+  await search.getByLabel("Maximum players to receive", { exact: true }).selectOption("4");
+  await expect(search.locator("p").filter({ hasText: /^Receive 1–4 players\./ })).toBeVisible();
+  await expect(search.getByRole("button", { name: "Search", exact: true })).toBeEnabled();
+  await search.getByLabel("Maximum players to receive", { exact: true }).selectOption("3");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(
@@ -908,9 +951,6 @@ test("incoming Gem/Watch and position filters intersect without changing existin
   await run();
   await expect(search.locator("tbody tr[data-trade-result]")).toHaveCount(2);
   await search.getByLabel("Create package", { exact: true }).check();
-  await search
-    .getByLabel("Minimum players to receive", { exact: true })
-    .selectOption("2");
   await search
     .getByLabel("Maximum players to receive", { exact: true })
     .selectOption("2");
@@ -1584,18 +1624,17 @@ test("packages paginate complete results and load exactly the selected receive c
     .getByLabel("Above outgoing total (index points)", { exact: true })
     .fill("500");
   await search.getByLabel("Create package", { exact: true }).check();
-  // Equal incoming bounds retain the exact-size package search and pagination checks.
-  await search.getByLabel("Minimum players to receive", { exact: true }).selectOption("2");
+  // The maximum includes singles as well as pairs; pagination retains every match.
   await search.getByLabel("Maximum players to receive", { exact: true }).selectOption("2");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
-    search.getByText("66 index matches.", { exact: false }),
+    search.getByText("78 index matches.", { exact: false }),
   ).toBeVisible();
   await expandSearchAlternatives(search);
   await expect(search.locator("tbody tr[data-trade-result]")).toHaveCount(50);
   await search.getByRole("button", { name: "Show more", exact: true }).click();
   await expandSearchAlternatives(search);
-  await expect(search.locator("tbody tr[data-trade-result]")).toHaveCount(66);
+  await expect(search.locator("tbody tr[data-trade-result]")).toHaveCount(78);
   // An injured player remains discoverable and its uncertainty is explicit in the result details.
   await expandSearchAlternatives(search);
   const injured = search
@@ -1621,28 +1660,27 @@ test("packages paginate complete results and load exactly the selected receive c
   // Exercise all remaining package counts through the actual worker and analyzer selectors.
   for (const [count, matches] of [
     [1, 12],
-    [3, 220],
-    [4, 495],
-    [5, 792],
+    [3, 298],
+    [4, 793],
+    [5, 1585],
   ]) {
-    await search
-      .getByLabel("Minimum players to receive", { exact: true })
-      .selectOption(String(count));
-    await search
+      await search
       .getByLabel("Maximum players to receive", { exact: true })
       .selectOption(String(count));
     await search.getByRole("button", { name: "Search", exact: true }).click();
     await expect(
       search.getByText(`${matches} index matches.`, { exact: false }),
     ).toBeVisible({ timeout: 60000 });
-    await search.getByRole("button", { name: "Load trade" }).first().click();
-    await expect(
-      page.getByLabel(`Incoming player ${count}`, { exact: true }),
-    ).not.toHaveValue("");
-    if (count < 5)
-      await expect(
-        page.getByLabel(`Incoming player ${count + 1}`, { exact: true }),
-      ).toHaveValue("");
+    // Load the actual chosen return size, which may be smaller than the configured maximum.
+    await expandSearchAlternatives(search);
+    const selected = search.locator("tbody tr[data-trade-result]").first();
+    const selectedCount = await selected.locator("td").first().getByRole("link").count();
+    expect(selectedCount).toBeGreaterThanOrEqual(1);
+    expect(selectedCount).toBeLessThanOrEqual(count);
+    await selected.getByRole("button", { name: "Load trade" }).click();
+    await expect(page.getByLabel(`Incoming player ${selectedCount}`, { exact: true })).not.toHaveValue("");
+    if (selectedCount < 5)
+      await expect(page.getByLabel(`Incoming player ${selectedCount + 1}`, { exact: true })).toHaveValue("");
   }
   await search.screenshot({ path: "test-results/trade-search-desktop.png" });
 });
@@ -1660,9 +1698,6 @@ test("large searches show progress and support cancel, restart and navigation", 
     .getByLabel("Above outgoing total (index points)", { exact: true })
     .fill("500");
   await search.getByLabel("Create package", { exact: true }).check();
-  await search
-    .getByLabel("Minimum players to receive", { exact: true })
-    .selectOption("5");
   await search
     .getByLabel("Maximum players to receive", { exact: true })
     .selectOption("5");
@@ -1794,8 +1829,9 @@ test("deficit filtering selects one offered position and invalidates changed gra
     .getByLabel("Maximum position grade", { exact: true })
     .selectOption("A+");
   await search.getByRole("button", { name: "Search", exact: true }).click();
+  // The selected WR deficit must be satisfied by a WR upgrade; the QB cannot satisfy that position's assignment.
   await expect(
-    search.getByText("12 index matches.", { exact: false }),
+    search.getByText("3 index matches.", { exact: false }),
   ).toBeVisible();
   // Removing the explicitly chosen WR offer requires a new valid position instead of silently using QB.
   await page.getByLabel("Outgoing player 2", { exact: true }).selectOption("");
@@ -2484,10 +2520,9 @@ test("result expansions indent names smoothly without shifting numerical columns
   const search = panel(page);
   await search.getByLabel("Use strict index range", { exact: true }).uncheck();
   await search.getByLabel("Create package", { exact: true }).check();
-  await search.getByLabel("Minimum players to receive", { exact: true }).selectOption("2");
   await search.getByLabel("Maximum players to receive", { exact: true }).selectOption("2");
   await search.getByRole("button", { name: "Search", exact: true }).click();
-  await expect(search.getByText("66 index matches.", { exact: false })).toBeVisible();
+  await expect(search.getByText("78 index matches.", { exact: false })).toBeVisible();
   const buttons = search.getByRole("button", { name: /^Show .*alternative offers involving/ });
   await buttons.first().click();
   const nested = search.locator('tr[data-trade-result][data-result-depth="2"]').first();

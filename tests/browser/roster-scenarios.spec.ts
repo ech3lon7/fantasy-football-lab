@@ -232,6 +232,11 @@ test("My team stays selected and hypothetical moves are independent, durable and
   await expect(
     page.getByText("Hypothetical: Plan A", { exact: true }),
   ).toBeVisible();
+  // A saved hypothetical remains active after reload without permanent routine warnings or a forced live-roster switch.
+  await expect(page.getByText(/Player indices use the real snapshot/)).toHaveCount(0);
+  await expect(page.getByText(/Updated player data applied to saved moves/)).toHaveCount(0);
+  await expect(page.getByText(/This source snapshot is older than 24 hours/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Return to live roster", exact: true })).toHaveCount(0);
   await expect(page.getByLabel("My team", { exact: true })).toHaveValue("1");
   await page.goto("./#/trades");
   await openTradeDetails(page);
@@ -241,9 +246,14 @@ test("My team stays selected and hypothetical moves are independent, durable and
       .getByLabel("Outgoing player 1", { exact: true })
       .locator('option[value="200"]'),
   ).toHaveCount(1);
-  await page
-    .getByRole("button", { name: "Return to live roster", exact: true })
-    .click();
+  // Switching back is an explicit My team selection, never a prompt on another screen.
+  await expect(page.getByRole("button", { name: "Return to live roster", exact: true })).toHaveCount(0);
+  await page.goto("./#/overview");
+  await page.getByLabel("Roster simulation", { exact: true }).selectOption("");
+  await expect(page.getByText("Hypothetical: Plan A", { exact: true })).toHaveCount(0);
+  await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
   await expect(
     page
       .getByLabel("Outgoing player 1", { exact: true })
@@ -372,6 +382,8 @@ test("saved hypothetical trades restore their own recipe and debug exports conta
     }),
   });
   await search.getByLabel("Search goal", { exact: true }).selectOption("custom");
+  // This case verifies saved-scenario diagnostics independently of the new optional opponent safeguard.
+  await search.getByLabel("Standard search: Protect their weak positions", { exact: true }).uncheck();
   await search.getByLabel("Use strict index range", { exact: true }).check();
   await search
     .getByLabel("Below outgoing total (index points)", { exact: true })
@@ -691,6 +703,40 @@ test("three roster slots restore exact working points and require explicit saves
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await slots.screenshot({ path: "test-results/roster-save-slots-mobile.png" });
+});
+
+// A hypothetical status must never share the team selector's header position or cover another top-level control.
+test("trade header keeps hypothetical status clear of team and import controls", async ({ page }) => {
+  await seed(page);
+  await page.getByRole("textbox", { name: "Simulation name", exact: true }).fill("Los Chilones");
+  await page.getByRole("button", { name: "New simulation", exact: true }).click();
+  await page.goto("./#/trades");
+  const status = page.getByText("Hypothetical: Los Chilones", { exact: true });
+  const team = page.getByRole("combobox", { name: "My team", exact: true });
+  const importButton = page.getByRole("button", { name: "Import workbook", exact: true });
+  for (const width of [1920, 1280, 1101, 1024, 780, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(status).toBeVisible();
+    await expect(team).toBeVisible();
+    await expect(importButton).toBeVisible();
+    const header = await page.locator(".topbar").boundingBox();
+    const controls = await Promise.all([status, team, importButton].map((control) => control.boundingBox()));
+    expect(header).not.toBeNull();
+    expect(controls.every(Boolean)).toBe(true);
+    expect(controls[0]!.y).toBeGreaterThanOrEqual(header!.y + header!.height);
+    // Check visible geometry rather than CSS declarations so future layout changes retain the guarantee.
+    for (let i = 0; i < controls.length; i++) {
+      const a = controls[i]!;
+      expect(a.x).toBeGreaterThanOrEqual(0);
+      expect(a.x + a.width).toBeLessThanOrEqual(width);
+      for (const b of controls.slice(i + 1)) {
+        const overlaps = a.x < b!.x + b!.width && a.x + a.width > b!.x && a.y < b!.y + b!.height && a.y + a.height > b!.y;
+        expect(overlaps, `Top controls overlap at ${width}px`).toBe(false);
+      }
+    }
+    if (width === 1280 || width === 390)
+      await page.locator("main").screenshot({ path: `test-results/trade-header-${width}.png` });
+  }
 });
 
 // Refresh requires an explicit discard of unsaved roster edits and returns to the most recently saved point.

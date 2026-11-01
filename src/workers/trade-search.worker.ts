@@ -1,6 +1,7 @@
 import { tradeResultGroups } from "../domain/trade-result-groups";
 import { managerFailures } from "../domain/manager-expectations";
 import { surfaceFailures } from "../domain/surface-appeal";
+import { deficitProtectionFailures } from "../domain/trade-safeguards";
 import { findTradeRecoveries } from "../domain/trade-guidance";
 import { evaluate, type Model } from "../domain/valuation";
 import { applyRosterScenario } from "../domain/roster-scenarios";
@@ -178,6 +179,8 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
     if (request.query.manager) stats.managerExcluded = 0;
     // This filter needs each complete evaluated package, including its required drops.
     if (request.query.usefulness) stats.usefulnessExcluded = 0;
+    if (request.query.deficitProtection?.enabled)
+      stats.deficitProtectionExcluded = 0;
     // Every exact match receives the same authoritative evaluation as a manually entered trade.
     for (const match of matches) {
       const row = scoreTradeMatch(
@@ -191,6 +194,15 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
       const failures = discoveryFailures(row, request.query);
       if (!failures.length) rows.push(row);
       else {
+        // Diagnose this safeguard independently from overall weekly gain and positional-deficit targeting.
+        if (
+          deficitProtectionFailures(
+            row.deficitProtection,
+            request.query.deficitProtection,
+          ).length
+        )
+          stats.deficitProtectionExcluded =
+            (stats.deficitProtectionExcluded ?? 0) + 1;
         if (managerFailures(row.manager, request.query.manager).length)
           stats.managerExcluded = (stats.managerExcluded ?? 0) + 1;
         if (surfaceFailures(row, request.query.surface).length)

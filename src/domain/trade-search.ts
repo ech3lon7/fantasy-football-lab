@@ -39,6 +39,15 @@ import { readStarterLineup, tradeImpactVersion } from "./starter-lineups";
 import type { Model, Player } from "./valuation";
 import type { OpponentIncentive } from "./trade-discovery";
 import type { RosterScenario } from "./roster-scenarios";
+import {
+  positionGradeScale,
+  deficitProtectionErrors,
+  deficitProtectionEvidence,
+  type DeficitProtection,
+  type DeficitProtectionEvidence,
+} from "./trade-safeguards";
+// Preserve existing imports of the grade scale while sharing it with both search safeguards.
+export { positionGradeScale } from "./trade-safeguards";
 
 // Discovery settings are optional so saved fixed-package searches retain their original behavior.
 export interface DiscoveryOptions {
@@ -95,21 +104,6 @@ export interface WeeklyFilter {
   other?: WeeklyRange;
 }
 // This order compares existing letter grades only; the grade calculation remains in teamsAssessment.
-export const positionGradeScale = [
-  "F",
-  "D−",
-  "D",
-  "D+",
-  "C−",
-  "C",
-  "C+",
-  "B−",
-  "B",
-  "B+",
-  "A−",
-  "A",
-  "A+",
-] as const;
 export interface DeficitFilter {
   position: Position;
   ceiling: string;
@@ -172,6 +166,7 @@ export interface TradeSearchQuery {
   deficit?: DeficitFilter;
   incoming?: IncomingFilter;
   usefulness?: { minimum: number };
+  deficitProtection?: DeficitProtection;
   discovery?: DiscoveryOptions;
   // Optional surface appeal screens source-based recipient lineups independently of our valuation model.
   // Manager expectations are a separate opt-in evaluator; old surface settings retain their meaning.
@@ -195,6 +190,7 @@ export interface SearchMatch {
   give?: string[];
 }
 export interface SearchRow extends SearchMatch {
+  deficitProtection?: DeficitProtectionEvidence[];
   manager?: ManagerAssessment;
   surface?: SurfaceEvidence;
   // Compact before/after metadata travels with each result, never recomputed from a different live selection.
@@ -222,6 +218,7 @@ export interface SearchRow extends SearchMatch {
   irB: string[];
 }
 export interface SearchStats {
+  deficitProtectionExcluded?: number;
   teams: number;
   checked: number;
   excluded: number;
@@ -348,6 +345,7 @@ export function tradeSearchContext(
     query.deficit ? [query.deficit.position, query.deficit.ceiling] : null,
     // Invalid edits invalidate results too; disabling usefulness preserves the old search path.
     query.usefulness ? [String(query.usefulness.minimum)] : null,
+    query.deficitProtection ?? null,
     // Include selections and counts in stale-result protection, even during invalid numeric edits.
     query.incoming
       ? [
@@ -374,7 +372,7 @@ export function tradeSearchContext(
 
 // Missing indices block outgoing searches, while genuine zero remains a usable number.
 export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
-  const errors: string[] = [];
+  const errors: string[] = deficitProtectionErrors(q.deficitProtection);
   if (q.manager && !managerSettingsSchema.safeParse(q.manager).success)
     errors.push("Choose valid manager expectation settings.");
   if (
@@ -1276,6 +1274,21 @@ export function scoreTradeMatch(
   return {
     ...match,
     // Scored/direct inspections must use the complete package too, rather than retaining a broad team-level comparison.
+    ...(q.deficitProtection?.enabled
+      ? {
+          deficitProtection: deficitProtectionEvidence(
+            m,
+            {
+              teamA: q.teamA,
+              teamB: match.teamB,
+              give: q.give,
+              get: match.get,
+            },
+            r,
+            q.deficitProtection,
+          ),
+        }
+      : {}),
     ...(q.upgrade
       ? { upgrades: offeredUpgrades(m, q, match.teamB, lineupsRaw, match.get) }
       : {}),

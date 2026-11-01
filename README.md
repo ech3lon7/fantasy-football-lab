@@ -55,6 +55,16 @@ npm run test:browser
 
 Node 24 is used by CI. TypeScript is pinned to the version supported by the lint toolchain. SheetJS CE comes from its official CDN rather than the outdated npm-registry distribution. The lockfile pins exact dependencies.
 
+Before pushing a finished change (including a version edit), run the complete release gate:
+
+```sh
+npm run verify:release
+```
+
+Install the browser once with `npx playwright install chromium` if needed. This command runs type checks, lint, every unit test, the publication scan, a production build under the GitHub Pages path, and every browser test. It starts and stops its own preview on port 4173; stop any other preview on that port first. A failure stops the gate and prints the failing step. GitHub Actions runs this same command and retains browser traces under the failed run's artifacts.
+
+For the final Linux verification before changing the published app, push a working branch and open a pull request. Merge only after **Verify and deploy / build** passes. A repository ruleset requiring that check before merging into `main` prevents failed changes from reaching the deployment branch. Local Windows verification cannot guarantee GitHub runner availability or identical Linux behavior.
+
 Local private verification:
 
 ```sh

@@ -57,6 +57,15 @@ const querySchema = z
       .optional(),
     // Preserve the optional usefulness setting when a saved trade restores its search controls.
     usefulness: z.object({ minimum: finite.nonnegative() }).strict().optional(),
+    // Keep recipient safeguards when saving/loading a trade; existing saved queries remain valid.
+    deficitProtection: z
+      .object({
+        enabled: z.boolean(),
+        ceiling: z.string().max(3),
+        minimum: finite.positive(),
+      })
+      .strict()
+      .optional(),
     // Optional discovery settings use the existing saved-search/sync contract; old saved trades need no migration.
     discovery: z
       .object({

@@ -19,6 +19,8 @@ export function guidedQuery(
   return {
     // Goal presets retain the shared scoring preference.
     lineupBasis: q.lineupBasis,
+    // Goal shortcuts must not silently turn off the independently selected recipient safeguard.
+    deficitProtection: q.deficitProtection,
     teamA: q.teamA,
     give: [...q.give],
     goal,

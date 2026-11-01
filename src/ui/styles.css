@@ -2306,12 +2306,12 @@ pre {
 .trade-workspace .trade-result-cell:has(> .trade-result-details[open]) > .trade-result-actions { position: fixed; z-index: 66; right: 32px; bottom: 25px; width: min(525px, calc(100vw - 65px)); padding: 8px; background: #fff; border-top: 1px solid var(--line); }
 .trade-workspace .trade-result-details[open] { padding-bottom: 80px; }
 
-/* Keep league identity in the top bar and expose optional roster search on demand, leaving the field visible on desktop. */
+/* Move only the team selector into the desktop header; hypothetical status and unsaved warnings keep their own content row. */
 @media (min-width: 1101px) {
-  .trade-page .content > .toolbar { position: absolute; top: 4px; right: 190px; z-index: 12; margin: 0; }
-  .trade-page .content > .toolbar .control { display: flex; align-items: center; gap: 7px; margin: 0; }
-  .trade-page .content > .toolbar .control > span { font-size: 10px; margin: 0; }
-  .trade-page .content > .toolbar select { min-height: 32px; padding: 5px 8px; font-size: 11px; width: 175px; }
+  .trade-page .content > .my-team-toolbar { position: absolute; top: 4px; right: 190px; z-index: 12; margin: 0; }
+  .trade-page .content > .my-team-toolbar .control { display: flex; align-items: center; gap: 7px; margin: 0; }
+  .trade-page .content > .my-team-toolbar .control > span { font-size: 10px; margin: 0; }
+  .trade-page .content > .my-team-toolbar select { min-height: 32px; padding: 5px 8px; font-size: 11px; width: 175px; }
 }
 .trade-workspace .trade-roster-search { margin: 5px 0; padding: 0; border: 0; }
 .trade-workspace .trade-roster-search > summary { font-size: 10px; color: var(--muted); }
@@ -2336,8 +2336,8 @@ pre {
   .trade-page .page-heading .snapshot { position: absolute; right: 265px; top: 59px; font-size: 9px; text-align: right; }
   .trade-page .page-heading .snapshot > span { display: none; }
   .trade-page .page-heading .snapshot small { margin: 0; font-size: 9px; }
-  .trade-page .content > .toolbar { right: 320px; }
-  .trade-page .content > .toolbar .control { flex-direction: row; }
+  .trade-page .content > .my-team-toolbar { right: 320px; }
+  .trade-page .content > .my-team-toolbar .control { flex-direction: row; }
 }
 .trade-workspace-basis .control { flex-direction: row; gap: 6px; min-width: 0; }
 .trade-workspace-left > .toolbar { margin: 6px 0; }

@@ -842,11 +842,11 @@ test("sourced usage and market evidence survives reload and remains separate fro
     .getByRole("button", { name: "Apply role scenario", exact: true })
     .click();
   await expect(
-    page.getByText(/Experimental role forecast scenario: 25%/),
+    page.getByText(/Role forecast scenario: 25%/),
   ).toBeVisible();
   await page.goto("./#/players");
   await expect(
-    page.getByText(/Experimental role forecast scenario: 25%/),
+    page.getByText(/Role forecast scenario: 25%/),
   ).toBeVisible();
   await page.goto("./#/model");
   await expect(

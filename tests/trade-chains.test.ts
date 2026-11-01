@@ -10,6 +10,7 @@ import {
   chainErrors,
   chainBudgets,
   chainRecipientEvidence,
+  chainScoringCeiling,
   compareChains,
   evaluateChainLeg,
   searchTradeChains,
@@ -25,6 +26,7 @@ import {
   saveTrade,
   summaryFromSearch,
 } from "../src/domain/saved-trades";
+import { lineup, roster } from "../src/domain/lineups";
 import { defaultChainDependency } from "../src/domain/chain-plausibility";
 import { fromTables } from "../src/import/workbook";
 
@@ -591,7 +593,7 @@ it("rejects a 23.95-for-52 concession and checks recipient boundary values", asy
 });
 
 // A wide pool and several attractive but unusable stars previously exhausted the budget before trying balanced incoming packages.
-// This bounded integration search takes over five seconds on GitHub runners; allow 30 seconds for this case only, retaining every assertion.
+// Exercise the same package-size coverage with fixture-sized budgets, rather than a production-sized CPU load on shared CI runners.
 it("reaches every package size and finds valid chains with a ten-player pool and six opponents", async () => {
   const d = await fairChainFixture();
   const add = (id: number, owner: number, pos: string, points: number) => {
@@ -636,27 +638,39 @@ it("reaches every package size and finds valid chains with a ten-player pool and
   const m = evaluate(await fromTables(d.tables, d.settings), d.settings);
   const range = { minimum: 1, maximum: 3 },
     teams = ["2", "3", "4", "5", "6", "7"];
-  const r = searchTradeChains(
-    m,
-    query({
-      pool,
-      mode: "safe",
-      first: { offer: range, receive: range, teams },
-      second: { offer: range, receive: range, teams },
-    }),
-  );
-  expect(r.chains.length).toBeGreaterThan(0);
-  expect(r.stats.firstExplored).toBeGreaterThan(0);
-  expect(r.stats.rejectedRecipientBeforeScoring).toBeGreaterThan(0);
-  for (const count of [1, 2, 3]) {
-    const sizes = Object.keys(r.stats.firstEvaluatedBySize);
-    expect(sizes.some((size) => size.startsWith(`${count}-for-`))).toBe(true);
-    expect(sizes.some((size) => size.endsWith(`-for-${count}`))).toBe(true);
+  const original = { ...chainBudgets.standard };
+  // Restore production limits even when a search or assertion fails; no application search limits change.
+  try {
+    Object.assign(chainBudgets.standard, {
+      scans: 12000,
+      first: 320,
+      second: 1280,
+      beam: 12,
+    });
+    const r = searchTradeChains(
+      m,
+      query({
+        pool,
+        mode: "safe",
+        first: { offer: range, receive: range, teams },
+        second: { offer: range, receive: range, teams },
+      }),
+    );
+    expect(r.chains.length).toBeGreaterThan(0);
+    expect(r.stats.firstExplored).toBeGreaterThan(0);
+    expect(r.stats.rejectedRecipientBeforeScoring).toBeGreaterThan(0);
+    for (const count of [1, 2, 3]) {
+      const sizes = Object.keys(r.stats.firstEvaluatedBySize);
+      expect(sizes.some((size) => size.startsWith(`${count}-for-`))).toBe(true);
+      expect(sizes.some((size) => size.endsWith(`-for-${count}`))).toBe(true);
+    }
+    for (const chain of r.chains)
+      for (const leg of [chain.first, chain.second])
+        expect(leg.recipient.failures).toEqual([]);
+    expect(r.stats.bestFinalGain).toBeGreaterThanOrEqual(r.chains[0].gain);
+  } finally {
+    Object.assign(chainBudgets.standard, original);
   }
-  for (const chain of r.chains)
-    for (const leg of [chain.first, chain.second])
-      expect(leg.recipient.failures).toEqual([]);
-  expect(r.stats.bestFinalGain).toBeGreaterThanOrEqual(r.chains[0].gain);
 }, 30000);
 
 // The explicit zero minimum permits a flat recipient, while null and even tiny losses remain failures.
@@ -1053,28 +1067,160 @@ it("finds the +6 EPPG RB bridge behind higher-immediate-gain dead ends", async (
   expect(r.stats.firstEligible).toBe(31);
   expect(r.stats.firstExplored).toBe(31);
   expect(r.stats.limited).toBe(false);
-  expect(r.stats.evaluated).toBe(188);
+  expect(r.stats.evaluated).toBe(126);
+  expect(r.stats.skippedImpossibleGain).toBe(62);
 });
 
-// With one resident branch and exactly enough global evaluations, completed branches must release their work and admit every deferred bridge.
-it("reassigns unused work and exhausts deferred branches at the exact evaluation boundary", async () => {
+// Long follow-up universes cannot keep a valid later bridge waiting until the entire shared allowance is spent.
+it("finds a later bridge while earlier follow-up branches are still unfinished", async () => {
+  const { m: source, q } = await deferredBridgeSample();
+  const tables = structuredClone(source.dataset.tables);
+  tables.ModelContext[0].BenchSlots = 200;
+  const base = tables.ModelPlayers.find((p) => p.PlayerID === 11)!;
+  const history = tables.ModelHistory.filter((h) => h.PlayerID === 11);
+  for (let i = 0; i < 100; i++) {
+    const id = 1000 + i;
+    tables.ModelPlayers.push({
+      ...base,
+      PlayerID: id,
+      Player: `Synthetic follow-up filler ${i}`,
+      ActualPoints: 0,
+      Actual_PPG: 0,
+      Last3_PPG: 0,
+      ESPN_Projected_PPG: 0,
+      ESPN_Projected_Total: 0,
+      Current_Week_Projection: 0,
+    });
+    tables.ModelRosters.push({ PlayerID: id, TeamID: 3, LineupSlotID: 20 });
+    tables.ModelHistory.push(
+      ...history.map((row) => ({ ...row, PlayerID: id, Points: 0 })),
+    );
+  }
+  const dataset = await fromTables(tables, source.settings);
+  const m = evaluate(dataset, dataset.settings);
+  const original = { ...chainBudgets.standard };
+  try {
+    Object.assign(chainBudgets.standard, { first: 80, second: 28, beam: 1 });
+    const r = searchTradeChains(m, q);
+    const bridge = r.chains.find(
+      (c) =>
+        c.first.draft.get.join() === "2" && c.second.draft.get.join() === "5",
+    );
+    expect(bridge?.gain).toBe(6);
+    expect(bridge?.first.recipient.failures).toEqual([]);
+    expect(bridge?.second.recipient.failures).toEqual([]);
+    expect(r.stats.firstExplored).toBe(r.stats.firstEligible);
+    expect(r.stats.coverage.followups.completed).toBe(0);
+    expect(r.stats.coverage.followups.unfinished).toBe(r.stats.firstEligible);
+    expect(r.stats.coverage.followups.deferred).toBe(0);
+    expect(r.stats.evaluated).toBe(108);
+    expect(r.stats.limited).toBe(true);
+    // With enough work, closed streams resume beyond their saved prefix exactly once and exhaust the same two valid chains.
+    Object.assign(chainBudgets.standard, { first: 80, second: 4000 });
+    const complete = searchTradeChains(m, q);
+    expect(complete.stats.found).toBe(2);
+    expect(complete.stats.evaluated).toBe(126);
+    expect(complete.stats.skippedImpossibleGain).toBe(3162);
+    // Four first-stage price rejections are scanned without a full evaluation; no resumed candidate is counted twice.
+    expect(complete.stats.scanned).toBe(3292);
+    expect(complete.stats.coverage.followups.completed).toBe(31);
+    expect(complete.stats.coverage.followups.unfinished).toBe(0);
+    expect(complete.stats.limited).toBe(false);
+  } finally {
+    Object.assign(chainBudgets.standard, original);
+  }
+});
+
+// Cheap gain rejections retain the same complete solution set while unused first-stage work funds remaining full evaluations.
+it("reassigns unused work and exhausts deferred branches without scoring impossible gains", async () => {
   const { m, q } = await deferredBridgeSample(),
     original = { ...chainBudgets.standard };
   try {
-    Object.assign(chainBudgets.standard, { first: 80, second: 108, beam: 1 });
+    Object.assign(chainBudgets.standard, { first: 80, second: 47, beam: 1 });
     const r = searchTradeChains(m, q);
     expect(r.stats.found).toBe(2);
-    expect(r.stats.evaluated).toBe(188);
+    expect(r.stats.evaluated).toBe(126);
     expect(r.stats.coverage.first.evaluated).toBe(64);
-    expect(r.stats.coverage.followups.evaluated).toBe(124);
+    expect(r.stats.coverage.followups.evaluated).toBe(62);
     expect(r.stats.coverage.followups.completed).toBe(31);
-    expect(r.stats.coverage.unusedEvaluations).toBe(0);
+    expect(r.stats.coverage.unusedEvaluations).toBe(1);
     expect(r.stats.coverage.stopReasons).toEqual([]);
     expect(r.stats.limited).toBe(false);
   } finally {
     Object.assign(chainBudgets.standard, original);
   }
 });
+
+// Enumerating every post-trade subset proves the ceiling allows drops, vacancies, byes and IR without excluding a possible legal lineup.
+it.each(["scheduled", "hypothetical", "bye", "IR", "negative"])(
+  "never underestimates a possible final score with %s players",
+  async (mode) => {
+    const d = await fairChainFixture();
+    let m = evaluate(d, d.settings);
+    if (mode === "hypothetical")
+      m = applyRosterScenario(m, {
+        id: "ceiling",
+        name: "Ceiling",
+        team: "1",
+        season: 2026,
+        sourceHash: d.hash,
+        moves: [],
+        cursor: 0,
+      });
+    if (mode === "IR") {
+      m.byId.get("5")!.slot = 21;
+      m.byId.get("5")!.injury = "INJURY_RESERVE";
+      m.byId.get("5")!.irEligible = true;
+    }
+    // A missing current-week game lowers actual scoring but cannot lower the deliberately healthy ceiling.
+    if (mode === "bye") {
+      const player = m.byId.get("5")!;
+      player.bye = m.current;
+      m = {
+        ...m,
+        dataset: {
+          ...m.dataset,
+          tables: {
+            ...m.dataset.tables,
+            ModelSchedule: m.dataset.tables.ModelSchedule.map((row) =>
+              String(row.ProTeamID) === player.nflId &&
+              Number(row.Week) === m.current
+                ? { ...row, HasGame: 0 }
+                : row,
+            ),
+          },
+        },
+      };
+    }
+    if (mode === "negative")
+      for (const id of ["8", "9"])
+        Object.assign(m.byId.get(id)!, { expected: -4, value: -4 });
+    const draft = {
+      teamA: "1",
+      teamB: "3",
+      give: ["3"],
+      get: mode === "negative" ? ["5", "7"] : ["5", "7", "12"],
+    };
+    const before = roster(m, "1");
+    const bag = before
+      .filter((id) => !draft.give.includes(id))
+      .concat(draft.get);
+    const ceiling = chainScoringCeiling(m, before, draft);
+    let maximum = -Infinity;
+    for (let mask = 0; mask < 2 ** bag.length; mask++) {
+      const subset = bag.filter((_, index) => mask & (1 << index));
+      for (const week of m.weeks)
+        maximum = Math.max(
+          maximum,
+          lineup(m, subset, week, false, false, "expected").expected,
+        );
+    }
+    expect(ceiling + 1e-9).toBeGreaterThanOrEqual(maximum);
+    const evaluated = evaluateChainLeg(m, draft, "best-available");
+    expect(evaluated.leg.row.ownAfter).not.toBeNull();
+    expect(ceiling + 1e-9).toBeGreaterThanOrEqual(evaluated.leg.row.ownAfter!);
+  },
+);
 
 // A broad connected-only search exceeds the retained display cap without claiming that unsearched chains remain.
 it("separates a full connected search from the 30-result display cap", async () => {
@@ -1115,7 +1261,8 @@ it("reports exact unfinished work when evaluations or candidate scans run out", 
     expect(r.stats.coverage.stopReasons).toEqual([
       "followup-evaluation-budget",
     ]);
-    expect(r.stats.coverage.followups.unfinished).toBe(1);
+    expect(r.stats.coverage.followups.unfinished).toBe(r.stats.firstExplored);
+    expect(r.stats.firstExplored).toBeGreaterThan(chainBudgets.standard.beam);
     expect(r.stats.coverage.followups.deferred).toBeGreaterThan(0);
     expect(r.stats.coverage.unusedEvaluations).toBe(0);
     Object.assign(chainBudgets.standard, { scans: 1, first: 80, second: 1 });

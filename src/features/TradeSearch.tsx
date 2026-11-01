@@ -59,6 +59,11 @@ import {
 import { SearchSection } from "../ui/SearchSection";
 import { TeamsOptions } from "../ui/layout";
 import { FilterHelp } from "../ui/FilterHelp";
+import { DeficitProtectionControls } from "./DeficitProtectionControls";
+import {
+  defaultDeficitProtection,
+  type DeficitProtection,
+} from "../domain/trade-safeguards";
 import { PlayerName } from "../ui/PlayerName";
 import { fmt, signed, Signal } from "../ui/components";
 import {
@@ -194,8 +199,12 @@ export function TradeSearch({
   );
   const [packages, setPackages] = useState(true),
     // Package searches can return singles as well as larger packages within these inclusive limits.
-    [minimumCount, setMinimumCount] = useState(1),
     [count, setCount] = useState(3);
+  // Package mode always includes a one-player return, including after restoring legacy minimum-size controls.
+  const minimumCount = 1;
+  const [deficitProtection, setDeficitProtection] = useState<DeficitProtection>(
+    { ...defaultDeficitProtection },
+  );
   // Empty selections disable each category; active categories count only the same qualifying incoming players.
   const [signals, setSignals] = useState<("Gem" | "Watch")[]>([]),
     [incomingPositions, setIncomingPositions] = useState<Position[]>([]),
@@ -262,6 +271,7 @@ export function TradeSearch({
         }
       : undefined;
   const query: TradeSearchQuery = {
+    deficitProtection,
     lineupBasis,
     teamA: draft.teamA,
     give: draft.give,
@@ -440,6 +450,9 @@ export function TradeSearch({
   }, [JSON.stringify(query), onQueryChange]);
   // Explicit saved-trade loading restores every search control; ordinary rerenders never reset user edits.
   function restoreQuery(q: TradeSearchQuery) {
+    setDeficitProtection(
+      q.deficitProtection ?? { ...defaultDeficitProtection },
+    );
     setIndexMode(q.indexMode ?? "strict");
     setGoal(withoutLegacySurface(q).goal ?? "custom");
     setManager(q.manager);
@@ -462,7 +475,6 @@ export function TradeSearch({
       nearMisses: !!q.discovery?.nearMisses,
     });
     setPackages(!!q.discovery?.receive || q.count !== 1);
-    setMinimumCount(incomingCountRange(q).minimum);
     setCount(incomingCountRange(q).maximum);
     setUpgradeOnly(!!q.upgrade);
     setUsefulnessOnly(!!q.usefulness);
@@ -512,7 +524,6 @@ export function TradeSearch({
       if (Object.hasOwn(c, "discovery")) setDiscovery(c.discovery);
       if (Object.hasOwn(c, "selectedTeams")) setSelectedTeams(c.selectedTeams);
       if (Object.hasOwn(c, "packages")) setPackages(c.packages);
-      if (Object.hasOwn(c, "minimumCount")) setMinimumCount(c.minimumCount);
       if (Object.hasOwn(c, "count")) setCount(c.count);
       if (Object.hasOwn(c, "signals")) setSignals(c.signals);
       if (Object.hasOwn(c, "incomingPositions"))
@@ -742,6 +753,7 @@ export function TradeSearch({
 
   // Clear screening restrictions and stop stale work while preserving the trade draft, protected pool and package sizes.
   function clearFilters() {
+    setDeficitProtection({ ...defaultDeficitProtection, enabled: false });
     onClearPreview?.();
     setSelectedPreview("");
     active.current?.worker.terminate();
@@ -1038,6 +1050,16 @@ export function TradeSearch({
 
   // Chips describe current controls; removing one invalidates old results through the existing context mechanism.
   const chips: { label: string; remove: () => void }[] = [
+    // Recipient protection is never a hidden active filter; the chip can disable it without changing another choice.
+    ...(deficitProtection.enabled
+      ? [
+          {
+            label: `Protect their ${deficitProtection.ceiling} or lower positions: +${deficitProtection.minimum} points/week`,
+            remove: () =>
+              setDeficitProtection({ ...deficitProtection, enabled: false }),
+          },
+        ]
+      : []),
     // Opponent scope participates in the query/context and can be removed without changing other criteria.
     ...(selectedTeams !== undefined
       ? [
@@ -1283,6 +1305,12 @@ export function TradeSearch({
           </div>
           {/* One optional Surface Trading evaluator replaces the retired source-gain controls. */}
           <ManagerControls value={manager} change={setManager} />
+          {/* The recipient's weak-position safeguard is independent of ordinary deficit targeting and every chain control. */}
+          <DeficitProtectionControls
+            scope="Standard search"
+            value={deficitProtection}
+            change={setDeficitProtection}
+          />
           {/* Opponent checkboxes are a search-only scope; all other filters and manual trade selections remain independent. */}
           <details className="trade-search-group">
             <summary>
@@ -1417,7 +1445,7 @@ export function TradeSearch({
                   help={
                     discovery.flexible
                       ? "Search a range of incoming sizes for each outgoing subset. Example: receive 1–3 returns singles, pairs and three-player packages from one team. Every package must still meet your index and active filters."
-                      : "Keep your outgoing players fixed and search a range of incoming sizes from one team. Example: receive 1–3 checks singles, pairs and three-player packages together. Equal minimum and maximum searches one exact size."
+                      : "Keep your outgoing players fixed and search one through the selected maximum incoming players from one team. Singles always remain eligible; other active filters still apply."
                   }
                 >
                   <label className="check">
@@ -1432,19 +1460,12 @@ export function TradeSearch({
                 {/* Inclusive incoming bounds search all selected sizes, independently of outgoing pool combinations. */}
                 {packages &&
                   (
-                    [
-                      [
-                        "Minimum players to receive",
-                        minimumCount,
-                        setMinimumCount,
-                      ],
-                      ["Maximum players to receive", count, setCount],
-                    ] as const
+                    [["Maximum players to receive", count, setCount]] as const
                   ).map(([label, value, set]) => (
                     <FilterHelp
                       key={label}
                       label={label}
-                      help="Choose an inclusive range from one through five incoming players, all from the same other team. A 1–3 range returns singles, pairs and triples; 2–2 returns exactly two. All active filters still apply to each package."
+                      help="Search one through this maximum incoming players from the same other team. A maximum of three includes singles, pairs and triples. Other active filters still apply to each offer."
                     >
                       <label className="control">
                         <span>{label}</span>
@@ -2758,6 +2779,12 @@ export function TradeSearch({
                     </p>
                   )}
                   {/* Count excluded teams separately from evaluated-package weekly-gain exclusions. */}
+                  {job.stats?.deficitProtectionExcluded !== undefined && (
+                    <p>
+                      Trades excluded for insufficient improvement at their weak
+                      position: {job.stats.deficitProtectionExcluded}.
+                    </p>
+                  )}
                   {job.stats?.deficitExcluded !== undefined && (
                     <p>
                       {multiplePackages ? "Team/package checks" : "Teams"}{" "}

@@ -1,6 +1,6 @@
 {
   "name": "fantasy-football-lab",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,6 +11,7 @@
     "lint": "eslint src tests scripts --max-warnings=0",
     "format": "prettier --write src tests scripts vite.config.ts playwright.config.ts tsconfig.json package.json eslint.config.js",
     "check": "tsc -b && npm run lint && vitest run && node scripts/check-publication.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "engines": {

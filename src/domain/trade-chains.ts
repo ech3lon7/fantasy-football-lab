@@ -45,7 +45,12 @@ import {
   type ChainSurfaceFilter,
 } from "./chain-plausibility";
 import type { Model, Player } from "./valuation";
-import { teamsAssessment, type PositionGrade } from "./lineups";
+import { lineup, teamsAssessment, type PositionGrade } from "./lineups";
+import {
+  deficitProtectionErrors,
+  deficitProtectionFailures,
+  type DeficitProtection,
+} from "./trade-safeguards";
 
 // Chain controls are independent of ordinary single-trade filters; all values are in average remaining-season points/week.
 export interface ChainQuery {
@@ -74,6 +79,7 @@ export interface ChainFitRule {
   positions: Position[];
 }
 export interface ChainStep {
+  deficitProtection?: DeficitProtection;
   offer: ChainRange;
   receive: ChainRange;
   teams?: string[];
@@ -263,8 +269,14 @@ export interface TradeChain {
   dependency?: ChainDependencyEvidence;
 }
 // Identify search semantics independently of the user-managed app version in progress and debug exports.
-export const chainSearchVersion = "connected-chain-plausibility-1";
+export const chainSearchVersion = "gain-bounded-bridge-search-4";
 export interface ChainStats {
+  limits?: {
+    firstEvaluations: number;
+    totalEvaluations: number;
+    scans: number;
+  };
+  rejectedDeficit?: number;
   phase: "Finding first trades" | "Finding follow-up trades" | "Complete";
   scanned: number;
   evaluated: number;
@@ -274,6 +286,7 @@ export interface ChainStats {
   rejectedValue: number;
   rejectedRoster: number;
   rejectedGain: number;
+  skippedImpossibleGain?: number;
   rejectedRecipient: number;
   rejectedFit: number;
   rejectedIndex: number;
@@ -375,9 +388,9 @@ export function chainRecipientEvidence(
 
 // Fixed work budgets keep cancellation responsive through worker termination; deeper search expands, but never promises exhaustive coverage.
 export const chainBudgets = {
-  // Two complementary traversals receive twice the previous work allowance, preserving breadth without relaxing any trade predicate.
-  standard: { scans: 24000, first: 800, beam: 24, second: 2400 },
-  deeper: { scans: 120000, first: 2400, beam: 72, second: 12000 },
+  // Broader explicit allowances explore additional bridges and follow-ups without weakening any trade predicate.
+  standard: { scans: 120000, first: 3200, beam: 24, second: 12800 },
+  deeper: { scans: 600000, first: 12000, beam: 72, second: 48000 },
 };
 // Only usable numeric valuations enter packages; stable sorted identities keep ties and repeated discoveries deterministic.
 const usable = (p: Player) =>
@@ -456,6 +469,11 @@ export function chainErrors(m: Model, q: ChainQuery): string[] {
     ["First", q.first],
     ["Second", q.second],
   ] as const) {
+    errors.push(
+      ...deficitProtectionErrors(step.deficitProtection).map(
+        (error) => `${name} trade: ${error}`,
+      ),
+    );
     // Optional per-leg filters validate independently and never read the standard finder's settings.
     if (
       step.indexWindow &&
@@ -521,9 +539,11 @@ export function evaluateChainLeg(
   basis: LineupBasis,
   lineupsRaw?: string,
   recipient = defaultChainRecipient,
+  deficitProtection?: DeficitProtection,
 ) {
   const result = evaluateTrade(m, draft, false, lineupsRaw);
   const query: TradeSearchQuery = {
+    deficitProtection,
     teamA: draft.teamA,
     give: draft.give,
     count: draft.get.length,
@@ -842,6 +862,15 @@ function couldPassPrice(m: Model, d: Draft) {
   return pass((p) => p.positive!) && pass((p) => p.value! * p.available);
 }
 
+// Allow healthy, over-capacity rosters and empty roles instead of negative scorers: actual legal weekly lineups cannot exceed this ceiling.
+export function chainScoringCeiling(m: Model, roster: string[], draft: Draft) {
+  const relaxed = roster
+    .filter((id) => !draft.give.includes(id))
+    .concat(draft.get)
+    .filter((id) => (m.byId.get(id)?.expected ?? -Infinity) >= 0);
+  return lineup(m, relaxed, m.current, false, true, "expected").expected;
+}
+
 // Final ranking uses the original-to-final gain; passing recipient preferences never becomes an acceptance probability.
 export function compareChains(a: TradeChain, b: TradeChain) {
   return (
@@ -870,6 +899,12 @@ export function searchTradeChains(
   const budget = chainBudgets[q.depth];
   const requirePrices = q.pricePolicy !== "warnings";
   const stats: ChainStats = {
+    limits: {
+      firstEvaluations: budget.first,
+      totalEvaluations: budget.first + budget.second,
+      scans: budget.scans * 2,
+    },
+    rejectedDeficit: 0,
     phase: "Finding first trades",
     scanned: 0,
     evaluated: 0,
@@ -879,6 +914,7 @@ export function searchTradeChains(
     rejectedValue: 0,
     rejectedRoster: 0,
     rejectedGain: 0,
+    skippedImpossibleGain: 0,
     rejectedRecipient: 0,
     rejectedFit: 0,
     rejectedIndex: 0,
@@ -1156,6 +1192,21 @@ export function searchTradeChains(
   };
   const accepted = (leg: ChainLeg, step: 1 | 2) => {
     const row = leg.row;
+    // Recheck each recipient against its own roster at that leg, not the original league before trade one.
+    const deficitFailures = deficitProtectionFailures(
+      row.deficitProtection,
+      (step === 1 ? q.first : q.second).deficitProtection,
+    );
+    if (deficitFailures.length) {
+      stats.rejectedDeficit!++;
+      if (plausibilityRejections.length < 10)
+        plausibilityRejections.push({
+          step,
+          draft: leg.draft,
+          failures: deficitFailures,
+        });
+      return false;
+    }
     if (!row.legal || row.dropsA.some((id) => protectedIds.has(id))) {
       stats.rejectedRoster++;
       return false;
@@ -1267,6 +1318,7 @@ export function searchTradeChains(
       readLineupBasis(q.basis),
       lineupsRaw,
       q.recipient,
+      q.first.deficitProtection,
     );
     if (fit.length) scored.leg.fit = fit;
     stats.evaluated++;
@@ -1302,9 +1354,21 @@ export function searchTradeChains(
   }
   stats.phase = "Finding follow-up trades";
   const deferred = orderSeeds();
+  // Keep only compact cursors for waiting branches; a long-running stream must not monopolize a resident roster slot.
+  const pending = deferred.map((seed) => ({ seed, offset: 0, pass: 0 }));
   let nextSeed = 0;
-  // Suspended generators preserve unfinished streams; only the bounded active window holds advanced roster models.
-  function* followupsFor(seed: (typeof seeds)[number]) {
+  const quantum = Math.max(
+    1,
+    Math.min(
+      64,
+      Math.floor(
+        (budget.first + budget.second - stats.evaluated) /
+          Math.max(1, deferred.length),
+      ),
+    ),
+  );
+  // Rebuild a parked branch at its deterministic candidate cursor without repeating scoring or retaining its advanced model.
+  function* followupsFor(seed: (typeof seeds)[number], offset: number) {
     const afterFirst = advanceChainRoster(
       m,
       seed.leg.draft,
@@ -1312,6 +1376,10 @@ export function searchTradeChains(
       seed.result,
     );
     const plans = afterFirst.simulation!.lineupsRaw;
+    // Cache the entire checkpoint roster, including protected players, for optimistic scoring before required drops.
+    const ownRoster = afterFirst.players
+      .filter((p) => p.owner === q.team)
+      .map((p) => p.id);
     const pool = afterFirst.players
       .filter(
         (p) =>
@@ -1328,7 +1396,9 @@ export function searchTradeChains(
       pool,
       secondFit,
     );
+    let cursor = 0;
     for (const draft of followups) {
+      if (cursor++ < offset) continue;
       // The scheduler counts every candidate, including cheap rejections, against its shared scan allowance.
       yield () => {
         const fit = secondFit(draft);
@@ -1341,12 +1411,22 @@ export function searchTradeChains(
         if (!precheckRecipient(afterFirst, draft, 2)) {
           return false;
         }
+        // Skip full scoring only when even an optimistic final lineup cannot meet the original-to-final gain requirement.
+        if (
+          chainScoringCeiling(afterFirst, ownRoster, draft) + 1e-9 <
+          seed.leg.row.ownBefore! + q.minimumGain
+        ) {
+          stats.skippedImpossibleGain!++;
+          stats.rejectedGain++;
+          return false;
+        }
         const evaluatedSecond = evaluateChainLeg(
           afterFirst,
           draft,
           q.basis,
           plans,
           q.recipient,
+          q.second.deficitProtection,
         );
         const second = evaluatedSecond.leg;
         if (fit.length) second.fit = fit;
@@ -1438,6 +1518,8 @@ export function searchTradeChains(
     }
   }
   const active: {
+    resume: (typeof pending)[number];
+    used: number;
     stream: ReturnType<typeof followupsFor>;
     task: IteratorResult<() => boolean>;
   }[] = [];
@@ -1445,15 +1527,16 @@ export function searchTradeChains(
   const fillActive = () => {
     while (
       active.length < budget.beam &&
-      nextSeed < deferred.length &&
+      nextSeed < pending.length &&
       stats.scanned < budget.scans * 2 &&
       stats.evaluated < budget.first + budget.second
     ) {
-      const stream = followupsFor(deferred[nextSeed++]);
-      stats.firstExplored++;
+      const resume = pending[nextSeed++];
+      const stream = followupsFor(resume.seed, resume.offset);
+      if (resume.offset === 0) stats.firstExplored++;
       const task = stream.next();
       if (task.done) stats.coverage.followups.completed++;
-      else active.push({ stream, task });
+      else active.push({ stream, task, resume, used: 0 });
     }
   };
   // Share all remaining evaluations and scans; exhausted first-stage capacity is available to follow-ups instead of being wasted.
@@ -1469,25 +1552,36 @@ export function searchTradeChains(
     followupScans++;
     stats.scanned++;
     if (branch.task.value!()) followupEvaluations++;
+    branch.resume.offset++;
     branch.task = branch.stream.next();
     if (branch.task.done) stats.coverage.followups.completed++;
-    else active.push(branch);
+    // Probe waiting first trades fairly, then double each resumed slice to avoid repeatedly rebuilding long prefixes one candidate at a time.
+    else if (
+      ++branch.used >= quantum * 2 ** branch.resume.pass &&
+      nextSeed < pending.length
+    ) {
+      branch.stream.return(undefined);
+      branch.resume.pass++;
+      pending.push(branch.resume);
+    } else active.push(branch);
     fillActive();
     stats.coverage.followups.scanned = followupScans;
     stats.coverage.followups.evaluated = followupEvaluations;
-    stats.coverage.followups.unfinished = active.length;
-    stats.coverage.followups.deferred = deferred.length - nextSeed;
+    stats.coverage.followups.unfinished =
+      stats.firstExplored - stats.coverage.followups.completed;
+    stats.coverage.followups.deferred = deferred.length - stats.firstExplored;
     publish();
   }
   // Display limits never imply incomplete exploration; stop reasons and unused work describe only the selected search universe.
-  stats.coverage.followups.unfinished = active.length;
-  stats.coverage.followups.deferred = deferred.length - nextSeed;
+  stats.coverage.followups.unfinished =
+    stats.firstExplored - stats.coverage.followups.completed;
+  stats.coverage.followups.deferred = deferred.length - stats.firstExplored;
   stats.coverage.unusedEvaluations = Math.max(
     0,
     budget.first + budget.second - stats.evaluated,
   );
   stats.coverage.unusedScans = Math.max(0, budget.scans * 2 - stats.scanned);
-  if (active.length || nextSeed < deferred.length) {
+  if (active.length || nextSeed < pending.length) {
     if (!stats.coverage.unusedEvaluations)
       stats.coverage.stopReasons.push("followup-evaluation-budget");
     if (!stats.coverage.unusedScans)
@@ -1499,7 +1593,7 @@ export function searchTradeChains(
     stats.dependencyPending > 0 ||
     !stats.coverage.first.complete ||
     active.length > 0 ||
-    nextSeed < deferred.length;
+    nextSeed < pending.length;
   stats.resultCapped = stats.found > chains.length;
   stats.phase = "Complete";
   publish();

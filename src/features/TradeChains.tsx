@@ -53,6 +53,8 @@ import { TeamsOptions } from "../ui/layout";
 import { positionGradeScale } from "../domain/trade-search";
 import { tradeDebugReport } from "../domain/trade-tools";
 import { FilterHelp } from "../ui/FilterHelp";
+import { DeficitProtectionControls } from "./DeficitProtectionControls";
+import { defaultDeficitProtection } from "../domain/trade-safeguards";
 import { PlayerName } from "../ui/PlayerName";
 import { fmt, signed, Signal } from "../ui/components";
 
@@ -74,6 +76,7 @@ const chainFilterScope = {
     "required chain dependency and materiality",
     "per-leg raw index windows",
     "per-leg Surface Trading",
+    "per-leg weak-position protection",
   ],
   "Single-trade only": [
     "search goal",
@@ -200,20 +203,27 @@ export function TradeChains({
     [gain, setGain] = useState(initial?.controls.gain ?? "5");
   const journal = useNegotiations();
   const [first, setFirst] = useState<ChainQuery["first"]>(
-    withoutLegacySurface(
-      initial?.query.first ?? {
+    withoutLegacySurface({
+      ...(initial?.query.first ?? {
         offer: { minimum: 1, maximum: 3 },
         receive: { minimum: 1, maximum: 3 },
+      }),
+      // New protection defaults do not reset any saved leg filters; an explicit disabled choice stays disabled.
+      deficitProtection: initial?.query.first.deficitProtection ?? {
+        ...defaultDeficitProtection,
       },
-    ),
+    }),
   );
   const [second, setSecond] = useState<ChainQuery["second"]>(
-    withoutLegacySurface(
-      initial?.query.second ?? {
+    withoutLegacySurface({
+      ...(initial?.query.second ?? {
         offer: { minimum: 1, maximum: 3 },
         receive: { minimum: 1, maximum: 3 },
+      }),
+      deficitProtection: initial?.query.second.deficitProtection ?? {
+        ...defaultDeficitProtection,
       },
-    ),
+    }),
   );
   const [depth, setDepth] = useState<ChainQuery["depth"]>(
     initial?.query.depth ?? "standard",
@@ -554,8 +564,11 @@ export function TradeChains({
       plans: step === 1 ? captured.plans : model.simulation?.lineupsRaw,
     };
   }
-  function legQuery(leg: ChainLeg): TradeSearchQuery {
+  function legQuery(leg: ChainLeg, step: 1 | 2): TradeSearchQuery {
     return {
+      // Saving or inspecting a stale result must retain that executed leg's safeguard, not the currently edited controls.
+      deficitProtection: (step === 1 ? job?.query.first : job?.query.second)
+        ?.deficitProtection,
       teamA: leg.draft.teamA,
       give: leg.draft.give,
       count: leg.draft.get.length,
@@ -571,8 +584,12 @@ export function TradeChains({
       const leg = step === 1 ? chain.first : chain.second;
       const { model } = legContext(chain, step);
       if (
-        save(leg.draft, summaryFromSearch(leg.row), legQuery(leg), model) !==
-        false
+        save(
+          leg.draft,
+          summaryFromSearch(leg.row),
+          legQuery(leg, step),
+          model,
+        ) !== false
       )
         setSaved((previous) => [...previous, `${chain.key}:${step}`]);
     } catch (error) {
@@ -589,8 +606,13 @@ export function TradeChains({
       const { model, plans } = legContext(chain, step);
       // Step two uses its actual post-step-one roster for both named upgrades and affected position grades.
       const detail = {
-        ...searchLineupDetails(model, legQuery(leg), leg.row, plans),
-        incentive: opponentIncentive(model, legQuery(leg), leg.row, plans),
+        ...searchLineupDetails(model, legQuery(leg, step), leg.row, plans),
+        incentive: opponentIncentive(
+          model,
+          legQuery(leg, step),
+          leg.row,
+          plans,
+        ),
       };
       setDetails((previous) => ({ ...previous, [key]: detail }));
     } catch (error) {
@@ -807,6 +829,11 @@ export function TradeChains({
         </div>
       </div>
       {/* Surplus and deficit checks are independently optional on each leg; absent/disabled rules never narrow the search. */}
+      <DeficitProtectionControls
+        scope={label}
+        value={value.deficitProtection}
+        change={(deficitProtection) => change({ ...value, deficitProtection })}
+      />
       {(["surplus", "deficit"] as const).map((kind) => {
         const rule = value.fit?.[kind] ?? defaultChainFit(kind);
         const update = (patch: Partial<ChainFitRule>) =>
@@ -1571,8 +1598,12 @@ export function TradeChains({
                     setDepth(e.target.value as ChainQuery["depth"])
                   }
                 >
-                  <option value="standard">Standard</option>
-                  <option value="deeper">Deeper</option>
+                  <option value="standard">
+                    Broad — up to 16,000 evaluations
+                  </option>
+                  <option value="deeper">
+                    Deeper — up to 60,000 evaluations
+                  </option>
                 </select>
               </label>
             </FilterHelp>
@@ -1647,10 +1678,18 @@ export function TradeChains({
                   setPricePolicy("required");
                   setPreset("custom");
                   setFirst({
+                    deficitProtection: {
+                      ...defaultDeficitProtection,
+                      enabled: false,
+                    },
                     offer: { minimum: 1, maximum: 3 },
                     receive: { minimum: 1, maximum: 3 },
                   });
                   setSecond({
+                    deficitProtection: {
+                      ...defaultDeficitProtection,
+                      enabled: false,
+                    },
                     offer: { minimum: 1, maximum: 3 },
                     receive: { minimum: 1, maximum: 3 },
                   });
@@ -1716,6 +1755,8 @@ export function TradeChains({
               {job.stats?.phase ?? "Starting chain search"} ·{" "}
               {job.stats?.evaluated ?? 0} trades evaluated ·{" "}
               {job.stats?.firstExplored ?? 0} first steps explored.
+              {job.stats?.limits &&
+                ` Evaluation limit: ${job.stats.limits.totalEvaluations.toLocaleString()}; scanned ${job.stats.scanned.toLocaleString()} candidates. Cancel stops the search immediately.`}
             </p>
           )}
           {job?.status === "cancelled" && (
@@ -1741,9 +1782,9 @@ export function TradeChains({
                 {job.result.stats.limited && " Search coverage is incomplete."}
               </p>
               {/* Exhaustive exploration and a capped display are separate statuses; neither changes any acceptance threshold. */}
-              <p className="notice warning">
+              <p>
                 {job.result.stats.limited
-                  ? "Work budget reached: unexplored possibilities remain."
+                  ? `Search limit reached${job.result.stats.limits ? ` (${job.result.stats.limits.totalEvaluations.toLocaleString()} evaluations or ${job.result.stats.limits.scans.toLocaleString()} candidate scans)` : ""}: more possibilities may exist.`
                   : "All eligible combinations within these selected sizes and teams were examined."}{" "}
                 {job.result.stats.resultCapped &&
                   "Display capped at the best 30 qualifying chains. "}
@@ -1751,6 +1792,13 @@ export function TradeChains({
                 gains and value concessions must satisfy the recipient checks on
                 each step. No automatic waiver additions.
               </p>
+              {/* Keep actual safeguard exclusions visible in diagnostics, without adding permanent top-of-page notices. */}
+              {!!job.result.stats.rejectedDeficit && (
+                <p>
+                  Excluded for insufficient improvement at the other team's weak
+                  position: {job.result.stats.rejectedDeficit}.
+                </p>
+              )}
               {!job.result.chains.length && (
                 <p>
                   {job.result.stats.limited
@@ -1820,6 +1868,13 @@ export function TradeChains({
                   Obvious recipient-value mismatches rejected before full
                   scoring: {job.result.stats.rejectedRecipientBeforeScoring}.
                   These do not consume the full-evaluation budget.
+                </p>
+                {/* Explain the safe scoring shortcut separately from full evaluations and ordinary filter exclusions. */}
+                <p>
+                  Skipped full scoring for{" "}
+                  {job.result.stats.skippedImpossibleGain ?? 0} candidates that
+                  could not reach your minimum gain, even with an optimistic
+                  lineup. These still count as scanned candidates.
                 </p>
                 <p>
                   Fully evaluated first-trade sizes:{" "}

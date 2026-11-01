@@ -93,6 +93,31 @@ async function seed(page: Page) {
   }
 }
 
+// Each chain leg keeps its own grade/gain safeguard through reload, without sharing it with the standard finder.
+test("remembers independent weak-position safeguards on both chain legs", async ({ page }) => {
+  await seed(page);
+  const first = page.getByRole("group", { name: "First trade", exact: true });
+  const second = page.getByRole("group", { name: "Second trade", exact: true });
+  await expect(first.getByLabel("First trade: Protect their weak positions", { exact: true })).toBeChecked();
+  await first.getByLabel("First trade: Minimum positional gain", { exact: true }).fill("3");
+  await first.getByLabel("First trade: Deficit grade cutoff", { exact: true }).selectOption("C");
+  await second.getByLabel("Second trade: Minimum positional gain", { exact: true }).fill("4");
+  await first.getByLabel("First trade: Protect their weak positions", { exact: true }).uncheck();
+  await expect.poll(async () => JSON.parse((await stored(page)).state.filters.tradeSearchSettings).chain.query.second.deficitProtection.minimum).toBe(4);
+  await page.reload();
+  await page.getByRole("button", { name: "Two-trade chain planner", exact: true }).click();
+  await openTradeFilters(page, "Chain");
+  await expect(first.getByLabel("First trade: Protect their weak positions", { exact: true })).not.toBeChecked();
+  await expect(second.getByLabel("Second trade: Protect their weak positions", { exact: true })).toBeChecked();
+  await expect(second.getByLabel("Second trade: Minimum positional gain", { exact: true })).toHaveValue("4");
+  await first.getByLabel("First trade: Protect their weak positions", { exact: true }).check();
+  await expect(first.getByLabel("First trade: Minimum positional gain", { exact: true })).toHaveValue("3");
+  await expect(first.getByLabel("First trade: Deficit grade cutoff", { exact: true })).toHaveValue("C");
+  await page.getByRole("button", { name: "Clear chain filters", exact: true }).click();
+  await expect(first.getByLabel("First trade: Protect their weak positions", { exact: true })).not.toBeChecked();
+  await expect(second.getByLabel("Second trade: Protect their weak positions", { exact: true })).not.toBeChecked();
+});
+
 // Read durable saved records without relying on optimistic button text or changing the current roster recipe.
 async function stored(page: Page) {
   return page.evaluate(async () => {
@@ -129,7 +154,9 @@ test("finds both chain modes, explains replacements, and saves individual steps 
   await page.getByText("Chain search exclusions", { exact: true }).click();
   await expect(page.getByText(/Search coverage: complete/)).toBeVisible();
   await expect(page.getByText(/deferred first trades: 0/)).toBeVisible();
-  await expect(page.getByText(/connected-chain-plausibility-1/)).toBeVisible();
+  await expect(page.getByText(/gain-bounded-bridge-search-4/)).toBeVisible();
+  // The worker distinguishes cheap score-ceiling rejections from full evaluations.
+  await expect(page.getByText(/Skipped full scoring for \d+ candidates/)).toBeVisible();
 
   const safe = page
     .locator("article")
@@ -339,7 +366,7 @@ test("isolates scopes and presets, retains optional fit settings and remembers b
   expect(report.chainSearch.status).toBe("complete");
   // Both download routes retain algorithm/build identity and exact remaining work from the dedicated worker.
   expect(report.chainSearch.searchVersion).toBe(
-    "connected-chain-plausibility-1",
+    "gain-bounded-bridge-search-4",
   );
   expect(Number.isFinite(Date.parse(report.chainSearch.appBuild.builtAt))).toBe(
     true,

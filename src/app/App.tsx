@@ -62,6 +62,7 @@ import {
   type CloudConfig,
 } from "../sync/client";
 import { Legend } from "../ui/components";
+import { FilterHelp } from "../ui/FilterHelp";
 import { Panel } from "../ui/layout";
 import { PlayerPopoverProvider } from "../ui/PlayerPopover";
 import {
@@ -831,7 +832,8 @@ export default function App() {
           </div>
         </header>
         <div className="content">
-          <div className="toolbar">
+          {/* Only the team selector joins the desktop trade header; roster status stays in normal content flow. */}
+          <div className="toolbar my-team-toolbar">
             {/* This explicit account-synced selector is separate from browsing opponents. */}
             {d && w && (
               <label className="control">
@@ -854,28 +856,28 @@ export default function App() {
               </label>
             )}
           </div>
-          {/* The visible mode applies consistently across roster/trade/search views and always offers an explicit return to live data. */}
+          {/* Keep the active roster and save action compact; routine refresh explanations belong in hover help, not warning banners. */}
           {model?.simulation && w && (
-            <div className="notice warning toolbar" role="status">
-              <strong>Hypothetical: {model.simulation.scenario.name}</strong> ·
-              Player indices use the real snapshot.{" "}
+            <div className="toolbar">
+              <FilterHelp
+                label="Hypothetical roster"
+                help="Your saved roster moves and lineup are being used. Importing updated player statistics keeps those moves. Player values are calculated from the imported league data, so hypothetical ownership changes do not change their values."
+              >
+                <strong>Hypothetical: {model.simulation.scenario.name}</strong>
+              </FilterHelp>
               {rosterScenarioDirty(
                 w.state.filters[rosterScenariosKey],
                 scenarioRaw,
                 model.simulation.scenario.id,
               ) && (
                 <span>
-                  Unsaved roster changes.{" "}
+                  Not saved.{" "}
                   <a href="#/overview">Save a roster slot on My team.</a>{" "}
                 </span>
               )}
-              {model.simulation.rebased &&
-                "Updated player data applied to saved moves."}
-              <button className="button" onClick={() => restoreScenario()}>
-                Return to live roster
-              </button>
+              {/* Roster switching stays in My team's simulation selector; never prompt for it globally. */}
               {model.simulation.issues.map((issue) => (
-                <p key={issue}>
+                <p className="notice danger" role="alert" key={issue}>
                   {issue} Analysis is conditional until resolved.
                 </p>
               ))}
@@ -903,8 +905,17 @@ export default function App() {
               </p>
             </div>
             {d && (
-              <div className={`snapshot ${stale ? "stale" : ""}`}>
-                <span>{stale ? "Stale snapshot" : "Snapshot loaded"}</span>
+              <div className="snapshot">
+                <FilterHelp
+                  label="Saved data"
+                  help={
+                    stale
+                      ? "This saved data is over 24 hours old or its date is unavailable. You can keep using it, including hypothetical rosters. To update statistics, refresh and save Excel, then import the workbook."
+                      : "This is the date of the imported player data. You can use either imported or hypothetical rosters."
+                  }
+                >
+                  <span>Saved data</span>
+                </FilterHelp>
                 <small>
                   {d.sourceUTC
                     ? new Date(d.sourceUTC).toLocaleString()
@@ -936,20 +947,17 @@ export default function App() {
               </button>
             </div>
           )}
-          {stale && (
-            <div className="notice warning">
-              This source snapshot is older than 24 hours or has no refresh
-              time. Refresh and save Excel, then import it again.
-            </div>
-          )}
-          {/* Scenario assumptions stay visible on every screen, including roster rankings. */}
+          {/* Show the selected forecast mode without repeatedly interrupting the user with a warning. */}
           {model && model.roleScenarioWeight > 0 && (
-            <div className="notice warning" role="status">
-              Experimental role forecast scenario:{" "}
-              {Math.round(model.roleScenarioWeight * 100)}% role model,{" "}
-              {Math.round((1 - model.roleScenarioWeight) * 100)}% original blend
-              where role data is usable. Change it in Model &amp; audit.
-            </div>
+            <FilterHelp
+              label="Role forecast scenario"
+              help={`${Math.round(model.roleScenarioWeight * 100)}% role forecast and ${Math.round((1 - model.roleScenarioWeight) * 100)}% original scoring forecast where role data is available. Change this in Model & audit.`}
+            >
+              <small>
+                Role forecast scenario:{" "}
+                {Math.round(model.roleScenarioWeight * 100)}%
+              </small>
+            </FilterHelp>
           )}
           {model?.evidenceIssue && (
             <div className="notice warning">{model.evidenceIssue}</div>
