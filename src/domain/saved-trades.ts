@@ -26,6 +26,8 @@ import type { SearchRow, TradeSearchQuery } from "./trade-search";
 import { tradeSearchBounds } from "./trade-search";
 import { tradeImpactVersion } from "./starter-lineups";
 import { rosterScenarioSchema } from "./roster-scenarios";
+// Optional recipes fit the existing private saved-trade sync payload; older records remain valid.
+import { stressRecipeSchema, type StressRecipe } from "./trade-stress";
 
 // Reuse the existing account-scoped string filters, so saved trades need no new database table or migration.
 export const savedTradesKey = "savedTrades";
@@ -160,6 +162,7 @@ const savedSchema = z
     lineupBasis: z.enum(lineupBases).optional(),
     // Preserve a private immutable recipe with each hypothetical trade, never a pointer to mutable named scenarios.
     scenario: rosterScenarioSchema.optional(),
+    stressTest: stressRecipeSchema.optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
     original: summarySchema
@@ -333,6 +336,7 @@ export function saveTrade(
   summary: SavedTradeSummary,
   query?: TradeSearchQuery,
   now = new Date().toISOString(),
+  stressTest?: StressRecipe | null,
 ) {
   const read = readSavedTrades(state.filters[savedTradesKey]);
   if (read.issue) throw Error(read.issue);
@@ -355,6 +359,17 @@ export function saveTrade(
   if (parsedQuery && tradeSearchBounds(m, parsedQuery).errors.length)
     throw Error("Correct invalid search controls before saving this trade.");
   const season = num(m.dataset.tables.ModelContext[0].Season);
+  // An explicit null clears a manual scenario; unrelated search saves preserve an existing recipe.
+  const checkedStress =
+    stressTest == null ? stressTest : stressRecipeSchema.parse(stressTest);
+  if (
+    checkedStress?.adjustments.some(
+      (a) => ![...draft.give, ...draft.get].includes(a.player),
+    )
+  )
+    throw Error(
+      "Stress-test assumptions must belong to players in this trade.",
+    );
   const identity = savedTradeIdentity(season, draft);
   const prior = read.trades.find(
     (t) =>
@@ -370,6 +385,10 @@ export function saveTrade(
         lineupBasis: readLineupBasis(summary.lineupBasis),
         query: parsedQuery ?? prior.query,
         updatedAt: now,
+        stressTest:
+          checkedStress === undefined
+            ? prior.stressTest
+            : (checkedStress ?? undefined),
       }
     : {
         id: crypto.randomUUID(),
@@ -382,6 +401,7 @@ export function saveTrade(
         scenario: m.simulation?.scenario
           ? structuredClone(m.simulation.scenario)
           : undefined,
+        stressTest: checkedStress ?? undefined,
         createdAt: now,
         updatedAt: now,
         original: {

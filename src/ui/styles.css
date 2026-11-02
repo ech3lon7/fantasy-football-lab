@@ -2503,3 +2503,14 @@ pre {
   .trade-workspace .has-player .trade-selected-player { grid-row: 1; grid-column: 2; text-align: left; }
   .trade-workspace .has-player .trade-select-row { grid-row: 2; grid-column: 2; }
 }
+/* Scoring sensitivity is a compact, optional manual section; its table scrolls locally on narrow screens. */
+.trade-stress-test { margin-top: 1rem; padding: .85rem; border: 1px solid var(--line, #dce4dd); border-radius: .75rem; background: var(--surface, #fff); min-width: 0; }
+.trade-stress-test > summary { font-weight: 700; }
+.trade-stress-players { display: grid; gap: .5rem; margin: .85rem 0; }
+.trade-stress-player { padding: .5rem; border-bottom: 1px solid var(--line, #dce4dd); }
+.trade-stress-player .check { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.trade-stress-player input[type="number"] { width: 8rem; background: #fffbe8; color: #6d28d9; }
+.trade-stress-test .table-wrap { max-width: 100%; overflow-x: auto; }
+/* Unlike sortable app tables, these static headers have no padded button; keep their text separated and readable. */
+.trade-stress-test th { padding: 9px 12px; white-space: normal; min-width: 105px; }
+.trade-stress-test th:first-child { min-width: 115px; }

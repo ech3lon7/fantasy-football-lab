@@ -35,6 +35,9 @@ import { StarterLineupEditor } from "./StarterLineupEditor";
 // Trade discovery delegates scoring to its own worker without changing the existing analyzer.
 import { TradeSearch } from "./TradeSearch";
 import { SavedTrades } from "./SavedTrades";
+// The optional manual scenario stays separate from normal valuation and all search controls.
+import { TradeStressTest } from "./TradeStressTest";
+import type { StressRecipe } from "../domain/trade-stress";
 import {
   saveTrade,
   summaryFromTrade,
@@ -1717,6 +1720,15 @@ export function TradeView({
   // The manual analyzer and standard finder retain this preference; the chain planner owns a separate choice.
   const lineupBasis =
     preview?.basis ?? readLineupBasis(state.filters[lineupBasisKey]);
+  // Scope last-run assumptions to the displayed package; saved loads remount the editor even for the same trade.
+  const stressKey = JSON.stringify(draft);
+  const [stressState, setStressState] = useState<{
+    key: string;
+    recipe?: StressRecipe;
+    restore: number;
+  }>({ key: "", restore: 0 });
+  const stressRecipe =
+    stressState.key === stressKey ? stressState.recipe : undefined;
   const [result, setResult] = useState<TradeResult | null>(null),
     [pending, setPending] = useState(false),
     [message, setMessage] = useState(""),
@@ -1796,9 +1808,20 @@ export function TradeView({
     query?: TradeSearchQuery,
     // A chain's second leg saves its prerequisite roster recipe without applying it to the current workspace.
     context: Model = m,
+    stressTest?: StressRecipe | null,
   ) {
     try {
-      saveTrades(saveTrade(state, context, selected, summary, query));
+      saveTrades(
+        saveTrade(
+          state,
+          context,
+          selected,
+          summary,
+          query,
+          undefined,
+          stressTest,
+        ),
+      );
       setSaveMessage(
         "Trade saved. Duplicate packages update the existing entry while preserving its name, notes and original summary.",
       );
@@ -1816,6 +1839,11 @@ export function TradeView({
     // Storage or recipe failures must not load a draft against the wrong roster context.
     if (restoreScenario?.(trade.scenario) === false) return;
     change(trade.draft);
+    setStressState((prior) => ({
+      key: JSON.stringify(trade.draft),
+      recipe: trade.stressTest,
+      restore: prior.restore + 1,
+    }));
     changeBasis(savedLineupBasis(trade));
     if (trade.query)
       setRestoreSearch({
@@ -2149,6 +2177,24 @@ export function TradeView({
                 plans={lineupsRaw}
                 pending={pending}
               />
+              {/* A completed manual offer exposes sensitivity without opening or changing finder filters. */}
+              {r && (
+                <TradeStressTest
+                  key={`${stressKey}:${stressState.restore}`}
+                  m={m}
+                  draft={draft}
+                  plans={lineupsRaw}
+                  initial={stressRecipe}
+                  change={(recipe) => {
+                    setStressState((prior) => ({
+                      ...prior,
+                      key: stressKey,
+                      recipe,
+                    }));
+                    setSaveMessage("");
+                  }}
+                />
+              )}
             </>
           )}
           <div className="trade-workspace-save">
@@ -2176,6 +2222,8 @@ export function TradeView({
                       (preview?.query ?? searchQuery)
                         ? { ...(preview?.query ?? searchQuery)!, lineupBasis }
                         : undefined,
+                      m,
+                      stressRecipe ?? null,
                     );
                 }}
               >

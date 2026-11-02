@@ -254,6 +254,20 @@ function SavedTradeCard({
         {team(trade.draft.teamA)} offers {names(trade.draft.give)} to{" "}
         {team(trade.draft.teamB)} for {names(trade.draft.get)}.
       </p>
+      {/* Saved what-if assumptions are separate from the immutable normal-model summary. */}
+      {trade.stressTest && (
+        <p>
+          Stress-test assumptions:{" "}
+          {trade.stressTest.adjustments.map((a, i) => (
+            <span key={a.player}>
+              {i > 0 && "; "}
+              {names([a.player])}:{" "}
+              <span className="model">{fmt(a.ppg)} PPG</span>
+            </span>
+          ))}
+          . Load and run the stress test to recalculate.
+        </p>
+      )}
       <div className="toolbar">
         <label className="control">
           <span>Saved trade name</span>

@@ -6,6 +6,8 @@ import { evidenceKey, roleScenarioKey } from "../domain/opportunity";
 import { applyRosterScenario } from "../domain/roster-scenarios";
 import type { RosterScenario } from "../domain/roster-scenarios";
 import type { Draft } from "../domain/contracts";
+// Optional scoring sensitivity uses a separate request and never replaces the cached valuation model.
+import { evaluateStressTest } from "../domain/trade-stress";
 let model: Model | undefined,
   key = "";
 // Project each saved recipe independently, retaining conflicts as uncertainty rather than changing the live cache.
@@ -68,6 +70,21 @@ self.onmessage = (e: MessageEvent) => {
           });
         }
       }
+    } else if (type === "trade-stress") {
+      const projected = applyRosterScenario(
+        model!,
+        e.data.scenario,
+        filters?.[starterLineupsKey],
+      );
+      self.postMessage({
+        id,
+        result: evaluateStressTest(
+          projected,
+          draft,
+          e.data.stress,
+          projected.simulation?.lineupsRaw ?? filters?.[starterLineupsKey],
+        ),
+      });
     } else if (type === "trade")
       self.postMessage({
         id,
