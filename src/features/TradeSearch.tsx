@@ -20,6 +20,8 @@ import {
   type ChainPreferences,
 } from "./TradeChains";
 import { guidedQuery } from "../domain/trade-guidance";
+// Render the domain's complete primary-label choices consistently with the screener.
+import { primaryGemSignals } from "../domain/label-rules";
 import {
   lineupBasisLabel,
   readLineupBasis,
@@ -206,7 +208,7 @@ export function TradeSearch({
     { ...defaultDeficitProtection },
   );
   // Empty selections disable each category; active categories count only the same qualifying incoming players.
-  const [signals, setSignals] = useState<("Gem" | "Watch")[]>([]),
+  const [signals, setSignals] = useState<(typeof primaryGemSignals)[number][]>([]),
     [incomingPositions, setIncomingPositions] = useState<Position[]>([]),
     [minimumSignals, setMinimumSignals] = useState("1"),
     [minimumPositions, setMinimumPositions] = useState("1");
@@ -1489,12 +1491,12 @@ export function TradeSearch({
             <fieldset className="trade-search-group">
               <legend>Incoming players</legend>
               <div className="toolbar">
-                {(["Gem", "Watch"] as const).map((label) => (
+                {primaryGemSignals.map((label) => (
                   <FilterHelp
                     key={label}
                     label={label}
                     help={
-                      "Receive at least the selected minimum players labeled Gem or Watch; selecting both labels matches either. With positions enabled, the same counted players must also match those positions. Example: at least two WR players labeled Gem or Watch."
+                      "Receive at least the selected minimum players labeled Gem, Pre-gem or Watch. Selected labels match any; with positions enabled, the same counted players must also match those positions."
                     }
                   >
                     <label className="check" key={label}>
@@ -1516,13 +1518,13 @@ export function TradeSearch({
               </div>
               {signals.length > 0 && (
                 <FilterHelp
-                  label={"Minimum incoming Gem/Watch matches"}
+                  label={"Minimum incoming Gem/Pre-gem/Watch matches"}
                   help={
                     "Minimum number of received players that satisfy the selected signal category and any enabled positions. It cannot exceed the number of players to receive."
                   }
                 >
                   <label className="control">
-                    <span>Minimum incoming Gem/Watch matches</span>
+                    <span>Minimum incoming Gem/Pre-gem/Watch matches</span>
                     <input
                       type="number"
                       min="1"
@@ -1540,7 +1542,7 @@ export function TradeSearch({
                     key={position}
                     label={`Receive ${position}`}
                     help={
-                      "Receive players at any selected position. The minimum counts players, not distinct positions. If Gem/Watch is enabled, the same players must satisfy both categories. No position selections means no position restriction."
+                      "Receive players at any selected position. The minimum counts players, not distinct positions. If Gem/Pre-gem/Watch is enabled, the same players must satisfy both categories. No position selections means no position restriction."
                     }
                   >
                     <label className="check" key={position}>
@@ -1565,7 +1567,7 @@ export function TradeSearch({
                 <FilterHelp
                   label={"Minimum incoming position matches"}
                   help={
-                    "Minimum number of received players at any selected position, also satisfying selected Gem/Watch signals if enabled. It cannot exceed the number of players to receive."
+                    "Minimum number of received players at any selected position, also satisfying selected Gem/Pre-gem/Watch signals if enabled. It cannot exceed the number of players to receive."
                   }
                 >
                   <label className="control">

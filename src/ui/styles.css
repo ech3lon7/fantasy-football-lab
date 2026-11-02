@@ -193,6 +193,8 @@ nav > a:not(.active):hover {
   font-size: 11px;
   color: #bacebe;
 }
+/* Keep per-player label freshness compact across roster cards, tables and inspection views. */
+.signal-evaluation { display: inline-block; font-size: 10px; margin-left: 5px; }
 .app-shell > main {
   margin-left: 236px;
   width: calc(100% - 236px);
@@ -827,6 +829,10 @@ th:first-child {
 }
 .signal.candidate {
   background: #dbeafe;
+}
+/* Pre-gem uses a lighter tint of Gem's blue while preserving the shared badge text and shape. */
+.signal.pre-gem {
+  background: #eff6ff;
 }
 .signal.watch {
   background: #fce7f3;

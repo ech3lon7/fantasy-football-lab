@@ -955,7 +955,7 @@ test("incoming Gem/Watch and position filters intersect without changing existin
     .getByLabel("Maximum players to receive", { exact: true })
     .selectOption("2");
   await search
-    .getByLabel("Minimum incoming Gem/Watch matches", { exact: true })
+    .getByLabel("Minimum incoming Gem/Pre-gem/Watch matches", { exact: true })
     .fill("2");
   await search
     .getByLabel("Minimum incoming position matches", { exact: true })

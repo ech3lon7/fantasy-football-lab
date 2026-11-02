@@ -1,6 +1,10 @@
 // Keep labeling policy separate from workbook valuation, app versions and descriptive historical percentiles.
 export const labelRuleVersion = "label-rules-1";
 export const gemVersion = "automatic-breakout-3";
+// Pre-gem has its own version so the unchanged Gem policy and historical reference stay compatible.
+export const preGemVersion = "automatic-pre-gem-1";
+export const primaryGemSignals = ["Gem", "Pre-gem", "Watch"] as const;
+export const preGemPolicy = { games: 3, trend: 1, trendPct: 0.1 };
 export const gemPositions = ["RB", "WR", "TE"] as const;
 export const labelPolicy = {
   window: 3,
@@ -88,10 +92,25 @@ export function effectiveLabelRules(settings: typeof labelSettingDefaults) {
       ],
     },
     {
+      // Expose the effective Pre-gem settings without relabeling the unchanged Gem/Watch historical bindings.
+      id: "Pre-gem",
+      positions: "RB / WR / TE",
+      window:
+        "One latest-three-game scoring/workload window; rising scoring and stable/rising workload; 3+ games; excludes full Gem",
+      evidence:
+        "Provisional earlier confirmation; three-game early trend compares latest two versus first; no trade-value bonus",
+      parameters: [
+        ...shared.filter((p) => !p.id.endsWith(".growth")),
+        parameter("sample", preGemPolicy.games, "games"),
+        parameter("trend", preGemPolicy.trend, "PPG"),
+        parameter("trendPct", preGemPolicy.trendPct, "fraction"),
+      ],
+    },
+    {
       id: "Watch",
       positions: "RB / WR / TE",
       window:
-        "Latest 3 vs preceding 2–3; positive change AND (shared level OR absolute AND percentage growth); under 5 games: level only; excludes Gem",
+        "Latest 3 vs preceding 2–3; positive change AND (shared level OR absolute AND percentage growth); under 5 games: level only; excludes Gem and Pre-gem",
       evidence:
         "Retrospectively explored; broad Watch retained; stricter WR filter deferred",
       parameters: [

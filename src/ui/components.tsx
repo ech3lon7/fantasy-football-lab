@@ -35,11 +35,11 @@ export function Metric({
 }
 // Reduced workload uses the existing caution appearance; other signal styling remains unchanged.
 export function Signal({ text }: { text: string }) {
-  // Known player tags share the same marker-free help as filter choices on every screen; other statuses stay unchanged.
+  // Known player tags share marker-free help; Pre-gem uses its own lighter Gem-blue badge on every screen.
   return (
     <FilterHelp label={text}>
       <span
-        className={`signal ${text === "Gem" || text === "Gem candidate" ? "candidate" : text === "Watch" || text === "Opportunity watch" || text === "BUY LOW" ? "watch" : /caution|SELL HIGH|issue|FAIL|UNAVAILABLE|Reduced workload/.test(text) ? "caution" : /Emerging|Conditional|CONDITIONAL|Projection-gap/.test(text) ? "conditional" : ""}`}
+        className={`signal ${text === "Gem" || text === "Gem candidate" ? "candidate" : text === "Pre-gem" ? "pre-gem" : text === "Watch" || text === "Opportunity watch" || text === "BUY LOW" ? "watch" : /caution|SELL HIGH|issue|FAIL|UNAVAILABLE|Reduced workload/.test(text) ? "caution" : /Emerging|Conditional|CONDITIONAL|Projection-gap/.test(text) ? "conditional" : ""}`}
       >
         {text}
       </span>
@@ -63,6 +63,21 @@ export function PlayerSignals({ p }: { p: Player }) {
       {playerSignals(p).map((text) => (
         <Signal key={text} text={text} />
       ))}
+      {/* Show the latest included game, independently of when the source was refreshed; no new warning banner. */}
+      {p.breakout && (
+        <FilterHelp
+          label="Label evaluation date"
+          help="Labels use the included played-game history. A newer refresh can still exclude the current NFL week, even when this player's game has finished."
+        >
+          <small
+            className={`${p.breakout.evaluatedThrough === null ? "muted" : "fact"} signal-evaluation`}
+          >
+            {p.breakout.evaluatedThrough === null
+              ? "Evaluation history unavailable"
+              : `Evaluated through Week ${p.breakout.evaluatedThrough}`}
+          </small>
+        </FilterHelp>
+      )}
     </span>
   );
 }

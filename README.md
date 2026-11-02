@@ -43,6 +43,12 @@ Click a player's name to open the popover, or open the full player profile. Each
 
 Watch shows its own workload qualification routes, including the early-sample branch; Gem retains its existing scoring/workload evidence. BUY LOW/SELL HIGH show the positional touchdown-rate and volume comparisons, not market prices. TD caution repeats SELL HIGH evidence without a second penalty. Explanations never assign a label, change a forecast/value, or automatically recommend a transaction. Displayed numbers are rounded; the existing engine compares unrounded values.
 
+## Primary player labels
+
+Gem, Pre-gem and Watch are exclusive primary labels, in that order. Pre-gem keeps the existing positional Gem scoring/workload floors but needs only one qualifying three-game window, improving actual scoring and stable/rising workload. With exactly three played games, trend compares the latest two with the first; longer histories compare the latest three with all earlier games. Gem and TE Gem requirements stay unchanged. Each stage is supported in player views, the screener and incoming-player trade filters; Why Pre-gem shows the exact requirements, scores, workload and weeks. Old Any-signal/default screener searches automatically include the new stage; explicit narrow selections stay narrow.
+
+The compact “Evaluated through Week X” beside player signals identifies the newest included game, separately from refresh time. The current adapter still excludes the current NFL scoring week, including already finished individual games; this update does not invent new history or treat live scores as final. Pre-gem follow-up in Model & audit records first observations locally and checks scoring/workload Gem confirmation within the next three played games, alongside actual future PPG. Incomplete follow-ups remain pending. This is a provisional pattern comparison, not a probability or an automatic valuation adjustment.
+
 ## Development
 
 ```sh

@@ -225,7 +225,7 @@ export function TradeDiscoveryControls({
       <div className="trade-search-controls">
         <FilterHelp
           label="Find a target player"
-          help="Search rostered players on other teams, then choose a specific target. Position and Gem/Watch filters still apply to the incoming package."
+          help="Search rostered players on other teams, then choose a specific target. Position and Gem/Pre-gem/Watch filters still apply to the incoming package."
         >
           <label className="control">
             <span>Find a target player</span>

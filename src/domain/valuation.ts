@@ -24,7 +24,7 @@ import {
   type EvidenceInput,
 } from "./opportunity";
 import { assessGem, gemVersion, type GemAssessment } from "./gems";
-import { labelPolicy, labelRuleVersion } from "./label-rules";
+import { labelPolicy, labelRuleVersion, preGemVersion } from "./label-rules";
 import type { RosterScenario } from "./roster-scenarios";
 export interface Player {
   id: string;
@@ -661,7 +661,8 @@ export function evaluate(
       if (p.breakout.reducedWorkload?.status === "PASS")
         p.opportunity.signals.push("Reduced workload");
       p.gem = p.breakout.classification;
-      p.priority = p.gem === "Gem" ? 1 : p.gem === "Watch" ? 2 : 99;
+      // Primary-label order affects discovery presentation only, never scoring or trade valuation.
+      p.priority = p.gem === "Gem" ? 1 : p.gem === "Pre-gem" ? 2 : p.gem === "Watch" ? 3 : 99;
       p.explanation = p.breakout.explanation;
     }
   return {
@@ -675,7 +676,7 @@ export function evaluate(
     weeks,
     analysisVersion: options.workbookMode
       ? "v5.2-workbook"
-      : `${evidenceVersion}/${gemVersion}/${labelRuleVersion}`,
+      : `${evidenceVersion}/${gemVersion}/${preGemVersion}/${labelRuleVersion}`,
     calibration,
     supplementalInput: supplemental.input,
     evidenceIssue: supplemental.issue,

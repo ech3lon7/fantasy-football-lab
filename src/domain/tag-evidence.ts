@@ -2,6 +2,7 @@
 import { defaultGemRules, gemPositions, labelPolicy } from "./label-rules";
 import { n, num, type Row } from "./contracts";
 import { playedHistory } from "./opportunity";
+import type { GemCheck } from "./gems";
 import { playerSignals, type Model, type Player } from "./valuation";
 import {
   evidenceComparison,
@@ -10,6 +11,7 @@ import {
 
 // Explanations describe active analytical labels only; they never assign signals or change forecasts.
 export interface TagEvidenceRow {
+  status?: GemCheck["status"];
   check: string;
   required: string;
   actual: string;
@@ -93,12 +95,18 @@ function gameEvidence(
           },
           {
             name: "Earlier played-game evidence",
-            games: workloadWindow
-              ? history.slice(-2 * labelPolicy.window, -labelPolicy.window)
-              : history.slice(0, -labelPolicy.window),
-            note: workloadWindow
-              ? "Immediately preceding two or three played games"
-              : "ALL earlier played games before the latest three",
+            games:
+              tag === "Pre-gem" && history.length === 3
+                ? history.slice(0, 1)
+                : workloadWindow
+                  ? history.slice(-2 * labelPolicy.window, -labelPolicy.window)
+                  : history.slice(0, -labelPolicy.window),
+            note:
+              tag === "Pre-gem" && history.length === 3
+                ? "Early trend baseline: first game versus latest two; the scoring/workload floors still use all three games"
+                : workloadWindow
+                  ? "Immediately preceding two or three played games"
+                  : "ALL earlier played games before the latest three",
           },
         ];
   // Explicit null counting stats mean zero in a verified game; absent or invalid counts stay unavailable.
@@ -154,6 +162,25 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
     "projection",
   );
 
+  // Active Pre-gems show their own qualifying evidence without a redundant full-Gem confirmation row.
+  if (active.has("Pre-gem") && assessment)
+    explanations.push({
+      tag: "Pre-gem",
+      meaning: assessment.explanation,
+      rows: [
+        ...assessment.preGemChecks.map((check) => ({
+          ...check,
+          kind: "fact" as const,
+        })),
+        ...gameEvidence(p, playedHistory(m.dataset).get(p.id) ?? [], "Pre-gem"),
+      ],
+      interpretation:
+        "Strong scoring and opportunity are present, but the second overlapping Gem window is not yet confirmed. Gem, Pre-gem and Watch are mutually exclusive primary labels.",
+      limitations:
+        "Provisional earlier-confirmation signal, not a guaranteed Gem promotion, scoring forecast or trade-value bonus. With exactly three games, the trend comparison is especially small.",
+      window:
+        "One latest-three-game scoring/workload window. Trend uses latest three versus all earlier games; with exactly three games, latest two versus first game only.",
+    });
   // Watch uses its own workload branches, rather than presenting failed Gem scoring gates as the Watch requirements.
   if (
     active.has("Watch") &&
@@ -249,6 +276,16 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           assessment.checks
             .filter((c) => c.status !== "PASS")
             .map((c) => `${c.check}: ${c.status}`)
+            .join("; ") || "Unavailable",
+          "model",
+        ),
+        // A workload Watch may clear recent scoring but still fail Pre-gem trend, stability or availability.
+        row(
+          "Pre-gem requirements not met",
+          "At least one earlier-confirmation requirement is not PASS",
+          assessment.preGemChecks
+            .filter((c) => c.status !== "PASS")
+            .map((c) => `${c.check}: ${c.status}; ${c.actual}`)
             .join("; ") || "Unavailable",
           "model",
         ),

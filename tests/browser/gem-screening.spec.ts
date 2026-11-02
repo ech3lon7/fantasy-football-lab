@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openTradeFilters } from "./trade-workspace-helpers";
 import { execFileSync } from "node:child_process";
 // Compare the new read-only explanations with the real model's active labels in both player surfaces.
 import { evaluate } from "../../src/domain/valuation";
@@ -20,6 +21,7 @@ async function seed(
   filters: Record<string, string> = {},
   reduced = false,
   analytical = false,
+  preGem = false,
 ) {
   // Run the existing fixture through tsx so its JSON imports need no production change.
   const d: Dataset = JSON.parse(
@@ -50,6 +52,8 @@ async function seed(
     { id: 106, scores: [6, 6, 12, 12, 12], projection: 15, targets: 200 },
     { id: 108, scores: [6, 6, 12, 12], projection: 6, targets: 200 },
   ];
+  // Only this workflow needs an emerging one-window player; existing Gem/Watch fixtures retain their answers.
+  if (preGem) patterns.find((p) => p.id === 2)!.scores = [0, 0, 16, 17, 18];
   // Scoring history and cached aggregates agree, so the real import/model contract applies.
   for (const x of patterns) {
     const p = d.tables.ModelPlayers.find((p) => p.PlayerID === x.id)!;
@@ -188,6 +192,40 @@ async function seed(
   ).toBeVisible();
   return dataset;
 }
+
+// The primary stage, exact evidence, included-game date and discovery choices agree across every shared player surface.
+test("Pre-gem filters and evidence persist across screener, roster, profile, popover and trade controls", async ({ page }) => {
+  await seed(page, {}, false, false, true);
+  await page.getByRole("button", { name: "Clear signals", exact: true }).click();
+  await page.getByLabel("Pre-gem", { exact: true }).check();
+  await page.getByRole("combobox", { name: "Player pool", exact: true }).selectOption("All");
+  await page.getByRole("combobox", { name: "Breakout classification", exact: true }).selectOption("Pre-gem only");
+  await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+  await expect(page.locator('a[href="#/player/2"]').first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("Pre-gem", { exact: true })).toBeChecked();
+  await page.locator('a[href="#/player/2"]').first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Evaluated through Week 5", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Why Gem?", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText("Why Watch?", { exact: true })).toHaveCount(0);
+  await dialog.getByText("Why Pre-gem?", { exact: true }).click();
+  const evidence = dialog.getByRole("table", { name: "Pre-gem evidence checks", exact: true });
+  await expect(evidence).toContainText("2026 W3: 16.00");
+  await expect(evidence).toContainText("Scoring improvement");
+  await expect(evidence).toContainText("Stable or rising workload");
+  await expect(evidence).toContainText("PASS");
+  await dialog.getByRole("link", { name: "Open full player page", exact: true }).click();
+  await expect(page.getByText("Why Pre-gem?", { exact: true })).toBeVisible();
+  await page.goto("./#/teams");
+  await page.getByRole("combobox", { name: "Team", exact: true }).selectOption("2");
+  await expect(page.locator("tr").filter({ has: page.locator('a[href="#/player/2"]') }).getByText("Pre-gem", { exact: true })).toBeVisible();
+  await page.goto("./#/trades");
+  await openTradeFilters(page);
+  await page.getByRole("combobox", { name: "Search goal", exact: true }).selectOption("custom");
+  await page.getByRole("checkbox", { name: "Pre-gem", exact: true }).check();
+  await expect(page.getByLabel("Minimum incoming Gem/Pre-gem/Watch matches", { exact: true })).toBeVisible();
+});
 
 // Inspect only this isolated browser's private journal; test fixtures never reach cloud services or publication assets.
 async function readTracking(
@@ -1148,7 +1186,8 @@ test("cleared saved signals permit rising RBs and survive Apply and reload", asy
       { message: "Applied Gem filters must reach IndexedDB before reload" },
     )
     .toMatchObject({
-      gemFilterVersion: "2",
+      // Applying uses the new label-aware format; an explicitly empty signal selection still means Any signal.
+      gemFilterVersion: "3",
       gemSignals: "[]",
       gemPool: "All",
       gemPos: "RB",

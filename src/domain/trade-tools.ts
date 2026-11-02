@@ -105,7 +105,7 @@ export function diagnoseTradeCandidate(
       q.incoming,
     )
   )
-    reasons.push("Incoming Gem/Watch or position minimums are not met.");
+    reasons.push("Incoming Gem/Pre-gem/Watch or position minimums are not met.");
   const child = { ...q, give, count: get.length },
     bounds = tradeSearchBounds(m, {
       ...child,

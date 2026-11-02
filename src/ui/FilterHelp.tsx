@@ -18,7 +18,7 @@ export const filterHelp: Record<string, string> = {
   "Player pool":
     "Available shows free agents/waivers; All includes rostered players; Selected team uses the team you choose. Example: choose All to investigate trade targets.",
   "Breakout classification":
-    "Gem requires strong scoring and workload in both overlapping three-game windows, with active availability. Watch uses workload opportunity rules. Classification combines with your signal and numeric filters.",
+    "Gem requires strong scoring and workload in two overlapping windows. Pre-gem uses one three-game window plus rising scoring and stable/rising workload. Watch uses workload opportunity rules. Only the highest qualifying primary label is shown. Other filters still apply.",
   "Search players":
     "Filter the current player pool by name. Position and ownership selections still apply.",
   "Search this roster":
@@ -32,8 +32,11 @@ export const filterHelp: Record<string, string> = {
   "Signals - match any selected":
     "Selected signals are OR choices; other filter categories use AND. Clear all signals for Any signal. Example: Gem or Watch plus Trend PPG ≥ 2.",
   Gem: "Strong actual scoring and sustained workload in both overlapping three-game windows, with active availability. This is an automatic production signal, not a guarantee or market price.",
+  // Pre-gem explains its earlier confirmation without implying a weaker Gem or a guaranteed promotion.
+  "Pre-gem":
+    "Gem-level scoring and workload in one three-game window, with improving scoring and stable/rising workload. It precedes full Gem confirmation; promotion is not guaranteed. Three-game early samples compare the latest two with the first game for trend only.",
   Watch:
-    "A developing workload opportunity that does not pass every Gem gate. Workload, rather than a required scoring breakout, drives this label.",
+    "A developing workload opportunity that does not qualify for Gem or Pre-gem. Workload, rather than a required scoring breakout, drives this label.",
   "Projection-gap watch":
     "Actual season PPG exceeds ESPN's season projected PPG, with recent scoring confirmation. This does not use ESPN's current-week matchup projection.",
   "Scoring breakout watch":
@@ -53,7 +56,7 @@ export const filterHelp: Record<string, string> = {
   "Insufficient data":
     "Evidence is incomplete or invalid. This is not a confirmed failure of the Gem scoring or workload requirements.",
   "Not applicable":
-    "The primary Gem/Watch classifier applies to RB, WR and TE. Other positions can still have independent scoring signals.",
+    "The primary Gem/Pre-gem/Watch classifier applies to RB, WR and TE. Other positions can still have independent scoring signals.",
   "Minimum trend PPG":
     "Latest three played-game actual PPG minus ALL earlier played-game PPG. Example: 16 recent minus 12 earlier gives +4 trend PPG. Blank disables the limit; zero is a real threshold.",
   "Minimum surplus index":

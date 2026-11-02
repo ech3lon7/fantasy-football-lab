@@ -85,7 +85,7 @@ const chainFilterScope = {
     "weekly-gain limits",
     "positional upgrades",
     "usefulness",
-    "Gem/Watch",
+    "Gem/Pre-gem/Watch",
     "standard-finder Surface Trading",
     "near misses/recovery",
   ],

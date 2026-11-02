@@ -125,7 +125,7 @@ function EvidenceTable({
                           row.status === "PASS" ? "model" : "notice warning"
                         }
                       >
-                        {row.status}
+                        {row.status ?? "—"}
                       </td>
                     )}
                   </tr>
@@ -224,6 +224,7 @@ export function GemEvidence({ p, m }: { p: Player; m: Model }) {
           <p>{explanation.meaning}</p>
           <EvidenceTable
             label={`${explanation.tag} evidence checks`}
+            results={explanation.tag === "Pre-gem"}
             rows={explanation.rows.map((row) => ({
               ...row,
               historical: historicalLabelContext(

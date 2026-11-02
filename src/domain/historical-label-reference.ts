@@ -111,10 +111,13 @@ export function historicalLabelContext(
 
 // Explain unsupported row comparisons and redundant floors without inventing a distribution or a success probability.
 export function labelResearchNote(tag: string) {
+  // Keep the new earlier-confirmation experiment distinct from the unchanged Gem historical gate study.
+  if (tag === "Pre-gem")
+    return "Provisional earlier-confirmation rule. The bounded 2023–2025 comparison favored one qualifying window over lower scoring/workload floors; TE evidence is weaker. Historical promotion rates are not individual probabilities. Prospective results are recorded separately.";
   if (tag === "Gem")
     return "The individual-game workload floor remains mandatory but provisional. Removing that support check while retaining the other current gates changed zero labels in the 2023–2025 study (494 weekly labels; 154 first alerts). It was historically redundant within this combined rule, not independently validated as necessary or optimal; it may matter in future data. Scoring and average-workload gates remain unchanged. TE tuning was underpowered.";
   if (tag === "Watch")
-    return "Broad Watch is unchanged. The proposed stricter WR growth filter is deferred pending comparison against simple scoring and target filters. Early samples below three games have no matching three-game historical reference.";
+    return "Broad Watch qualification is unchanged. Historical Watch membership precedes Pre-gem precedence and does not validate the new exclusive Watch population. The proposed stricter WR growth filter is deferred pending comparison against simple scoring and target filters. Early samples below three games have no matching three-game historical reference.";
   if (["Scoring breakout watch", "Projection-gap watch"].includes(tag))
     return "Archived ESPN forecasts are unavailable, so the complete projection-dependent label was not historically validated. PPG context is omitted when scoring compatibility cannot be verified.";
   if (["BUY LOW", "SELL HIGH", "TD caution"].includes(tag))
@@ -159,7 +162,7 @@ export function historicalLabelAudit(m: Model) {
     version: `${labelRuleVersion} / ${gemVersion} / ${data.version}`,
     binding: labelEvidenceBinding,
     status: compatible
-      ? "Research applies to the recorded default Gem/Watch policy; it does not validate arbitrary user settings for other labels."
+      ? "Research applies to the recorded default Gem/Watch policy; it does not validate arbitrary user settings for other labels. Historical Watch aggregates precede Pre-gem precedence; they are not measurements of the new exclusive Watch population."
       : "Research configuration mismatch: calibration results withheld; current labels continue using the active rules.",
     scoring: scoringMatches(m)
       ? "Observed offensive scoring weights match. Unobserved bonuses remain unverified."

@@ -6,7 +6,12 @@ import {
 } from "./evidence-comparison";
 
 // Preserve compatibility exports while the shared registry owns Gem and Watch policy values.
-import { defaultGemRules, gemPositions, labelPolicy } from "./label-rules";
+import {
+  defaultGemRules,
+  gemPositions,
+  labelPolicy,
+  preGemPolicy,
+} from "./label-rules";
 export { defaultGemRules, gemPositions, gemVersion } from "./label-rules";
 export interface GemCheck {
   check: string;
@@ -18,11 +23,15 @@ export interface GemCheck {
 export interface GemAssessment {
   classification:
     | "Gem"
+    | "Pre-gem"
     | "Watch"
     | "No breakout signal"
     | "Insufficient data"
     | "Not applicable";
   checks: GemCheck[];
+  // Store the exact Pre-gem predicates and last included game once for every presentation surface.
+  preGemChecks: GemCheck[];
+  evaluatedThrough: number | null;
   explanation: string;
   recentWeeks: number[];
   previousWeeks: number[];
@@ -46,6 +55,10 @@ export function assessGem(
   const result: GemAssessment = {
     classification: "Not applicable",
     checks: [],
+    preGemChecks: [],
+    evaluatedThrough: rows.length
+      ? Math.max(...rows.map((r) => num(r.Week)))
+      : null,
     explanation:
       "Gem scoring and workload rules apply to RB, WR and TE. Other scoring and regression signals remain separate.",
     recentWeeks: recentRows.map((r) => num(r.Week)),
@@ -190,7 +203,14 @@ export function assessGem(
     ).length;
     const scoreMean = mean(points),
       workloadMean = mean(workload);
-    const known = gemHistoryPass && window.rows.length === labelPolicy.window;
+    // Recent-window evidence can qualify Pre-gem after three games; Gem still requires its separate four-game history gate.
+    const known =
+      complete &&
+      rows.length >=
+        (window.name === "Recent window"
+          ? preGemPolicy.games
+          : labelPolicy.gemGames) &&
+      window.rows.length === labelPolicy.window;
     // Pair every individual score/count with its actual week so overlapping windows are explicit in Why Gem.
     const weekly = (values: number[]) =>
       window.rows
@@ -314,7 +334,88 @@ export function assessGem(
     result.warnings.push(
       `Injured same-team competition: ${competition.map((r) => `${str(r.Player)} (${str(r.InjuryStatus)})`).join(", ")}. This does not establish whether the increased role is temporary.`,
     );
-  // Preserve the existing Watch opportunity tests; strong stable production can now independently earn Gem.
+  // Pre-gem relaxes confirmation only: retain scoring/workload floors and require rising points with stable/rising opportunity.
+  const trendRows =
+    rows.length === preGemPolicy.games ? rows.slice(-2) : recentRows;
+  const earlierRows =
+    rows.length === preGemPolicy.games
+      ? rows.slice(0, 1)
+      : rows.slice(0, -labelPolicy.window);
+  const scoreKnown =
+    complete &&
+    rows.length >= preGemPolicy.games &&
+    [...trendRows, ...earlierRows].every((r) => n(r.Points) !== null);
+  const workKnown =
+    scoreKnown &&
+    [...trendRows, ...earlierRows].every((r) =>
+      keys.every(
+        (key) =>
+          Object.hasOwn(r, key) &&
+          (r[key] === null || (n(r[key]) !== null && num(r[key]) >= 0)),
+      ),
+    );
+  const oldPoints = scoreKnown
+    ? mean(earlierRows.map((r) => num(r.Points)))
+    : null;
+  const newPoints = scoreKnown
+    ? mean(trendRows.map((r) => num(r.Points)))
+    : null;
+  const pointChange =
+    oldPoints !== null && newPoints !== null ? newPoints - oldPoints : null;
+  const pointMinimum =
+    oldPoints !== null
+      ? Math.max(
+          preGemPolicy.trend,
+          preGemPolicy.trendPct * Math.abs(oldPoints),
+        )
+      : null;
+  const oldWork = workKnown ? mean(amounts(earlierRows)) : null;
+  const newWork = workKnown ? mean(amounts(trendRows)) : null;
+  const workChange =
+    oldWork !== null && newWork !== null ? newWork - oldWork : null;
+  const trendWeeks = `weeks ${trendRows.map((r) => num(r.Week)).join(", ") || "none"} versus ${earlierRows.map((r) => num(r.Week)).join(", ") || "none"}`;
+  result.preGemChecks = [
+    {
+      check: "Verified history",
+      required: `${preGemPolicy.games}+ verified played games; complete history`,
+      actual: `${rows.length} games; ${trendWeeks}${rows.length === 3 ? "; early sample: latest two versus first game for trend only" : "; trend compares latest three versus all earlier games"}`,
+      status: !complete
+        ? "UNKNOWN"
+        : rows.length >= preGemPolicy.games
+          ? "PASS"
+          : "FAIL",
+      comparisons: [
+        evidenceComparison(preGemPolicy.games, rows.length, "games"),
+      ],
+    },
+    ...windows[0],
+    {
+      check: "Scoring improvement",
+      required: `Increase ≥ max(${preGemPolicy.trend} PPG, ${preGemPolicy.trendPct * 100}% of absolute earlier PPG)`,
+      actual: `${fmt(oldPoints)} → ${fmt(newPoints)} PPG; change ${fmt(pointChange)}; ${trendWeeks}`,
+      status: !scoreKnown
+        ? "UNKNOWN"
+        : pointChange !== null &&
+            pointMinimum !== null &&
+            pointChange >= pointMinimum
+          ? "PASS"
+          : "FAIL",
+      comparisons: [evidenceComparison(pointMinimum, pointChange, "PPG")],
+    },
+    {
+      check: "Stable or rising workload",
+      required: "Recent workload must be at least the earlier workload",
+      actual: `${fmt(oldWork)} → ${fmt(newWork)} ${unit}/game; ${trendWeeks}`,
+      status: !workKnown
+        ? "UNKNOWN"
+        : workChange !== null && workChange >= 0
+          ? "PASS"
+          : "FAIL",
+      comparisons: [evidenceComparison(0, workChange, `${unit}/game`)],
+    },
+    result.checks.find((check) => check.check === "Availability")!,
+  ];
+  // Preserve existing Watch qualification; exclusive precedence promotes qualifying players without weakening Gem.
   const promising =
     recent.length === labelPolicy.window &&
     previous.length >= labelPolicy.priorGames &&
@@ -333,19 +434,23 @@ export function assessGem(
     ? "Gem"
     : !complete || !usable || !rows.length
       ? "Insufficient data"
-      : promising || shortPromising
-        ? "Watch"
-        : "No breakout signal";
+      : result.preGemChecks.every((check) => check.status === "PASS")
+        ? "Pre-gem"
+        : promising || shortPromising
+          ? "Watch"
+          : "No breakout signal";
   result.explanation =
     result.classification === "Gem"
       ? "Strong actual scoring backed by sustained workload in both consecutive, overlapping three-game windows. Workload growth is not required. This identifies a strong production candidate, not a guaranteed breakout or proof of an undervalued player."
-      : result.classification === "Watch"
-        ? `Workload opportunity meets the existing Watch criteria but does not pass every Gem gate. ${result.checks
-            .filter((c) => c.status !== "PASS")
-            .map((c) => c.check + ": " + c.status)
-            .join("; ")}.`
-        : result.classification === "Insufficient data"
-          ? "Verified played-game evidence is missing, inconsistent or invalid. Gem requires both actual scoring and workload."
-          : "No qualifying Gem or developing-workload signal under the automatic rules.";
+      : result.classification === "Pre-gem"
+        ? "Gem-level actual scoring and workload in one three-game window, with improving scoring and stable/rising workload. The second overlapping Gem confirmation window is not yet qualified. Early three-game samples compare the latest two games with the first game for trend only."
+        : result.classification === "Watch"
+          ? `Workload opportunity meets the existing Watch criteria but does not pass every Gem gate. ${result.checks
+              .filter((c) => c.status !== "PASS")
+              .map((c) => c.check + ": " + c.status)
+              .join("; ")}.`
+          : result.classification === "Insufficient data"
+            ? "Verified played-game evidence is missing, inconsistent or invalid. Gem requires both actual scoring and workload."
+            : "No qualifying Gem or developing-workload signal under the automatic rules.";
   return result;
 }

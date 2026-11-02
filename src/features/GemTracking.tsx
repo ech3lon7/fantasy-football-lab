@@ -1,5 +1,6 @@
 import {
   gemTrackingReport,
+  preGemTrackingReport,
   type GemTrackingState,
 } from "../domain/gem-tracking";
 import { useEffect, useState } from "react";
@@ -40,7 +41,7 @@ export function GemTracking({
   return (
     <Panel
       title="Prospective Gem tracking"
-      note="Automatic observation, not automatic retuning. Live Gem, Watch and trade values stay unchanged."
+      note="Automatic observation, not automatic retuning. Gem, Pre-gem and Watch are recorded independently of trade values."
     >
       <p>{state?.status ?? "Loading this account’s local tracking journal…"}</p>
       <details>
@@ -54,10 +55,10 @@ export function GemTracking({
         <p>
           The first fresh source (within 24 hours) observed per current-season
           week is frozen with its source time, dataset hash and rule definition.
-          Old weeks are never backfilled. Four verified played games, complete
+          Old weeks are never backfilled. Three verified played games, complete
           workload history, ACTIVE status and remaining availability define the
-          tracked RB/WR/TE population; unlabelled eligible players are recorded
-          too.
+          tracked RB/WR/TE population; full Gem and shadow trials still require
+          four games. Unlabelled eligible players are recorded too.
         </p>
         <p>
           Confidence, rarity and coverage are frozen research trials, not
@@ -72,6 +73,14 @@ export function GemTracking({
           participation counts as failure; missing history waits for a complete
           import. Byes are not played games; zero and negative scores count.
           Outcomes are frozen at the first complete, later-dated import.
+        </p>
+        {/* The new label's confirmation target is separate from the existing future-production trials. */}
+        <p>
+          Pre-gem follow-up checks whether the Gem scoring/workload pattern
+          appears within the next three played games, and records their actual
+          PPG. This cannot reconstruct historical injury availability.
+          Incomplete follow-ups stay pending; no promotion is guaranteed and
+          results never retune labels automatically.
         </p>
         <p>
           First alerts mean first recorded since tracking began, not first ever
@@ -100,6 +109,43 @@ export function GemTracking({
             denominator. Labels/week uses recorded eligible horizon weeks,
             including zero-label weeks; unobserved weeks are excluded.
           </p>
+          {/* Shared storage retains first observed primary labels; display the new played-game outcome without mixing denominators. */}
+          <details>
+            <summary>Pre-gem follow-up · next three played games</summary>
+            <DataTable
+              rows={preGemTrackingReport(state!.journal, cohort.id)}
+              id={(r) => r.pos}
+              columns={[
+                { key: "pos", label: "Position", value: (r) => r.pos },
+                {
+                  key: "labels",
+                  label: "First recorded Pre-gems",
+                  kind: "fact",
+                  value: (r) => r.labels,
+                },
+                {
+                  key: "confirmation",
+                  label: "Gem pattern confirmed / completed follow-ups",
+                  kind: "fact",
+                  value: (r) => (r.scored ? r.hits / r.scored : null),
+                  render: (r) => accuracy(r.hits, r.scored, r.labels),
+                },
+                {
+                  key: "pending",
+                  label: "Pending",
+                  kind: "fact",
+                  value: (r) => r.pending,
+                },
+                {
+                  key: "ppg",
+                  label: "Actual next-three-game PPG",
+                  kind: "fact",
+                  value: (r) => r.futurePPG,
+                  render: (r) => fmt(r.futurePPG),
+                },
+              ]}
+            />
+          </details>
           <DataTable
             rows={cohort.rows}
             id={(r) => r.id}

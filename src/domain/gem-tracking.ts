@@ -5,7 +5,11 @@ import {
   gemVersion,
   labelRuleVersion,
   labelPolicy,
+  preGemVersion,
+  preGemPolicy,
+  primaryGemSignals,
 } from "./label-rules";
+import { assessGem } from "./gems";
 import { playedHistory } from "./opportunity";
 import type { Model } from "./valuation";
 
@@ -44,6 +48,9 @@ const caseSchema = z
     id: z.string(),
     pos: z.enum(["RB", "WR", "TE"]),
     mask: z.number().int().min(0).max(31),
+    // Optional additions preserve old journals while freezing the observed primary label and sample size.
+    primary: z.enum(primaryGemSignals).optional(),
+    games: z.number().int().min(3).optional(),
   })
   .strict();
 const outcomeSchema = z
@@ -84,6 +91,25 @@ const checkpointSchema = z
       .object({
         three: outcomeSchema.optional(),
         five: outcomeSchema.optional(),
+        // Pre-gem follows three played games, independently of the existing calendar-week research trials.
+        preGem: z
+          .array(
+            z
+              .object({
+                id: z.string(),
+                sourceUTC: z.string(),
+                sourceHash: z.string(),
+                recordedAt: z.string(),
+                games: z.number().int().min(1).max(3),
+                complete: z.boolean(),
+                converted: z.boolean().nullable(),
+                ppg: finite.nullable(),
+                scores: z.array(finite).max(3),
+              })
+              .strict(),
+          )
+          .max(10000)
+          .optional(),
       })
       .strict(),
   })
@@ -162,6 +188,8 @@ function identity(m: Model) {
     tracker: "prospective-gem-1",
     labelRuleVersion,
     gemVersion,
+    preGemVersion,
+    preGemPolicy,
     current: defaultGemRules,
     policy: labelPolicy,
     methods: trials,
@@ -218,7 +246,7 @@ function captureCases(m: Model, histories: Map<string, Row[]>) {
       const usable =
         p.historyComplete &&
         rows.length === p.games &&
-        rows.length >= 4 &&
+        rows.length >= 3 &&
         new Set(rows.map((r) => num(r.Week))).size === rows.length &&
         rows
           .slice(-4)
@@ -248,7 +276,15 @@ function captureCases(m: Model, histories: Map<string, Row[]>) {
         )
       )
         mask |= 16;
-      return [{ id: p.id, pos, mask }];
+      return [
+        {
+          id: p.id,
+          pos,
+          mask,
+          primary: primaryGemSignals.find((label) => label === p.gem),
+          games: rows.length,
+        },
+      ];
     })
     .sort((a, b) => cmpId(a.id, b.id));
 }
@@ -340,6 +376,93 @@ function scoreOutcome(
   };
 }
 
+// Reuse the Gem classifier at each subsequent played-game prefix; historical availability is unknown, so this records scoring/workload confirmation only.
+function scorePreGem(
+  m: Model,
+  cohort: Cohort,
+  checkpoint: Checkpoint,
+  histories: Map<string, Row[]>,
+  now: number,
+) {
+  const source = Date.parse(m.dataset.sourceUTC ?? "");
+  if (
+    !Number.isFinite(source) ||
+    source <= Date.parse(checkpoint.capturedAt) ||
+    source > now + 300000
+  )
+    return;
+  // Never replay a frozen observation against a different Gem definition.
+  let rules;
+  try {
+    rules = JSON.parse(cohort.rules);
+  } catch {
+    return;
+  }
+  if (!rules || typeof rules !== "object") return;
+  if (
+    rules.gemVersion !== gemVersion ||
+    canonical(rules.current) !== canonical(defaultGemRules) ||
+    canonical(rules.policy) !== canonical(labelPolicy)
+  )
+    return;
+  const results = checkpoint.outcomes.preGem ?? [];
+  for (const origin of checkpoint.cases.filter(
+    (c) => c.primary === "Pre-gem",
+  )) {
+    const previous = results.find((r) => r.id === origin.id);
+    if (previous?.complete) continue;
+    const p = m.byId.get(origin.id),
+      rows = histories.get(origin.id) ?? [];
+    if (!p || !p.historyComplete || rows.length !== p.games) continue;
+    const past = rows.filter((r) => num(r.Week) <= checkpoint.week);
+    if (past.length !== origin.games) continue;
+    const future = rows
+      .filter(
+        (r) => num(r.Week) > checkpoint.week && num(r.Week) <= cohort.final,
+      )
+      .slice(0, 3);
+    if (!future.length) continue;
+    let unknown = false;
+    const converted =
+      previous?.converted === true ||
+      future.some((_, i) => {
+        const prefix = [...past, ...future.slice(0, i + 1)];
+        const assessment = assessGem(
+          {
+            ...p,
+            games: prefix.length,
+            historyComplete: true,
+            uncertain: false,
+            available: 1,
+            injury: "ACTIVE",
+          },
+          prefix,
+          m.dataset,
+          now,
+        );
+        if (assessment.checks.some((check) => check.status === "UNKNOWN"))
+          unknown = true;
+        return assessment.classification === "Gem";
+      });
+    // Missing workload cannot prove a failed promotion; keep that follow-up pending rather than silently counting a miss.
+    const complete = future.length === 3 && (converted || !unknown);
+    const result = {
+      id: origin.id,
+      sourceUTC: m.dataset.sourceUTC!,
+      sourceHash: m.dataset.hash,
+      recordedAt: new Date(now).toISOString(),
+      games: future.length,
+      complete,
+      converted: converted ? true : complete ? false : null,
+      ppg: future.length === 3 ? mean(future.map((r) => num(r.Points))) : null,
+      scores: future.map((r) => num(r.Points)),
+    };
+    if (previous) Object.assign(previous, result);
+    else results.push(result);
+  }
+  if (results.length) checkpoint.outcomes.preGem = results;
+}
+
 // Append the first fresh observation per week, never backfill old labels, and freeze outcomes at the first verified mature import.
 export function advanceGemJournal(
   journal: GemJournal,
@@ -352,7 +475,8 @@ export function advanceGemJournal(
   for (const cohort of next.cohorts.filter(
     (c) => c.league === descriptor.league && c.season === descriptor.season,
   ))
-    for (const checkpoint of cohort.checkpoints)
+    for (const checkpoint of cohort.checkpoints) {
+      scorePreGem(m, cohort, checkpoint, histories, now);
       for (const [key, horizon] of [
         ["three", 3],
         ["five", 5],
@@ -368,6 +492,7 @@ export function advanceGemJournal(
           );
           if (result) checkpoint.outcomes[key] = result;
         }
+    }
   const source = Date.parse(m.dataset.sourceUTC ?? ""),
     imported = Date.parse(m.dataset.importedAt),
     date = new Date(now),
@@ -425,6 +550,39 @@ export function advanceGemJournal(
   return { journal: next, status };
 }
 
+// First recorded Pre-gem alerts use their own played-game denominator; pending imports cannot become failures.
+export function preGemTrackingReport(journal: GemJournal, key: string) {
+  const cohort = journal.cohorts.find((c) => c.key === key);
+  return (["RB", "WR", "TE"] as const).map((pos) => {
+    const seen = new Set<string>();
+    let labels = 0,
+      scored = 0,
+      hits = 0;
+    const points: number[] = [];
+    for (const checkpoint of cohort?.checkpoints ?? [])
+      for (const c of checkpoint.cases.filter(
+        (c) => c.pos === pos && c.primary === "Pre-gem",
+      )) {
+        if (seen.has(c.id)) continue;
+        seen.add(c.id);
+        labels++;
+        const outcome = checkpoint.outcomes.preGem?.find((r) => r.id === c.id);
+        if (!outcome?.complete) continue;
+        scored++;
+        if (outcome.converted) hits++;
+        if (outcome.ppg !== null) points.push(outcome.ppg);
+      }
+    return {
+      pos,
+      labels,
+      scored,
+      hits,
+      pending: labels - scored,
+      futurePPG: mean(points),
+    };
+  });
+}
+
 // Report first-recorded alerts separately from repeated weekly labels; unscored horizons never enter accuracy denominators.
 export function gemTrackingReport(journal: GemJournal) {
   return journal.cohorts.map((cohort, cohortIndex) => ({
@@ -460,7 +618,10 @@ export function gemTrackingReport(journal: GemJournal) {
             const outcome = checkpoint.outcomes[horizon],
               outcomes = new Map(outcome?.results.map((r) => [r.id, r]));
             if (outcome) ready++;
-            for (const c of checkpoint.cases.filter((c) => c.pos === pos)) {
+            // Preserve the original four-game research population even when the journal also captures three-game Pre-gems.
+            for (const c of checkpoint.cases.filter(
+              (c) => c.pos === pos && (c.games ?? 4) >= 4,
+            )) {
               const labelled = !!(c.mask & trial.bit),
                 wasFirst = labelled && !first.has(c.id),
                 result = outcomes.get(c.id);

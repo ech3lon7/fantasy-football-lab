@@ -4,6 +4,8 @@ import {
   type ManagerSettings,
   type ManagerAssessment,
 } from "./manager-expectations";
+// The same exclusive primary labels are available to discovery and saved searches.
+import { primaryGemSignals } from "./label-rules";
 import {
   surfaceAppeal,
   type SurfaceEvidence,
@@ -144,7 +146,7 @@ export interface SearchLineupDetails {
 }
 // Incoming criteria screen existing labels and positions without changing values or ranking.
 export interface IncomingFilter {
-  signals?: ("Gem" | "Watch")[];
+  signals?: (typeof primaryGemSignals)[number][];
   minimumSignals?: number;
   positions?: Position[];
   minimumPositions?: number;
@@ -497,8 +499,8 @@ export function tradeSearchBounds(m: Model, q: TradeSearchQuery) {
     [
       q.incoming?.signals,
       q.incoming?.minimumSignals ?? 1,
-      ["Gem", "Watch"],
-      "Gem/Watch",
+      primaryGemSignals,
+      "Gem/Pre-gem/Watch",
     ],
     [
       q.incoming?.positions,
@@ -853,7 +855,7 @@ export function matchesIncoming(players: Player[], filter?: IncomingFilter) {
     selected = filter?.positions ?? [];
   const count = players.filter(
     (p) =>
-      (!signals.length || signals.includes(p.gem as "Gem" | "Watch")) &&
+      (!signals.length || signals.some((signal) => signal === p.gem)) &&
       (!selected.length || selected.includes(p.pos as Position)),
   ).length;
   return (

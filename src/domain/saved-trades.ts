@@ -1,4 +1,6 @@
 import { z } from "zod";
+// Accept the new label without changing existing saved Gem/Watch selections.
+import { primaryGemSignals } from "./label-rules";
 import { withoutLegacySurface } from "./surface-appeal";
 import { managerSettingsSchema } from "./manager-expectations";
 import {
@@ -112,8 +114,8 @@ const querySchema = z
     incoming: z
       .object({
         signals: z
-          .array(z.enum(["Gem", "Watch"]))
-          .max(2)
+          .array(z.enum(primaryGemSignals))
+          .max(primaryGemSignals.length)
           .optional(),
         minimumSignals: count.min(1).optional(),
         positions: z.array(z.enum(positions)).max(6).optional(),
