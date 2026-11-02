@@ -4,6 +4,9 @@ import type { OpponentIncentive } from "../domain/trade-discovery";
 import { FilterHelp } from "../ui/FilterHelp";
 import { fmt, signed } from "../ui/components";
 import { PlayerName } from "../ui/PlayerName";
+import { createPortal } from "react-dom";
+import { useState } from "react";
+import { TradePoolBoard } from "./TradeSearchControls";
 
 // Keep exploratory controls local until an evaluated package is explicitly loaded or saved.
 export interface DiscoveryState {
@@ -35,6 +38,8 @@ export function TradeDiscoveryControls({
   change,
   starters,
   startersKnown,
+  boardHost,
+  changeDraft,
 }: {
   m: Model;
   draft: Draft;
@@ -42,7 +47,52 @@ export function TradeDiscoveryControls({
   change: (value: DiscoveryState) => void;
   starters: string[];
   startersKnown: boolean;
+  boardHost?: HTMLElement | null;
+  changeDraft?: (draft: Draft) => void;
 }) {
+  // Moves edit only this finder's pool/manual offer; limits and ownership apply equally to drag and click.
+  const [moveError, setMoveError] = useState("");
+  function move(id: string, destination: "protected" | "pool" | "offering") {
+    if (m.byId.get(id)?.owner !== draft.teamA) return;
+    const pool = value.flexible
+      ? value.pool
+      : [...new Set([...value.pool, ...draft.give])];
+    if (
+      (destination === "pool" ||
+        (destination === "offering" && value.flexible)) &&
+      !pool.includes(id) &&
+      pool.length >= 12
+    ) {
+      setMoveError("The tradable pool can contain up to 12 players.");
+      return;
+    }
+    if (
+      destination === "offering" &&
+      !draft.give.includes(id) &&
+      draft.give.length >= 5
+    ) {
+      setMoveError("Offer up to five players at a time.");
+      return;
+    }
+    setMoveError("");
+    change({
+      ...value,
+      flexible: destination === "pool" ? true : value.flexible,
+      pool:
+        destination === "protected"
+          ? value.pool.filter((player) => player !== id)
+          : destination === "offering" && !value.flexible
+            ? value.pool
+            : [...new Set([...pool, id])],
+    });
+    changeDraft?.({
+      ...draft,
+      give:
+        destination === "offering"
+          ? [...new Set([...draft.give, id])]
+          : draft.give.filter((player) => player !== id),
+    });
+  }
   const owned = m.players
     .filter((p) => p.owner === draft.teamA)
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -58,6 +108,23 @@ export function TradeDiscoveryControls({
   return (
     <fieldset className="trade-search-group">
       <legend>Search approach</legend>
+      {/* Mount the live board beside the existing offer cards; the control state still belongs to this finder. */}
+      {boardHost &&
+        createPortal(
+          <>
+            <TradePoolBoard
+              m={m}
+              team={draft.teamA}
+              scope="Standard"
+              active={value.flexible}
+              pool={value.flexible ? value.pool : draft.give}
+              offering={draft.give}
+              move={move}
+            />
+            {moveError && <p role="status">{moveError}</p>}
+          </>,
+          boardHost,
+        )}
       <div className="trade-search-controls">
         <FilterHelp
           label="Find outgoing combinations"
@@ -202,6 +269,9 @@ export function TradeDiscoveryControls({
                     type="checkbox"
                     aria-label={`Tradable ${p.name}`}
                     checked={value.pool.includes(p.id)}
+                    disabled={
+                      !value.pool.includes(p.id) && value.pool.length >= 12
+                    }
                     onChange={(e) =>
                       change({
                         ...value,

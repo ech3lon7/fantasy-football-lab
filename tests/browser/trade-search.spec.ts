@@ -145,6 +145,58 @@ const panel = (page: Page) =>
     }),
   });
 
+// Verify the approved compact hierarchy, shared deficit threshold, and identical click/drag pool selection through real persistence.
+test("compact search groups link deficit protection and support visual pool moves", async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 1200 });
+  await seed(page, false, false, false, false, true);
+  const search = panel(page);
+  await expect(search.locator(".trade-filter-category")).toHaveCount(4);
+  for (const title of ["Players & packages", "Value & acceptance", "Scoring impact"]) {
+    // Select the direct disclosure summary, not an unrelated nested team picker.
+    const summary = search.locator(".trade-filter-category > summary").filter({ hasText: title });
+    await summary.click();
+  }
+  const target = search.getByLabel("Only teams with a positional deficit", { exact: true });
+  const guard = search.getByLabel("Standard search: Protect their weak positions", { exact: true });
+  await expect(guard).toBeDisabled();
+  await target.check();
+  await expect(guard).toBeEnabled();
+  await expect(guard).toBeChecked();
+  await search.getByLabel("Maximum position grade", { exact: true }).selectOption("C");
+  await expect(search.getByLabel("Standard search: Deficit grade cutoff", { exact: true })).toHaveCount(0);
+  await expect.poll(async () => JSON.parse((await storedWorkspace(page)).state.filters.tradeSearchSettings).standard.query.deficitProtection.ceiling).toBe("C");
+  await search.getByLabel("Standard search: Minimum positional gain", { exact: true }).fill("3");
+  await target.uncheck();
+  await expect(guard).toBeDisabled();
+  await expect.poll(async () => JSON.parse((await storedWorkspace(page)).state.filters.tradeSearchSettings).standard.query.deficitProtection.enabled).toBe(false);
+  await page.reload();
+  await openTradeFilters(page);
+  await expect(guard).toBeDisabled();
+  await target.check();
+  await expect(search.getByLabel("Standard search: Minimum positional gain", { exact: true })).toHaveValue("3");
+  const board = page.getByRole("region", { name: "Standard visual player pool", exact: true });
+  await board.getByLabel("Move Bench QB in standard pool", { exact: true }).selectOption("protected");
+  await expect.poll(async () => (await storedWorkspace(page)).state.draft.give).toEqual([]);
+  await board.getByLabel("Move Bench QB in standard pool", { exact: true }).selectOption("pool");
+  const starter = board.locator("article").filter({ has: page.getByRole("link", { name: "Main QB", exact: true }) });
+  // Drag from the card's grip, avoiding its native Move selector and player-profile link.
+  await starter.locator("svg").first().dragTo(board.getByLabel("Standard offering drop zone", { exact: true }));
+  await expect.poll(async () => (await storedWorkspace(page)).state.draft.give).toEqual(["100"]);
+  await expect.poll(async () => JSON.parse((await storedWorkspace(page)).state.filters.tradeSearchSettings).standard.query.discovery.flexible.pool).toEqual(expect.arrayContaining(["101", "100"]));
+  await page.screenshot({ path: "test-results/compact-trade-search-desktop.png", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  // At phone width the name/forecast must occupy the card body, not overlap inside the portrait column.
+  const selectedCard = page.locator(".trade-player-slot.has-player").first();
+  expect((await selectedCard.locator(".trade-selected-player").boundingBox())!.width).toBeGreaterThan(150);
+  const playerNameBox = (await selectedCard.locator(".trade-selected-player > a").boundingBox())!;
+  const forecastBox = (await selectedCard.locator(".trade-selected-player > strong").boundingBox())!;
+  expect(playerNameBox.x + playerNameBox.width).toBeLessThanOrEqual(forecastBox.x + 1);
+  await page.screenshot({ path: "test-results/compact-trade-search-mobile.png", fullPage: true });
+  await page.reload();
+  await expect(board.getByLabel("Move Main QB in standard pool", { exact: true })).toHaveValue("offering");
+});
+
 // Legacy saved minimums cannot hide straight swaps, and the recipient safeguard uses the actual worker and persists independently.
 test("restores packages with singles and persists adjustable recipient protection", async ({ page }) => {
   await seed(page);
@@ -170,10 +222,12 @@ test("restores packages with singles and persists adjustable recipient protectio
   await search.getByLabel("Create package", { exact: true }).uncheck();
   await search.getByLabel("Receive QB", { exact: true }).check();
   const guard = search.getByLabel("Standard search: Protect their weak positions", { exact: true });
+  await search.getByLabel("Only teams with a positional deficit", { exact: true }).check();
+  await search.getByLabel("Maximum position grade", { exact: true }).selectOption("A+");
   await guard.check();
   const minimum = search.getByLabel("Standard search: Minimum positional gain", { exact: true });
   await expect(minimum).toHaveValue("2");
-  await expect(search.getByLabel("Standard search: Deficit grade cutoff", { exact: true })).toHaveValue("C+");
+  await expect(search.getByLabel("Maximum position grade", { exact: true })).toHaveValue("A+");
   await minimum.fill("30");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(search.getByText("0 index matches.", { exact: false })).toBeVisible();
@@ -762,7 +816,7 @@ test("filter help is unobtrusive accessible and does not change controls or save
     await toggle.evaluate((element) => getComputedStyle(element).cursor),
   ).not.toBe("help");
   await expect(page.getByRole("tooltip")).toHaveCount(0);
-  await search.getByText(label, { exact: true }).hover();
+  await toggle.hover();
   await expect(page.getByRole("tooltip")).toHaveCount(0);
   await expect(page.getByRole("tooltip")).toContainText(
     "independently of marked starters",
@@ -1221,7 +1275,7 @@ test("weekly sliders filter exact averages for either or both teams without chan
     search.getByText(/Trades excluded by weekly-gain limits: 1/),
   ).toBeVisible();
   await expect(
-    search.getByRole("link", { name: "Incoming QB", exact: true }),
+    search.locator("tbody tr[data-trade-result]").getByRole("link", { name: "Incoming QB", exact: true }),
   ).toHaveCount(0);
   await expandSearchAlternatives(search);
   const first = search.locator("tbody tr[data-trade-result]").first();
@@ -2111,7 +2165,7 @@ test("upgrade counts require all requested starter and bench matches", async ({
     .getByLabel("Minimum bench upgrades", { exact: true })
     .fill("1.5");
   await search
-    .getByText("Only show positional upgrades for the other team", {
+    .getByLabel("Only show positional upgrades for the other team", {
       exact: true,
     })
     .hover();
@@ -2247,9 +2301,10 @@ test("guided search defaults to automatic singles and packages and configures tr
   await expect(search.getByLabel("Search goal", { exact: true })).toHaveValue(
     "explore",
   );
+  // The range is now directly accessible in its category, but remains opt-in.
   await expect(
     search.getByLabel("Use strict index range", { exact: true }),
-  ).not.toBeVisible();
+  ).not.toBeChecked();
   await expect(
     search.getByText("Receive 1–3 players. Automatic index matching", {
       exact: false,
@@ -2281,7 +2336,7 @@ test("guided search defaults to automatic singles and packages and configures tr
   await search
     .getByLabel("Position to receive", { exact: true })
     .selectOption("QB");
-  await search.getByText("Advanced search controls", { exact: true }).click();
+  // Filter categories are already expanded by openTradeFilters.
   await expect(search.getByLabel("Receive QB", { exact: true })).toBeChecked();
   await expect(
     search.getByLabel("Use strict index range", { exact: true }),
@@ -2566,7 +2621,7 @@ test("compact workspace previews authoritative scoring and weekly roles without 
   const calculated = evaluateTrade(model, { teamA: "1", teamB, give, get }, true);
   expect(calculated.valid).toBe(true);
   if (!calculated.valid) throw Error("Expected valid fixture trade");
-  await page.getByRole("button", { name: "Close standard filters", exact: true }).click();
+  await page.getByRole("button", { name: "Standard filters", exact: true }).click();
   await inspect.click();
   const strip = page.getByRole("region", { name: "Trade scoring summary", exact: true });
   await expect(strip).toHaveAttribute("aria-busy", "false");

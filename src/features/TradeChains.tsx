@@ -3,6 +3,13 @@ import {
   TradeFiltersDrawer,
   type TradeWorkspacePreview,
 } from "./TradeWorkspace";
+import { createPortal } from "react-dom";
+import {
+  TradeFilterGroup,
+  TradePoolBoard,
+  TeamNeedsPreview,
+  TradePositionChips,
+} from "./TradeSearchControls";
 import { GroupedChains } from "./TradeResultGroups";
 import {
   ManagerControls,
@@ -139,6 +146,7 @@ export interface ChainDebugReport {
 // Store no chain results or roster moves automatically; each saved leg uses the existing explicit saved-trade action.
 export function TradeChains({
   m,
+  poolHost,
   team: initialTeam,
   pool: initialPool,
   basis: initialBasis,
@@ -153,6 +161,7 @@ export function TradeChains({
   onPreview,
   onPool,
 }: {
+  poolHost?: HTMLElement | null;
   onPool?: (value: {
     team: string;
     pool: string[];
@@ -178,7 +187,7 @@ export function TradeChains({
   ) => boolean | void;
 }) {
   // Seed once from the previous selections; subsequent single-trade edits cannot change any chain option.
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [team, setTeam] = useState(initial?.query.team ?? initialTeam);
   const [pool, setPool] = useState(initial?.query.pool ?? [...initialPool]);
   const [basis, setBasis] = useState(initial?.query.basis ?? initialBasis);
@@ -287,6 +296,20 @@ export function TradeChains({
     minimumGain: gain.trim() ? Number(gain) : NaN,
     first: {
       ...first,
+      // Each leg inherits only its own deficit threshold; standard-search controls never participate.
+      deficitProtection: {
+        ...(first.deficitProtection ?? defaultDeficitProtection),
+        enabled:
+          !!first.fit?.deficit?.enabled && !!first.deficitProtection?.enabled,
+        ceiling: first.fit?.deficit?.grade ?? defaultChainFit("deficit").grade,
+        minimum:
+          (!first.fit?.deficit?.enabled || !first.deficitProtection?.enabled) &&
+          (!Number.isFinite(first.deficitProtection?.minimum) ||
+            (first.deficitProtection?.minimum ?? 0) <= 0)
+            ? defaultDeficitProtection.minimum
+            : (first.deficitProtection?.minimum ??
+              defaultDeficitProtection.minimum),
+      },
       teams: firstOverride ? first.teams : selectedTeams,
       manager: first.manager
         ? { ...first.manager, profiles: journal.profiles }
@@ -294,6 +317,21 @@ export function TradeChains({
     },
     second: {
       ...second,
+      // Each leg inherits only its own deficit threshold; standard-search controls never participate.
+      deficitProtection: {
+        ...(second.deficitProtection ?? defaultDeficitProtection),
+        enabled:
+          !!second.fit?.deficit?.enabled && !!second.deficitProtection?.enabled,
+        ceiling: second.fit?.deficit?.grade ?? defaultChainFit("deficit").grade,
+        minimum:
+          (!second.fit?.deficit?.enabled ||
+            !second.deficitProtection?.enabled) &&
+          (!Number.isFinite(second.deficitProtection?.minimum) ||
+            (second.deficitProtection?.minimum ?? 0) <= 0)
+            ? defaultDeficitProtection.minimum
+            : (second.deficitProtection?.minimum ??
+              defaultDeficitProtection.minimum),
+      },
       teams: secondOverride ? second.teams : selectedTeams,
       manager: second.manager
         ? { ...second.manager, profiles: journal.profiles }
@@ -654,185 +692,201 @@ export function TradeChains({
   ) => (
     <fieldset className="trade-search-group">
       <legend>{label}</legend>
-      <div className="trade-search-controls">
-        {(["offer", "receive"] as const).map((direction) => (
-          <div key={direction}>
-            {(["minimum", "maximum"] as const).map((bound) => (
-              <label className="control" key={bound}>
-                <span>
-                  {label} {direction} {bound}
-                </span>
-                <select
-                  value={value[direction][bound]}
+      {/* Per-leg package and value options stay nearby but folded until needed; both legs remain independently mounted. */}
+      <TradeFilterGroup
+        title={`${label}: Players & packages`}
+        summary={`Offer ${value.offer.minimum}–${value.offer.maximum} · Receive ${value.receive.minimum}–${value.receive.maximum}`}
+      >
+        <div className="trade-search-controls">
+          {(["offer", "receive"] as const).map((direction) => (
+            <div key={direction}>
+              {(["minimum", "maximum"] as const).map((bound) => (
+                <label className="control" key={bound}>
+                  <span>
+                    {label} {direction} {bound}
+                  </span>
+                  <select
+                    value={value[direction][bound]}
+                    onChange={(e) =>
+                      change({
+                        ...value,
+                        [direction]: {
+                          ...value[direction],
+                          [bound]: Number(e.target.value),
+                        },
+                      })
+                    }
+                  >
+                    {[1, 2, 3, 4, 5].map((count) => (
+                      <option key={count}>{count}</option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+          ))}
+          <details>
+            <summary>
+              {label} teams ({override ? "override: " : "planner scope: "}
+              {(override ? value.teams : selectedTeams)?.length ?? "all"})
+            </summary>
+            {/* Custom team choices are available only after explicitly overriding the inherited search scope. */}
+            <FilterHelp
+              label={`Override ${label.toLowerCase()} teams`}
+              help="Replaces this chain planner’s opponent scope for this step only. Turn off to follow Chain teams to search. The standard finder is independent."
+            >
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={override}
+                  aria-label={`Override ${label.toLowerCase()} teams`}
+                  onChange={(e) => {
+                    changeOverride(e.target.checked);
+                    if (e.target.checked)
+                      change({
+                        ...value,
+                        teams: selectedTeams ? [...selectedTeams] : undefined,
+                      });
+                  }}
+                />
+                Override {label.toLowerCase()} teams
+              </label>
+            </FilterHelp>
+            {!override && (
+              <p className="muted">
+                Uses Chain teams to search. Enable the override to choose a
+                different scope for this step.
+              </p>
+            )}
+            {override && (
+              <>
+                <div className="button-row">
+                  <button
+                    className="subtle"
+                    onClick={() => change({ ...value, teams: undefined })}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    className="subtle"
+                    onClick={() => change({ ...value, teams: [] })}
+                  >
+                    Clear selection
+                  </button>
+                </div>
+                {opponents.map((t) => {
+                  const id = str(t.TeamID);
+                  return (
+                    <label className="check" key={id}>
+                      <input
+                        type="checkbox"
+                        aria-label={`${label} team: ${str(t.TeamName)}`}
+                        checked={
+                          value.teams === undefined || value.teams.includes(id)
+                        }
+                        onChange={(e) => {
+                          const selected =
+                            value.teams ?? opponents.map((t) => str(t.TeamID));
+                          change({
+                            ...value,
+                            teams: e.target.checked
+                              ? [...selected, id]
+                              : selected.filter((team) => team !== id),
+                          });
+                        }}
+                      />
+                      {str(t.TeamName)}
+                    </label>
+                  );
+                })}
+              </>
+            )}
+          </details>
+        </div>
+      </TradeFilterGroup>
+      <TradeFilterGroup
+        title={`${label}: Value & acceptance`}
+        summary={value.indexWindow ? "Index window on" : "No index window"}
+      >
+        {/* Each leg owns its optional plausibility inputs; raw sums never silently inherit package premiums or standard-search settings. */}
+        <div className="trade-search-controls">
+          <div>
+            <FilterHelp
+              label={`${label} index window`}
+              help="Require the raw incoming index sum to lie within this leg's below/above range around its outgoing sum. Inclusive and unrounded. Premium and recipient checks still apply separately; unequal packages may need a wider window."
+            >
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={!!value.indexWindow}
                   onChange={(e) =>
                     change({
                       ...value,
-                      [direction]: {
-                        ...value[direction],
-                        [bound]: Number(e.target.value),
-                      },
+                      indexWindow: e.target.checked
+                        ? { below: 5, above: 5 }
+                        : undefined,
                     })
                   }
-                >
-                  {[1, 2, 3, 4, 5].map((count) => (
-                    <option key={count}>{count}</option>
-                  ))}
-                </select>
+                />
+                {label} index window
               </label>
-            ))}
-          </div>
-        ))}
-        <details>
-          <summary>
-            {label} teams ({override ? "override: " : "planner scope: "}
-            {(override ? value.teams : selectedTeams)?.length ?? "all"})
-          </summary>
-          {/* Custom team choices are available only after explicitly overriding the inherited search scope. */}
-          <FilterHelp
-            label={`Override ${label.toLowerCase()} teams`}
-            help="Replaces this chain planner’s opponent scope for this step only. Turn off to follow Chain teams to search. The standard finder is independent."
-          >
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={override}
-                aria-label={`Override ${label.toLowerCase()} teams`}
-                onChange={(e) => {
-                  changeOverride(e.target.checked);
-                  if (e.target.checked)
+            </FilterHelp>
+            {value.indexWindow && (
+              <>
+                {number(
+                  `${label} index below`,
+                  Number.isFinite(value.indexWindow.below)
+                    ? String(value.indexWindow.below)
+                    : "",
+                  (text) =>
                     change({
                       ...value,
-                      teams: selectedTeams ? [...selectedTeams] : undefined,
-                    });
-                }}
-              />
-              Override {label.toLowerCase()} teams
-            </label>
-          </FilterHelp>
-          {!override && (
-            <p className="muted">
-              Uses Chain teams to search. Enable the override to choose a
-              different scope for this step.
-            </p>
-          )}
-          {override && (
-            <>
-              <div className="button-row">
-                <button
-                  className="subtle"
-                  onClick={() => change({ ...value, teams: undefined })}
-                >
-                  Select all
-                </button>
-                <button
-                  className="subtle"
-                  onClick={() => change({ ...value, teams: [] })}
-                >
-                  Clear selection
-                </button>
-              </div>
-              {opponents.map((t) => {
-                const id = str(t.TeamID);
-                return (
-                  <label className="check" key={id}>
-                    <input
-                      type="checkbox"
-                      aria-label={`${label} team: ${str(t.TeamName)}`}
-                      checked={
-                        value.teams === undefined || value.teams.includes(id)
-                      }
-                      onChange={(e) => {
-                        const selected =
-                          value.teams ?? opponents.map((t) => str(t.TeamID));
-                        change({
-                          ...value,
-                          teams: e.target.checked
-                            ? [...selected, id]
-                            : selected.filter((team) => team !== id),
-                        });
-                      }}
-                    />
-                    {str(t.TeamName)}
-                  </label>
-                );
-              })}
-            </>
-          )}
-        </details>
-      </div>
-      {/* Each leg owns its optional plausibility inputs; raw sums never silently inherit package premiums or standard-search settings. */}
-      <div className="trade-search-controls">
-        <div>
-          <FilterHelp
-            label={`${label} index window`}
-            help="Require the raw incoming index sum to lie within this leg's below/above range around its outgoing sum. Inclusive and unrounded. Premium and recipient checks still apply separately; unequal packages may need a wider window."
-          >
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={!!value.indexWindow}
-                onChange={(e) =>
-                  change({
-                    ...value,
-                    indexWindow: e.target.checked
-                      ? { below: 5, above: 5 }
-                      : undefined,
-                  })
-                }
-              />
-              {label} index window
-            </label>
-          </FilterHelp>
-          {value.indexWindow && (
-            <>
-              {number(
-                `${label} index below`,
-                Number.isFinite(value.indexWindow.below)
-                  ? String(value.indexWindow.below)
-                  : "",
-                (text) =>
-                  change({
-                    ...value,
-                    indexWindow: {
-                      ...value.indexWindow!,
-                      below: text.trim() ? Number(text) : NaN,
-                    },
-                  }),
-                0,
-                "Allowed raw index points below the outgoing sum. Blank is invalid; zero means no downward allowance.",
-              )}
-              {number(
-                `${label} index above`,
-                Number.isFinite(value.indexWindow.above)
-                  ? String(value.indexWindow.above)
-                  : "",
-                (text) =>
-                  change({
-                    ...value,
-                    indexWindow: {
-                      ...value.indexWindow!,
-                      above: text.trim() ? Number(text) : NaN,
-                    },
-                  }),
-                0,
-                "Allowed raw index points above the outgoing sum. This does not imply that the opponent accepts a concession.",
-              )}
-            </>
-          )}
+                      indexWindow: {
+                        ...value.indexWindow!,
+                        below: text.trim() ? Number(text) : NaN,
+                      },
+                    }),
+                  0,
+                  "Allowed raw index points below the outgoing sum. Blank is invalid; zero means no downward allowance.",
+                )}
+                {number(
+                  `${label} index above`,
+                  Number.isFinite(value.indexWindow.above)
+                    ? String(value.indexWindow.above)
+                    : "",
+                  (text) =>
+                    change({
+                      ...value,
+                      indexWindow: {
+                        ...value.indexWindow!,
+                        above: text.trim() ? Number(text) : NaN,
+                      },
+                    }),
+                  0,
+                  "Allowed raw index points above the outgoing sum. This does not imply that the opponent accepts a concession.",
+                )}
+              </>
+            )}
+          </div>
+          <div>
+            <ManagerControls
+              label={`${label}: Enable Surface Trading`}
+              value={value.manager}
+              change={(manager) => change({ ...value, manager })}
+            />
+          </div>
         </div>
-        <div>
-          <ManagerControls
-            label={`${label}: Enable Surface Trading`}
-            value={value.manager}
-            change={(manager) => change({ ...value, manager })}
-          />
-        </div>
-      </div>
-      {/* Surplus and deficit checks are independently optional on each leg; absent/disabled rules never narrow the search. */}
-      <DeficitProtectionControls
+      </TradeFilterGroup>
+      {/* Each leg previews its own selected teams; the second leg's executed roster is explained in results. */}
+      <TeamNeedsPreview
+        m={m}
+        teams={opponents
+          .filter(
+            (t) =>
+              value.teams === undefined || value.teams.includes(str(t.TeamID)),
+          )
+          .map((t) => str(t.TeamID))}
         scope={label}
-        value={value.deficitProtection}
-        change={(deficitProtection) => change({ ...value, deficitProtection })}
       />
       {(["surplus", "deficit"] as const).map((kind) => {
         const rule = value.fit?.[kind] ?? defaultChainFit(kind);
@@ -840,6 +894,14 @@ export function TradeChains({
           change({
             ...value,
             fit: { ...value.fit, [kind]: { ...rule, ...patch } },
+            ...(kind === "deficit" && patch.grade
+              ? {
+                  deficitProtection: {
+                    ...(value.deficitProtection ?? defaultDeficitProtection),
+                    ceiling: patch.grade,
+                  },
+                }
+              : {}),
           });
         const title =
           kind === "surplus"
@@ -924,6 +986,18 @@ export function TradeChains({
                     </select>
                   </label>
                 </FilterHelp>
+                <TradePositionChips
+                  scope={`${label} ${kind}`}
+                  positions={positions}
+                  selected={rule.positions}
+                  change={(position) =>
+                    update({
+                      positions: rule.positions.includes(position)
+                        ? rule.positions.filter((p) => p !== position)
+                        : [...rule.positions, position],
+                    })
+                  }
+                />
                 <fieldset>
                   <legend>
                     {label} {kind} positions (none selected = automatic)
@@ -947,6 +1021,17 @@ export function TradeChains({
                   ))}
                 </fieldset>
               </div>
+            )}
+            {kind === "deficit" && (
+              <DeficitProtectionControls
+                scope={label}
+                value={value.deficitProtection}
+                change={(deficitProtection) =>
+                  change({ ...value, deficitProtection })
+                }
+                targeting={rule.enabled}
+                ceiling={rule.grade}
+              />
             )}
           </div>
         );
@@ -1301,83 +1386,326 @@ export function TradeChains({
       note={`Independent chain controls · ${lineupBasisLabel(basis)} · ${m.simulation ? "Hypothetical roster" : "Imported roster"}`}
       compact
       action={
-        <TradeFiltersButton
-          scope="Chain"
-          open={filtersOpen}
-          toggle={() => setFiltersOpen((value) => !value)}
-        />
+        <div className="trade-finder-actions">
+          {/* This shortcut runs only this planner's own captured settings. */}
+          <button
+            type="button"
+            className="button primary"
+            aria-label="Run chain trade search"
+            disabled={!!errors.length || job?.status === "running"}
+            onClick={search}
+          >
+            Search chains
+          </button>
+          <TradeFiltersButton
+            scope="Chain"
+            open={filtersOpen}
+            toggle={() => setFiltersOpen((value) => !value)}
+          />
+        </div>
       }
     >
+      {open &&
+        poolHost &&
+        createPortal(
+          <TradePoolBoard
+            m={m}
+            team={team}
+            pool={pool}
+            scope="Chain"
+            move={(id, destination) =>
+              setPool((old) =>
+                destination === "protected"
+                  ? old.filter((player) => player !== id)
+                  : old.includes(id) || old.length >= 12
+                    ? old
+                    : [...old, id],
+              )
+            }
+          />,
+          poolHost,
+        )}
       <div
         className={`trade-finder-layout${filtersOpen ? " filters-open" : ""}`}
       >
+        <div
+          className="active-filter-chips"
+          aria-label="Active chain-search filters"
+        >
+          <span>Final gain ≥ {gain} EPPG</span>
+          {(
+            [
+              ["First trade", first, setFirst],
+              ["Second trade", second, setSecond],
+            ] as const
+          ).flatMap(([label, leg, set]) =>
+            (["surplus", "deficit"] as const).map((kind) =>
+              leg.fit?.[kind]?.enabled ? (
+                <button
+                  type="button"
+                  key={`${label}-${kind}`}
+                  aria-label={`Remove ${label} ${kind} targeting`}
+                  onClick={() =>
+                    set({
+                      ...leg,
+                      fit: {
+                        ...leg.fit,
+                        [kind]: { ...leg.fit![kind]!, enabled: false },
+                      },
+                    })
+                  }
+                >
+                  {label}: {kind} {leg.fit[kind]!.grade} ×
+                </button>
+              ) : null,
+            ),
+          )}
+          {(
+            [
+              ["First trade", query.first, setFirst],
+              ["Second trade", query.second, setSecond],
+            ] as const
+          ).map(([label, leg, set]) =>
+            leg.deficitProtection?.enabled ? (
+              <button
+                type="button"
+                key={label}
+                aria-label={`Remove ${label} protection`}
+                onClick={() =>
+                  set((old) => ({
+                    ...old,
+                    deficitProtection: {
+                      ...old.deficitProtection!,
+                      enabled: false,
+                    },
+                  }))
+                }
+              >
+                {label}: protect ≥ +{leg.deficitProtection.minimum} ×
+              </button>
+            ) : null,
+          )}
+        </div>
         <TradeFiltersDrawer
           scope="Chain"
           open={filtersOpen}
           close={() => setFiltersOpen(false)}
         >
-          {/* Each search owns its team, basis, outgoing pool and opponents, copied only once from prior selections. */}
-          <div className="trade-search-controls">
-            <FilterHelp
-              label="Chain team"
-              help="Choose the team for this chain only. Its own tradable pool, team scopes and results remain independent of the standard finder."
-            >
-              <label className="control">
-                <span>Chain team</span>
-                <select value={team} onChange={(e) => setTeam(e.target.value)}>
-                  <TeamsOptions d={m.dataset} />
-                </select>
-              </label>
-            </FilterHelp>
-            <FilterHelp
-              label="Chain lineup impact basis"
-              help="Best available uses each full roster’s strongest lineup; Marked starters uses saved or imported starter roles. Both legs and both teams use this chain’s own basis."
-            >
-              <label className="control">
-                <span>Chain lineup impact basis</span>
-                <select
-                  value={basis}
-                  onChange={(e) => setBasis(e.target.value as LineupBasis)}
-                >
-                  <option value="best-available">Best available lineup</option>
-                  <option value="marked-starters">Marked starters</option>
-                </select>
-              </label>
-            </FilterHelp>
-            <FilterHelp
-              label="Chain preset"
-              help="Preset thresholds range from easier to stricter discovery. Selecting one changes your final minimum, recipient gain and price-test requirement; automatic recipient concession is capped at 10%. Dependency and per-leg optional filters are preserved. All gains are inclusive minimums. Optional surplus/deficit targeting stays disabled unless you enable it. Editing any query setting marks the preset Custom."
-            >
-              <label className="control">
-                <span>Chain preset</span>
-                <select
-                  value={preset}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    if (id === "custom") {
-                      setPreset(id);
-                      return;
-                    }
-                    const next = applyChainPreset(query, id);
-                    presetQuery.current = JSON.stringify(next);
-                    setGain(String(next.minimumGain));
-                    setRecipientLoss(
-                      String(next.recipient!.maximumValueLossPct * 100),
-                    );
-                    setRecipientGain(String(next.recipient!.minimumGain));
-                    setPricePolicy(next.pricePolicy!);
-                    setPreset(id);
-                  }}
-                >
-                  <option value="custom">Custom</option>
-                  {chainPresets.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
+          {/* The same four categories contain this planner's own controls; no settings are shared with standard search. */}
+          <TradeFilterGroup
+            title="Players & packages"
+            summary={`${pool.length}/12 tradable · ${selectedTeams?.length ?? "All"} teams`}
+          >
+            {/* Each search owns its team, basis, outgoing pool and opponents, copied only once from prior selections. */}
+            <div className="trade-search-controls">
+              <FilterHelp
+                label="Chain team"
+                help="Choose the team for this chain only. Its own tradable pool, team scopes and results remain independent of the standard finder."
+              >
+                <label className="control">
+                  <span>Chain team</span>
+                  <select
+                    value={team}
+                    onChange={(e) => setTeam(e.target.value)}
+                  >
+                    <TeamsOptions d={m.dataset} />
+                  </select>
+                </label>
+              </FilterHelp>
+              <FilterHelp
+                label="Chain lineup impact basis"
+                help="Best available uses each full roster’s strongest lineup; Marked starters uses saved or imported starter roles. Both legs and both teams use this chain’s own basis."
+              >
+                <label className="control">
+                  <span>Chain lineup impact basis</span>
+                  <select
+                    value={basis}
+                    onChange={(e) => setBasis(e.target.value as LineupBasis)}
+                  >
+                    <option value="best-available">
+                      Best available lineup
                     </option>
-                  ))}
-                </select>
-              </label>
-            </FilterHelp>
+                    <option value="marked-starters">Marked starters</option>
+                  </select>
+                </label>
+              </FilterHelp>
+              <FilterHelp
+                label="Chain preset"
+                help="Preset thresholds range from easier to stricter discovery. Selecting one changes your final minimum, recipient gain and price-test requirement; automatic recipient concession is capped at 10%. Dependency and per-leg optional filters are preserved. All gains are inclusive minimums. Optional surplus/deficit targeting stays disabled unless you enable it. Editing any query setting marks the preset Custom."
+              >
+                <label className="control">
+                  <span>Chain preset</span>
+                  <select
+                    value={preset}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      if (id === "custom") {
+                        setPreset(id);
+                        return;
+                      }
+                      const next = applyChainPreset(query, id);
+                      presetQuery.current = JSON.stringify(next);
+                      setGain(String(next.minimumGain));
+                      setRecipientLoss(
+                        String(next.recipient!.maximumValueLossPct * 100),
+                      );
+                      setRecipientGain(String(next.recipient!.minimumGain));
+                      setPricePolicy(next.pricePolicy!);
+                      setPreset(id);
+                    }}
+                  >
+                    <option value="custom">Custom</option>
+                    {chainPresets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </FilterHelp>
+            </div>
+            <details className="trade-search-group">
+              <summary>Chain tradable pool ({pool.length}/12)</summary>
+              <FilterHelp
+                label="Select all chain tradable players"
+                help="Keep current chain selections and add players in the displayed order, up to the existing 12-player pool limit. This does not change the standard search pool."
+              >
+                <button
+                  type="button"
+                  className="subtle"
+                  disabled={
+                    pool.length >= 12 ||
+                    poolPlayers.every((p) => pool.includes(p.id))
+                  }
+                  onClick={() =>
+                    setPool((old) =>
+                      [
+                        ...new Set([
+                          ...old.filter((id) =>
+                            poolPlayers.some((p) => p.id === id),
+                          ),
+                          ...poolPlayers.map((p) => p.id),
+                        ]),
+                      ].slice(0, 12),
+                    )
+                  }
+                >
+                  Select all{poolPlayers.length > 12 ? " (up to 12)" : ""}
+                </button>
+              </FilterHelp>
+              {poolPlayers.map((p) => (
+                <label className="check" key={p.id}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Chain tradable player: ${p.name}`}
+                    checked={pool.includes(p.id)}
+                    disabled={!pool.includes(p.id) && pool.length >= 12}
+                    onChange={(e) =>
+                      setPool((old) =>
+                        e.target.checked
+                          ? [...old, p.id]
+                          : old.filter((id) => id !== p.id),
+                      )
+                    }
+                  />
+                  {p.name} · {p.pos} ·{" "}
+                  <span className="model">{fmt(p.index)}</span>
+                </label>
+              ))}
+            </details>
+            <details className="trade-search-group">
+              <summary>
+                Chain teams to search ({selectedTeams?.length ?? "all"})
+              </summary>
+              <div className="button-row">
+                <button
+                  className="subtle"
+                  onClick={() => setSelectedTeams(undefined)}
+                >
+                  Select all chain teams
+                </button>
+                <button className="subtle" onClick={() => setSelectedTeams([])}>
+                  Clear chain team selection
+                </button>
+              </div>
+              {opponents.map((t) => {
+                const id = str(t.TeamID);
+                return (
+                  <label className="check" key={id}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Chain search team: ${str(t.TeamName)}`}
+                      checked={
+                        selectedTeams === undefined ||
+                        selectedTeams.includes(id)
+                      }
+                      onChange={(e) =>
+                        setSelectedTeams((previous) => {
+                          const selected =
+                            previous ?? opponents.map((t) => str(t.TeamID));
+                          return e.target.checked
+                            ? [...selected, id]
+                            : selected.filter((value) => value !== id);
+                        })
+                      }
+                    />
+                    {str(t.TeamName)}
+                  </label>
+                );
+              })}
+            </details>
+            <details>
+              <summary>Which filters apply to chains?</summary>
+              {Object.entries(chainFilterScope).map(([label, fields]) => (
+                <p key={label}>
+                  <strong>{label}:</strong> {fields.join(", ")}.
+                </p>
+              ))}
+              <p>
+                Recipient, roster and gain checks apply separately on each step.
+                Price tests are required or advisory according to this planner’s
+                own control.
+              </p>
+            </details>
+            <p>
+              Tradable pool: {names(pool)}. Other original roster players stay
+              protected. Newly acquired players may also be offered in step two.
+            </p>
+          </TradeFilterGroup>
+          <TradeFilterGroup
+            title="Team needs"
+            summary="Independent settings for each trade"
+            open
+          >
+            <details className="trade-chain-leg" open>
+              <summary>First trade · acquire your next move</summary>
+              {stepControls(
+                "First trade",
+                first,
+                setFirst,
+                firstOverride,
+                setFirstOverride,
+              )}
+            </details>
+            <details className="trade-chain-leg">
+              <summary>Second trade · complete the chain</summary>
+              {stepControls(
+                "Second trade",
+                second,
+                setSecond,
+                secondOverride,
+                setSecondOverride,
+              )}
+            </details>
+          </TradeFilterGroup>
+          <TradeFilterGroup
+            title="Value & acceptance"
+            summary={
+              pricePolicy === "required"
+                ? "Price tests required"
+                : "Price tests advisory"
+            }
+          >
             <FilterHelp
               label="Chain price tests"
               help="Required rejects a candidate unless both existing price tests pass on each step. Warning only keeps the calculated tests visible without excluding a trade. Roster legality, protected players, recipient limits and scoring requirements always apply."
@@ -1395,233 +1723,118 @@ export function TradeChains({
                 </select>
               </label>
             </FilterHelp>
-          </div>
-          {/* Dependency stays required in every preset; all new controls remain local to this planner. */}
-          <details className="trade-search-group">
-            <summary>Chain dependency</summary>
+            {/* Dependency stays required in every preset; all new controls remain local to this planner. */}
+            <details className="trade-search-group">
+              <summary>Chain dependency</summary>
+              <div className="trade-search-controls">
+                <FilterHelp
+                  label="Dependency route"
+                  help="Trade 1 must materially fund trade 2 or provide retained coverage that makes the second trade better. Unrelated upgrades do not qualify. Either allows both routes; contribution and interaction are separate evidence."
+                >
+                  <label className="control">
+                    <span>Dependency route</span>
+                    <select
+                      value={dependencyRoute}
+                      onChange={(e) =>
+                        setDependencyRoute(
+                          e.target.value as ChainDependencySettings["route"],
+                        )
+                      }
+                    >
+                      <option value="either">Either connected route</option>
+                      <option value="retrade">Re-trade acquisition</option>
+                      <option value="retain">Keep-and-release</option>
+                    </select>
+                  </label>
+                </FilterHelp>
+                {number(
+                  "Minimum acquired contribution (%)",
+                  acquiredShare,
+                  setAcquiredShare,
+                  0.1,
+                  "Minimum acquired share of the second offer for the re-trade route. Zero-index packages use a separately labeled remaining-points fallback. A token card does not qualify. Provisional default 25%.",
+                  100,
+                )}
+                {number(
+                  "Minimum interaction gain (EPPG)",
+                  interactionGain,
+                  setInteractionGain,
+                  0.1,
+                  "Keep-and-release: trade 2's gain after trade 1 minus its gain when performed alone. Example: +5 after coverage versus −3 alone gives +8 interaction. Provisional default +2.",
+                )}
+              </div>
+            </details>
+            {Number(recipientLoss) > 10 && (
+              <p className="notice warning">
+                Custom recipient concession: {recipientLoss}%. This explicitly
+                allows larger value losses than the 10% preset cap and may
+                produce implausible offers.
+              </p>
+            )}
+          </TradeFilterGroup>
+          <TradeFilterGroup
+            title="Scoring impact"
+            summary={`Final gain ≥ ${gain} EPPG`}
+          >
             <div className="trade-search-controls">
               <FilterHelp
-                label="Dependency route"
-                help="Trade 1 must materially fund trade 2 or provide retained coverage that makes the second trade better. Unrelated upgrades do not qualify. Either allows both routes; contribution and interaction are separate evidence."
+                label="Chain mode"
+                help="Safe refers to your positive first-step scoring gain. Speculative allows your flat or losing first step within the temporary-loss limit. Recipient concession/gain checks apply on both steps; price checks follow Chain price tests. These are modeled preferences, not acceptance guarantees."
               >
                 <label className="control">
-                  <span>Dependency route</span>
+                  <span>Chain mode</span>
                   <select
-                    value={dependencyRoute}
+                    value={mode}
                     onChange={(e) =>
-                      setDependencyRoute(
-                        e.target.value as ChainDependencySettings["route"],
-                      )
+                      setMode(e.target.value as ChainQuery["mode"])
                     }
                   >
-                    <option value="either">Either connected route</option>
-                    <option value="retrade">Re-trade acquisition</option>
-                    <option value="retain">Keep-and-release</option>
+                    <option value="both">Safe and speculative</option>
+                    <option value="safe">Safe only</option>
+                    <option value="speculative">Speculative only</option>
                   </select>
                 </label>
               </FilterHelp>
+              {number("Maximum temporary loss (EPPG)", loss, setLoss, 0)}
+              {number("Minimum final gain (EPPG)", gain, setGain, 0.1)}
               {number(
-                "Minimum acquired contribution (%)",
-                acquiredShare,
-                setAcquiredShare,
-                0.1,
-                "Minimum acquired share of the second offer for the re-trade route. Zero-index packages use a separately labeled remaining-points fallback. A token card does not qualify. Provisional default 25%.",
+                "Maximum recipient value loss (%)",
+                recipientLoss,
+                setRecipientLoss,
+                0,
+                "Each recipient must receive at least (1 − this percentage) of the comparable surplus they surrender. Equal-size trades use raw index sums. Unequal trades scale the smaller package once by the existing consolidation premium before comparing concessions; both raw and adjusted numbers are shown. Default 10% is a provisional preference, not a market price or validated acceptance probability. Existing price tests remain unchanged.",
                 100,
               )}
               {number(
-                "Minimum interaction gain (EPPG)",
-                interactionGain,
-                setInteractionGain,
-                0.1,
-                "Keep-and-release: trade 2's gain after trade 1 minus its gain when performed alone. Example: +5 after coverage versus −3 alone gives +8 interaction. Provisional default +2.",
+                "Minimum recipient gain (EPPG)",
+                recipientGain,
+                setRecipientGain,
+                0,
+                "Each step must improve its recipient's lineup on the selected scoring basis by at least this many average points/week, after required drops and without waiver additions. Zero permits a flat result but never a scoring loss. This applies to safe and speculative chains independently of your final gain.",
               )}
-            </div>
-          </details>
-          {Number(recipientLoss) > 10 && (
-            <p className="notice warning">
-              Custom recipient concession: {recipientLoss}%. This explicitly
-              allows larger value losses than the 10% preset cap and may produce
-              implausible offers.
-            </p>
-          )}
-          <details className="trade-search-group">
-            <summary>Chain tradable pool ({pool.length}/12)</summary>
-            <FilterHelp
-              label="Select all chain tradable players"
-              help="Keep current chain selections and add players in the displayed order, up to the existing 12-player pool limit. This does not change the standard search pool."
-            >
-              <button
-                type="button"
-                className="subtle"
-                disabled={
-                  pool.length >= 12 ||
-                  poolPlayers.every((p) => pool.includes(p.id))
-                }
-                onClick={() =>
-                  setPool((old) =>
-                    [
-                      ...new Set([
-                        ...old.filter((id) =>
-                          poolPlayers.some((p) => p.id === id),
-                        ),
-                        ...poolPlayers.map((p) => p.id),
-                      ]),
-                    ].slice(0, 12),
-                  )
-                }
+              <FilterHelp
+                label="Chain search depth"
+                help="Standard and deeper searches retain deferred bridges and interleave acquired positions, players, teams, package sizes and modes. Follow-ups share remaining work as branches finish. Deeper expands the allowance; the result states whether exploration finished."
               >
-                Select all{poolPlayers.length > 12 ? " (up to 12)" : ""}
-              </button>
-            </FilterHelp>
-            {poolPlayers.map((p) => (
-              <label className="check" key={p.id}>
-                <input
-                  type="checkbox"
-                  aria-label={`Chain tradable player: ${p.name}`}
-                  checked={pool.includes(p.id)}
-                  disabled={!pool.includes(p.id) && pool.length >= 12}
-                  onChange={(e) =>
-                    setPool((old) =>
-                      e.target.checked
-                        ? [...old, p.id]
-                        : old.filter((id) => id !== p.id),
-                    )
-                  }
-                />
-                {p.name} · {p.pos} ·{" "}
-                <span className="model">{fmt(p.index)}</span>
-              </label>
-            ))}
-          </details>
-          <details className="trade-search-group">
-            <summary>
-              Chain teams to search ({selectedTeams?.length ?? "all"})
-            </summary>
-            <div className="button-row">
-              <button
-                className="subtle"
-                onClick={() => setSelectedTeams(undefined)}
-              >
-                Select all chain teams
-              </button>
-              <button className="subtle" onClick={() => setSelectedTeams([])}>
-                Clear chain team selection
-              </button>
-            </div>
-            {opponents.map((t) => {
-              const id = str(t.TeamID);
-              return (
-                <label className="check" key={id}>
-                  <input
-                    type="checkbox"
-                    aria-label={`Chain search team: ${str(t.TeamName)}`}
-                    checked={
-                      selectedTeams === undefined || selectedTeams.includes(id)
-                    }
+                <label className="control">
+                  <span>Chain search depth</span>
+                  <select
+                    value={depth}
                     onChange={(e) =>
-                      setSelectedTeams((previous) => {
-                        const selected =
-                          previous ?? opponents.map((t) => str(t.TeamID));
-                        return e.target.checked
-                          ? [...selected, id]
-                          : selected.filter((value) => value !== id);
-                      })
+                      setDepth(e.target.value as ChainQuery["depth"])
                     }
-                  />
-                  {str(t.TeamName)}
+                  >
+                    <option value="standard">
+                      Broad — up to 16,000 evaluations
+                    </option>
+                    <option value="deeper">
+                      Deeper — up to 60,000 evaluations
+                    </option>
+                  </select>
                 </label>
-              );
-            })}
-          </details>
-          <details>
-            <summary>Which filters apply to chains?</summary>
-            {Object.entries(chainFilterScope).map(([label, fields]) => (
-              <p key={label}>
-                <strong>{label}:</strong> {fields.join(", ")}.
-              </p>
-            ))}
-            <p>
-              Recipient, roster and gain checks apply separately on each step.
-              Price tests are required or advisory according to this planner’s
-              own control.
-            </p>
-          </details>
-          <p>
-            Tradable pool: {names(pool)}. Other original roster players stay
-            protected. Newly acquired players may also be offered in step two.
-          </p>
-          <div className="trade-search-controls">
-            <FilterHelp
-              label="Chain mode"
-              help="Safe refers to your positive first-step scoring gain. Speculative allows your flat or losing first step within the temporary-loss limit. Recipient concession/gain checks apply on both steps; price checks follow Chain price tests. These are modeled preferences, not acceptance guarantees."
-            >
-              <label className="control">
-                <span>Chain mode</span>
-                <select
-                  value={mode}
-                  onChange={(e) =>
-                    setMode(e.target.value as ChainQuery["mode"])
-                  }
-                >
-                  <option value="both">Safe and speculative</option>
-                  <option value="safe">Safe only</option>
-                  <option value="speculative">Speculative only</option>
-                </select>
-              </label>
-            </FilterHelp>
-            {number("Maximum temporary loss (EPPG)", loss, setLoss, 0)}
-            {number("Minimum final gain (EPPG)", gain, setGain, 0.1)}
-            {number(
-              "Maximum recipient value loss (%)",
-              recipientLoss,
-              setRecipientLoss,
-              0,
-              "Each recipient must receive at least (1 − this percentage) of the comparable surplus they surrender. Equal-size trades use raw index sums. Unequal trades scale the smaller package once by the existing consolidation premium before comparing concessions; both raw and adjusted numbers are shown. Default 10% is a provisional preference, not a market price or validated acceptance probability. Existing price tests remain unchanged.",
-              100,
-            )}
-            {number(
-              "Minimum recipient gain (EPPG)",
-              recipientGain,
-              setRecipientGain,
-              0,
-              "Each step must improve its recipient's lineup on the selected scoring basis by at least this many average points/week, after required drops and without waiver additions. Zero permits a flat result but never a scoring loss. This applies to safe and speculative chains independently of your final gain.",
-            )}
-            <FilterHelp
-              label="Chain search depth"
-              help="Standard and deeper searches retain deferred bridges and interleave acquired positions, players, teams, package sizes and modes. Follow-ups share remaining work as branches finish. Deeper expands the allowance; the result states whether exploration finished."
-            >
-              <label className="control">
-                <span>Chain search depth</span>
-                <select
-                  value={depth}
-                  onChange={(e) =>
-                    setDepth(e.target.value as ChainQuery["depth"])
-                  }
-                >
-                  <option value="standard">
-                    Broad — up to 16,000 evaluations
-                  </option>
-                  <option value="deeper">
-                    Deeper — up to 60,000 evaluations
-                  </option>
-                </select>
-              </label>
-            </FilterHelp>
-          </div>
-          {stepControls(
-            "First trade",
-            first,
-            setFirst,
-            firstOverride,
-            setFirstOverride,
-          )}
-          {stepControls(
-            "Second trade",
-            second,
-            setSecond,
-            secondOverride,
-            setSecondOverride,
-          )}
+              </FilterHelp>
+            </div>
+          </TradeFilterGroup>
           {errors.map((error) => (
             <p className="notice warning" key={error}>
               {error}

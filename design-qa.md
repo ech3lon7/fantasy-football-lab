@@ -1,58 +1,59 @@
-**Comparison target**
-
-- Selected visual: Option 1, `C:/Users/israe/.codex/generated_images/01a18526-81b2-72e0-bdf6-2905f3f411d9/exec-bd028e76-8b9e-4595-8886-40864c292846.png`.
-- Normalized reference: `C:/Users/israe/Documents/Codex/2026-10-08/se/outputs/trade-workspace/reference-normalized.png`.
-- Implementation: `C:/Users/israe/Documents/Codex/2026-10-08/se/outputs/trade-workspace/workspace-desktop.png`.
-- Additional states: `workspace-filters.png` and `workspace-mobile.png` in that same output directory.
-- Focused comparison: `C:/Users/israe/Documents/Codex/2026-10-08/se/outputs/trade-workspace/lineup-detail-comparison.png` (reference on left, implementation on right).
-- Local production preview: http://127.0.0.1:4184/fantasy-football-lab/#/trades . The in-app development preview remains open at http://127.0.0.1:4183/#/trades .
-
-**Viewport and state**
-
-Reference pixels are 1487 x 1058. The reference was normalized to the 1488 x 1056 CSS viewport used for the implementation capture, at deviceScaleFactor 1. Mobile was checked at 390 x 844; its full-page capture includes vertically stacked content. The reference and implementation were opened together in the same comparison input, followed by the focused field comparison.
-
-Both show the trade workspace with a selected offer, closed filters, team scoring above, offer cards on the left, a lineup field below and results on the right. The reference is illustrative two-player data; implementation uses the real imported Week 8 workbook and an inspected single-player result. Player names, offer size, scores and availability come from the imported data rather than the mock. This screenshot is a layout example, not a recommendation to propose its selected trade. The actual league's nine starting slots take precedence over the illustrative mock's ten slots.
-
-**Findings and comparison history**
-
-- Resolved P1: the initial header and always-visible roster search pushed the field below the useful desktop area. Consolidated the title/account selector into the trade-route top bar, collapsed optional roster-search inputs and put basis/return controls on one line. The final capture shows all nine field cards and the current-trade Save action together.
-- Resolved P1: an open result drawer could cover Load/Save. Added a drawer footer for the existing actions, kept the drawer over the results region when filters are open, and dismiss it when filters change. Production browser checks verify saving/loading old and current results.
-- Resolved P2: a sticky save strip could cover the last field row, especially on mobile. Returned the strip to normal flow. Final desktop/mobile captures show uncovered field cards.
-- Resolved P2: the first capture could catch an intermediate empty preview. Mark captured-context transitions as loading and wait for a calculated numeric result before final capture.
-- No outstanding actionable P0/P1/P2 findings in the verified desktop, drawer and mobile states.
-
-Earlier evidence is `qa-initial.png`; the final desktop/mobile captures replace the intermediate screenshots after these fixes. The full-view and focused comparisons were repeated after the last spacing adjustment.
-
-**Required fidelity surfaces**
-
-- Fonts/typography: retained the application's DM Sans and Manrope, matching the rounded sans-serif direction. Heading hierarchy, compact data labels, wrapping and numeric emphasis were inspected at normal density. Existing native selectors remain readable and keyboard-operable; the result table is denser than the illustrative cards to preserve the existing value/tests columns.
-- Spacing/layout rhythm: narrow dark navigation, paired score strip and roughly 47/53 working panes match the selected composition. Optional controls are in independent animated drawers; details and saved trades are collapsed below. Larger packages scroll inside the left pane rather than forcing repeated whole-page navigation. Mobile stacks the panes and keeps table overflow local.
-- Colors/tokens: retained existing green facts, blue projections, pink model values and purple editable controls. Sage field, white cards, neutral borders, purple changed-slot outlines and pale selected-result shading preserve the visual direction. Failure/conditional labels remain explicit rather than relying on color.
-- Image quality: generated field texture is a 15.9 KB WebP and remains sharp at its displayed size. Player portraits reuse the existing ESPN source. D/ST and missing portraits use existing library icons. The existing brand/logo and icon system were retained.
-- Copy/content: actual scoring uses existing evaluator output and explicitly distinguishes remaining-season average scoring from the chosen week's field and ESPN weekly projections. Both team and before/after controls remain explicit. No illustrative forecast, roster or acceptance value was copied into active calculations.
-
-**Primary interactions and verification**
-
-- Workbook import, manual player selection, standard search, independent chain preferences, per-leg inspection, player popovers, filter opening/Escape, sorting/group expansion, save/load, stale results and hypothetical force/undo flows exercised through the production browser suite.
-- New preview regression compares top-strip before/after and each selected-week player ID to the authoritative evaluator, then verifies inspection did not alter the stored draft or search settings.
-- Chain step previews verified against each leg's captured before/after, including the prerequisite roster for step two. Inspecting a chain does not overwrite single-trade settings or apply its prerequisite to the workspace.
-- Type check/lint/publication scan and 294 unit tests passed. Production browser suite: 78 passed, including the supplied real workbook import. After final presentation adjustments, preview parity, chain inspection and animated hierarchy were rerun: 3 passed.
-- Production build passed. Existing large-chunk and SheetJS mixed-import warnings remain; no unrelated bundling changes were introduced.
-- Console errors checked: no JavaScript page errors in the final imported-workbook capture; in-app browser error logs were empty. No document-wide mobile overflow.
-- The in-app browser was also used for importing the workbook, manual selection and searching. Its upload picker initially stalled, so installed Chrome was used for repeatable production screenshots and acceptance checks; in-app interaction subsequently completed successfully.
-- No valuation/domain formulas, database schemas, app version, commits or deployment were changed by this redesign.
-
-**Implementation checklist**
-
-- [x] Match selected overall composition while retaining existing functionality.
-- [x] Keep manual, standard and chain controls separate.
-- [x] Use captured evaluator scoring and weekly roles.
-- [x] Preserve explicit saving/loading and current draft independence.
-- [x] Check desktop, side drawer and mobile presentation.
-- [x] Resolve blocking visual findings and repeat comparison.
-
-**Follow-up polish**
-
-- P3: future simplification could replace selected-player native dropdowns with a smaller explicit Change action, if requested. They remain visible now to preserve existing editing behavior.
+# Trade search visual QA — 2026-11-02
 
 final result: passed
+
+## Scope and visual truth
+
+Approved visual: `C:/Users/israe/.codex/generated_images/01a18526-81b2-72e0-bdf6-2905f3f411d9/exec-67201ebc-13c0-434d-9f5b-b5d485cf3fbe.png`.
+
+Local implementation: `http://127.0.0.1:4187/#/trades`.
+
+Evidence folder: `C:/Users/israe/Documents/Codex/2026-10-08/se/outputs/trade-search-ui-2026-11-02/`.
+
+- Implementation screenshots: `trade-desktop.png`, `chain-desktop.png`, `trade-mobile.png`.
+- Full-view comparison: `comparison-full.png` (approved concept and implementation together).
+- Focused comparison: `comparison-needs.png`.
+- Mobile detail: `mobile-card-review.png`.
+
+The reference and desktop implementation are both 1536 × 1024 at 1 CSS pixel per image pixel. Mobile uses 390 × 844 CSS pixels with a full-page capture. Comparisons use natural dimensions with no stretched typography. The concept uses illustrative players/grades; the implementation reads the private saved workbook. The application navigation, valid-trade score strip, imported roster rules and existing selection controls remain functional rather than being replaced with fictional mock data.
+
+## Findings and iteration history
+
+1. P2 — Repeated selection controls and unavailable score totals pushed the lineup field too far down. Reduced selected-card chrome and pool-card spacing; incomplete offers now show one compact prompt. Complete trades retain the same authoritative before/after scores.
+2. P2 — The previous side-drawer width calculation would unnecessarily narrow inspected trade details. Restored their normal readable width for the new stacked layout.
+3. P1 — The previous phone-grid coordinates conflicted with desktop card compaction, putting names and EPPG inside the portrait column. Reset the phone grid coordinates and added a browser assertion that the name and forecast do not overlap. The refreshed mobile capture shows readable cards and loaded portraits.
+4. P2 — Disabling deficit targeting could lose the remembered child protection state on reload. Persist the dormant toggle/minimum separately from the effective disabled query; the browser workflow checks an actual parent-off reload.
+
+Post-fix screenshots and the focused production-build workflow were reviewed. No actionable P0/P1/P2 issue remains in the changed controls.
+
+## Fidelity surfaces
+
+- Typography: retained the existing DM Sans/Manrope families and application type hierarchy; compact controls and long names wrap without horizontal overflow. Source illustration values are not copied into forecasts.
+- Layout: four expandable task groups; position grades and a miniature roster preview; deficit targeting and its dependent protection are adjacent. A single grade threshold controls both. Existing player photos and lineup field remain on the left. Each chain leg has independently expandable package/value controls.
+- Colors: existing forest, sage, ivory, purple-input and pink-model tokens; restrained weak-grade tint; explicit grade letters and checkbox states accompany color.
+- Assets: existing ESPN headshot source, existing football-field image and existing icon library. No new asset downloads, substitute player art or dependency changes.
+- Copy: one grade threshold, a separate minimum positional gain, concise visible labels and complete marker-free hover help. Fixed offers use “Not offered”; active flexible pools use “Protected”, matching their different drop-protection semantics.
+- Interaction: drag from player-card grips or use the native Move selector; position chips support selection/drag with native incoming checkboxes. Active-filter chips remain removable. Header search shortcuts invoke the same worker actions. Escape, keyboard/touch alternatives and reduced motion retain support.
+
+## Verification
+
+- Full local release gate passed: TypeScript, lint, 318 unit tests, publication scan, GitHub Pages build, 84 browser workflows; one existing private-workbook browser case skipped without its opt-in path.
+- Final mobile-only CSS correction: checks rerun, Pages artifact rebuilt, and the compact-search/persistence/native-drag/mobile-overlap workflow passed against that production artifact.
+- Native grip dragging passed three consecutive focused runs.
+- Real workbook imported through the production adapter with cached calculation parity checks. Desktop, chain and mobile rendering produced no page errors or horizontal overflow.
+- No domain valuation or worker calculation changes, dependency changes, version changes, commits, pushes or deployments.
+
+## Intentional adaptations and follow-up polish
+
+- Actual starter counts and editable native player selectors are retained; larger rosters and expanded advanced controls can require internal scrolling. Persistent search actions and removable chips stay reachable.
+- The illustration’s placeholder comparison and “Save search” action are represented by real roster previews and the existing automatic search-setting persistence, not fabricated forecasts or a new persistence system.
+- P3: a single-position preview could be made more horizontal in a future visual iteration. This does not obstruct a control or hide player data.
+
+## Completion checklist
+
+- [x] Preserve the left player-photo/EPPG experience.
+- [x] Group search options into Players & packages, Team needs, Value & acceptance, Scoring impact.
+- [x] Link protection to enabled deficit targeting using one grade threshold.
+- [x] Keep each finder and chain leg independent.
+- [x] Preserve saved choices, search math, save/load and existing value/legality distinctions.
+- [x] Verify desktop/mobile interactions, photos, typography, overflow, motion and production-path loading.

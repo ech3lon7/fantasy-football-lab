@@ -11,7 +11,7 @@ export async function openTradeDetails(page: Page) {
   }
 }
 
-// Filters are closed by default in the redesign; acceptance tests explicitly open the appropriate tool's drawer.
+// Existing calculation workflows expand the active finder's new categories explicitly; each tool retains its own state.
 export async function openTradeFilters(page: Page, scope = "Standard") {
   const button = page.getByRole("button", {
     name: `${scope} filters`,
@@ -19,4 +19,10 @@ export async function openTradeFilters(page: Page, scope = "Standard") {
   });
   if ((await button.getAttribute("aria-expanded")) !== "true")
     await button.click();
+  // Legacy workflow assertions exercise all controls rather than the default compact presentation.
+  const groups = page.locator(`#${scope.toLowerCase()}-trade-filters .trade-filter-category, #${scope.toLowerCase()}-trade-filters .trade-chain-leg`);
+  for (let i = 0; i < await groups.count(); i++) {
+    if (await groups.nth(i).getAttribute("open") === null)
+      await groups.nth(i).locator(":scope > summary").click();
+  }
 }

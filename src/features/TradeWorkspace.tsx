@@ -151,6 +151,13 @@ export function TradeScoreStrip({
   pending: boolean;
   label?: string;
 }) {
+  // An incomplete offer has no trade forecast; one compact hint preserves room for player cards and the field.
+  if (!draft.give.length || !draft.get.length)
+    return (
+      <section className="trade-score-empty" aria-label="Trade scoring summary">
+        Choose players on both sides to compare weekly lineup impact.
+      </section>
+    );
   return (
     <section
       className="trade-score-strip"

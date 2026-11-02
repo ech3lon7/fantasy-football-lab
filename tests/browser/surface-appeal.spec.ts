@@ -82,7 +82,7 @@ async function seed(page: Page, missing = false) {
       exact: true,
     }),
   });
-  await panel.getByText("Advanced search controls", { exact: true }).click();
+  // Filter categories are already expanded by openTradeFilters.
   await panel
     .getByRole("checkbox", { name: "Create package", exact: true })
     .uncheck();

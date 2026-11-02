@@ -74,7 +74,7 @@ async function seed(page: Page) {
     await group
       .getByRole("combobox", { name: `${name} receive maximum`, exact: true })
       .selectOption("1");
-    await group.locator("summary").click();
+    await group.locator("summary").filter({ hasText: new RegExp(`^${name} teams`) }).click();
     await group
       .getByRole("checkbox", {
         name: `Override ${name.toLowerCase()} teams`,
@@ -98,9 +98,13 @@ test("remembers independent weak-position safeguards on both chain legs", async 
   await seed(page);
   const first = page.getByRole("group", { name: "First trade", exact: true });
   const second = page.getByRole("group", { name: "Second trade", exact: true });
+  // Protection becomes available only with that same leg's deficit targeting, and shares its grade.
+  await expect(first.getByLabel("First trade: Protect their weak positions", { exact: true })).toBeDisabled();
+  await first.getByLabel("First trade: Offer into their deficit", { exact: true }).check();
+  await second.getByLabel("Second trade: Offer into their deficit", { exact: true }).check();
   await expect(first.getByLabel("First trade: Protect their weak positions", { exact: true })).toBeChecked();
   await first.getByLabel("First trade: Minimum positional gain", { exact: true }).fill("3");
-  await first.getByLabel("First trade: Deficit grade cutoff", { exact: true }).selectOption("C");
+  await first.getByRole("combobox", { name: "First trade deficit grade", exact: true }).selectOption("C");
   await second.getByLabel("Second trade: Minimum positional gain", { exact: true }).fill("4");
   await first.getByLabel("First trade: Protect their weak positions", { exact: true }).uncheck();
   await expect.poll(async () => JSON.parse((await stored(page)).state.filters.tradeSearchSettings).chain.query.second.deficitProtection.minimum).toBe(4);
@@ -112,7 +116,7 @@ test("remembers independent weak-position safeguards on both chain legs", async 
   await expect(second.getByLabel("Second trade: Minimum positional gain", { exact: true })).toHaveValue("4");
   await first.getByLabel("First trade: Protect their weak positions", { exact: true }).check();
   await expect(first.getByLabel("First trade: Minimum positional gain", { exact: true })).toHaveValue("3");
-  await expect(first.getByLabel("First trade: Deficit grade cutoff", { exact: true })).toHaveValue("C");
+  await expect(first.getByRole("combobox", { name: "First trade deficit grade", exact: true })).toHaveValue("C");
   await page.getByRole("button", { name: "Clear chain filters", exact: true }).click();
   await expect(first.getByLabel("First trade: Protect their weak positions", { exact: true })).not.toBeChecked();
   await expect(second.getByLabel("Second trade: Protect their weak positions", { exact: true })).not.toBeChecked();
@@ -818,7 +822,7 @@ test("selects all chain pool players and preserves the standard finder", async (
   await seed(page);
   const original = await stored(page);
   const pool = page
-    .locator("details:not(.trade-saved-drawer):not(.trade-full-analysis)")
+    .locator("details:not(.trade-saved-drawer):not(.trade-full-analysis):not(.trade-filter-category)")
     .filter({
       has: page.locator("summary").filter({ hasText: /^Chain tradable pool/ }),
     });

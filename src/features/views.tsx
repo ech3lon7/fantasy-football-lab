@@ -6,7 +6,6 @@ import {
   TradeFiltersDrawer,
   type TradeWorkspaceMode,
   type TradeWorkspacePreview,
-  type TradeChainPool,
 } from "./TradeWorkspace";
 import { DirectManagerAssessment } from "./Negotiations";
 import { FilterHelp } from "../ui/FilterHelp";
@@ -613,9 +612,12 @@ export function PlayerList({
                       const labeled = m.players.filter(
                         (p) => comparisonLabel(p).toLowerCase() === normalized,
                       );
-                      const match = labeled.length === 1
-                        ? labeled[0]
-                        : exact.length === 1 ? exact[0] : undefined;
+                      const match =
+                        labeled.length === 1
+                          ? labeled[0]
+                          : exact.length === 1
+                            ? exact[0]
+                            : undefined;
                       const nextId = match?.id ?? "";
                       setComparisonNames((names) => ({
                         ...names,
@@ -1690,7 +1692,8 @@ export function TradeView({
 }) {
   // Inspection is a read-only view of a captured offer; only explicit editing/loading commits a new search draft.
   const [preview, setPreview] = useState<TradeWorkspacePreview>();
-  const [chainPool, setChainPool] = useState<TradeChainPool>();
+  // The active finder portals its own visual pool beside the existing player cards without sharing query state.
+  const [poolHost, setPoolHost] = useState<HTMLDivElement | null>(null);
   const [workspaceMode, setWorkspaceMode] =
     useState<TradeWorkspaceMode>("standard");
   const [manualFilters, setManualFilters] = useState(false),
@@ -2095,26 +2098,7 @@ export function TradeView({
           </div>
           {/* Chain configuration stays independent; inspecting a leg never turns its prerequisite into a real draft. */}
           {workspaceMode === "chain" && !preview ? (
-            <section className="panel trade-chain-pool">
-              <h3>Chain trade pool</h3>
-              <p>Choose your pool in Chain filters, then inspect a result.</p>
-              <div className="trade-chain-pool-cards">
-                {(chainPool?.pool ?? []).map((id) => {
-                  const player = baseModel.byId.get(id);
-                  return (
-                    player && (
-                      <article key={id}>
-                        <TradePortrait player={player} />
-                        <PlayerName p={player} />
-                        <strong className="model">
-                          {fmt(player.expected)} Expected PPG
-                        </strong>
-                      </article>
-                    )
-                  );
-                })}
-              </div>
-            </section>
+            <div ref={setPoolHost} />
           ) : (
             <>
               <fieldset
@@ -2129,6 +2113,8 @@ export function TradeView({
                   {side(false)}
                 </div>
               </fieldset>
+              {/* Drag/click pool selection leaves the offer photos and lineup field intact. */}
+              <div ref={setPoolHost} />
               {/* Forcing records completion regardless of price/lineup verdicts; ownership validation still protects the simulation. */}
               {forceTrade && !preview?.prerequisite && (
                 <div className="toolbar">
@@ -2205,6 +2191,7 @@ export function TradeView({
         <div className="trade-workspace-right">
           {/* Search preserves the outgoing draft and loads only an explicitly selected counterparty/package. */}
           <TradeSearch
+            poolHost={preview ? null : poolHost}
             m={baseModel}
             draft={baseDraft}
             lineupsRaw={basePlans}
@@ -2216,7 +2203,6 @@ export function TradeView({
             }}
             onClearPreview={() => setPreview(undefined)}
             onPreview={setPreview}
-            onChainPool={setChainPool}
             lineupBasis={readLineupBasis(state.filters[lineupBasisKey])}
             onLineupBasisChange={changeBasis}
             onQueryChange={setSearchQuery}
@@ -3054,13 +3040,13 @@ export function ModelView({
             <DataTable
               rows={m.dataset.tables[name]}
               id={(r) => JSON.stringify(r)}
-              columns={Object.keys(m.dataset.tables[name][0] ?? {}).filter((key) => key !== "PlayerID").map(
-                (key) => ({
+              columns={Object.keys(m.dataset.tables[name][0] ?? {})
+                .filter((key) => key !== "PlayerID")
+                .map((key) => ({
                   key,
                   label: key,
                   value: (r: Record<string, unknown>) => r[key],
-                }),
-              )}
+                }))}
             />
           </details>
         ))}

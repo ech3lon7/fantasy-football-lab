@@ -58,6 +58,11 @@ import {
   type WeeklyRange,
   type TradeSearchQuery,
 } from "../domain/trade-search";
+import {
+  TradeFilterGroup,
+  TeamNeedsPreview,
+  TradePositionChips,
+} from "./TradeSearchControls";
 import { SearchSection } from "../ui/SearchSection";
 import { TeamsOptions } from "../ui/layout";
 import { FilterHelp } from "../ui/FilterHelp";
@@ -116,12 +121,14 @@ export function TradeSearch({
   restore,
   settingsRaw,
   saveSettings,
+  poolHost,
   workspaceMode,
   onModeChange,
   onPreview,
   onChainPool,
   onClearPreview,
 }: {
+  poolHost?: HTMLElement | null;
   workspaceMode?: TradeWorkspaceMode;
   onModeChange?: (mode: TradeWorkspaceMode) => void;
   onPreview?: (value: TradeWorkspacePreview) => void;
@@ -169,7 +176,7 @@ export function TradeSearch({
     else setLocalFinder(value);
   };
   // Drawers and preview selection are local presentation state, independent of persisted query criteria.
-  const [filtersOpen, setFiltersOpen] = useState(false),
+  const [filtersOpen, setFiltersOpen] = useState(true),
     [selectedPreview, setSelectedPreview] = useState("");
   const resultPlans = useRef<string | undefined>(undefined);
   const [chainSettings, setChainSettings] = useState<
@@ -208,7 +215,9 @@ export function TradeSearch({
     { ...defaultDeficitProtection },
   );
   // Empty selections disable each category; active categories count only the same qualifying incoming players.
-  const [signals, setSignals] = useState<(typeof primaryGemSignals)[number][]>([]),
+  const [signals, setSignals] = useState<(typeof primaryGemSignals)[number][]>(
+      [],
+    ),
     [incomingPositions, setIncomingPositions] = useState<Position[]>([]),
     [minimumSignals, setMinimumSignals] = useState("1"),
     [minimumPositions, setMinimumPositions] = useState("1");
@@ -273,7 +282,18 @@ export function TradeSearch({
         }
       : undefined;
   const query: TradeSearchQuery = {
-    deficitProtection,
+    // Protection uses deficit targeting's single grade threshold; dormant invalid edits cannot block an unrelated search.
+    deficitProtection: {
+      ...deficitProtection,
+      ceiling: deficitCeiling,
+      enabled: deficitOnly && deficitProtection.enabled,
+      minimum:
+        (!deficitOnly || !deficitProtection.enabled) &&
+        (!Number.isFinite(deficitProtection.minimum) ||
+          deficitProtection.minimum <= 0)
+          ? defaultDeficitProtection.minimum
+          : deficitProtection.minimum,
+    },
     lineupBasis,
     teamA: draft.teamA,
     give: draft.give,
@@ -392,6 +412,8 @@ export function TradeSearch({
     deficitOnly,
     deficitPosition,
     deficitCeiling,
+    // Remember dormant protection separately from the effective query, which must disable it with its parent.
+    deficitProtection,
   };
   const settingsText = JSON.stringify({
     version: 1,
@@ -554,6 +576,15 @@ export function TradeSearch({
         setDeficitPosition(c.deficitPosition);
       if (Object.hasOwn(c, "deficitCeiling"))
         setDeficitCeiling(c.deficitCeiling);
+      // Parent-off searches preserve the user's child toggle/minimum for a later re-enable or reload.
+      if (
+        c.deficitProtection &&
+        typeof c.deficitProtection.enabled === "boolean"
+      )
+        setDeficitProtection({
+          ...defaultDeficitProtection,
+          ...c.deficitProtection,
+        });
       onLineupBasisChange?.(readLineupBasis(previous.query.lineupBasis));
       if (
         previous.query.teamA &&
@@ -1053,10 +1084,10 @@ export function TradeSearch({
   // Chips describe current controls; removing one invalidates old results through the existing context mechanism.
   const chips: { label: string; remove: () => void }[] = [
     // Recipient protection is never a hidden active filter; the chip can disable it without changing another choice.
-    ...(deficitProtection.enabled
+    ...(query.deficitProtection?.enabled
       ? [
           {
-            label: `Protect their ${deficitProtection.ceiling} or lower positions: +${deficitProtection.minimum} points/week`,
+            label: `Protect their ${deficitCeiling} or lower positions: +${deficitProtection.minimum} points/week`,
             remove: () =>
               setDeficitProtection({ ...deficitProtection, enabled: false }),
           },
@@ -1188,213 +1219,167 @@ export function TradeSearch({
       note={`Independent standard-search controls · Scoring basis: ${lineupBasisLabel(lineupBasis)}`}
       compact
       action={
-        <TradeFiltersButton
-          scope="Standard"
-          open={filtersOpen}
-          toggle={() => setFiltersOpen((value) => !value)}
-        />
+        <div className="trade-finder-actions">
+          {/* Search remains reachable while controls or results scroll; it invokes the same worker action. */}
+          <button
+            type="button"
+            className="button primary"
+            aria-label="Run standard trade search"
+            disabled={bounds.errors.length > 0}
+            onClick={search}
+          >
+            Search trades
+          </button>
+          <TradeFiltersButton
+            scope="Standard"
+            open={filtersOpen}
+            toggle={() => setFiltersOpen((value) => !value)}
+          />
+        </div>
       }
     >
       <div
         className={`trade-finder-layout${filtersOpen ? " filters-open" : ""}`}
       >
+        {/* Removable criteria stay visible even when filter categories or the whole filter area are collapsed. */}
+        <div
+          className="active-filter-chips"
+          aria-label="Active trade-search filters"
+        >
+          {chips.map((chip) => (
+            <button
+              type="button"
+              key={chip.label}
+              aria-label={`Remove ${chip.label}`}
+              onClick={chip.remove}
+            >
+              {chip.label} ×
+            </button>
+          ))}
+          <button
+            type="button"
+            className="subtle"
+            aria-label="Clear all active standard filters"
+            onClick={clearFilters}
+          >
+            Clear all
+          </button>
+        </div>
         <TradeFiltersDrawer
           scope="Standard"
           open={filtersOpen}
           close={() => setFiltersOpen(false)}
         >
-          {/* Keep every standard search selection inside its own disclosure; none of these setters affects chain controls. */}
-          <div className="trade-search-controls">
-            <FilterHelp
-              label="Standard search team"
-              help="Choose the standard finder’s team and outgoing players. This also updates the manual analyzer; it does not change chain settings."
-            >
-              <label className="control">
-                <span>Standard search team</span>
-                <select
-                  value={draft.teamA}
-                  onChange={(e) =>
-                    change({
-                      ...draft,
-                      teamA: e.target.value,
-                      give: [],
-                      get: [],
-                    })
-                  }
-                >
-                  <TeamsOptions d={m.dataset} />
-                </select>
-              </label>
-            </FilterHelp>
-          </div>
-          <details className="trade-search-group">
-            <summary>
-              Standard fixed outgoing players ({draft.give.length}/5)
-            </summary>
-            {m.players
-              .filter((p) => p.owner === draft.teamA)
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((p) => (
-                <label className="check" key={p.id}>
-                  <input
-                    type="checkbox"
-                    aria-label={`Standard outgoing player: ${p.name}`}
-                    checked={draft.give.includes(p.id)}
-                    disabled={
-                      !draft.give.includes(p.id) && draft.give.length >= 5
-                    }
+          {/* Compact categories replace the narrow push drawer; controls remain mounted when folded. */}
+          <TradeFilterGroup
+            title="Players & packages"
+            summary={`Offer ${discovery.flexible ? discovery.minimum + "–" + discovery.maximum : draft.give.length} · Receive ${receive.minimum}–${receive.maximum}`}
+          >
+            {/* Keep every standard search selection inside its own disclosure; none of these setters affects chain controls. */}
+            <div className="trade-search-controls">
+              <FilterHelp
+                label="Standard search team"
+                help="Choose the standard finder’s team and outgoing players. This also updates the manual analyzer; it does not change chain settings."
+              >
+                <label className="control">
+                  <span>Standard search team</span>
+                  <select
+                    value={draft.teamA}
                     onChange={(e) =>
                       change({
                         ...draft,
-                        give: e.target.checked
-                          ? [...draft.give, p.id]
-                          : draft.give.filter((id) => id !== p.id),
+                        teamA: e.target.value,
+                        give: [],
+                        get: [],
                       })
                     }
-                  />
-                  {p.name} · {p.pos}
+                  >
+                    <TeamsOptions d={m.dataset} />
+                  </select>
                 </label>
-              ))}
-          </details>
-          {/* Goal presets are explicit, reversible shortcuts; advanced criteria remain available without changing valuations. */}
-          <div className="trade-search-controls">
-            <FilterHelp
-              label="Search goal"
-              help="Choosing a preset resets screening filters and searches 1–3 incoming players with automatic index matching. Keeps your offered/protected players, required target and selected teams. Improve scoring requires your gain ≥ +1 and theirs ≥ 0 points/week. Find a position also requires that position's scoring contribution to your optimized lineup to increase, including FLEX. Review value, depth and legality separately."
-            >
-              <label className="control">
-                <span>Search goal</span>
-                <select
-                  aria-label="Search goal"
-                  value={goal}
-                  onChange={(e) => {
-                    const next = e.target.value as typeof goal;
-                    restoreQuery(guidedQuery(query, next, goalPosition));
-                    setAdvanced(next === "custom");
-                  }}
-                >
-                  <option value="explore">Trade away these players</option>
-                  <option value="improve">Improve my weekly scoring</option>
-                  <option value="position">Find a position upgrade</option>
-                  <option value="custom">Custom search</option>
-                </select>
-              </label>
-            </FilterHelp>
-            {goal === "position" && (
-              <label className="control">
-                <span>Position to receive</span>
-                <select
-                  aria-label="Position to receive"
-                  value={goalPosition}
-                  onChange={(e) =>
-                    restoreQuery(
-                      guidedQuery(
-                        query,
-                        "position",
-                        e.target.value as Position,
-                      ),
-                    )
-                  }
-                >
-                  {positions.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-          </div>
-          {/* One optional Surface Trading evaluator replaces the retired source-gain controls. */}
-          <ManagerControls value={manager} change={setManager} />
-          {/* The recipient's weak-position safeguard is independent of ordinary deficit targeting and every chain control. */}
-          <DeficitProtectionControls
-            scope="Standard search"
-            value={deficitProtection}
-            change={setDeficitProtection}
-          />
-          {/* Opponent checkboxes are a search-only scope; all other filters and manual trade selections remain independent. */}
-          <details className="trade-search-group">
-            <summary>
-              <FilterHelp
-                label="Teams to search"
-                help="Standard finder scope only: applies to singles, packages, near misses and recovery suggestions. Chain teams are configured independently inside the chain planner. A required single-trade target must belong to a selected team."
-              >
-                <span>
-                  Teams to search:{" "}
-                  {selectedTeams === undefined
-                    ? "All other teams"
-                    : `${selectedTeams.length} of ${opponents.length} selected`}
-                </span>
               </FilterHelp>
-            </summary>
-            <div className="toolbar">
-              <button
-                type="button"
-                className="subtle"
-                onClick={() => setSelectedTeams(undefined)}
-              >
-                Select all teams
-              </button>
-              <button
-                type="button"
-                className="subtle"
-                onClick={() => setSelectedTeams([])}
-              >
-                Clear team selection
-              </button>
             </div>
-            <div className="trade-search-controls">
-              {opponents.map((team) => {
-                const id = str(team.TeamID);
-                return (
-                  <label className="check" key={id}>
+            <details className="trade-search-group">
+              <summary>
+                Standard fixed outgoing players ({draft.give.length}/5)
+              </summary>
+              {m.players
+                .filter((p) => p.owner === draft.teamA)
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((p) => (
+                  <label className="check" key={p.id}>
                     <input
                       type="checkbox"
-                      aria-label={`Search team: ${str(team.TeamName)}`}
-                      checked={
-                        selectedTeams === undefined ||
-                        selectedTeams.includes(id)
+                      aria-label={`Standard outgoing player: ${p.name}`}
+                      checked={draft.give.includes(p.id)}
+                      disabled={
+                        !draft.give.includes(p.id) && draft.give.length >= 5
                       }
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setSelectedTeams((previous) => {
-                          const selected =
-                            previous ??
-                            opponents.map((opponent) => str(opponent.TeamID));
-                          return checked
-                            ? [...selected, id]
-                            : selected.filter((teamID) => teamID !== id);
-                        });
-                      }}
-                    />{" "}
-                    {str(team.TeamName)}
+                      onChange={(e) =>
+                        change({
+                          ...draft,
+                          give: e.target.checked
+                            ? [...draft.give, p.id]
+                            : draft.give.filter((id) => id !== p.id),
+                        })
+                      }
+                    />
+                    {p.name} · {p.pos}
                   </label>
-                );
-              })}
+                ))}
+            </details>
+            {/* Goal presets are explicit, reversible shortcuts; advanced criteria remain available without changing valuations. */}
+            <div className="trade-search-controls">
+              <FilterHelp
+                label="Search goal"
+                help="Choosing a preset resets screening filters and searches 1–3 incoming players with automatic index matching. Keeps your offered/protected players, required target and selected teams. Improve scoring requires your gain ≥ +1 and theirs ≥ 0 points/week. Find a position also requires that position's scoring contribution to your optimized lineup to increase, including FLEX. Review value, depth and legality separately."
+              >
+                <label className="control">
+                  <span>Search goal</span>
+                  <select
+                    aria-label="Search goal"
+                    value={goal}
+                    onChange={(e) => {
+                      const next = e.target.value as typeof goal;
+                      restoreQuery(guidedQuery(query, next, goalPosition));
+                      setAdvanced(next === "custom");
+                    }}
+                  >
+                    <option value="explore">Trade away these players</option>
+                    <option value="improve">Improve my weekly scoring</option>
+                    <option value="position">Find a position upgrade</option>
+                    <option value="custom">Custom search</option>
+                  </select>
+                </label>
+              </FilterHelp>
+              {goal === "position" && (
+                <label className="control">
+                  <span>Position to receive</span>
+                  <select
+                    aria-label="Position to receive"
+                    value={goalPosition}
+                    onChange={(e) =>
+                      restoreQuery(
+                        guidedQuery(
+                          query,
+                          "position",
+                          e.target.value as Position,
+                        ),
+                      )
+                    }
+                  >
+                    {positions.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
-          </details>
-          <p>
-            Receive{" "}
-            {receive.minimum === receive.maximum
-              ? receive.minimum
-              : `${receive.minimum}–${receive.maximum}`}{" "}
-            player{receive.maximum === 1 ? "" : "s"}.{" "}
-            {indexMode === "automatic"
-              ? "Automatic index matching; value differences stay visible."
-              : "Strict index range enabled."}
-          </p>
-          <p>
-            Offering: {names(discovery.flexible ? discovery.pool : draft.give)}
-            {discovery.flexible &&
-              ` (offer ${discovery.minimum}–${discovery.maximum} from this pool)`}
-          </p>
-          <details
-            open={advanced}
-            onToggle={(e) => setAdvanced(e.currentTarget.open)}
-          >
-            <summary>Advanced search controls</summary>
             <TradeDiscoveryControls
+              boardHost={openFinder === "standard" ? poolHost : null}
+              changeDraft={change}
               m={m}
               draft={draft}
               value={discovery}
@@ -1419,74 +1404,52 @@ export function TradeSearch({
                 </>
               )}
             </p>
-            <fieldset className="trade-search-group">
-              <legend>Value range</legend>
-              <div className="trade-search-controls">
-                {/* A strict price window is opt-in; hiding its fields must not leave a hidden active ±5 limit. */}
-                <FilterHelp
-                  label="Use strict index range"
-                  help="Limit incoming summed indices to your below/above offsets. Automatic matching checks all usable indices and keeps price tests separate from scoring gains."
-                >
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      checked={indexMode === "strict"}
-                      onChange={(e) =>
-                        setIndexMode(e.target.checked ? "strict" : "automatic")
-                      }
-                    />
-                    Use strict index range
-                  </label>
-                </FilterHelp>
-                {indexMode === "strict" &&
-                  offsetControl("Below outgoing total", below, setBelow)}
-                {indexMode === "strict" &&
-                  offsetControl("Above outgoing total", above, setAbove)}
-                <FilterHelp
-                  label={"Create package"}
-                  help={
-                    discovery.flexible
-                      ? "Search a range of incoming sizes for each outgoing subset. Example: receive 1–3 returns singles, pairs and three-player packages from one team. Every package must still meet your index and active filters."
-                      : "Keep your outgoing players fixed and search one through the selected maximum incoming players from one team. Singles always remain eligible; other active filters still apply."
-                  }
-                >
-                  <label className="check">
-                    <span>Create package</span>
-                    <input
-                      type="checkbox"
-                      checked={packages}
-                      onChange={(event) => setPackages(event.target.checked)}
-                    />
-                  </label>
-                </FilterHelp>
-                {/* Inclusive incoming bounds search all selected sizes, independently of outgoing pool combinations. */}
-                {packages &&
-                  (
-                    [["Maximum players to receive", count, setCount]] as const
-                  ).map(([label, value, set]) => (
-                    <FilterHelp
-                      key={label}
-                      label={label}
-                      help="Search one through this maximum incoming players from the same other team. A maximum of three includes singles, pairs and triples. Other active filters still apply to each offer."
-                    >
-                      <label className="control">
-                        <span>{label}</span>
-                        <select
-                          aria-label={label}
-                          value={value}
-                          onChange={(event) => set(Number(event.target.value))}
-                        >
-                          {[1, 2, 3, 4, 5].map((n) => (
-                            <option key={n} value={n}>
-                              {n}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </FilterHelp>
-                  ))}
-              </div>
-            </fieldset>
+            <div className="trade-search-controls">
+              {" "}
+              <FilterHelp
+                label={"Create package"}
+                help={
+                  discovery.flexible
+                    ? "Search a range of incoming sizes for each outgoing subset. Example: receive 1–3 returns singles, pairs and three-player packages from one team. Every package must still meet your index and active filters."
+                    : "Keep your outgoing players fixed and search one through the selected maximum incoming players from one team. Singles always remain eligible; other active filters still apply."
+                }
+              >
+                <label className="check">
+                  <span>Create package</span>
+                  <input
+                    type="checkbox"
+                    checked={packages}
+                    onChange={(event) => setPackages(event.target.checked)}
+                  />
+                </label>
+              </FilterHelp>
+              {/* Inclusive incoming bounds search all selected sizes, independently of outgoing pool combinations. */}
+              {packages &&
+                (
+                  [["Maximum players to receive", count, setCount]] as const
+                ).map(([label, value, set]) => (
+                  <FilterHelp
+                    key={label}
+                    label={label}
+                    help="Search one through this maximum incoming players from the same other team. A maximum of three includes singles, pairs and triples. Other active filters still apply to each offer."
+                  >
+                    <label className="control">
+                      <span>{label}</span>
+                      <select
+                        aria-label={label}
+                        value={value}
+                        onChange={(event) => set(Number(event.target.value))}
+                      >
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </FilterHelp>
+                ))}
+            </div>{" "}
             {/* Incoming categories combine with all existing criteria and count the same matching players. */}
             <fieldset className="trade-search-group">
               <legend>Incoming players</legend>
@@ -1536,33 +1499,20 @@ export function TradeSearch({
                   </label>
                 </FilterHelp>
               )}
-              <div className="toolbar">
-                {positions.map((position) => (
-                  <FilterHelp
-                    key={position}
-                    label={`Receive ${position}`}
-                    help={
-                      "Receive players at any selected position. The minimum counts players, not distinct positions. If Gem/Pre-gem/Watch is enabled, the same players must satisfy both categories. No position selections means no position restriction."
-                    }
-                  >
-                    <label className="check" key={position}>
-                      <input
-                        type="checkbox"
-                        aria-label={`Receive ${position}`}
-                        checked={incomingPositions.includes(position)}
-                        onChange={(e) =>
-                          setIncomingPositions(
-                            e.target.checked
-                              ? [...incomingPositions, position]
-                              : incomingPositions.filter((p) => p !== position),
-                          )
-                        }
-                      />
-                      {position}
-                    </label>
-                  </FilterHelp>
-                ))}
-              </div>
+              {/* Incoming position chips retain the original named checkboxes and add the same drag/click affordance as deficit positions. */}
+              <TradePositionChips
+                scope="Standard incoming"
+                positions={positions}
+                selected={incomingPositions}
+                checkboxLabel="Receive"
+                change={(position) =>
+                  setIncomingPositions(
+                    incomingPositions.includes(position)
+                      ? incomingPositions.filter((p) => p !== position)
+                      : [...incomingPositions, position],
+                  )
+                }
+              />
               {incomingPositions.length > 0 && (
                 <FilterHelp
                   label={"Minimum incoming position matches"}
@@ -1584,6 +1534,207 @@ export function TradeSearch({
                 </FilterHelp>
               )}
             </fieldset>
+            <p>
+              Receive{" "}
+              {receive.minimum === receive.maximum
+                ? receive.minimum
+                : `${receive.minimum}–${receive.maximum}`}{" "}
+              player{receive.maximum === 1 ? "" : "s"}.{" "}
+              {indexMode === "automatic"
+                ? "Automatic index matching; value differences stay visible."
+                : "Strict index range enabled."}
+            </p>
+            <p>
+              Offering:{" "}
+              {names(discovery.flexible ? discovery.pool : draft.give)}
+              {discovery.flexible &&
+                ` (offer ${discovery.minimum}–${discovery.maximum} from this pool)`}
+            </p>
+          </TradeFilterGroup>
+          <TradeFilterGroup
+            title="Team needs"
+            summary={
+              deficitOnly
+                ? `${selectedPosition} ${deficitCeiling} or lower`
+                : "Target deficits · protect weak positions"
+            }
+            open
+          >
+            {/* Opponent checkboxes are a search-only scope; all other filters and manual trade selections remain independent. */}
+            <details className="trade-search-group">
+              <summary>
+                <FilterHelp
+                  label="Teams to search"
+                  help="Standard finder scope only: applies to singles, packages, near misses and recovery suggestions. Chain teams are configured independently inside the chain planner. A required single-trade target must belong to a selected team."
+                >
+                  <span>
+                    Teams to search:{" "}
+                    {selectedTeams === undefined
+                      ? "All other teams"
+                      : `${selectedTeams.length} of ${opponents.length} selected`}
+                  </span>
+                </FilterHelp>
+              </summary>
+              <div className="toolbar">
+                <button
+                  type="button"
+                  className="subtle"
+                  onClick={() => setSelectedTeams(undefined)}
+                >
+                  Select all teams
+                </button>
+                <button
+                  type="button"
+                  className="subtle"
+                  onClick={() => setSelectedTeams([])}
+                >
+                  Clear team selection
+                </button>
+              </div>
+              <div className="trade-search-controls">
+                {opponents.map((team) => {
+                  const id = str(team.TeamID);
+                  return (
+                    <label className="check" key={id}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Search team: ${str(team.TeamName)}`}
+                        checked={
+                          selectedTeams === undefined ||
+                          selectedTeams.includes(id)
+                        }
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSelectedTeams((previous) => {
+                            const selected =
+                              previous ??
+                              opponents.map((opponent) => str(opponent.TeamID));
+                            return checked
+                              ? [...selected, id]
+                              : selected.filter((teamID) => teamID !== id);
+                          });
+                        }}
+                      />{" "}
+                      {str(team.TeamName)}
+                    </label>
+                  );
+                })}
+              </div>
+            </details>
+            <TeamNeedsPreview
+              m={m}
+              teams={opponents
+                .filter(
+                  (team) =>
+                    selectedTeams === undefined ||
+                    selectedTeams.includes(str(team.TeamID)),
+                )
+                .map((team) => str(team.TeamID))}
+              scope="Standard"
+              initialTeam={draft.teamB}
+              position={selectedPosition}
+              changePosition={(position) => {
+                if (offeredPositions.includes(position))
+                  setDeficitPosition(position);
+              }}
+            />
+            {/* Reuse existing league-relative team grades for one offered position. */}
+            <div className="trade-search-controls">
+              <FilterHelp
+                label={"Only teams with a positional deficit"}
+                help={
+                  "Use their current position grade relative to this fantasy league, as shown in League teams. The ceiling is inclusive: QB C+ includes C+ and lower. Unavailable grades cannot qualify. When positional upgrades are enabled, an upgrade must match this selected position."
+                }
+              >
+                <label className="check">
+                  <span>Only teams with a positional deficit</span>
+                  <input
+                    type="checkbox"
+                    checked={deficitOnly}
+                    onChange={(event) => {
+                      // Freeze the initial position too, so changing offers cannot silently change the active criterion.
+                      if (event.target.checked && !deficitPosition)
+                        setDeficitPosition(selectedPosition);
+                      setDeficitOnly(event.target.checked);
+                    }}
+                  />
+                </label>
+              </FilterHelp>
+              {deficitOnly && (
+                <TradePositionChips
+                  scope="Standard deficit"
+                  positions={offeredPositions}
+                  selected={[selectedPosition]}
+                  change={setDeficitPosition}
+                />
+              )}
+              {deficitOnly && (
+                <>
+                  <FilterHelp
+                    label={"Deficit position"}
+                    help={
+                      "Choose one position represented among your offered players. Its grade controls the deficit test even when your package also contains other positions."
+                    }
+                  >
+                    <label className="control">
+                      <span>Deficit position</span>
+                      <select
+                        aria-label="Deficit position"
+                        value={
+                          offeredPositions.includes(
+                            selectedPosition as Position,
+                          )
+                            ? selectedPosition
+                            : ""
+                        }
+                        onChange={(event) =>
+                          setDeficitPosition(event.target.value)
+                        }
+                      >
+                        <option value="" disabled>
+                          Select an offered position
+                        </option>
+                        {offeredPositions.map((position) => (
+                          <option key={position} value={position}>
+                            {position}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </FilterHelp>
+                  <FilterHelp
+                    label={"Maximum position grade"}
+                    help={
+                      "The selected grade and every lower grade qualify. Grades compare modeled starter Value PPG per slot with this fantasy league’s median, not the entire NFL."
+                    }
+                  >
+                    <label className="control">
+                      <span>Maximum position grade</span>
+                      <select
+                        aria-label="Maximum position grade"
+                        value={deficitCeiling}
+                        onChange={(event) =>
+                          setDeficitCeiling(event.target.value)
+                        }
+                      >
+                        {positionGradeScale.map((grade) => (
+                          <option key={grade} value={grade}>
+                            {grade} or lower
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </FilterHelp>
+                </>
+              )}
+            </div>
+            <DeficitProtectionControls
+              scope="Standard search"
+              value={deficitProtection}
+              change={setDeficitProtection}
+              targeting={deficitOnly}
+              ceiling={deficitCeiling}
+            />
             <fieldset className="trade-search-group">
               <legend>Roster fit</legend>
               {/* Original-roster comparisons establish improvement; complete-package roles still account for departures and drops. */}
@@ -1597,11 +1748,10 @@ export function TradeSearch({
                   }
                 >
                   <label className="check">
-                    <span>
-                      Every offered player must be useful to the other team
-                    </span>
+                    <span>Every offered player must be useful</span>
                     <input
                       type="checkbox"
+                      aria-label="Every offered player must be useful to the other team"
                       checked={usefulnessOnly}
                       onChange={(e) => setUsefulnessOnly(e.target.checked)}
                     />
@@ -1634,11 +1784,10 @@ export function TradeSearch({
                   help={`${upgradeOnly ? (upgradeMode === "best" ? `Requires at least ${formatUpgradeCount(query.upgrade?.requiredBest)} distinct positions upgraded.` : `Requires at least ${formatUpgradeCount(query.upgrade?.requiredStarters)} starter upgrades and ${formatUpgradeCount(query.upgrade?.requiredBench)} bench upgrades.`) : "Require your selected number of distinct positional upgrades."} Uses Expected PPG against their pre-trade roster, including players they send away. Comparisons are distinct. Starter uses marked/imported starters; Depth uses actual bench; Best includes the entire position, including IR. Net scoring gain is separate.`}
                 >
                   <label className="check">
-                    <span>
-                      Only show positional upgrades for the other team
-                    </span>
+                    <span>Require positional upgrades</span>
                     <input
                       type="checkbox"
+                      aria-label="Only show positional upgrades for the other team"
                       checked={upgradeOnly}
                       onChange={(event) => setUpgradeOnly(event.target.checked)}
                     />
@@ -1722,111 +1871,61 @@ export function TradeSearch({
                   </>
                 )}
               </div>
-              {/* Reuse existing league-relative team grades for one offered position. */}
+            </fieldset>{" "}
+          </TradeFilterGroup>
+          <TradeFilterGroup
+            title="Value & acceptance"
+            summary={
+              manager
+                ? "Surface trading on"
+                : indexMode === "strict"
+                  ? "Strict index range"
+                  : "Automatic index matching"
+            }
+          >
+            {/* One optional Surface Trading evaluator replaces the retired source-gain controls. */}
+            <ManagerControls value={manager} change={setManager} />
+            <fieldset className="trade-search-group">
+              <legend>Value range</legend>
               <div className="trade-search-controls">
+                {/* A strict price window is opt-in; hiding its fields must not leave a hidden active ±5 limit. */}
                 <FilterHelp
-                  label={"Only teams with a positional deficit"}
-                  help={
-                    "Use their current position grade relative to this fantasy league, as shown in League teams. The ceiling is inclusive: QB C+ includes C+ and lower. Unavailable grades cannot qualify. When positional upgrades are enabled, an upgrade must match this selected position."
-                  }
+                  label="Use strict index range"
+                  help="Limit incoming summed indices to your below/above offsets. Automatic matching checks all usable indices and keeps price tests separate from scoring gains."
                 >
                   <label className="check">
-                    <span>Only teams with a positional deficit</span>
                     <input
                       type="checkbox"
-                      checked={deficitOnly}
-                      onChange={(event) => {
-                        // Freeze the initial position too, so changing offers cannot silently change the active criterion.
-                        if (event.target.checked && !deficitPosition)
-                          setDeficitPosition(selectedPosition);
-                        setDeficitOnly(event.target.checked);
-                      }}
+                      checked={indexMode === "strict"}
+                      onChange={(e) =>
+                        setIndexMode(e.target.checked ? "strict" : "automatic")
+                      }
                     />
+                    Use strict index range
                   </label>
                 </FilterHelp>
-                {deficitOnly && (
-                  <>
-                    <FilterHelp
-                      label={"Deficit position"}
-                      help={
-                        "Choose one position represented among your offered players. Its grade controls the deficit test even when your package also contains other positions."
-                      }
-                    >
-                      <label className="control">
-                        <span>Deficit position</span>
-                        <select
-                          aria-label="Deficit position"
-                          value={
-                            offeredPositions.includes(
-                              selectedPosition as Position,
-                            )
-                              ? selectedPosition
-                              : ""
-                          }
-                          onChange={(event) =>
-                            setDeficitPosition(event.target.value)
-                          }
-                        >
-                          <option value="" disabled>
-                            Select an offered position
-                          </option>
-                          {offeredPositions.map((position) => (
-                            <option key={position} value={position}>
-                              {position}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </FilterHelp>
-                    <FilterHelp
-                      label={"Maximum position grade"}
-                      help={
-                        "The selected grade and every lower grade qualify. Grades compare modeled starter Value PPG per slot with this fantasy league’s median, not the entire NFL."
-                      }
-                    >
-                      <label className="control">
-                        <span>Maximum position grade</span>
-                        <select
-                          aria-label="Maximum position grade"
-                          value={deficitCeiling}
-                          onChange={(event) =>
-                            setDeficitCeiling(event.target.value)
-                          }
-                        >
-                          {positionGradeScale.map((grade) => (
-                            <option key={grade} value={grade}>
-                              {grade} or lower
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </FilterHelp>
-                  </>
-                )}
+                {indexMode === "strict" &&
+                  offsetControl("Below outgoing total", below, setBelow)}
+                {indexMode === "strict" &&
+                  offsetControl("Above outgoing total", above, setAbove)}
               </div>
             </fieldset>
+          </TradeFilterGroup>
+          <TradeFilterGroup
+            title="Scoring impact"
+            summary={
+              ownWeekly.enabled || otherWeekly.enabled
+                ? "Weekly gain limits enabled"
+                : "No weekly gain limits"
+            }
+          >
             <fieldset className="trade-search-group">
               <legend>Scoring impact</legend>
               {/* Screen existing average lineup gains independently for either or both teams. */}
               {weeklyControls("Your", ownWeekly, setOwnWeekly)}
               {weeklyControls("Their", otherWeekly, setOtherWeekly)}
-            </fieldset>
-          </details>
-          <div
-            className="active-filter-chips"
-            aria-label="Active trade-search filters"
-          >
-            {chips.map((chip) => (
-              <button
-                type="button"
-                key={chip.label}
-                aria-label={`Remove ${chip.label}`}
-                onClick={chip.remove}
-              >
-                {chip.label} ×
-              </button>
-            ))}
-          </div>
+            </fieldset>{" "}
+          </TradeFilterGroup>
           {!bounds.errors.length &&
             !discovery.flexible &&
             indexMode === "strict" && (
@@ -2839,6 +2938,7 @@ export function TradeSearch({
     <>
       {searchPanel}
       <TradeChains
+        poolHost={poolHost}
         m={m}
         onPreview={onPreview}
         onPool={onChainPool}
