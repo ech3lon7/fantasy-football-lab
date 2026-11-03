@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bookmark, LoaderCircle } from "lucide-react";
 import {
   chainErrors,
+  mergeChainResults,
   chainSearchVersion,
   chainPresets,
   applyChainPreset,
@@ -37,6 +38,11 @@ import {
   type ChainDependencySettings,
   type ChainDependencyEvidence,
 } from "../domain/chain-plausibility";
+import {
+  applyChainStrictness,
+  type ChainDiscovery,
+  type ChainStrictness,
+} from "../domain/chain-discovery";
 import { opponentIncentive } from "../domain/trade-discovery";
 import { OpponentIncentiveView } from "./TradeDiscovery";
 import { SurfaceAppealView } from "./SurfaceAppeal";
@@ -80,7 +86,12 @@ const chainFilterScope = {
     "price-test policy",
     "search depth",
     "optional surplus/deficit targeting",
-    "required chain dependency and materiality",
+    "connected or independent sequence types",
+    "materiality for connected chains",
+    "scenario and strictness",
+    "ranking and final positional/player targets",
+    "temporary locked first trade",
+    "bounded automatic broadening",
     "per-leg raw index windows",
     "per-leg Surface Trading",
     "per-leg weak-position protection",
@@ -112,6 +123,13 @@ export interface ChainPreferences {
   firstOverride: boolean;
   secondOverride: boolean;
   preset: string;
+  strictness?: ChainStrictness;
+  customPresets?: {
+    id: string;
+    name: string;
+    query: ChainQuery;
+    strictness?: ChainStrictness;
+  }[];
 }
 
 // The existing debug download receives captured chain controls/results without persisting another workspace or dataset.
@@ -160,7 +178,9 @@ export function TradeChains({
   toggle,
   onPreview,
   onPool,
+  followup,
 }: {
+  followup?: { id: string; draft: Draft };
   poolHost?: HTMLElement | null;
   onPool?: (value: {
     team: string;
@@ -197,14 +217,22 @@ export function TradeChains({
   const [pricePolicy, setPricePolicy] = useState<
     NonNullable<ChainQuery["pricePolicy"]>
   >(initial?.query.pricePolicy ?? "required");
-  // Preserve explicit larger legacy concessions as Custom; new presets never raise the base 10% cap automatically.
+  // Restore the explicit saved scenario or custom preset without inferring it from its concession threshold.
   const [preset, setPreset] = useState(
-    initial?.query.recipient &&
-      initial.query.recipient.maximumValueLossPct > 0.1
-      ? "custom"
-      : (initial?.preset ?? "custom"),
+    initial?.strictness ? (initial.preset ?? "custom") : "custom",
   );
   const presetQuery = useRef("");
+  // New discovery preferences live only in this planner and persist with its existing workspace settings.
+  const [strictness, setStrictness] = useState<ChainStrictness>(
+    initial?.strictness ?? "balanced",
+  );
+  const [discovery, setDiscovery] = useState<ChainDiscovery>(
+    initial?.query.discovery ?? { sequences: "connected", ranking: "own" },
+  );
+  const [customPresets, setCustomPresets] = useState(
+    initial?.customPresets ?? [],
+  );
+  const [presetName, setPresetName] = useState("");
   const [mode, setMode] = useState<ChainQuery["mode"]>(
     initial?.query.mode ?? "both",
   );
@@ -290,6 +318,7 @@ export function TradeChains({
   const query: ChainQuery = {
     team,
     pool,
+    discovery,
     mode,
     pricePolicy,
     maximumLoss: loss.trim() ? Number(loss) : NaN,
@@ -371,6 +400,8 @@ export function TradeChains({
     firstOverride,
     secondOverride,
     preset,
+    strictness,
+    customPresets,
   };
   const preferenceText = JSON.stringify(preference);
   useEffect(() => {
@@ -382,10 +413,34 @@ export function TradeChains({
   }, [team, pool.join(","), basis]);
   const queryText = JSON.stringify(query);
   useEffect(() => {
-    if (!presetQuery.current) presetQuery.current = queryText;
+    if (!presetQuery.current || presetQuery.current === "pending")
+      presetQuery.current = queryText;
     else if (presetQuery.current !== queryText && preset !== "custom")
       setPreset("custom");
   }, [queryText]);
+  // Loading a first trade is a temporary search constraint, not a forced move or a saved-roster edit.
+  useEffect(() => {
+    if (!followup) return;
+    const d = followup.draft;
+    setTeam(d.teamA);
+    setPool((old) =>
+      [
+        ...new Set([
+          ...d.give,
+          ...old.filter((id) => m.byId.get(id)?.owner === d.teamA),
+        ]),
+      ].slice(0, 12),
+    );
+    setFirst((old) => ({
+      ...old,
+      teams: [d.teamB],
+      offer: { minimum: d.give.length, maximum: d.give.length },
+      receive: { minimum: d.get.length, maximum: d.get.length },
+    }));
+    setFirstOverride(true);
+    setDiscovery((old) => ({ ...old, pinnedFirst: d }));
+    setFiltersOpen(true);
+  }, [followup?.id]);
   // Imports and hypothetical moves only prune stale ownership; they never add unprotected players to the pool.
   useEffect(() => {
     setPool((previous) =>
@@ -504,10 +559,14 @@ export function TradeChains({
   }, [context]);
 
   // Send only the real source plus the existing ownership recipe, reproducing the same live/hypothetical policy in the worker.
-  function search() {
+  function search(deeper = false) {
     if (errors.length) return;
     active.current?.terminate();
     const id = crypto.randomUUID();
+    const executedQuery = deeper
+      ? { ...query, depth: "deeper" as const }
+      : query;
+    const previous = deeper && !stale ? job?.result : undefined;
     resultContext.current = { model: m, plans: lineupsRaw };
     try {
       const worker = new Worker(
@@ -515,7 +574,12 @@ export function TradeChains({
         { type: "module" },
       );
       active.current = worker;
-      setJob({ context, query, status: "running" });
+      setJob({
+        context,
+        query: executedQuery,
+        status: "running",
+        result: previous,
+      });
       setSaved([]);
       setDetails({});
       setDetailError("");
@@ -530,7 +594,8 @@ export function TradeChains({
         if (message.type === "progress")
           setJob({
             context,
-            query,
+            query: executedQuery,
+            result: previous,
             status: "running",
             stats: message.stats,
             elapsed: message.elapsed,
@@ -540,11 +605,19 @@ export function TradeChains({
             message.type === "complete"
               ? {
                   context,
-                  query,
+                  query: executedQuery,
                   status: "complete",
-                  result: message.result,
+                  // Deeper work preserves already found plans and refreshes matching evidence by stable identity.
+                  result: previous
+                    ? mergeChainResults(
+                        previous,
+                        message.result,
+                        query.discovery?.ranking,
+                      )
+                    : message.result,
                   stats: message.result.stats,
-                  elapsed: message.elapsed,
+                  elapsed:
+                    (previous ? (job?.elapsed ?? 0) : 0) + message.elapsed,
                 }
               : { context, query, status: "error", error: message.message },
           );
@@ -572,7 +645,7 @@ export function TradeChains({
         roleWeight: String(m.roleScenarioWeight),
         scenario: m.simulation?.scenario,
         lineupsRaw,
-        query,
+        query: executedQuery,
       };
       worker.postMessage(request);
     } catch (error) {
@@ -590,6 +663,20 @@ export function TradeChains({
     }
   }
 
+  // Explicit preset selection can change its documented defaults; search recovery cannot alter these hard requirements.
+  function applyOptions(next: ChainQuery, label: string) {
+    presetQuery.current = "pending";
+    setGain(String(next.minimumGain));
+    setLoss(String(next.maximumLoss));
+    setMode(next.mode);
+    setRecipientLoss(String(next.recipient!.maximumValueLossPct * 100));
+    setRecipientGain(String(next.recipient!.minimumGain));
+    setPricePolicy(next.pricePolicy ?? "required");
+    setFirst(next.first);
+    setSecond(next.second);
+    setDiscovery(next.discovery ?? { sequences: "connected", ranking: "own" });
+    setPreset(label);
+  }
   // Reconstruct a leg's prerequisite only for inspection or saving; this never changes the app's working or saved roster.
   function legContext(chain: TradeChain, step: 1 | 2) {
     const captured = resultContext.current ?? { model: m, plans: lineupsRaw };
@@ -1287,7 +1374,11 @@ export function TradeChains({
           {fmt(leg.recipient.lossPct * 100)}% (maximum{" "}
           {fmt(leg.recipient.maximumValueLossPct * 100)}%). Their gain:{" "}
           {signed(leg.recipient.gain)} EPPG (requires ≥{" "}
-          {fmt(leg.recipient.minimumGain)}). Recipient checks:{" "}
+          {fmt(leg.recipient.minimumGain)}). Their lineup change:{" "}
+          {leg.recipient.gainPct == null
+            ? "unavailable"
+            : `${signed(leg.recipient.gainPct * 100)}%`}
+          . Recipient checks:{" "}
           <Signal text={leg.recipient.failures.length ? "FAIL" : "PASS"} />
         </p>
         {/* Keep the raw indices visible beside the premium-aware concession comparison for unequal packages. */}
@@ -1393,7 +1484,7 @@ export function TradeChains({
             className="button primary"
             aria-label="Run chain trade search"
             disabled={!!errors.length || job?.status === "running"}
-            onClick={search}
+            onClick={() => search()}
           >
             Search chains
           </button>
@@ -1531,7 +1622,7 @@ export function TradeChains({
               </FilterHelp>
               <FilterHelp
                 label="Chain preset"
-                help="Preset thresholds range from easier to stricter discovery. Selecting one changes your final minimum, recipient gain and price-test requirement; automatic recipient concession is capped at 10%. Dependency and per-leg optional filters are preserved. All gains are inclusive minimums. Optional surplus/deficit targeting stays disabled unless you enable it. Editing any query setting marks the preset Custom."
+                help="Seven provisional trading scenarios, with separate strictness. Explicit selection changes gain, package and recipient defaults while preserving team scopes, protected players, targets and optional fit requirements. Subsequent edits become Custom."
               >
                 <label className="control">
                   <span>Chain preset</span>
@@ -1539,19 +1630,33 @@ export function TradeChains({
                     value={preset}
                     onChange={(e) => {
                       const id = e.target.value;
-                      if (id === "custom") {
-                        setPreset(id);
-                        return;
-                      }
-                      const next = applyChainPreset(query, id);
-                      presetQuery.current = JSON.stringify(next);
-                      setGain(String(next.minimumGain));
-                      setRecipientLoss(
-                        String(next.recipient!.maximumValueLossPct * 100),
+                      const savedPreset = customPresets.find(
+                        (p) => p.id === id,
                       );
-                      setRecipientGain(String(next.recipient!.minimumGain));
-                      setPricePolicy(next.pricePolicy!);
-                      setPreset(id);
+                      if (savedPreset) {
+                        setStrictness(savedPreset.strictness ?? "balanced");
+                        applyOptions(
+                          {
+                            ...savedPreset.query,
+                            team,
+                            pool,
+                            first: {
+                              ...savedPreset.query.first,
+                              teams: first.teams,
+                            },
+                            second: {
+                              ...savedPreset.query.second,
+                              teams: second.teams,
+                            },
+                          },
+                          id,
+                        );
+                      } else if (id === "custom") setPreset(id);
+                      else
+                        applyOptions(
+                          applyChainPreset(query, id, strictness),
+                          id,
+                        );
                     }}
                   >
                     <option value="custom">Custom</option>
@@ -1560,10 +1665,216 @@ export function TradeChains({
                         {p.label}
                       </option>
                     ))}
+                    {customPresets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
                   </select>
                 </label>
               </FilterHelp>
             </div>
+            {/* Scenario modifiers and named saves reuse existing controls and leave the standard finder untouched. */}
+            <div className="trade-search-controls">
+              <label className="control">
+                <span>Chain strictness</span>
+                <select
+                  value={strictness}
+                  onChange={(e) => {
+                    const next = e.target.value as ChainStrictness;
+                    setStrictness(next);
+                    applyOptions(
+                      applyChainStrictness(query, next, preset === "mutual"),
+                      chainPresets.some((p) => p.id === preset)
+                        ? preset
+                        : "custom",
+                    );
+                  }}
+                >
+                  <option value="conservative">Conservative</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="negotiable">Negotiable</option>
+                </select>
+              </label>
+              <FilterHelp
+                label="Sequence types"
+                help="Connected chains re-trade acquisitions or gain meaningful coverage. Sequential upgrades are independent moves, clearly labeled separately."
+              >
+                <label className="control">
+                  <span>Sequence types</span>
+                  <select
+                    value={discovery.sequences}
+                    onChange={(e) =>
+                      setDiscovery({
+                        ...discovery,
+                        sequences: e.target
+                          .value as ChainDiscovery["sequences"],
+                      })
+                    }
+                  >
+                    <option value="connected">Connected chains</option>
+                    <option value="sequential">
+                      Independent sequential upgrades
+                    </option>
+                    <option value="both">Both types</option>
+                  </select>
+                </label>
+              </FilterHelp>
+              <FilterHelp
+                label="Rank plans by"
+                help="Surface appeal ranks recipient season-average and ESPN projection changes when available; otherwise modeled recipient gain. It does not predict acceptance."
+              >
+                <label className="control">
+                  <span>Rank plans by</span>
+                  <select
+                    value={discovery.ranking}
+                    onChange={(e) =>
+                      setDiscovery({
+                        ...discovery,
+                        ranking: e.target.value as ChainDiscovery["ranking"],
+                      })
+                    }
+                  >
+                    <option value="own">Your EPPG gain</option>
+                    <option value="mutual">Benefit to both sides</option>
+                    <option value="appeal">Apparent recipient appeal</option>
+                  </select>
+                </label>
+              </FilterHelp>
+              <FilterHelp
+                label="Target roster need"
+                help="Require a final retained acquisition at this position. Depth requires a retained acquisition outside the modeled starting lineups. Applies across all scenarios."
+              >
+                <label className="control">
+                  <span>Target roster need</span>
+                  <select
+                    value={discovery.position ?? "any"}
+                    onChange={(e) =>
+                      setDiscovery({
+                        ...discovery,
+                        position:
+                          e.target.value === "any"
+                            ? undefined
+                            : (e.target.value as ChainDiscovery["position"]),
+                      })
+                    }
+                  >
+                    <option value="any">Any position</option>
+                    {positions.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                    <option value="depth">Depth</option>
+                  </select>
+                </label>
+              </FilterHelp>
+              <label className="control">
+                <span>Add required final target</span>
+                <select
+                  value=""
+                  onChange={(e) =>
+                    setDiscovery({
+                      ...discovery,
+                      requiredTargets: e.target.value
+                        ? [
+                            ...new Set([
+                              ...(discovery.requiredTargets ?? []),
+                              e.target.value,
+                            ]),
+                          ]
+                        : discovery.requiredTargets,
+                    })
+                  }
+                >
+                  <option value="">Choose a player</option>
+                  {m.players
+                    .filter((p) => p.owner !== team && p.owner !== "0")
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} - {p.pos}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              {(discovery.requiredTargets ?? []).map((id) => (
+                <button
+                  key={id}
+                  className="button"
+                  aria-label={`Remove required target ${m.byId.get(id)?.name ?? "unavailable player"}`}
+                  onClick={() =>
+                    setDiscovery({
+                      ...discovery,
+                      requiredTargets: discovery.requiredTargets!.filter(
+                        (other) => other !== id,
+                      ),
+                    })
+                  }
+                >
+                  {m.byId.get(id)?.name ?? "Unavailable target"} x
+                </button>
+              ))}
+              <label className="control">
+                <span>Custom preset name</span>
+                <input
+                  value={presetName}
+                  maxLength={60}
+                  onChange={(e) => setPresetName(e.target.value)}
+                />
+              </label>
+              <button
+                className="button"
+                disabled={!presetName.trim() || !!errors.length}
+                onClick={() => {
+                  const name = presetName.trim(),
+                    existing = customPresets.find((p) => p.name === name),
+                    id = existing?.id ?? crypto.randomUUID();
+                  setCustomPresets((old) =>
+                    [
+                      ...old.filter((p) => p.id !== id),
+                      { id, name, query: structuredClone(query), strictness },
+                    ].slice(-10),
+                  );
+                  setPreset(id);
+                  setPresetName("");
+                }}
+              >
+                Save custom preset
+              </button>
+              {customPresets.some((p) => p.id === preset) && (
+                <button
+                  className="button"
+                  onClick={() => {
+                    setCustomPresets((old) =>
+                      old.filter((p) => p.id !== preset),
+                    );
+                    setPreset("custom");
+                  }}
+                >
+                  Delete custom preset
+                </button>
+              )}
+            </div>
+            {discovery.pinnedFirst && (
+              <div className="trade-search-group">
+                <strong>Locked first trade</strong>
+                <p>
+                  {names(discovery.pinnedFirst.give)} for{" "}
+                  {names(discovery.pinnedFirst.get)} -{" "}
+                  {teamName(discovery.pinnedFirst.teamB)}. Preview only; saved
+                  rosters are unchanged.
+                </p>
+                <button
+                  className="button"
+                  onClick={() =>
+                    setDiscovery({ ...discovery, pinnedFirst: undefined })
+                  }
+                >
+                  Unlock first trade
+                </button>
+              </div>
+            )}
             <details className="trade-search-group">
               <summary>Chain tradable pool ({pool.length}/12)</summary>
               <FilterHelp
@@ -1729,7 +2040,7 @@ export function TradeChains({
               <div className="trade-search-controls">
                 <FilterHelp
                   label="Dependency route"
-                  help="Trade 1 must materially fund trade 2 or provide retained coverage that makes the second trade better. Unrelated upgrades do not qualify. Either allows both routes; contribution and interaction are separate evidence."
+                  help="These materiality settings classify connected chains: trade 1 funds trade 2 or supplies meaningful coverage. Independent sequential upgrades are proved separately using trade two on its own. Either permits both connected routes."
                 >
                   <label className="control">
                     <span>Dependency route</span>
@@ -1764,13 +2075,7 @@ export function TradeChains({
                 )}
               </div>
             </details>
-            {Number(recipientLoss) > 10 && (
-              <p className="notice warning">
-                Custom recipient concession: {recipientLoss}%. This explicitly
-                allows larger value losses than the 10% preset cap and may
-                produce implausible offers.
-              </p>
-            )}
+            {/* Recipient concessions are explained by the control's hover help; no obsolete fixed-10% preset banner. */}
           </TradeFilterGroup>
           <TradeFilterGroup
             title="Scoring impact"
@@ -1802,15 +2107,85 @@ export function TradeChains({
                 recipientLoss,
                 setRecipientLoss,
                 0,
-                "Each recipient must receive at least (1 − this percentage) of the comparable surplus they surrender. Equal-size trades use raw index sums. Unequal trades scale the smaller package once by the existing consolidation premium before comparing concessions; both raw and adjusted numbers are shown. Default 10% is a provisional preference, not a market price or validated acceptance probability. Existing price tests remain unchanged.",
+                "Each recipient must receive at least (1 − this percentage) of the comparable surplus they surrender. Equal-size trades use raw index sums. Unequal trades scale the smaller package once by the existing consolidation premium before comparing concessions; both raw and adjusted numbers are shown. The selected limit is a provisional preference, not a market price or validated acceptance probability. Existing price tests remain unchanged.",
                 100,
               )}
               {number(
                 "Minimum recipient gain (EPPG)",
                 recipientGain,
                 setRecipientGain,
-                0,
-                "Each step must improve its recipient's lineup on the selected scoring basis by at least this many average points/week, after required drops and without waiver additions. Zero permits a flat result but never a scoring loss. This applies to safe and speculative chains independently of your final gain.",
+                -1000,
+                "Minimum recipient points/week after required drops. A negative value explicitly permits a modeled loss. This is separate from your first-trade loss limit and is not a prediction of acceptance.",
+              )}
+              {/* Recovery is bounded and only changes recipient gain, value concession and active index windows. */}
+              <FilterHelp
+                label="Automatically broaden empty searches"
+                help="Only recipient scoring-loss/value limits and active index windows may widen, within the ceilings below. Your final gain, first-step loss, teams, protected players, required targets, sizes, surface and needs filters stay fixed. Each attempt is reported."
+              >
+                <label className="control checkbox">
+                  <input
+                    type="checkbox"
+                    checked={!!discovery.broaden?.enabled}
+                    onChange={(e) =>
+                      setDiscovery({
+                        ...discovery,
+                        broaden: {
+                          maximumRecipientLoss: 4,
+                          maximumValueLossPct: 0.35,
+                          indexExtra: 20,
+                          ...discovery.broaden,
+                          enabled: e.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  Automatically broaden empty searches
+                </label>
+              </FilterHelp>
+              {discovery.broaden?.enabled && (
+                <div className="trade-search-controls">
+                  {number(
+                    "Broadening: maximum recipient loss (EPPG)",
+                    String(discovery.broaden.maximumRecipientLoss),
+                    (v) =>
+                      setDiscovery({
+                        ...discovery,
+                        broaden: {
+                          ...discovery.broaden!,
+                          maximumRecipientLoss: v.trim() ? Number(v) : NaN,
+                        },
+                      }),
+                    0,
+                  )}
+                  {number(
+                    "Broadening: maximum value concession (%)",
+                    String(discovery.broaden.maximumValueLossPct * 100),
+                    (v) =>
+                      setDiscovery({
+                        ...discovery,
+                        broaden: {
+                          ...discovery.broaden!,
+                          maximumValueLossPct: v.trim() ? Number(v) / 100 : NaN,
+                        },
+                      }),
+                    0,
+                    undefined,
+                    100,
+                  )}
+                  {number(
+                    "Broadening: extra index points per side",
+                    String(discovery.broaden.indexExtra),
+                    (v) =>
+                      setDiscovery({
+                        ...discovery,
+                        broaden: {
+                          ...discovery.broaden!,
+                          indexExtra: v.trim() ? Number(v) : NaN,
+                        },
+                      }),
+                    0,
+                  )}
+                </div>
               )}
               <FilterHelp
                 label="Chain search depth"
@@ -1825,10 +2200,10 @@ export function TradeChains({
                     }
                   >
                     <option value="standard">
-                      Broad — up to 16,000 evaluations
+                      Broad — up to 16,000 evaluations per attempt
                     </option>
                     <option value="deeper">
-                      Deeper — up to 60,000 evaluations
+                      Deeper — up to 60,000 evaluations per attempt
                     </option>
                   </select>
                 </label>
@@ -1846,7 +2221,7 @@ export function TradeChains({
             <button
               className="button primary"
               disabled={!!errors.length || job?.status === "running"}
-              onClick={search}
+              onClick={() => search()}
             >
               {job?.status === "running" ? (
                 <LoaderCircle size={16} aria-hidden="true" />
@@ -1870,7 +2245,7 @@ export function TradeChains({
             {/* Reset keeps the established defaults and selections; hover help makes its stricter thresholds explicit. */}
             <FilterHelp
               label="Clear chain filters"
-              help="Restore defaults: final gain 5 EPPG, recipient gain 1 EPPG, maximum concession 10%, required price tests, and no position targeting. Restore dependency to either route, 25% contribution and +2 interaction; disable optional per-leg windows/Surface Trading. Keep your team, pool, opponent scope and scoring basis. Choose Very lenient for broader discovery."
+              help="Restore defaults: final gain 5 EPPG, recipient gain 1 EPPG, maximum concession 10%, required price tests, and no position targeting. Restore dependency to either route, 25% contribution and +2 interaction; disable optional per-leg windows/Surface Trading. Keep your team, pool, opponent scope and scoring basis. Choose a scenario with Negotiable strictness for broader discovery."
             >
               <button
                 className="subtle"
@@ -1890,6 +2265,7 @@ export function TradeChains({
                   setGain("5");
                   setPricePolicy("required");
                   setPreset("custom");
+                  setDiscovery({ sequences: "connected", ranking: "own" });
                   setFirst({
                     deficitProtection: {
                       ...defaultDeficitProtection,
@@ -2000,11 +2376,39 @@ export function TradeChains({
                   ? `Search limit reached${job.result.stats.limits ? ` (${job.result.stats.limits.totalEvaluations.toLocaleString()} evaluations or ${job.result.stats.limits.scans.toLocaleString()} candidate scans)` : ""}: more possibilities may exist.`
                   : "All eligible combinations within these selected sizes and teams were examined."}{" "}
                 {job.result.stats.resultCapped &&
-                  "Display capped at the best 30 qualifying chains. "}
-                Results are modeled possibilities, not agreed trades. Opponent
-                gains and value concessions must satisfy the recipient checks on
-                each step. No automatic waiver additions.
+                  "Some qualifying plans are omitted by the per-search display limit. "}
+                Results are modeled possibilities, not agreed trades or
+                acceptance predictions. Opponent gains and value concessions
+                must satisfy the recipient checks on each step. No automatic
+                waiver additions.
               </p>
+              {/* Preserved results stay visible during deeper exploration; recovery reports its exact applied limits. */}
+              {job.status !== "running" && !stale && (
+                <button
+                  className="button"
+                  disabled={job.query.depth === "deeper"}
+                  onClick={() => search(true)}
+                >
+                  Search deeper (keep results)
+                </button>
+              )}
+              {job.result.attempts && (
+                <details>
+                  <summary>Search attempts and relaxed limits</summary>
+                  {job.result.attempts.map((a, i) => (
+                    <p key={i}>
+                      Attempt {i + 1}: {a.found} qualifying plans,{" "}
+                      {a.stats.evaluated} evaluations.{" "}
+                      {a.changes.length
+                        ? a.changes.join("; ")
+                        : "Original limits."}{" "}
+                      {a.stats.limited
+                        ? "Search limit reached; unexplored possibilities remain."
+                        : "Selected combinations examined."}
+                    </p>
+                  ))}
+                </details>
+              )}
               {/* Keep actual safeguard exclusions visible in diagnostics, without adding permanent top-of-page notices. */}
               {!!job.result.stats.rejectedDeficit && (
                 <p>
@@ -2031,6 +2435,13 @@ export function TradeChains({
                 )}
               <details>
                 <summary>Chain search exclusions</summary>
+                {(job.result.attempts?.length ?? 0) > 1 && (
+                  <p>
+                    Evaluation totals and limits include all attempts. The
+                    stream and exclusion counts below describe the latest
+                    attempt; earlier attempts are listed above.
+                  </p>
+                )}
                 {/* Show remaining work and exact stopping limits alongside rejection counts instead of implying a zero-result proof. */}
                 <p>
                   Search coverage:{" "}
@@ -2149,48 +2560,87 @@ export function TradeChains({
                   </p>
                 ))}
               </details>
-              <GroupedChains
-                chains={job.result.chains}
-                m={resultContext.current?.model ?? m}
-                render={(chain, i) => (
-                  <article className="trade-search-group" key={chain.key}>
-                    <h3>
-                      Chain {i + 1} ·{" "}
-                      {chain.mode === "safe" ? "Safe" : "Speculative"} ·{" "}
-                      <span className="model">
-                        {signed(chain.gain)} EPPG overall
-                      </span>
-                      {(chain.first.row.warnings.length > 0 ||
-                        chain.second.row.warnings.length > 0) && (
-                        <Signal text="CONDITIONAL" />
-                      )}
-                    </h3>
-                    <p className="model">
-                      Your roster: {fmt(chain.before)} →{" "}
-                      {fmt(chain.intermediate)} → {fmt(chain.after)} EPPG.
-                    </p>
-                    <p>
-                      {chain.mode === "safe"
-                        ? "First trade improves scoring even if the follow-up never happens."
-                        : `If the follow-up fails, step one leaves you at ${fmt(chain.intermediate)} EPPG (${signed(chain.first.row.own)}).`}
-                    </p>
-                    {chain.dependency && (
-                      <>
-                        <p className="model">
-                          Connected route:{" "}
-                          {chain.dependency.route === "retrade"
-                            ? "Re-trade acquisition"
-                            : "Keep-and-release"}
-                          .
-                        </p>
-                        {dependencyDetails(chain.dependency)}
-                      </>
-                    )}
-                    {renderLeg(chain, 1)}
-                    {renderLeg(chain, 2)}
-                  </article>
-                )}
-              />
+              {(["connected", "sequential"] as const).map(
+                (kind) =>
+                  job.result!.chains.some(
+                    (c) => (c.kind ?? "connected") === kind,
+                  ) && (
+                    <section
+                      key={kind}
+                      aria-label={
+                        kind === "connected"
+                          ? "Connected chains"
+                          : "Independent sequential upgrades"
+                      }
+                    >
+                      <h3>
+                        {kind === "connected"
+                          ? "Connected chains"
+                          : "Independent sequential upgrades"}
+                      </h3>
+                      <GroupedChains
+                        chains={job.result!.chains.filter(
+                          (c) => (c.kind ?? "connected") === kind,
+                        )}
+                        m={resultContext.current?.model ?? m}
+                        render={(chain, i) => (
+                          <article
+                            className="trade-search-group"
+                            key={chain.key}
+                          >
+                            <h3>
+                              Chain {i + 1} ·{" "}
+                              {chain.mode === "safe" ? "Safe" : "Speculative"} ·{" "}
+                              <span className="model">
+                                {signed(chain.gain)} EPPG overall
+                              </span>
+                              {(chain.first.row.warnings.length > 0 ||
+                                chain.second.row.warnings.length > 0) && (
+                                <Signal text="CONDITIONAL" />
+                              )}
+                            </h3>
+                            <p className="model">
+                              Your roster: {fmt(chain.before)} →{" "}
+                              {fmt(chain.intermediate)} → {fmt(chain.after)}{" "}
+                              EPPG.
+                            </p>
+                            <p>
+                              {chain.mode === "safe"
+                                ? "First trade does not reduce scoring even if the follow-up never happens."
+                                : `If the follow-up fails, step one leaves you at ${fmt(chain.intermediate)} EPPG (${signed(chain.first.row.own)}).`}
+                            </p>
+                            <p>
+                              <strong>
+                                {chain.kind === "sequential"
+                                  ? "Independent sequential upgrades"
+                                  : "Connected chain"}
+                              </strong>
+                              .{" "}
+                              {chain.relaxations?.length
+                                ? `Relaxed limits: ${chain.relaxations.join("; ")}`
+                                : "Original search limits."}
+                            </p>
+                            {chain.kind !== "sequential" &&
+                              chain.dependency && (
+                                <>
+                                  <p className="model">
+                                    Connected route:{" "}
+                                    {chain.dependency.route === "retrade"
+                                      ? "Re-trade acquisition"
+                                      : "Keep-and-release"}
+                                    .
+                                  </p>
+                                  {dependencyDetails(chain.dependency)}
+                                </>
+                              )}
+                            {renderLeg(chain, 1)}
+                            {renderLeg(chain, 2)}
+                          </article>
+                        )}
+                      />
+                    </section>
+                  ),
+              )}
             </>
           )}
         </div>

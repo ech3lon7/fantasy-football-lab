@@ -57,6 +57,7 @@ export interface RetainedEvidence {
   issue: string;
 }
 export interface ChainDependencyEvidence {
+  standalone?: { before: number; after: number };
   route: "retrade" | "retain" | null;
   retrade: RetradeEvidence;
   retained: RetainedEvidence;

@@ -587,7 +587,7 @@ it("rejects a 23.95-for-52 concession and checks recipient boundary values", asy
   for (const recipient of [
     { maximumValueLossPct: NaN, minimumGain: 1 },
     { maximumValueLossPct: 1.01, minimumGain: 1 },
-    { maximumValueLossPct: 0.1, minimumGain: -1 },
+    { maximumValueLossPct: 0.1, minimumGain: NaN },
   ])
     expect(chainErrors(m, query({ recipient })).join(" ")).toMatch(/recipient/);
 });
@@ -707,30 +707,18 @@ it("applies five presets without overwriting mode, sizes, teams, fit, pool or de
       fit: { surplus: defaultChainFit("surplus") },
     },
   });
-  expect(
-    chainPresets.map((p) => [
-      p.minimumGain,
-      p.maximumValueLossPct,
-      p.recipientGain,
-      p.pricePolicy,
-    ]),
-  ).toEqual([
-    [2, 0.1, 0, "warnings"],
-    [3, 0.1, 0.1, "warnings"],
-    [4, 0.1, 0.25, "warnings"],
-    [5, 0.1, 0.5, "required"],
-    [8, 0.1, 1, "required"],
-  ]);
+  expect(chainPresets).toHaveLength(7);
   for (const preset of chainPresets) {
-    const applied = applyChainPreset(original, preset.id);
-    expect(applied.first).toBe(original.first);
-    expect(applied.second).toBe(original.second);
+    const applied = applyChainPreset(original, preset.id, "negotiable");
+    expect(applied.first.teams).toBe(original.first.teams);
+    expect(applied.second.teams).toBe(original.second.teams);
     expect(applied.pool).toBe(original.pool);
-    expect(applied.mode).toBe("speculative");
     expect(applied.depth).toBe("deeper");
-    expect(applied.maximumLoss).toBe(7);
-    expect(applied.minimumGain).toBe(preset.minimumGain);
+    expect(applied.minimumGain).toBe(2);
     expect(applied.first.fit!.surplus!.enabled).toBe(false);
+    expect(applied.recipient!.minimumGain).toBe(
+      preset.id === "mutual" ? 0 : -3.25,
+    );
   }
 });
 

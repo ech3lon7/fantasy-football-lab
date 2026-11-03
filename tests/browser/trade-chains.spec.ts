@@ -143,7 +143,7 @@ async function stored(page: Page) {
 }
 
 // Both worker paths retain sequential scoring and contextual saves while requiring each recipient to benefit.
-test("finds both chain modes, explains replacements, and saves individual steps without moving real rosters", async ({
+test("finds positive and flat safe chains, explains replacements, and saves steps without moving rosters", async ({
   page,
 }) => {
   await seed(page);
@@ -158,9 +158,11 @@ test("finds both chain modes, explains replacements, and saves individual steps 
   await page.getByText("Chain search exclusions", { exact: true }).click();
   await expect(page.getByText(/Search coverage: complete/)).toBeVisible();
   await expect(page.getByText(/deferred first trades: 0/)).toBeVisible();
-  await expect(page.getByText(/gain-bounded-bridge-search-4/)).toBeVisible();
+  await expect(page.getByText(/negotiable-sequence-search-5/)).toBeVisible();
   // The worker distinguishes cheap score-ceiling rejections from full evaluations.
-  await expect(page.getByText(/Skipped full scoring for \d+ candidates/)).toBeVisible();
+  await expect(
+    page.getByText(/Skipped full scoring for \d+ candidates/),
+  ).toBeVisible();
 
   const safe = page
     .locator("article")
@@ -172,7 +174,7 @@ test("finds both chain modes, explains replacements, and saves individual steps 
     .locator("article")
     .filter({
       has: page.getByRole("heading", {
-        name: /Speculative.*\+5.00 EPPG overall/,
+        name: /Safe.*\+5.00 EPPG overall/,
       }),
     })
     .first();
@@ -210,7 +212,7 @@ test("finds both chain modes, explains replacements, and saves individual steps 
     safe.getByText("Your roster: 61.00 → 62.00 → 67.00 EPPG.", { exact: true }),
   ).toBeVisible();
   await expect(
-    speculative.getByText(/step one leaves you at 61.00 EPPG/),
+    speculative.getByText(/First trade does not reduce scoring/),
   ).toBeVisible();
   await expect(safe.getByText(/Acceptance concern/)).toHaveCount(0);
   await page
@@ -224,14 +226,35 @@ test("finds both chain modes, explains replacements, and saves individual steps 
       .locator("..");
     // Inspection reuses this leg's captured before/after, including step two's prerequisite, without changing either planner's settings.
     const beforeInspect = await stored(page);
-    const expectedBefore = await leg.locator("tbody tr").first().locator("td").nth(1).innerText();
-    const expectedAfter = await leg.locator("tbody tr").first().locator("td").nth(2).innerText();
-    await leg.getByRole("button", { name: `Inspect step ${step}`, exact: true }).click();
-    const summary = page.getByRole("region", { name: "Trade scoring summary", exact: true });
+    const expectedBefore = await leg
+      .locator("tbody tr")
+      .first()
+      .locator("td")
+      .nth(1)
+      .innerText();
+    const expectedAfter = await leg
+      .locator("tbody tr")
+      .first()
+      .locator("td")
+      .nth(2)
+      .innerText();
+    await leg
+      .getByRole("button", { name: `Inspect step ${step}`, exact: true })
+      .click();
+    const summary = page.getByRole("region", {
+      name: "Trade scoring summary",
+      exact: true,
+    });
     await expect(summary).toHaveAttribute("aria-busy", "false");
-    await expect(summary.locator(".trade-score-team").first()).toContainText(expectedBefore);
-    await expect(summary.locator(".trade-score-team").first()).toContainText(expectedAfter);
-    await expect(page.getByLabel("Outgoing player 1", { exact: true })).toBeDisabled();
+    await expect(summary.locator(".trade-score-team").first()).toContainText(
+      expectedBefore,
+    );
+    await expect(summary.locator(".trade-score-team").first()).toContainText(
+      expectedAfter,
+    );
+    await expect(
+      page.getByLabel("Outgoing player 1", { exact: true }),
+    ).toBeDisabled();
     expect((await stored(page)).state.draft).toEqual(beforeInspect.state.draft);
     await leg
       .getByText("Why the other team might accept", { exact: true })
@@ -277,7 +300,7 @@ test("finds both chain modes, explains replacements, and saves individual steps 
   );
   await page
     .getByRole("combobox", { name: "Chain mode", exact: true })
-    .selectOption("speculative");
+    .selectOption("safe");
   await expect(page.getByText(/Chain results are stale/)).toBeVisible();
   // Editing chain controls does not disable bookmarking either already evaluated step or alter its captured scoring basis.
   await page
@@ -311,7 +334,7 @@ test("finds both chain modes, explains replacements, and saves individual steps 
     page.getByText(/[1-9][0-9]* qualifying chains found/),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: /Safe.*EPPG overall/ }),
+    page.getByRole("heading", { name: /Speculative.*EPPG overall/ }),
   ).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
@@ -369,9 +392,7 @@ test("isolates scopes and presets, retains optional fit settings and remembers b
   expect(report.chainSearch.currentQuery.second.teams).toEqual(["3"]);
   expect(report.chainSearch.status).toBe("complete");
   // Both download routes retain algorithm/build identity and exact remaining work from the dedicated worker.
-  expect(report.chainSearch.searchVersion).toBe(
-    "gain-bounded-bridge-search-4",
-  );
+  expect(report.chainSearch.searchVersion).toBe("negotiable-sequence-search-5");
   expect(Number.isFinite(Date.parse(report.chainSearch.appBuild.builtAt))).toBe(
     true,
   );
@@ -428,12 +449,15 @@ test("isolates scopes and presets, retains optional fit settings and remembers b
   expect(report.chainSearch.currentQuery.basis).toBe("best-available");
   expect(report.chainSearch.currentQuery.second.teams).toEqual(["3"]);
   // Presets preserve unrelated selections and leave both optional fit gates disabled.
+  // Seven scenarios share independently selected Balanced strictness; their scopes and optional targeting remain intact.
   const presets = [
-    ["very-lenient", "2", "10", "0", "warnings"],
-    ["lenient", "3", "10", "0.1", "warnings"],
-    ["balanced", "4", "10", "0.25", "warnings"],
-    ["strict", "5", "10", "0.5", "required"],
-    ["very-strict", "8", "10", "1", "required"],
+    ["balanced", "2", "20", "-1.5", "warnings"],
+    ["mutual", "2", "20", "0", "warnings"],
+    ["star", "2", "20", "-1.5", "warnings"],
+    ["depth", "2", "20", "-1.5", "warnings"],
+    ["surface", "2", "20", "-1.5", "warnings"],
+    ["connected", "2", "20", "-1.5", "warnings"],
+    ["speculative", "2", "20", "-1.5", "warnings"],
   ];
   for (const [id, gain, concession, recipient, prices] of presets) {
     await chain
@@ -730,9 +754,7 @@ test("persists independent per-leg plausibility and materiality controls with ex
       exact: true,
     })
     .fill("30");
-  await expect(
-    page.getByText(/Custom recipient concession: 30%/),
-  ).toBeVisible();
+  await expect(page.getByRole("spinbutton", { name:"Maximum recipient value loss (%)",exact:true })).toHaveValue("30");
   await expect
     .poll(
       async () =>
@@ -822,7 +844,9 @@ test("selects all chain pool players and preserves the standard finder", async (
   await seed(page);
   const original = await stored(page);
   const pool = page
-    .locator("details:not(.trade-saved-drawer):not(.trade-full-analysis):not(.trade-filter-category)")
+    .locator(
+      "details:not(.trade-saved-drawer):not(.trade-full-analysis):not(.trade-filter-category)",
+    )
     .filter({
       has: page.locator("summary").filter({ hasText: /^Chain tradable pool/ }),
     });
@@ -855,4 +879,186 @@ test("selects all chain pool players and preserves the standard finder", async (
   await expect(
     pool.getByRole("button", { name: /^Select all/ }),
   ).toBeDisabled();
+});
+
+// Exercise the actual worker, temporary first-trade lock and named preference persistence without changing saved ownership.
+test("previews follow-ups, saves scenario modifiers and keeps roster ownership unchanged", async ({
+  page,
+}) => {
+  await seed(page);
+  await page
+    .getByRole("button", { name: "Manual analyzer", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Outgoing player 3", exact: true })
+    .selectOption("");
+  await page
+    .getByRole("combobox", { name: "Outgoing player 2", exact: true })
+    .selectOption("");
+  await page
+    .getByRole("combobox", { name: "Incoming player 1", exact: true })
+    .selectOption("2");
+  const before = await stored(page);
+  await page
+    .getByRole("button", { name: "Find a follow-up", exact: true })
+    .click();
+  await openTradeFilters(page, "Chain");
+  await expect(
+    page.getByText("Locked first trade", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("combobox", { name: "Chain preset", exact: true })
+    .selectOption("balanced");
+  await page
+    .getByRole("combobox", { name: "Chain strictness", exact: true })
+    .selectOption("negotiable");
+  await expect(
+    page.getByRole("spinbutton", {
+      name: "Minimum recipient gain (EPPG)",
+      exact: true,
+    }),
+  ).toHaveValue("-3.25");
+  // Synthetic TE compensation has zero surplus; widen this explicit test-only cap to exercise both sequence groups.
+  await page
+    .getByRole("spinbutton", {
+      name: "Maximum recipient value loss (%)",
+      exact: true,
+    })
+    .fill("100");
+  await page
+    .getByRole("combobox", { name: "Target roster need", exact: true })
+    .selectOption("WR");
+  await page
+    .getByRole("combobox", { name: "Add required final target", exact: true })
+    .selectOption("5");
+  await page.getByRole("combobox",{name:"Chain strictness",exact:true}).selectOption("conservative");
+  await expect(page.getByRole("spinbutton",{name:"Minimum recipient gain (EPPG)",exact:true})).toHaveValue("0");
+  await expect(page.getByRole("combobox",{name:"Target roster need",exact:true})).toHaveValue("WR");
+  await page.getByRole("combobox",{name:"Chain strictness",exact:true}).selectOption("negotiable");
+  await expect(page.getByRole("spinbutton",{name:"Minimum recipient gain (EPPG)",exact:true})).toHaveValue("-3.25");
+  await page.getByRole("spinbutton",{name:"Maximum recipient value loss (%)",exact:true}).fill("100");
+  await page
+    .getByRole("textbox", { name: "Custom preset name", exact: true })
+    .fill("WR follow-ups");
+  await page
+    .getByRole("button", { name: "Save custom preset", exact: true })
+    .click();
+  await expect
+    .poll(
+      async () =>
+        JSON.parse((await stored(page)).state.filters.tradeSearchSettings).chain
+          .customPresets.length,
+    )
+    .toBe(1);
+  await page
+    .getByRole("button", { name: "Search trade chains", exact: true })
+    .click();
+  await expect(
+    page.getByText(/[1-9][0-9]* qualifying chains found/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Connected chains", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", {
+      name: "Independent sequential upgrades",
+      exact: true,
+    }),
+  ).toBeVisible();
+  const after = await stored(page);
+  expect(after.dataset!.tables.ModelRosters).toEqual(
+    before.dataset!.tables.ModelRosters,
+  );
+  expect(after.state.filters.rosterScenarios).toEqual(
+    before.state.filters.rosterScenarios,
+  );
+  await page
+    .getByRole("button", { name: "Search deeper (keep results)", exact: true })
+    .click();
+  await expect(
+    page.getByText(/[1-9][0-9]* qualifying chains found/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "Search deeper (keep results)",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Two-trade chain planner", exact: true })
+    .click();
+  await openTradeFilters(page, "Chain");
+  await expect(
+    page
+      .getByRole("combobox", { name: "Chain preset", exact: true })
+      .locator("option:checked"),
+  ).toHaveText("WR follow-ups");
+  await expect(
+    page.getByRole("combobox", { name: "Target roster need", exact: true }),
+  ).toHaveValue("WR");
+  await expect(
+    page.getByRole("button", {
+      name: "Remove required target Chain Target WR",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Locked first trade", { exact: true }),
+  ).toBeVisible();
+});
+
+// The worker exposes every automatic retry while leaving the remembered hard thresholds and scopes intact.
+test("reports bounded automatic recovery without modifying requested gains or teams", async ({
+  page,
+}) => {
+  await seed(page);
+  await page
+    .getByRole("spinbutton", {
+      name: "Minimum recipient gain (EPPG)",
+      exact: true,
+    })
+    .fill("100");
+  await page
+    .getByRole("checkbox", {
+      name: "Automatically broaden empty searches",
+      exact: true,
+    })
+    .check();
+  await page
+    .getByRole("spinbutton", {
+      name: "Broadening: maximum recipient loss (EPPG)",
+      exact: true,
+    })
+    .fill("3.25");
+  const before = JSON.parse(
+    (await stored(page)).state.filters.tradeSearchSettings,
+  ).chain.query;
+  await page
+    .getByRole("button", { name: "Search trade chains", exact: true })
+    .click();
+  await expect(
+    page.getByText(/[1-9][0-9]* qualifying chains found/),
+  ).toBeVisible();
+  await page
+    .getByText("Search attempts and relaxed limits", { exact: true })
+    .click();
+  await expect(page.getByText(/Attempt 1: 0 qualifying plans/)).toBeVisible();
+  await expect(
+    page.getByText(/Attempt 3:.*Recipient minimum 100.00/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("spinbutton", {
+      name: "Minimum recipient gain (EPPG)",
+      exact: true,
+    }),
+  ).toHaveValue("100");
+  const after = JSON.parse(
+    (await stored(page)).state.filters.tradeSearchSettings,
+  ).chain.query;
+  expect(after.minimumGain).toBe(before.minimumGain);
+  expect(after.maximumLoss).toBe(before.maximumLoss);
+  expect(after.first.teams).toEqual(before.first.teams);
+  expect(after.second.teams).toEqual(before.second.teams);
+  expect(after.pool).toEqual(before.pool);
 });

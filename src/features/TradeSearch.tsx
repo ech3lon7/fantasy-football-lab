@@ -127,7 +127,9 @@ export function TradeSearch({
   onPreview,
   onChainPool,
   onClearPreview,
+  followupRequest,
 }: {
+  followupRequest?: { id: string; draft: Draft };
   poolHost?: HTMLElement | null;
   workspaceMode?: TradeWorkspaceMode;
   onModeChange?: (mode: TradeWorkspaceMode) => void;
@@ -182,6 +184,18 @@ export function TradeSearch({
   const [chainSettings, setChainSettings] = useState<
     ChainPreferences | undefined
   >(initialSettings.chain);
+  // A selected offer becomes a temporary locked first step; no hypothetical or imported ownership is changed.
+  const [followup, setFollowup] = useState<{ id: string; draft: Draft }>();
+  function findFollowup(d: Draft) {
+    onClearPreview?.();
+    setFollowup({ id: crypto.randomUUID(), draft: structuredClone(d) });
+    setOpenFinder("chain");
+  }
+  useEffect(() => {
+    if (!followupRequest) return;
+    setFollowup(followupRequest);
+    setOpenFinder("chain");
+  }, [followupRequest?.id]);
   const lastSettings = useRef(settingsRaw ?? "");
   const [below, setBelow] = useState("5"),
     [above, setAbove] = useState("5");
@@ -2757,6 +2771,20 @@ export function TradeSearch({
                               >
                                 Load trade
                               </button>
+                              <button
+                                className="button"
+                                disabled={stale}
+                                onClick={() =>
+                                  findFollowup({
+                                    teamA: query.teamA,
+                                    teamB: row.teamB,
+                                    give: row.give ?? query.give,
+                                    get: row.get,
+                                  })
+                                }
+                              >
+                                Find a follow-up
+                              </button>
                               {save && (
                                 <button
                                   className="button primary"
@@ -2938,6 +2966,7 @@ export function TradeSearch({
     <>
       {searchPanel}
       <TradeChains
+        followup={followup}
         poolHost={poolHost}
         m={m}
         onPreview={onPreview}

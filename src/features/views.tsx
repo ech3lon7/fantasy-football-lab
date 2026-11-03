@@ -1730,6 +1730,11 @@ export function TradeView({
   const [preview, setPreview] = useState<TradeWorkspacePreview>();
   // The active finder portals its own visual pool beside the existing player cards without sharing query state.
   const [poolHost, setPoolHost] = useState<HTMLDivElement | null>(null);
+  // Follow-up search previews an exchange instead of committing it to the user's hypothetical roster.
+  const [followupRequest, setFollowupRequest] = useState<{
+    id: string;
+    draft: Draft;
+  }>();
   const [workspaceMode, setWorkspaceMode] =
     useState<TradeWorkspaceMode>("standard");
   const [manualFilters, setManualFilters] = useState(false),
@@ -2283,6 +2288,7 @@ export function TradeView({
             draft={baseDraft}
             lineupsRaw={basePlans}
             change={change}
+            followupRequest={followupRequest}
             workspaceMode={workspaceMode}
             onModeChange={(mode) => {
               setWorkspaceMode(mode);
@@ -2366,6 +2372,22 @@ export function TradeView({
                 )}
                 {result && !result.valid && (
                   <div className="notice">{result.errors.join(" ")}</div>
+                )}
+                {r && !preview?.prerequisite && (
+                  <button
+                    className="button"
+                    disabled={!r.legality}
+                    onClick={() => {
+                      setFollowupRequest({
+                        id: crypto.randomUUID(),
+                        draft: structuredClone(draft),
+                      });
+                      setWorkspaceMode("chain");
+                      setPreview(undefined);
+                    }}
+                  >
+                    Find a follow-up
+                  </button>
                 )}
                 <button
                   type="button"

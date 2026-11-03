@@ -9,6 +9,15 @@ import {
 } from "./contracts";
 import { evaluateTrade, type TradeResult } from "./trades";
 import {
+  applyChainPreset,
+  chainPresets,
+  chainSearchRounds,
+  chainRankingScore,
+  type ChainDiscovery,
+  type ChainRanking,
+} from "./chain-discovery";
+export { applyChainPreset, chainPresets };
+import {
   positionGradeScale,
   scoreTradeMatch,
   type SearchRow,
@@ -56,6 +65,7 @@ import {
 export interface ChainQuery {
   team: string;
   pool: string[];
+  discovery?: ChainDiscovery;
   mode: "safe" | "speculative" | "both";
   maximumLoss: number;
   minimumGain: number;
@@ -100,63 +110,6 @@ export interface ChainFitEvidence {
     status: string;
   }[];
   matched: boolean;
-}
-// Presets change only the three agreed thresholds and price gate; user mode, scope, sizes, depth and fit stay intact.
-export const chainPresets = [
-  {
-    id: "very-lenient",
-    label: "Very lenient",
-    minimumGain: 2,
-    maximumValueLossPct: 0.1,
-    recipientGain: 0,
-    pricePolicy: "warnings",
-  },
-  {
-    id: "lenient",
-    label: "Lenient",
-    minimumGain: 3,
-    maximumValueLossPct: 0.1,
-    recipientGain: 0.1,
-    pricePolicy: "warnings",
-  },
-  {
-    id: "balanced",
-    label: "Balanced",
-    minimumGain: 4,
-    maximumValueLossPct: 0.1,
-    recipientGain: 0.25,
-    pricePolicy: "warnings",
-  },
-  {
-    id: "strict",
-    label: "Strict",
-    minimumGain: 5,
-    maximumValueLossPct: 0.1,
-    recipientGain: 0.5,
-    pricePolicy: "required",
-  },
-  {
-    id: "very-strict",
-    label: "Very strict",
-    minimumGain: 8,
-    maximumValueLossPct: 0.1,
-    recipientGain: 1,
-    pricePolicy: "required",
-  },
-] as const;
-export function applyChainPreset(q: ChainQuery, id: string): ChainQuery {
-  const preset = chainPresets.find((p) => p.id === id);
-  return preset
-    ? {
-        ...q,
-        minimumGain: preset.minimumGain,
-        pricePolicy: preset.pricePolicy,
-        recipient: {
-          maximumValueLossPct: preset.maximumValueLossPct,
-          minimumGain: preset.recipientGain,
-        },
-      }
-    : q;
 }
 // Defaults suggest a surplus-to-deficit route without activating either rule.
 export function defaultChainFit(kind: "deficit" | "surplus"): ChainFitRule {
@@ -241,6 +194,7 @@ export interface ChainRecipientEvidence {
   gain: number | null;
   maximumValueLossPct: number;
   minimumGain: number;
+  gainPct?: number | null;
   failures: string[];
 }
 export interface ChainRange {
@@ -267,9 +221,11 @@ export interface TradeChain {
   gain: number;
   opponentGain: number;
   dependency?: ChainDependencyEvidence;
+  kind?: "connected" | "sequential";
+  relaxations?: string[];
 }
 // Identify search semantics independently of the user-managed app version in progress and debug exports.
-export const chainSearchVersion = "gain-bounded-bridge-search-4";
+export const chainSearchVersion = "negotiable-sequence-search-5";
 export interface ChainStats {
   limits?: {
     firstEvaluations: number;
@@ -318,6 +274,12 @@ export interface ChainStats {
   };
 }
 export interface ChainResults {
+  attempts?: {
+    query: ChainQuery;
+    changes: string[];
+    stats: ChainStats;
+    found: number;
+  }[];
   chains: TradeChain[];
   stats: ChainStats;
   // Separate exclusion samples show actual per-leg filters and connectedness without storing every rejected candidate.
@@ -343,7 +305,8 @@ export interface ChainResults {
 
 // Common normalized indices preserve surplus ratios; zeros stay numeric, and an unknown gain never counts as a benefit.
 export function chainRecipientEvidence(
-  row: Pick<SearchRow, "outgoing" | "incoming" | "give" | "get" | "other">,
+  row: Pick<SearchRow, "outgoing" | "incoming" | "give" | "get" | "other"> &
+    Partial<Pick<SearchRow, "otherBefore">>,
   policy = defaultChainRecipient,
   premium = 0,
   scored = true,
@@ -374,6 +337,10 @@ export function chainRecipientEvidence(
     );
   return {
     scored,
+    gainPct:
+      row.other !== null && row.otherBefore != null && row.otherBefore > 0
+        ? row.other / row.otherBefore
+        : null,
     receivedIndex: row.outgoing,
     surrenderedIndex: row.incoming,
     receivedComparableIndex,
@@ -444,12 +411,69 @@ export function chainErrors(m: Model, q: ChainQuery): string[] {
     !Number.isFinite(recipient.maximumValueLossPct) ||
     recipient.maximumValueLossPct < 0 ||
     recipient.maximumValueLossPct > 1 ||
-    !Number.isFinite(recipient.minimumGain) ||
-    recipient.minimumGain < 0
+    !Number.isFinite(recipient.minimumGain)
   )
     errors.push(
-      "Use a recipient value-loss limit from 0–100% and a nonnegative minimum recipient gain.",
+      "Use a recipient value-loss limit from 0–100% and a finite minimum recipient gain (negative permits a scoring loss).",
     );
+  // Discovery settings cannot bypass source/ownership validation or silently widen protected teams and players.
+  const discovery = q.discovery;
+  if (discovery) {
+    if (
+      !["connected", "sequential", "both"].includes(discovery.sequences) ||
+      !["own", "mutual", "appeal"].includes(discovery.ranking)
+    )
+      errors.push("Choose valid sequence and ranking options.");
+    if (
+      discovery.position &&
+      ![...positions, "depth"].includes(discovery.position)
+    )
+      errors.push("Choose a valid target position.");
+    if (
+      discovery.requiredTargets &&
+      (new Set(discovery.requiredTargets).size !==
+        discovery.requiredTargets.length ||
+        discovery.requiredTargets.some(
+          (id) =>
+            !m.byId.has(id) ||
+            m.byId.get(id)!.owner === q.team ||
+            m.byId.get(id)!.owner === "0",
+        ))
+    )
+      errors.push("Required targets must belong to another fantasy team.");
+    const b = discovery.broaden;
+    if (
+      b &&
+      (typeof b.enabled !== "boolean" ||
+        !Number.isFinite(b.maximumRecipientLoss) ||
+        b.maximumRecipientLoss < 0 ||
+        !Number.isFinite(b.maximumValueLossPct) ||
+        b.maximumValueLossPct < 0 ||
+        b.maximumValueLossPct > 1 ||
+        !Number.isFinite(b.indexExtra) ||
+        b.indexExtra < 0)
+    )
+      errors.push(
+        "Automatic broadening needs finite nonnegative limits and a value concession at most 100%.",
+      );
+    const pin = discovery.pinnedFirst;
+    if (
+      pin &&
+      (pin.teamA !== q.team ||
+        (!q.first.teams?.includes(pin.teamB) && q.first.teams !== undefined) ||
+        new Set([...pin.give, ...pin.get]).size !==
+          pin.give.length + pin.get.length ||
+        pin.give.some((id) => !q.pool.includes(id)) ||
+        pin.get.some((id) => m.byId.get(id)?.owner !== pin.teamB) ||
+        pin.give.length < q.first.offer.minimum ||
+        pin.give.length > q.first.offer.maximum ||
+        pin.get.length < q.first.receive.minimum ||
+        pin.get.length > q.first.receive.maximum)
+    )
+      errors.push(
+        "The locked first trade must match your selected team, pool, teams and package sizes.",
+      );
+  }
   if (q.pricePolicy && !["required", "warnings"].includes(q.pricePolicy))
     errors.push("Invalid chain price-test policy.");
   // Materiality is always required; malformed or blank active controls cannot silently switch it off.
@@ -872,8 +896,13 @@ export function chainScoringCeiling(m: Model, roster: string[], draft: Draft) {
 }
 
 // Final ranking uses the original-to-final gain; passing recipient preferences never becomes an acceptance probability.
-export function compareChains(a: TradeChain, b: TradeChain) {
+export function compareChains(
+  a: TradeChain,
+  b: TradeChain,
+  ranking: ChainRanking = "own",
+) {
   return (
+    chainRankingScore(b, ranking) - chainRankingScore(a, ranking) ||
     b.gain - a.gain ||
     Number(b.dependency?.route === "retrade") -
       Number(a.dependency?.route === "retrade") ||
@@ -885,6 +914,41 @@ export function compareChains(a: TradeChain, b: TradeChain) {
     b.opponentGain - a.opponentGain ||
     a.key.localeCompare(b.key)
   );
+}
+// Keep earlier discoveries when deeper work changes which top results fit in a bounded display. Counts are a conservative known union.
+export function mergeChainResults(
+  previous: ChainResults,
+  next: ChainResults,
+  ranking: ChainRanking = "own",
+): ChainResults {
+  const chains = [
+    ...new Map(
+      [...previous.chains, ...next.chains].map((c) => [c.key, c]),
+    ).values(),
+  ].sort((a, b) => compareChains(a, b, ranking));
+  return {
+    ...next,
+    chains,
+    attempts: [...(previous.attempts ?? []), ...(next.attempts ?? [])],
+    stats: {
+      ...next.stats,
+      found: Math.max(previous.stats.found, next.stats.found, chains.length),
+      evaluated: previous.stats.evaluated + next.stats.evaluated,
+      scanned: previous.stats.scanned + next.stats.scanned,
+      limits: {
+        firstEvaluations:
+          (previous.stats.limits?.firstEvaluations ?? 0) +
+          (next.stats.limits?.firstEvaluations ?? 0),
+        totalEvaluations:
+          (previous.stats.limits?.totalEvaluations ?? 0) +
+          (next.stats.limits?.totalEvaluations ?? 0),
+        scans:
+          (previous.stats.limits?.scans ?? 0) + (next.stats.limits?.scans ?? 0),
+      },
+      limited: previous.stats.limited || next.stats.limited,
+      resultCapped: previous.stats.resultCapped || next.stats.resultCapped,
+    },
+  };
 }
 export function searchTradeChains(
   m: Model,
@@ -1012,6 +1076,16 @@ export function searchTradeChains(
         return false;
       }
     }
+    // Source appeal remains supporting evidence when it is not an explicitly enabled eligibility filter.
+    if (!config.surface && q.discovery?.ranking === "appeal")
+      leg.surface = surfaceAppeal(
+        model,
+        leg.draft,
+        result,
+        { metric: "both", minimum: 0, requireValueTests: false },
+        q.basis,
+        plans,
+      );
     if (!config.surface) return true;
     leg.surface = surfaceAppeal(
       model,
@@ -1067,7 +1141,11 @@ export function searchTradeChains(
         : retrade.passed && policy.route === "either"
           ? "Not evaluated: meaningful re-trade already qualifies."
           : "";
-    if (!issue && coverage.length) {
+    if (
+      !issue &&
+      (coverage.length ||
+        (q.discovery && q.discovery.sequences !== "connected"))
+    ) {
       const key = draftKey(second.draft);
       let cached = standaloneCache.get(key);
       if (!cached) {
@@ -1140,7 +1218,10 @@ export function searchTradeChains(
       standalone,
       issue,
     );
-    return chainDependencyEvidence(policy, retrade, retained);
+    const evidence = chainDependencyEvidence(policy, retrade, retained);
+    return standalone && q.discovery?.sequences !== "connected"
+      ? { ...evidence, standalone }
+      : evidence;
   };
   // Progress snapshots carry current allowances and independent nested counts, including when the user cancels or downloads a running search.
   const publish = () => {
@@ -1209,6 +1290,20 @@ export function searchTradeChains(
     }
     if (!row.legal || row.dropsA.some((id) => protectedIds.has(id))) {
       stats.rejectedRoster++;
+      if (plausibilityRejections.length < 10) {
+        const cuts = row.dropsA
+          .filter((id) => protectedIds.has(id))
+          .map((id) => m.byId.get(id)?.name ?? "Unknown player");
+        plausibilityRejections.push({
+          step,
+          draft: leg.draft,
+          failures: [
+            cuts.length
+              ? `Required drops are protected: ${cuts.join(", ")}. Include them in the chain pool only if you permit their removal.`
+              : "This exchange has an unresolved roster or ownership conflict.",
+          ],
+        });
+      }
       return false;
     }
     if (requirePrices && (row.surplus !== "PASS" || row.points !== "PASS")) {
@@ -1289,7 +1384,10 @@ export function searchTradeChains(
     }
     return true;
   };
-  const first = candidatePortfolio(m, q, q.first, q.pool, firstFit);
+  // A follow-up request searches its exact first exchange, without mutating either saved roster.
+  const first = q.discovery?.pinnedFirst
+    ? [q.discovery.pinnedFirst][Symbol.iterator]()
+    : candidatePortfolio(m, q, q.first, q.pool, firstFit);
   let firstScans = 0,
     firstEvaluations = 0;
   while (firstScans < budget.scans && firstEvaluations < budget.first) {
@@ -1332,7 +1430,7 @@ export function searchTradeChains(
       passesSurface(m, scored.leg, scored.result, 1, lineupsRaw)
     ) {
       const gain = scored.leg.row.own!;
-      const safe = gain > 0;
+      const safe = q.discovery ? gain >= 0 : gain > 0;
       if (
         gain >= -q.maximumLoss &&
         (q.mode === "both" || (q.mode === "safe") === safe)
@@ -1408,6 +1506,19 @@ export function searchTradeChains(
           stats.rejectedValue++;
           return false;
         }
+        // A required final target cannot be rescued by scoring an offer that never acquires or retains it.
+        const selectedFinal = [
+          ...seed.leg.draft.get.filter((id) => !draft.give.includes(id)),
+          ...draft.get,
+        ];
+        if (
+          (q.discovery?.requiredTargets ?? []).some(
+            (id) => !selectedFinal.includes(id),
+          )
+        ) {
+          stats.rejectedFit++;
+          return false;
+        }
         if (!precheckRecipient(afterFirst, draft, 2)) {
           return false;
         }
@@ -1471,7 +1582,19 @@ export function searchTradeChains(
             evaluatedSecond.result,
           );
           if (!dependency) return true;
-          if (!dependency.route) {
+          const connected = !!dependency.route;
+          // Independent upgrades must each help and trade two must be legally useful on its own, rather than merely failing a dependency check.
+          const independent =
+            !connected &&
+            seed.leg.row.own! >= 0 &&
+            second.row.own! > 0 &&
+            !!dependency.standalone &&
+            dependency.standalone.after > dependency.standalone.before;
+          const sequence = q.discovery?.sequences ?? "connected";
+          if (
+            (!connected && (!independent || sequence === "connected")) ||
+            (connected && sequence === "sequential")
+          ) {
             stats.rejectedDependency++;
             if (dependencyRejections.length < 5)
               dependencyRejections.push({
@@ -1479,6 +1602,36 @@ export function searchTradeChains(
                 second: second.draft,
                 evidence: dependency,
               });
+            return true;
+          }
+          // Final targets refer to retained acquisitions, not cards immediately re-traded away. Depth means a retained reserve.
+          const kept = [
+            ...seed.leg.draft.get.filter(
+              (id) => !second.draft.give.includes(id),
+            ),
+            ...second.draft.get,
+          ].filter(
+            (id) =>
+              evaluatedSecond.result.valid &&
+              evaluatedSecond.result.legalA.includes(id),
+          );
+          const target = q.discovery?.position;
+          const scoredIds =
+            tradeImpact(evaluatedSecond.result, q.basis)?.own.weekly.flatMap(
+              (w) => w.ids,
+            ) ?? [];
+          if (
+            (q.discovery?.requiredTargets ?? []).some(
+              (id) => !kept.includes(id),
+            ) ||
+            (target &&
+              !kept.some((id) =>
+                target === "depth"
+                  ? !scoredIds.includes(id)
+                  : m.byId.get(id)?.pos === target,
+              ))
+          ) {
+            stats.rejectedFit++;
             return true;
           }
           // Report the best complete inspected chain that passes all other checks, even when it falls short of the requested final gain.
@@ -1493,7 +1646,11 @@ export function searchTradeChains(
           ) {
             const chain: TradeChain = {
               key: JSON.stringify([seed.leg.row.key, second.row.key]),
-              mode: seed.leg.row.own! > 0 ? "safe" : "speculative",
+              mode: (
+                q.discovery ? seed.leg.row.own! >= 0 : seed.leg.row.own! > 0
+              )
+                ? "safe"
+                : "speculative",
               first: seed.leg,
               second,
               afterFirst: afterFirst.simulation!.scenario,
@@ -1503,10 +1660,11 @@ export function searchTradeChains(
               gain,
               opponentGain: seed.leg.row.other! + second.row.other!,
               dependency,
+              kind: connected ? "connected" : "sequential",
             };
             chains.push(chain);
             stats.found++;
-            chains.sort(compareChains);
+            chains.sort((a, b) => compareChains(a, b, q.discovery?.ranking));
             if (chains.length > 30) {
               chains.pop();
               // Retaining only the top 30 affects display, not whether the search exhausted its work streams.
@@ -1604,4 +1762,63 @@ export function searchTradeChains(
     plausibilityRejections,
     dependencyRejections,
   };
+}
+
+// Run a bounded recovery ladder only after zero results; all hard constraints and optional surface/needs filters remain identical.
+export function discoverTradeChains(
+  m: Model,
+  q: ChainQuery,
+  plans?: string,
+  progress?: (stats: ChainStats) => void,
+): ChainResults {
+  const errors = chainErrors(m, q);
+  if (errors.length) throw Error(errors.join(" "));
+  const attempts: NonNullable<ChainResults["attempts"]> = [];
+  let result: ChainResults | undefined;
+  for (const round of chainSearchRounds(q)) {
+    const evaluated = attempts.reduce((n, a) => n + a.stats.evaluated, 0);
+    result = searchTradeChains(m, round.query, plans, (stats) =>
+      progress?.({
+        ...stats,
+        evaluated: evaluated + stats.evaluated,
+        limits: stats.limits
+          ? {
+              ...stats.limits,
+              totalEvaluations: evaluated + stats.limits.totalEvaluations,
+            }
+          : undefined,
+      }),
+    );
+    result.chains.forEach((c) => {
+      c.relaxations = round.changes;
+    });
+    attempts.push({
+      query: round.query,
+      changes: round.changes,
+      stats: structuredClone(result.stats),
+      found: result.stats.found,
+    });
+    if (result.chains.length) break;
+  }
+  const final = result!;
+  // Each attempt retains exact coverage and limits; totals never imply that the broader universe was exhausted.
+  final.attempts = attempts;
+  final.stats = {
+    ...final.stats,
+    evaluated: attempts.reduce((n, a) => n + a.stats.evaluated, 0),
+    scanned: attempts.reduce((n, a) => n + a.stats.scanned, 0),
+    limits: {
+      firstEvaluations: attempts.reduce(
+        (n, a) => n + (a.stats.limits?.firstEvaluations ?? 0),
+        0,
+      ),
+      totalEvaluations: attempts.reduce(
+        (n, a) => n + (a.stats.limits?.totalEvaluations ?? 0),
+        0,
+      ),
+      scans: attempts.reduce((n, a) => n + (a.stats.limits?.scans ?? 0), 0),
+    },
+    limited: attempts.some((a) => a.stats.limited),
+  };
+  return final;
 }

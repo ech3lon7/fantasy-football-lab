@@ -4,7 +4,7 @@ import {
   type RosterScenario,
 } from "../domain/roster-scenarios";
 import {
-  searchTradeChains,
+  discoverTradeChains,
   type ChainQuery,
   type ChainStats,
 } from "../domain/trade-chains";
@@ -44,7 +44,7 @@ self.onmessage = (event: MessageEvent<ChainRequest>) => {
         last = now;
       }
     };
-    const result = searchTradeChains(
+    const result = discoverTradeChains(
       model,
       request.query,
       request.lineupsRaw,
