@@ -1,5 +1,6 @@
 import type { Player } from "./valuation";
 import { playerSignals } from "./valuation";
+import { signalAppearance } from "./signal-appearance";
 
 // Primary breakout classifications stay separate from independent scoring and regression evidence.
 export const gemSignals = [
@@ -24,6 +25,7 @@ export const gemClassifications = [
   "Gem + Watch",
   "Gem + Pre-gem + Watch",
 ] as const;
+// Recognize the previous automatic alternatives only during migration; they are never preselected as AND requirements.
 const candidateSignals = [
   "Gem",
   "Pre-gem",
@@ -124,6 +126,7 @@ export type GemDraft = Record<Threshold, string> & {
   injured: boolean;
   aboveReplacement: boolean;
   includeMissing: boolean;
+  positiveOnly: boolean;
 };
 export type GemQuery = Omit<GemDraft, Threshold> &
   Record<Threshold, number | null>;
@@ -133,17 +136,18 @@ export interface GemResult {
   missing: string[];
 }
 
-// New searches include the new primary stage; explicitly saved signal selections retain their meaning.
+// Start without required labels so mutually exclusive primary stages are never preselected together under AND matching.
 export function defaultGemDraft(team: string): GemDraft {
   return {
     pool: "Available",
     team,
     position: "RB / WR / TE",
-    signals: [...candidateSignals],
+    signals: [],
     classification: "All classifications",
     injured: false,
     aboveReplacement: false,
     includeMissing: false,
+    positiveOnly: false,
     trendMin: "",
     indexMin: "",
     indexMax: "",
@@ -220,6 +224,9 @@ export function validateGemDraft(d: GemDraft, teams: string[]) {
     )
   )
     errors.signals = "Choose recognized gem signals.";
+  // Keep the opt-in flag boolean rather than interpreting malformed saved values as permission to broaden a search.
+  if (typeof d.positiveOnly !== "boolean")
+    errors.positiveOnly = "Choose whether to show positive labels only.";
   return {
     errors,
     query: Object.keys(errors).length
@@ -235,10 +242,18 @@ export function decodeGemFilters(saved: Record<string, string>, team: string) {
   draft.pool = saved.gemPool ?? draft.pool;
   draft.position = saved.gemPos ?? draft.position;
   draft.injured = saved.gemInjured === "true";
+  // Earlier searches remain unrestricted; the new flag persists through the same string-valued sync state.
+  draft.positiveOnly = saved.gemPositiveOnly === "true";
+  if (
+    saved.gemPositiveOnly !== undefined &&
+    !["true", "false"].includes(saved.gemPositiveOnly)
+  )
+    issue =
+      "Saved positive-label filter is invalid. Correct the controls and Apply, or Reset screener.";
   draft.classification = saved.gemClass ?? "All classifications";
   if (saved.gemFilterVersion !== undefined || saved.gemSignals !== undefined) {
     try {
-      if (!["1", "2", "3"].includes(saved.gemFilterVersion)) throw Error();
+      if (!["1", "2", "3", "4"].includes(saved.gemFilterVersion)) throw Error();
       const selected: unknown = JSON.parse(saved.gemSignals ?? "");
       if (
         !Array.isArray(selected) ||
@@ -255,16 +270,18 @@ export function decodeGemFilters(saved: Record<string, string>, team: string) {
       draft.signals = [
         ...new Set((selected as string[]).map((s) => legacySignals[s] ?? s)),
       ].filter((s) => !retiredSignalSelections.includes(s));
-      // Preserve old Any-signal/default searches when the primary family grows; explicit narrow selections stay narrow.
-      if (saved.gemFilterVersion !== "3") {
+      // Old broad/default selections meant alternatives or Any signal; migrate only those exact sets to no requirements.
+      if (saved.gemFilterVersion !== "4") {
         const same = (values: readonly string[]) =>
           draft.signals.length === values.length &&
           values.every((s) => draft.signals.includes(s));
         if (
+          same(gemSignals) ||
+          same(candidateSignals) ||
           same(gemSignals.filter((s) => s !== "Pre-gem")) ||
           same(candidateSignals.filter((s) => s !== "Pre-gem"))
         )
-          draft.signals.push("Pre-gem");
+          draft.signals = [];
       }
       for (const f of gemThresholds) draft[f.key] = saved[f.stored] ?? "";
       for (const k of [
@@ -280,7 +297,7 @@ export function decodeGemFilters(saved: Record<string, string>, team: string) {
       issue =
         "Saved gem filters are invalid or unsupported. Correct the controls and Apply, or Reset screener.";
     }
-  } else if (saved.gemSignal === "All signals") draft.signals = [...gemSignals];
+  } else if (saved.gemSignal === "All signals") draft.signals = [];
   else if (
     Object.hasOwn(legacySignals, saved.gemSignal ?? "") ||
     retiredSignalSelections.includes(saved.gemSignal ?? "")
@@ -302,7 +319,7 @@ export function decodeGemFilters(saved: Record<string, string>, team: string) {
 export function encodeGemFilters(q: GemQuery): Record<string, string> {
   const signals = gemSignals.filter((s) => q.signals.includes(s));
   return {
-    gemFilterVersion: "3",
+    gemFilterVersion: "4",
     gemClass: q.classification,
     gemPool: q.pool,
     gemTeam: q.team,
@@ -312,11 +329,12 @@ export function encodeGemFilters(q: GemQuery): Record<string, string> {
     gemSignal:
       signals.length === 1
         ? signals[0]
-        : signals.length === 0 || signals.length === gemSignals.length
+        : signals.length === 0
           ? "All signals"
-          : "Candidates and watches",
+          : "All selected signals",
     gemAboveReplacement: String(q.aboveReplacement),
     gemIncludeMissing: String(q.includeMissing),
+    gemPositiveOnly: String(q.positiveOnly),
     ...Object.fromEntries(
       gemThresholds.map((f) => [
         f.stored,
@@ -331,7 +349,8 @@ export function risingGemDraft(team: string): GemDraft {
   return {
     ...defaultGemDraft(team),
     pool: "All",
-    signals: ["Gem", "Pre-gem", "Watch", ...gemSignals.slice(-2)],
+    // Preserve this preset's numeric rising-player search without imposing incompatible primary labels.
+    signals: [],
     trendMin: "2",
     indexMin: "10",
     indexMax: "40",
@@ -344,9 +363,7 @@ export function risingGemDraft(team: string): GemDraft {
 export function gemQuerySummary(q: GemQuery): string {
   return [
     // Clearing signal choices means no signal restriction, including for saved searches.
-    q.signals.length && q.signals.length !== gemSignals.length
-      ? `(${q.signals.join(" OR ")})`
-      : "Any signal",
+    q.signals.length ? `(${q.signals.join(" AND ")})` : "Any signal",
     `Pool: ${q.pool}${q.pool === "Selected team" ? ` ${q.team}` : ""}`,
     `Position: ${q.position}`,
     ...(q.classification !== "All classifications"
@@ -358,6 +375,7 @@ export function gemQuerySummary(q: GemQuery): string {
         (f) => `${f.metric} ${f.key === "indexMax" ? "≤" : "≥"} ${q[f.key]}`,
       ),
     ...(q.aboveReplacement ? ["Above replacement PPG > 0"] : []),
+    ...(q.positiveOnly ? ["Positive labels only (no red labels)"] : []),
     q.injured ? "Injuries included" : "Active players only",
   ].join(" AND ");
 }
@@ -367,7 +385,21 @@ export function screenGems(players: Player[], q: GemQuery) {
   const matches: GemResult[] = [],
     incomplete: GemResult[] = [];
   for (const p of players) {
-    // Empty or fully selected signals mean Any signal, even when player data-status warnings have no checkbox.
+    // A positive signal cannot override a red label, regression warning or downtrend badge; apply to both results sections.
+    if (q.positiveOnly) {
+      const appearances = [...playerSignals(p), p.regression].map(
+        signalAppearance,
+      );
+      if (
+        p.arrow === "↓" ||
+        appearances.includes("caution") ||
+        !appearances.some((kind) =>
+          ["candidate", "pre-gem", "watch", "buy-low"].includes(kind),
+        )
+      )
+        continue;
+    }
+    // Every selected signal is required, even when all boxes are selected; only an empty selection is unrestricted.
     if (
       (q.classification === "Gem only" && p.gem !== "Gem") ||
       (q.classification === "Pre-gem only" && p.gem !== "Pre-gem") ||
@@ -376,9 +408,7 @@ export function screenGems(players: Player[], q: GemQuery) {
         !["Gem", "Pre-gem", "Watch"].includes(p.gem)) ||
       (q.classification === "Gem + Watch" &&
         !["Gem", "Watch"].includes(p.gem)) ||
-      (q.signals.length > 0 &&
-        q.signals.length !== gemSignals.length &&
-        !playerSignals(p).some((s) => q.signals.includes(s))) ||
+      !q.signals.every((s) => playerSignals(p).includes(s)) ||
       (q.pool === "Available" && p.owner !== "0") ||
       (q.pool === "Selected team" && p.owner !== q.team) ||
       (q.position !== "All" &&

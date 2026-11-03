@@ -1,5 +1,13 @@
 # Model contract
 
+## Next-refresh scenario spread
+
+The optional next-refresh tool keeps normal scoring-blend EPPG as its base, using a usable ESPN weekly projection only when that EPPG is unavailable. Lower/higher inputs use base minus/plus a scenario spread; they stay editable and Reset restores automatic assumptions. This does not alter player EPPG, consistency penalties, labels, trade calculations or saved settings.
+
+The player's recorded sample SD remains factual and unchanged. For compatible scoring, scenario variance blends that personal variance with the historical position's pooled within-player-season variance. With `df = MAX(0, played games − 1)`, `personalWeight = df / (df + 4)` and `spread = SQRT(personalWeight × personalSD² + (1 − personalWeight) × positionalSD²)`. Missing personal SD uses the historical reference alone; a recorded zero stays zero but does not erase the historical component. Four prior variance observations is a provisional smoothing choice, not a fitted reliability claim or calibrated probability interval. The historical influence fades as games accumulate.
+
+`historical-scoring-spread.json` contains anonymous aggregates only, from verified 2023–2025 appearances through Week 17 with at least four games per player-season. Raw historical stats were re-scored under the stored league rules and reproduced all source point totals. Pooled variance sums squared deviations around each player-season's own mean and divides by total within-season degrees of freedom; it does not measure scoring differences between players. The source hash, exact scoring rules, method, counts and all six positional SDs are retained. Current scoring rules, including positional overrides, must match before applying the reference. Missing or different scoring uses personal SD alone with an explicit explanation; if neither source is usable, lower/higher remain blank for manual entry. Invalid/conflicting player history still blocks the scenario rather than substituting a historical estimate.
+
 ## Opportunity evidence update October 2026
 
 The imported dataset keeps modelVersion `v5.2-port-1` as its source-workbook contract. Runtime analysis adds `opportunity-1`. The importer and `verify-excel.ts` evaluate explicit workbook mode to validate original cached values; ordinary app analysis uses the corrected evidence below. This intentionally changes workload, regression and gem outputs relative to older Excel caches.

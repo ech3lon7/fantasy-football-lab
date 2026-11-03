@@ -145,6 +145,55 @@ const panel = (page: Page) =>
     }),
   });
 
+// Wheel input should work over ordinary pane content and continue into the page at pane boundaries, without aiming at a narrow gutter.
+test("trade panes scroll under the pointer and release the page at their boundaries", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await seed(page);
+  const left = page.locator(".trade-workspace-left");
+  const finder = panel(page).locator(".trade-finder-layout");
+  for (const pane of [left, finder]) {
+    await pane.evaluate((element) => { element.scrollTop = 0; window.scrollTo(0, 0); });
+    await expect.poll(() => pane.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+    const box = (await pane.boundingBox())!;
+    // Both halves of the content surface, rather than only its scrollbar, must accept ordinary wheel gestures.
+    for (const fraction of [0.25, 0.75]) {
+      // Separate native wheel gestures before resetting scroll positions; Chrome otherwise keeps the preceding gesture latched to its old scroller.
+      await page.waitForTimeout(250);
+      await pane.evaluate((element) => { element.scrollTop = 0; window.scrollTo(0, 0); });
+      await page.mouse.move(box.x + box.width * fraction, box.y + Math.min(140, box.height / 3));
+      await page.mouse.wheel(0, 200);
+      await expect.poll(() => pane.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    }
+    await page.waitForTimeout(250);
+    await pane.evaluate((element) => { element.scrollTop = element.scrollHeight; window.scrollTo(0, 0); });
+    await page.mouse.move(box.x + box.width / 2, box.y + Math.min(140, box.height / 3));
+    await expect.poll(async () => { await page.mouse.wheel(0, 160); return page.evaluate(() => window.scrollY); }).toBeGreaterThan(0);
+  }
+  await page.screenshot({ path: "test-results/trade-scroll-desktop.png", fullPage: true });
+  // The chain planner uses the same scrolling surface and must not reintroduce the dead end.
+  await page.getByRole("button", { name: "Two-trade chain planner", exact: true }).click();
+  await openTradeFilters(page, "Chain");
+  const chain = page.locator(".trade-finder-section:not([hidden]) .trade-finder-layout");
+  // The bottom is stable only after the expanding filter categories finish their native layout animations.
+  await chain.evaluate(async (element) => { await Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => {}))); });
+  await chain.evaluate((element) => { element.scrollTop = element.scrollHeight; window.scrollTo(0, 0); });
+  const box = (await chain.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + Math.min(140, box.height / 3));
+  await expect.poll(async () => { await page.mouse.wheel(0, 160); return page.evaluate(() => window.scrollY); }).toBeGreaterThan(0);
+  // On a stacked phone layout, scrolling upward at the filter pane's top should return naturally to the roster above it.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await chain.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(250);
+  await chain.evaluate((element) => { element.scrollTop = 0; });
+  const phoneBox = (await chain.boundingBox())!;
+  const pageBefore = await page.evaluate(() => window.scrollY);
+  expect(pageBefore).toBeGreaterThan(0);
+  await page.mouse.move(phoneBox.x + phoneBox.width / 2, Math.max(100, phoneBox.y + 140));
+  await expect.poll(async () => { await page.mouse.wheel(0, -160); return page.evaluate(() => window.scrollY); }).toBeLessThan(pageBefore);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: "test-results/trade-scroll-mobile.png", fullPage: true });
+});
+
 // Verify the approved compact hierarchy, shared deficit threshold, and identical click/drag pool selection through real persistence.
 test("compact search groups link deficit protection and support visual pool moves", async ({ page }) => {
   await page.setViewportSize({ width: 1800, height: 1200 });
@@ -177,7 +226,12 @@ test("compact search groups link deficit protection and support visual pool move
   const board = page.getByRole("region", { name: "Standard visual player pool", exact: true });
   await board.getByLabel("Move Bench QB in standard pool", { exact: true }).selectOption("protected");
   await expect.poll(async () => (await storedWorkspace(page)).state.draft.give).toEqual([]);
-  await board.getByLabel("Move Bench QB in standard pool", { exact: true }).selectOption("pool");
+  // Unselected fixed-offer players now enter from the live lineup instead of a duplicate Not offered lane.
+  await expect(board.getByLabel("Standard not offered drop zone", { exact: true })).toHaveCount(0);
+  const field = page.getByRole("region", { name: "Visual lineup impact", exact: true });
+  await expect(field).toHaveAttribute("aria-busy", "false");
+  await field.getByRole("article", { name: /^QB: Bench QB/ }).dragTo(board.getByLabel("Standard tradable pool drop zone", { exact: true }));
+  await expect(board.getByLabel("Move Bench QB in standard pool", { exact: true })).toHaveValue("pool");
   const starter = board.locator("article").filter({ has: page.getByRole("link", { name: "Main QB", exact: true }) });
   // Drag from the card's grip, avoiding its native Move selector and player-profile link.
   await starter.locator("svg").first().dragTo(board.getByLabel("Standard offering drop zone", { exact: true }));
@@ -195,6 +249,40 @@ test("compact search groups link deficit protection and support visual pool move
   await page.screenshot({ path: "test-results/compact-trade-search-mobile.png", fullPage: true });
   await page.reload();
   await expect(board.getByLabel("Move Main QB in standard pool", { exact: true })).toHaveValue("offering");
+});
+
+// Real field drags edit the existing draft/pool, persist across reload, and cannot smuggle another team's players into either destination.
+test("lineup field adds owned players to offering and tradable pool without a not-offered section", async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 1200 });
+  await seed(page);
+  const board = page.getByRole("region", { name: "Standard visual player pool", exact: true });
+  const field = page.getByRole("region", { name: "Visual lineup impact", exact: true });
+  await expect(board.locator(".trade-pool-lane")).toHaveCount(2);
+  await expect(board.getByText("Not offered", { exact: false })).toHaveCount(0);
+  await board.getByLabel("Move Bench QB in standard pool", { exact: true }).selectOption("protected");
+  await expect(field).toHaveAttribute("aria-busy", "false");
+  const ownQB = field.getByRole("article", { name: /^QB: Bench QB/ });
+  await expect(ownQB).toHaveAttribute("draggable", "true");
+  await ownQB.dragTo(board.getByLabel("Standard offering drop zone", { exact: true }));
+  await expect.poll(async () => (await storedWorkspace(page)).state.draft.give).toEqual(["101"]);
+  // Moving the same starter into the pool enables flexible discovery and removes it from the fixed offer without duplicates.
+  await expect(field).toHaveAttribute("aria-busy", "false");
+  await ownQB.dragTo(board.getByLabel("Standard tradable pool drop zone", { exact: true }));
+  await expect.poll(async () => (await storedWorkspace(page)).state.draft.give).toEqual([]);
+  await expect.poll(async () => JSON.parse((await storedWorkspace(page)).state.filters.tradeSearchSettings).standard.query.discovery.flexible.pool).toEqual(["101"]);
+  const before = (await storedWorkspace(page)).state;
+  await field.getByRole("button", { name: "Their team", exact: true }).click();
+  await expect(field.locator('article[draggable="true"]')).toHaveCount(0);
+  // Drop validation rejects forged foreign-team or chain-scoped payloads even when the browser advertises the player MIME type.
+  for (const payload of [{ scope: "Standard", team: "2", id: "200" }, { scope: "Chain", team: "1", id: "100" }]) {
+    const dataTransfer = await page.evaluateHandle((value) => { const transfer = new DataTransfer(); transfer.setData("application/x-fantasy-trade-player", JSON.stringify(value)); return transfer; }, payload);
+    await board.getByLabel("Standard offering drop zone", { exact: true }).dispatchEvent("drop", { dataTransfer });
+  }
+  expect((await storedWorkspace(page)).state.draft).toEqual(before.draft);
+  expect((await storedWorkspace(page)).state.filters.tradeSearchSettings).toEqual(before.filters.tradeSearchSettings);
+  await page.reload();
+  await expect(board.getByLabel("Move Bench QB in standard pool", { exact: true })).toHaveValue("pool");
+  await page.screenshot({ path: "test-results/lineup-field-player-pool.png", fullPage: true });
 });
 
 // Legacy saved minimums cannot hide straight swaps, and the recipient safeguard uses the actual worker and persists independently.
@@ -2632,6 +2720,8 @@ test("compact workspace previews authoritative scoring and weekly roles without 
   const field = page.getByRole("region", { name: "Visual lineup impact", exact: true });
   await expect(field).toHaveAttribute("aria-busy", "false");
   // The exact selected-week roles, rather than a separate optimizer, supply the displayed player cards.
+  // Inspecting a captured result cannot accidentally drag a preview player into the live search pool.
+  await expect(field.locator('article[draggable="true"]')).toHaveCount(0);
   const firstWeek = calculated.potentialA.weekly[0];
   await field.getByRole("combobox", { name: "Trade board week", exact: true }).selectOption(String(firstWeek.week));
   for (const id of firstWeek.ids.filter(Boolean))

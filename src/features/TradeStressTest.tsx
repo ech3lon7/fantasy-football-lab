@@ -211,7 +211,7 @@ export function TradeStressTest({
                         ["Current EPPG", p.expected],
                         ["Recent actual PPG", p.recent],
                         ["Season actual PPG", p.actual],
-                        ["Experimental role forecast", p.roleForecast],
+                        ["Workload-only scoring reference", p.roleForecast],
                       ] as const
                     ).map(([label, value]) => (
                       <option

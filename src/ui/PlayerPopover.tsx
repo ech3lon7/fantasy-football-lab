@@ -1,4 +1,6 @@
 import { GemEvidence } from "./GemEvidence";
+// Player pages and inspection cards share the same optional, isolated next-game calculator.
+import { NextRefreshScenarios } from "./NextRefreshScenarios";
 import {
   useCallback,
   useEffect,
@@ -178,7 +180,7 @@ export function PlayerPopoverProvider({
       if (!mobile || event.key !== "Tab") return;
       const controls = [
         ...element.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), summary, [tabindex="0"]',
+          'a[href], button:not([disabled]), input:not([disabled]), summary, [tabindex="0"]',
         ),
       ].filter((node) => node.getClientRects().length > 0);
       const first = controls[0],
@@ -315,6 +317,7 @@ function PlayerInspection({ p, m }: { p: Player; m: Model }) {
           </div>
         ))}
       </dl>
+      <NextRefreshScenarios m={m} p={p} />
       <div className="player-popover-signals">
         <Trend p={p} />
         <PlayerSignals p={p} />
@@ -333,6 +336,11 @@ function PlayerInspection({ p, m }: { p: Player; m: Model }) {
       {/* Expanded sections expose existing evaluation values, optional evidence and exact played-game scores. */}
       <details>
         <summary>All evaluation stats</summary>
+        {/* Clarify the renamed experimental metric without changing its formula or optional model weight. */}
+        <p>
+          Workload-only scoring reference is an experimental points estimate
+          from recent usage, not a prediction of the next updated EPPG.
+        </p>
         <dl className="definition-grid">
           {extendedColumns
             .filter((c) => !["name", "gem", "trend"].includes(c.key))

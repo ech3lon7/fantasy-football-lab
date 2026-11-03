@@ -20,7 +20,10 @@ async function seed(page: Page) {
         `
     import {fixture} from './tests/fixtures.ts';
     import {fromTables} from './src/import/workbook.ts';
+    import fs from 'node:fs';
     const d=await fixture([0,-2,12,10,30]);
+    // Supply matching public scoring rules so browser defaults exercise the positional variance blend.
+    d.tables.ModelContext[0].ScoringItemsJSON=JSON.stringify(JSON.parse(fs.readFileSync('./src/domain/historical-scoring-spread.json','utf8')).scoring);
     d.tables.ModelPlayers.find(p=>p.PlayerID===1).Current_Week_Projection=null;
     d.tables.ModelPlayers.find(p=>p.PlayerID===2).Current_Week_Projection=0;
     process.stdout.write(JSON.stringify(await fromTables(d.tables,d.settings)));
@@ -62,6 +65,88 @@ async function seed(page: Page) {
     page.getByRole("heading", { name: "Your roster", exact: true }),
   ).toBeVisible();
 }
+
+// The optional next-refresh tool works identically in profiles/popovers, preserves model values and stays contained on mobile.
+test("next-refresh assumptions update EPPG without changing the player or trade model", async ({
+  page,
+}) => {
+  await seed(page);
+  await page.goto("./#/player/1");
+  const scenarios = page.locator(".next-refresh-scenarios");
+  await expect(scenarios).not.toHaveAttribute("open", "");
+  await scenarios.locator(":scope > summary").click();
+  await expect(scenarios).toContainText(
+    "not predicted scores or probability ranges",
+  );
+  // EPPG stays the center while factual SD and historical positional variance jointly set the editable spread.
+  await expect(
+    scenarios.getByRole("spinbutton", { name: "Base next-game points" }),
+  ).toHaveValue("13.24");
+  await expect(
+    scenarios.getByRole("spinbutton", { name: "Lower next-game points" }),
+  ).toHaveValue("3.47");
+  await expect(
+    scenarios.getByRole("spinbutton", { name: "Higher next-game points" }),
+  ).toHaveValue("23.01");
+  await expect(scenarios).toContainText("Scoring SD: 12.73");
+  await expect(scenarios).toContainText("historical RB SD of 5.38");
+  await expect(scenarios).toContainText("Historical variance weight: 50%");
+  await scenarios
+    .getByRole("spinbutton", { name: "Lower next-game points" })
+    .fill("0");
+  await scenarios
+    .getByRole("spinbutton", { name: "Higher next-game points" })
+    .fill("37.5");
+  await expect(
+    scenarios.getByRole("row").filter({
+      has: page.getByRole("spinbutton", { name: "Lower next-game points" }),
+    }),
+  ).toContainText("11.75");
+  await expect(
+    scenarios.getByRole("row").filter({
+      has: page.getByRole("spinbutton", { name: "Higher next-game points" }),
+    }),
+  ).toContainText("16.44");
+  await expect(scenarios).toContainText("+3.20");
+  await page.screenshot({
+    path: "test-results/next-refresh-desktop.png",
+    fullPage: true,
+  });
+  await scenarios
+    .getByRole("button", { name: "Reset score assumptions" })
+    .click();
+  await expect(
+    scenarios.getByRole("spinbutton", { name: "Higher next-game points" }),
+  ).toHaveValue("23.01");
+
+  // Navigating away discards what-if edits; mobile focus includes new numeric inputs inside the existing dialog.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("./#/overview");
+  await page
+    .locator('a[aria-haspopup="dialog"]')
+    .filter({ hasText: "Synthetic 1" })
+    .first()
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Synthetic 1", exact: true });
+  const tool = dialog.locator(".next-refresh-scenarios");
+  await tool.locator(":scope > summary").click();
+  const input = tool.getByRole("spinbutton", {
+    name: "Higher next-game points",
+  });
+  await expect(input).toHaveValue("23.01");
+  await input.fill("-2");
+  await page.keyboard.press("Tab");
+  await expect(dialog).toContainText("13.24");
+  await expect(input).toHaveValue("-2");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({ path: "test-results/next-refresh-mobile.png" });
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+});
 
 // A trade inspection must leave the draft, route and computed result intact and distinguish zero from missing.
 test("trade names inspect both players without changing the draft", async ({

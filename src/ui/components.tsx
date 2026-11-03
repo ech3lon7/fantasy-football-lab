@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from "react";
 import type { Player } from "../domain/valuation";
 import { playerSignals } from "../domain/valuation";
+// Use the same badge classification as positive-only screening without changing existing colors.
+import { signalAppearance } from "../domain/signal-appearance";
 import { PlayerName } from "./PlayerName";
 import { FilterHelp } from "./FilterHelp";
 export const fmt = (x: unknown, digits = 2) =>
@@ -33,16 +35,13 @@ export function Metric({
     </div>
   );
 }
-// Reduced workload uses the existing caution appearance; other signal styling remains unchanged.
+// Share badge colors across screens without changing qualification, filtering or the underlying player data.
 export function Signal({ text }: { text: string }) {
+  const appearance = signalAppearance(text);
   // Known player tags share marker-free help; Pre-gem uses its own lighter Gem-blue badge on every screen.
   return (
     <FilterHelp label={text}>
-      <span
-        className={`signal ${text === "Gem" || text === "Gem candidate" ? "candidate" : text === "Pre-gem" ? "pre-gem" : text === "Watch" || text === "Opportunity watch" || text === "BUY LOW" ? "watch" : /caution|SELL HIGH|issue|FAIL|UNAVAILABLE|Reduced workload/.test(text) ? "caution" : /Emerging|Conditional|CONDITIONAL|Projection-gap/.test(text) ? "conditional" : ""}`}
-      >
-        {text}
-      </span>
+      <span className={`signal ${appearance}`}>{text}</span>
     </FilterHelp>
   );
 }
@@ -401,7 +400,7 @@ export const extendedColumns: Column<Player>[] = [
   },
   {
     key: "roleForecast",
-    label: "Experimental role forecast PPG",
+    label: "Workload-only scoring reference PPG",
     kind: "model",
     value: (p) => p.roleForecast,
   },

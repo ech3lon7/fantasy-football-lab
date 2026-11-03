@@ -835,13 +835,21 @@ th:first-child {
   background: #eff6ff;
 }
 .signal.watch {
+  /* Primary Watch and all supporting watch tags share yellow fill with green text. */
+  background: #fef3c7;
+  color: #166534;
+}
+/* Preserve BUY LOW's existing appearance separately from the newly recolored Watch family. */
+.signal.buy-low {
   background: #fce7f3;
 }
 .signal.conditional {
   background: #fef3c7;
 }
 .signal.caution {
+  /* Negative labels retain readable dark-red text against a light-red warning fill. */
   background: #fee2e2;
+  color: #991b1b;
 }
 .trend {
   border-radius: 4px;
@@ -2130,7 +2138,8 @@ pre {
 .trade-score-context { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
 .trade-workspace-grid { display: grid; grid-template-columns: minmax(400px, .95fr) minmax(500px, 1.05fr); gap: 14px; padding-top: 12px; align-items: start; }
 .trade-workspace-left, .trade-workspace-right { min-width: 0; height: var(--trade-pane-height); }
-.trade-workspace-left { overflow: auto; overscroll-behavior: contain; padding-right: 2px; }
+/* Let wheel gestures continue into the page at pane boundaries instead of trapping users over the cards. */
+.trade-workspace-left { overflow: auto; overscroll-behavior: auto; scrollbar-gutter: stable; padding-right: 2px; }
 .trade-workspace-right { overflow: hidden; }
 .trade-workspace-basis .control { display: flex; align-items: center; gap: 8px; margin: 0 0 7px; }
 .trade-workspace-basis .control > span { font-size: 10px; }
@@ -2365,10 +2374,17 @@ pre {
 @media (max-width: 1000px) { .trade-workspace { --trade-pane-height: auto; } }
 @media (max-width: 600px) { .trade-workspace-controls { flex-wrap: wrap; } }
 /* The finder now stacks compact categories above results; both independent tools retain their own scrollable workspace. */
-.trade-workspace .trade-finder-layout, .trade-workspace .trade-finder-layout.filters-open { display: flex; flex-direction: column; overflow: auto; overscroll-behavior: contain; }
+/* Filters and results remain one scroll surface; reaching its edge must release scrolling to the surrounding page. */
+.trade-workspace .trade-finder-layout, .trade-workspace .trade-finder-layout.filters-open { display: flex; flex-direction: column; overflow: auto; overscroll-behavior: auto; scrollbar-gutter: stable; }
+/* Keep manual scrollbar targets visible and wide enough to grab without changing other app screens or popovers. */
+.trade-workspace-left::-webkit-scrollbar, .trade-workspace .trade-finder-layout::-webkit-scrollbar { width: 14px; height: 14px; }
+.trade-workspace-left::-webkit-scrollbar-track, .trade-workspace .trade-finder-layout::-webkit-scrollbar-track { background: #f1f4ef; }
+.trade-workspace-left::-webkit-scrollbar-thumb, .trade-workspace .trade-finder-layout::-webkit-scrollbar-thumb { background: #91a297; border: 3px solid #f1f4ef; border-radius: 8px; }
+.trade-workspace-left::-webkit-scrollbar-thumb:hover, .trade-workspace .trade-finder-layout::-webkit-scrollbar-thumb:hover { background: #647b6c; }
 .trade-workspace .trade-finder-layout > .trade-filters-drawer { flex: 0 0 auto; display: grid; grid-template-rows: 0fr; visibility: hidden; border: 0; transition: grid-template-rows 220ms ease, visibility 220ms; }
 .trade-workspace .filters-open > .trade-filters-drawer { grid-template-rows: 1fr; visibility: visible; background: #fff; }
-.trade-workspace .trade-filters-drawer-inner { min-width: 0; min-height: 0; height: auto; overflow: hidden; padding: 0 12px; }
+/* This clipped animation wrapper is not an independent scroller; release wheel input over controls to the finder. */
+.trade-workspace .trade-filters-drawer-inner { min-width: 0; min-height: 0; height: auto; overflow: hidden; overscroll-behavior: auto; padding: 0 12px; }
 .trade-workspace .trade-drawer-heading { display: none; }
 .trade-workspace .trade-finder-main { overflow: visible; flex: 1 0 auto; }
 .trade-workspace .trade-finder-main > .toolbar, .trade-workspace .trade-finder-main > .button-row { position: static; }
@@ -2434,6 +2450,8 @@ pre {
   .trade-filter-category-body { padding: 9px; }
   .trade-filter-category-body .trade-search-controls { grid-template-columns: minmax(0, 1fr); }
   .trade-pool-lanes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* Two fixed-offer lanes fill the available phone width after removing Not offered. */
+  .trade-pool-lanes:has(> :nth-child(2):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trade-pool-player { flex-wrap: wrap; }
   .trade-pool-player > div { flex-basis: 100%; }
   .trade-pool-player > svg { display: none; }
@@ -2514,3 +2532,12 @@ pre {
 /* Unlike sortable app tables, these static headers have no padded button; keep their text separated and readable. */
 .trade-stress-test th { padding: 9px 12px; white-space: normal; min-width: 105px; }
 .trade-stress-test th:first-child { min-width: 115px; }
+/* Optional next-refresh inputs stay compact, readable and locally scrollable in both profiles and narrow inspection cards. */
+.next-refresh-scenarios { margin: 1rem 0; min-width: 0; }
+.next-refresh-scenarios .table-wrap { max-width: 100%; overflow-x: auto; }
+.next-refresh-scenarios table { table-layout: fixed; min-width: 320px; }
+.next-refresh-scenarios th, .next-refresh-scenarios td { padding: 8px 6px; white-space: normal; min-width: 0; }
+/* Override the large sticky player-name column only inside this four-column calculator. */
+.next-refresh-scenarios th:first-child { position: static; min-width: 0; width: 20%; }
+.next-refresh-scenarios th:nth-child(2) { width: 30%; }
+.next-refresh-scenarios input { width: 100%; max-width: 7rem; box-sizing: border-box; padding: 6px; border: 1px solid var(--line); border-radius: 5px; font: inherit; background: #fffbe8; color: var(--purple); }

@@ -1,0 +1,377 @@
+{
+  "version": "next-refresh-spread-1",
+  "sourceSHA256": "56eaabea545a89ed0afaa5867d84e22d56872d323875da95afeb35c65a900283",
+  "seasons": [2023, 2024, 2025],
+  "priorDegreesOfFreedom": 4,
+  "method": "Pooled within-player-season sample variance; verified played games in Weeks 1\u201317; player-seasons with at least four games. Raw historical stats re-scored under the recorded league scoring rules. Four prior variance observations is a provisional blend, not a calibrated probability interval.",
+  "scoring": [
+    {
+      "statId": 3,
+      "points": 0.04,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 4,
+      "points": 4,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 19,
+      "points": 2,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 20,
+      "points": -2,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 24,
+      "points": 0.1,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 25,
+      "points": 6,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 26,
+      "points": 2,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 42,
+      "points": 0.1,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 43,
+      "points": 6,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 44,
+      "points": 2,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 53,
+      "points": 1,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 63,
+      "points": 6,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 72,
+      "points": -2,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 77,
+      "points": 4,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 80,
+      "points": 3,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 85,
+      "points": -1,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 86,
+      "points": 1,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 89,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 5
+      }
+    },
+    {
+      "statId": 90,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 4
+      }
+    },
+    {
+      "statId": 91,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 3
+      }
+    },
+    {
+      "statId": 92,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 1
+      }
+    },
+    {
+      "statId": 93,
+      "points": 6,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 6
+      }
+    },
+    {
+      "statId": 95,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 2
+      }
+    },
+    {
+      "statId": 96,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 2
+      }
+    },
+    {
+      "statId": 97,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 2
+      }
+    },
+    {
+      "statId": 98,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 2
+      }
+    },
+    {
+      "statId": 99,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 1
+      }
+    },
+    {
+      "statId": 101,
+      "points": 6,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 6
+      }
+    },
+    {
+      "statId": 102,
+      "points": 6,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 6
+      }
+    },
+    {
+      "statId": 103,
+      "points": 6,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 6
+      }
+    },
+    {
+      "statId": 104,
+      "points": 6,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 6
+      }
+    },
+    {
+      "statId": 123,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": -1
+      }
+    },
+    {
+      "statId": 124,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": -3
+      }
+    },
+    {
+      "statId": 125,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": -5
+      }
+    },
+    {
+      "statId": 128,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 5
+      }
+    },
+    {
+      "statId": 129,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 3
+      }
+    },
+    {
+      "statId": 130,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 2
+      }
+    },
+    {
+      "statId": 132,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": -1
+      }
+    },
+    {
+      "statId": 133,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": -3
+      }
+    },
+    {
+      "statId": 134,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": -5
+      }
+    },
+    {
+      "statId": 135,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": -6
+      }
+    },
+    {
+      "statId": 136,
+      "points": 0,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": -7
+      }
+    },
+    {
+      "statId": 198,
+      "points": 5,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 201,
+      "points": 6,
+      "isReverseItem": false,
+      "pointsOverrides": {}
+    },
+    {
+      "statId": 206,
+      "points": 2,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 2
+      }
+    },
+    {
+      "statId": 209,
+      "points": 1,
+      "isReverseItem": false,
+      "pointsOverrides": {
+        "16": 1
+      }
+    }
+  ],
+  "positions": {
+    "QB": {
+      "sd": 7.3511518507895754,
+      "games": 1803,
+      "playerSeasons": 177,
+      "degreesOfFreedom": 1626
+    },
+    "RB": {
+      "sd": 5.382911390178039,
+      "games": 4981,
+      "playerSeasons": 397,
+      "degreesOfFreedom": 4584
+    },
+    "WR": {
+      "sd": 5.584708192445322,
+      "games": 7781,
+      "playerSeasons": 632,
+      "degreesOfFreedom": 7149
+    },
+    "TE": {
+      "sd": 4.150770826935124,
+      "games": 4761,
+      "playerSeasons": 374,
+      "degreesOfFreedom": 4387
+    },
+    "K": {
+      "sd": 4.67802439797404,
+      "games": 1522,
+      "playerSeasons": 117,
+      "degreesOfFreedom": 1405
+    },
+    "D/ST": {
+      "sd": 6.383695050674022,
+      "games": 1536,
+      "playerSeasons": 96,
+      "degreesOfFreedom": 1440
+    }
+  }
+}

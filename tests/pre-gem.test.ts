@@ -187,7 +187,7 @@ it("supports filters, combinations, saved trades and automatic saved-filter migr
       { gemFilterVersion: "2", gemSignals: JSON.stringify(oldAll) },
       "1",
     ).draft.signals,
-  ).toContain("Pre-gem");
+  ).toEqual([]);
   expect(
     decodeGemFilters({ gemFilterVersion: "2", gemSignals: '["Watch"]' }, "1")
       .draft.signals,

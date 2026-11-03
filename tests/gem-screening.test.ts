@@ -1,6 +1,7 @@
 import { beforeAll, expect, it } from "vitest";
 import { fixture } from "./fixtures";
 import { evaluate, type Player } from "../src/domain/valuation";
+import { signalAppearance } from "../src/domain/signal-appearance";
 import {
   decodeGemFilters,
   defaultGemDraft,
@@ -38,8 +39,161 @@ const player = (id: string, patch: Partial<Player> = {}) => ({
 const query = (patch = {}) =>
   validateGemDraft({ ...risingGemDraft("1"), ...patch }, ["1", "2"]).query!;
 
-// The primary search uses OR for signals, AND for every threshold, and inclusive bounds.
-it("returns exactly the qualifying candidates and watches without mutating players", () => {
+// Multiple selections are cumulative requirements; extra labels are allowed, but partial matches never qualify.
+it("requires every selected signal while permitting additional player labels", () => {
+  const rows = [
+    player("1", {
+      gem: "Watch",
+      regression: "NEUTRAL",
+      opportunity: { ...base.opportunity, signals: ["Scoring breakout watch"] },
+    }),
+    player("2", {
+      gem: "Watch",
+      regression: "NEUTRAL",
+      opportunity: { ...base.opportunity, signals: ["Role-growth watch"] },
+    }),
+    player("3", {
+      gem: "Watch",
+      regression: "NEUTRAL",
+      opportunity: {
+        ...base.opportunity,
+        signals: ["Role-growth watch", "Scoring breakout watch"],
+      },
+    }),
+    player("4", {
+      gem: "Watch",
+      regression: "NEUTRAL",
+      opportunity: {
+        ...base.opportunity,
+        signals: ["Role-growth watch", "TD caution"],
+      },
+    }),
+  ];
+  const combined = query({
+    signals: ["Watch", "Role-growth watch", "Scoring breakout watch"],
+    pool: "Available",
+    positiveOnly: true,
+  });
+  expect(screenGems(rows, combined).matches.map((r) => r.player.id)).toEqual([
+    "3",
+  ]);
+  expect(
+    screenGems(rows, {
+      ...combined,
+      signals: ["Role-growth watch"],
+    }).matches.map((r) => r.player.id),
+  ).toEqual(["2", "3"]);
+  expect(
+    screenGems(rows, {
+      ...combined,
+      positiveOnly: false,
+      signals: ["Watch"],
+    }).matches.map((r) => r.player.id),
+  ).toEqual(["1", "2", "3", "4"]);
+  const required = {
+    ...combined,
+    positiveOnly: false,
+    signals: ["Watch", "Role-growth watch", "TD caution"],
+  };
+  expect(screenGems(rows, required).matches.map((r) => r.player.id)).toEqual([
+    "4",
+  ]);
+  expect(gemQuerySummary(required)).toContain(
+    "(Watch AND Role-growth watch AND TD caution)",
+  );
+  expect(
+    validateGemDraft(decodeGemFilters(encodeGemFilters(required), "1").draft, [
+      "1",
+      "2",
+    ]).query,
+  ).toEqual({
+    ...required,
+    signals: gemSignals.filter((s) => required.signals.includes(s)),
+  });
+});
+
+// A strong positive cannot hide any red primary, supporting or regression tag, including in the incomplete section.
+it("positive-only screening requires a positive label and excludes every red badge classification", () => {
+  const clean = (id: string, patch: Partial<Player> = {}) =>
+    player(id, {
+      regression: "NEUTRAL",
+      opportunity: { ...base.opportunity, signals: [] },
+      ...patch,
+    });
+  const rows = [
+    clean("1"),
+    clean("2", { gem: "Pre-gem" }),
+    clean("3", { gem: "Watch" }),
+    clean("4", {
+      opportunity: { ...base.opportunity, signals: ["Reduced workload"] },
+    }),
+    clean("5", {
+      gem: "No breakout signal",
+      opportunity: { ...base.opportunity, signals: ["Scoring breakout watch"] },
+    }),
+    clean("6", { regression: "SELL HIGH" }),
+    clean("7", { gem: "Insufficient data" }),
+    clean("8", { gem: "Not applicable" }),
+    clean("9", { gem: "Not applicable", regression: "BUY LOW" }),
+    clean("10", {
+      gem: "Watch",
+      opportunity: { ...base.opportunity, signals: ["TD caution"] },
+    }),
+    clean("11", { gem: "Watch", trendDelta: null }),
+    clean("12", { index: 9 }),
+    clean("13", { regression: "NEUTRAL - insufficient data" }),
+    clean("14", { arrow: "↓" }),
+  ];
+  const before = structuredClone(rows);
+  const result = screenGems(
+    rows,
+    query({ signals: [], positiveOnly: true, includeMissing: true }),
+  );
+  expect(result.matches.map((r) => r.player.id)).toEqual(["1", "2", "3", "9"]);
+  expect(result.incomplete.map((r) => r.player.id)).toEqual(["11"]);
+  expect(
+    screenGems(rows, query({ signals: [], positiveOnly: false })).matches.map(
+      (r) => r.player.id,
+    ),
+  ).toContain("4");
+  for (const label of [
+    "Reduced workload",
+    "No breakout signal",
+    "No gem signal",
+    "TD caution",
+    "SELL HIGH",
+    "Insufficient data",
+    "Limited history",
+    "Projection only",
+    "Data issue",
+  ])
+    expect(signalAppearance(label)).toBe("caution");
+  expect(rows).toEqual(before);
+});
+
+// Existing searches default off, while applied state round-trips and malformed saved flags require explicit recovery.
+it("persists the opt-in positive-label filter without broadening or changing legacy searches", () => {
+  expect(defaultGemDraft("1").positiveOnly).toBe(false);
+  expect(decodeGemFilters({ gemSignal: "Watch" }, "1").draft.positiveOnly).toBe(
+    false,
+  );
+  const q = query({ positiveOnly: true });
+  expect(gemQuerySummary(q)).toContain("Positive labels only (no red labels)");
+  const saved = encodeGemFilters(q);
+  expect(saved.gemPositiveOnly).toBe("true");
+  expect(
+    validateGemDraft(decodeGemFilters(saved, "1").draft, ["1", "2"]).query,
+  ).toEqual(q);
+  expect(encodeGemFilters({ ...q, positiveOnly: false }).gemPositiveOnly).toBe(
+    "false",
+  );
+  expect(
+    decodeGemFilters({ ...saved, gemPositiveOnly: "yes" }, "1").issue,
+  ).not.toBe("");
+});
+
+// With no required signals, all labels remain eligible while numeric thresholds retain inclusive AND behavior.
+it("returns exactly the numeric matches without mutating players", () => {
   const players = [
     player("1"),
     player("2", { gem: "Watch", index: 40 }),
@@ -54,6 +208,7 @@ it("returns exactly the qualifying candidates and watches without mutating playe
   expect(screenGems(players, query()).matches.map((r) => r.player.id)).toEqual([
     "1",
     "2",
+    "3",
   ]);
   expect(players).toEqual(before);
 });
@@ -183,7 +338,7 @@ it("migrates legacy signals and round-trips only applied string-valued state", (
   expect(encodeGemFilters(query({ trendMin: "" })).gemTrendMin).toBe("");
   expect(
     decodeGemFilters({ gemSignal: "All signals" }, "1").draft.signals,
-  ).toHaveLength(gemSignals.length);
+  ).toEqual([]);
 });
 
 // Retiring status choices must not break saved searches or discard unrelated criteria.
@@ -220,21 +375,44 @@ it("removes retired status selections while preserving saved screening criteria"
   expect(retiredOnly.issue).toBe("");
   expect(retiredOnly.draft.signals).toEqual([]);
   expect(retiredOnly.draft.trendMin).toBe("2");
-  // Select all retains the same unrestricted signal meaning as clearing signals, including status-only players.
+  // Select all now requires every signal; only clearing signals permits status-only players.
   const rows = [
     player("1", { gem: "Insufficient data" }),
     player("2", { gem: "Not applicable" }),
     player("3", { gem: "Gem" }),
   ];
   const all = query({ signals: [...gemSignals] });
-  expect(screenGems(rows, all)).toEqual(
-    screenGems(rows, { ...all, signals: [] }),
-  );
-  expect(screenGems(rows, all).matches.map((row) => row.player.id)).toEqual([
-    "1",
-    "2",
-    "3",
+  expect(screenGems(rows, all).matches).toEqual([]);
+  expect(
+    screenGems(rows, { ...all, signals: [] }).matches.map(
+      (row) => row.player.id,
+    ),
+  ).toEqual(["1", "2", "3"]);
+  expect(decodeGemFilters(encodeGemFilters(all), "1").draft.signals).toEqual([
+    ...gemSignals,
   ]);
+  for (const signals of [
+    gemSignals,
+    gemSignals.filter((s) => s !== "Pre-gem"),
+    [
+      "Gem",
+      "Pre-gem",
+      "Watch",
+      "Projection-gap watch",
+      "Role-growth watch",
+      "Scoring breakout watch",
+    ],
+  ])
+    expect(
+      decodeGemFilters(
+        {
+          ...encodeGemFilters(all),
+          gemFilterVersion: "3",
+          gemSignals: JSON.stringify(signals),
+        },
+        "1",
+      ).draft.signals,
+    ).toEqual([]);
 });
 
 // Unsupported or malformed new state must require correction rather than broadening.
@@ -270,10 +448,10 @@ it("screens an owned No gem signal RB with +15.42 trend when pool and signals ar
   expect(
     screenGems([rb], validateGemDraft(draft, ["1", "8"]).query!).matches,
   ).toHaveLength(0);
-  const broad = validateGemDraft(
-    { ...draft, pool: "All", signals: [...gemSignals] },
-    ["1", "8"],
-  ).query!;
+  const broad = validateGemDraft({ ...draft, pool: "All", signals: [] }, [
+    "1",
+    "8",
+  ]).query!;
   expect(screenGems([rb], broad).matches.map((r) => r.player.id)).toEqual([
     "900",
   ]);

@@ -193,6 +193,31 @@ async function seed(
   return dataset;
 }
 
+// Applied positive-only filtering excludes mixed positive/red tags, persists on reload and clears independently of other criteria.
+test("positive labels only excludes mixed red badges and restores applied state", async ({ page }) => {
+  await seed(page, { gemPool: "All", gemFilterVersion: "3", gemSignals: JSON.stringify(gemSignals) }, true, true);
+  const toggle = page.getByRole("checkbox", { name: "Positive labels only", exact: true });
+  await expect(toggle).not.toBeChecked();
+  await expect(page.getByRole("link", { name: /Synthetic 2 WR/ })).toBeVisible();
+  await toggle.check();
+  await expect(page.getByRole("link", { name: /Synthetic 2 WR/ })).toBeVisible();
+  await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("1 confirmed matches");
+  await expect(page.getByRole("link", { name: /Synthetic 106 WR/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Synthetic 2 WR/ })).toHaveCount(0);
+  await expect(page.locator(".signal.caution")).toHaveCount(0);
+  await expect(page.locator(".trend.down")).toHaveCount(0);
+  await expect(page.locator(".gem-query").filter({ has: page.getByText("Applied search:", { exact: true }) })).toContainText("Positive labels only (no red labels)");
+  await page.screenshot({ path: "test-results/gem-positive-labels.png", fullPage: true });
+  await page.reload();
+  await expect(toggle).toBeChecked();
+  await expect(page.getByRole("status")).toContainText("1 confirmed matches");
+  await page.getByRole("button", { name: "Remove positive labels only filter", exact: true }).click();
+  await expect(toggle).not.toBeChecked();
+  await expect(page.getByRole("combobox", { name: "Player pool", exact: true })).toHaveValue("All");
+  await expect(page.getByRole("link", { name: /Synthetic 2 WR/ })).toBeVisible();
+});
+
 // The primary stage, exact evidence, included-game date and discovery choices agree across every shared player surface.
 test("Pre-gem filters and evidence persist across screener, roster, profile, popover and trade controls", async ({ page }) => {
   await seed(page, {}, false, false, true);
@@ -467,7 +492,7 @@ test("all screener signals and controls retain repeatable marker-free help", asy
     "Breakout classification",
     "Position",
     "Include injured",
-    "Signals - match any selected",
+    "Signals - require all selected",
     ...gemThresholds.map((field) => field.label),
     "Above replacement only",
     "Show players with missing filter data",
@@ -910,8 +935,8 @@ test("gem search combines signals and thresholds, persists applied state and sep
   await page
     .getByRole("button", { name: "Clear signals", exact: true })
     .click();
-  await page.getByLabel("Gem", { exact: true }).check();
   await page.getByLabel("Watch", { exact: true }).check();
+  await page.getByLabel("Role-growth watch", { exact: true }).check();
   await page
     .getByRole("combobox", { name: "Player pool", exact: true })
     .selectOption("All");
@@ -922,8 +947,9 @@ test("gem search combines signals and thresholds, persists applied state and sep
   await page
     .getByRole("button", { name: "Apply filters", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("2 confirmed matches");
-  await expect(page.getByRole("cell", { name: /^Matches: Gem/ })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("1 confirmed matches");
+  await expect(page.locator(".gem-query").filter({ has: page.getByText("Applied search:", { exact: true }) })).toContainText("Watch AND Role-growth watch");
+  await expect(page.getByRole("link", { name: /Synthetic 2 WR/ })).toHaveCount(0);
   await expect(
     page.getByRole("cell", { name: /^Matches: Watch/ }),
   ).toBeVisible();
@@ -934,14 +960,16 @@ test("gem search combines signals and thresholds, persists applied state and sep
   await expect(
     page.getByRole("button", { name: "Apply filters", exact: true }),
   ).toBeDisabled();
-  await expect(page.getByRole("status")).toContainText("2 confirmed matches");
+  await expect(page.getByRole("status")).toContainText("1 confirmed matches");
   await page.reload();
   await expect(
     page.getByLabel("Minimum surplus index", { exact: true }),
   ).toHaveValue("0");
-  await expect(page.getByRole("status")).toContainText("2 confirmed matches");
+  await expect(page.getByRole("status")).toContainText("1 confirmed matches");
 
   // Missing recent/earlier trend evidence is displayed separately after explicit opt-in.
+  await page.getByRole("button", { name: "Clear signals", exact: true }).click();
+  await page.getByRole("combobox", { name: "Breakout classification", exact: true }).selectOption("Gem + Watch");
   await page.getByText(/^Advanced filters/).click();
   await page.getByLabel("Minimum recent PPG", { exact: true }).fill("");
   await page
@@ -1026,6 +1054,12 @@ test("legacy gem filters, reset and pagination retain unrelated state", async ({
   await page
     .getByRole("button", { name: "Apply filters", exact: true })
     .click();
+  // Selecting every signal no longer bypasses matching; clearing restores an unrestricted label search.
+  await expect(page.getByRole("status")).toContainText("0 confirmed matches");
+  await page.reload();
+  for (const label of gemSignals) await expect(page.getByRole("checkbox", { name: label, exact: true })).toBeChecked();
+  await page.getByRole("button", { name: "Clear signals", exact: true }).click();
+  await page.getByRole("button", { name: "Apply filters", exact: true }).click();
   await expect(
     page.getByText("50 of 78 records", { exact: true }),
   ).toBeVisible();
@@ -1187,7 +1221,7 @@ test("cleared saved signals permit rising RBs and survive Apply and reload", asy
     )
     .toMatchObject({
       // Applying uses the new label-aware format; an explicitly empty signal selection still means Any signal.
-      gemFilterVersion: "3",
+      gemFilterVersion: "4",
       gemSignals: "[]",
       gemPool: "All",
       gemPos: "RB",

@@ -18,6 +18,8 @@ import {
   type LineupBasis,
 } from "../domain/trade-impact";
 import { GemEvidence } from "../ui/GemEvidence";
+// Keep optional next-refresh assumptions consistent with the player inspection card.
+import { NextRefreshScenarios } from "../ui/NextRefreshScenarios";
 import {
   sourceDataset,
   scenarioTradeErrors,
@@ -811,6 +813,7 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
           </p>
         </Panel>
       </div>
+      <NextRefreshScenarios m={m} p={p} />
       {/* Role evidence remains independent of scoring labels and has its own source and sample window. */}
       <Panel title="Role and opportunity" note={p.opportunity.source}>
         <div className="metric-grid">
@@ -830,9 +833,10 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
             kind="fact"
           />
           <Metric
-            label="Experimental role forecast PPG"
+            label="Workload-only scoring reference PPG"
             value={fmt(p.roleForecast)}
             kind={p.roleForecast === null ? "muted" : "model"}
+            note="Experimental points estimate from recent usage; not a prediction of the next updated EPPG."
           />
         </div>
         <p>
@@ -1032,7 +1036,7 @@ export function GemView({
     ? screenGems(m.players, {
         ...query,
         pool: "All",
-        signals: [...gemSignals],
+        signals: [],
         classification: "All classifications",
       }).matches.length - result.matches.length
     : 0;
@@ -1126,6 +1130,8 @@ export function GemView({
       render: (p) => <PlayerSignals p={p} />,
     },
     playerColumns[8],
+    // Keep Expected PPG immediately after Trend PPG without changing the other screener columns.
+    playerColumns[4],
     playerColumns[2],
     playerColumns[6],
     playerColumns[1],
@@ -1155,8 +1161,7 @@ export function GemView({
       kind: "fact",
       value: (p) => `${p.injury}; ${p.status}; ${p.baselineStatus}`,
     },
-    // Keep the existing forecast, adjusted value, baseline, gap percent and workload columns.
-    playerColumns[4],
+    // Keep the existing adjusted value, baseline, gap percent and workload columns.
     playerColumns[5],
     extendedColumns[16],
     ...extendedColumns.slice(18, 22),
@@ -1169,7 +1174,7 @@ export function GemView({
     value: (r) => c.value(r.player),
     render: c.render ? (r) => c.render!(r.player) : undefined,
   }));
-  columns.splice(13, 0, {
+  columns.splice(14, 0, {
     key: "matching",
     label: "Matching evidence",
     value: (r) => [...r.missing, ...r.evidence].join(" - "),
@@ -1283,11 +1288,27 @@ export function GemView({
                 Include injured
               </label>
             </FilterHelp>
+            {/* This opt-in uses the normal Apply action; qualifying labels and scoring values stay unchanged. */}
+            <FilterHelp label="Positive labels only">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={draft.positiveOnly}
+                  onChange={(e) =>
+                    setEdit({
+                      ...edit,
+                      draft: { ...draft, positiveOnly: e.target.checked },
+                    })
+                  }
+                />
+                Positive labels only
+              </label>
+            </FilterHelp>
           </div>
           <fieldset>
             <legend>
-              <FilterHelp label="Signals - match any selected">
-                <span>Signals - match any selected</span>
+              <FilterHelp label="Signals - require all selected">
+                <span>Signals - require all selected</span>
               </FilterHelp>
             </legend>
             <div className="toolbar">
@@ -1507,6 +1528,18 @@ export function GemView({
                     Active players only ×
                   </button>
                 )}
+                {/* Removing the active chip clears only the positive-label restriction. */}
+                {query.positiveOnly && (
+                  <button
+                    className="subtle"
+                    aria-label="Remove positive labels only filter"
+                    onClick={() =>
+                      replace({ ...restored.draft, positiveOnly: false })
+                    }
+                  >
+                    Positive labels only ×
+                  </button>
+                )}
                 {query.signals.map((s) => (
                   <button
                     className="subtle"
@@ -1585,7 +1618,7 @@ export function GemView({
                         replace({
                           ...restored.draft,
                           pool: "All",
-                          signals: [...gemSignals],
+                          signals: [],
                           classification: "All classifications",
                         })
                       }
@@ -2176,6 +2209,12 @@ export function TradeView({
                 basis={lineupBasis}
                 plans={lineupsRaw}
                 pending={pending}
+                // Captured search results cannot edit the live pool until explicitly loaded.
+                poolScope={
+                  !preview && workspaceMode === "standard"
+                    ? "Standard"
+                    : undefined
+                }
               />
               {/* A completed manual offer exposes sensitivity without opening or changing finder filters. */}
               {r && (

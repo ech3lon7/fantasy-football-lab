@@ -8,7 +8,7 @@ import type { Model } from "../domain/valuation";
 import { fmt } from "../ui/components";
 import { PlayerName } from "../ui/PlayerName";
 import { FilterHelp } from "../ui/FilterHelp";
-import { TradePortrait } from "./TradeWorkspace";
+import { TradePortrait, tradePlayerDrag } from "./TradeWorkspace";
 
 // Native disclosures preserve mounted controls and keyboard access while grouping each finder's independent settings.
 export function TradeFilterGroup({
@@ -39,7 +39,6 @@ export function TradeFilterGroup({
 }
 
 // Drag payloads are scoped to the owning finder/team; external text and another finder's players cannot change selections.
-const playerDrag = "application/x-fantasy-trade-player";
 const positionDrag = "application/x-fantasy-trade-position";
 export function TradePoolBoard({
   m,
@@ -64,8 +63,11 @@ export function TradePoolBoard({
   const owned = m.players
     .filter((p) => p.owner === team)
     .sort((a, b) => a.name.localeCompare(b.name));
+  // Fixed offers no longer repeat every unselected player; add starters directly from the lineup field or roster selector.
   const lanes = offering
-    ? (["protected", "pool", "offering"] as const)
+    ? active
+      ? (["protected", "pool", "offering"] as const)
+      : (["pool", "offering"] as const)
     : (["protected", "pool"] as const);
   return (
     <section
@@ -82,7 +84,7 @@ export function TradePoolBoard({
       {/* Inactive pools never imply protection from the fixed search's existing required-drop rules. */}
       <FilterHelp
         label="Player pool moves"
-        help="Drag a card or use Move to. Moving to Tradable pool enables flexible search, which explores subsets of the whole pool and protects other players from offers and drops. Offering edits the manual draft; it is not a required subset in flexible searches. In fixed-offer mode, unoffered players can still appear as proposed required drops."
+        help="Drag a card from Lineup impact or use Move to. Moving to Tradable pool enables flexible search, which explores subsets of the whole pool and protects other players from offers and drops. Offering edits the manual draft; it is not a required subset in flexible searches. In fixed-offer mode, unoffered players can still appear as proposed required drops."
       >
         <small className="muted">
           Drag or use Move to ·{" "}
@@ -105,7 +107,7 @@ export function TradePoolBoard({
               key={lane}
               className={`trade-pool-lane${over === lane ? " is-drop-target" : ""}`}
               onDragOver={(event) => {
-                if (event.dataTransfer.types.includes(playerDrag)) {
+                if (event.dataTransfer.types.includes(tradePlayerDrag)) {
                   event.preventDefault();
                   setOver(lane);
                 }
@@ -116,7 +118,7 @@ export function TradePoolBoard({
                 setOver("");
                 try {
                   const value = JSON.parse(
-                    event.dataTransfer.getData(playerDrag),
+                    event.dataTransfer.getData(tradePlayerDrag),
                   );
                   if (
                     value.scope === scope &&
@@ -149,7 +151,7 @@ export function TradePoolBoard({
                     onDragStart={(event) => {
                       event.dataTransfer.effectAllowed = "move";
                       event.dataTransfer.setData(
-                        playerDrag,
+                        tradePlayerDrag,
                         JSON.stringify({ scope, team, id: player.id }),
                       );
                     }}
@@ -173,7 +175,7 @@ export function TradePoolBoard({
                         }
                       >
                         <option value="protected">
-                          {active ? "Protected" : "Not offered"}
+                          {active ? "Protected" : "Remove from offer"}
                         </option>
                         <option value="pool">Tradable pool</option>
                         {offering && <option value="offering">Offering</option>}

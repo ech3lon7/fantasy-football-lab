@@ -35,6 +35,8 @@ export interface TradeChainPool {
   basis: LineupBasis;
 }
 export type TradeWorkspaceMode = "standard" | "chain" | null;
+// Field cards and pool cards share the same team-scoped payload and existing drop validation.
+export const tradePlayerDrag = "application/x-fantasy-trade-player";
 export const tradeTeamName = (m: Model, id: string) =>
   str(
     m.dataset.tables.ModelTeams.find((team) => str(team.TeamID) === id)
@@ -199,6 +201,7 @@ export function TradeLineupField({
   basis,
   plans,
   pending,
+  poolScope,
 }: {
   m: Model;
   draft: Draft;
@@ -206,6 +209,7 @@ export function TradeLineupField({
   basis: LineupBasis;
   plans?: string;
   pending: boolean;
+  poolScope?: string;
 }) {
   const [side, setSide] = useState<"own" | "other">("own"),
     [stage, setStage] = useState<"before" | "after">("after"),
@@ -300,6 +304,9 @@ export function TradeLineupField({
           {slots.map((slot, index) => {
             const id = ids[index],
               player = id ? m.byId.get(id) : undefined;
+            // Only owned players in an editable finder can be offered; incoming players and result previews stay read-only.
+            const canDrag =
+              !!poolScope && side === "own" && player?.owner === team;
             const previous = before[index]
               ? m.byId.get(before[index]!)
               : undefined;
@@ -325,6 +332,19 @@ export function TradeLineupField({
               <article
                 className={`trade-field-player${changed ? ` is-changed is-${changeKind}-change` : ""}`}
                 data-change-kind={changed ? changeKind : undefined}
+                draggable={canDrag}
+                onDragStart={(event) => {
+                  // Cancel native image/link drags on read-only cards instead of accepting them as player selections.
+                  if (!canDrag || !player) {
+                    event.preventDefault();
+                    return;
+                  }
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData(
+                    tradePlayerDrag,
+                    JSON.stringify({ scope: poolScope, team, id: player.id }),
+                  );
+                }}
                 key={`${slot}-${index}`}
                 aria-label={`${slot}: ${player?.name ?? "Unfilled"}${changed ? ", changed" : ""}`}
               >

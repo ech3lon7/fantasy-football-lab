@@ -29,8 +29,12 @@ export const filterHelp: Record<string, string> = {
     "Show the full evaluation columns without changing the selected players or their calculated values.",
   "Include injured":
     "Include injured players in screening. Their injury and availability warnings still apply; enabling this does not assume a recovery date.",
-  "Signals - match any selected":
-    "Selected signals are OR choices; other filter categories use AND. Clear all signals for Any signal. Example: Gem or Watch plus Trend PPG ≥ 2.",
+  // Explain the stricter intersection of positive labels and the absence of all red badge classifications.
+  "Positive labels only":
+    "Require a Gem, Pre-gem, Watch-family or BUY LOW label and exclude players with any red label or downtrend arrow, including Reduced workload, No breakout signal, SELL HIGH or data warnings. A positive label does not cancel a red one. Other filters still apply.",
+  // Checked signals are individual requirements; clearing them removes only the signal restriction.
+  "Signals - require all selected":
+    "Every checked signal is required. Watch alone requires Watch while allowing additional tags; Watch + Role-growth watch requires both. Clear all signals for Any signal. Gem, Pre-gem and Watch are mutually exclusive, so requiring multiple primary stages gives no matches.",
   Gem: "Strong actual scoring and sustained workload in both overlapping three-game windows, with active availability. This is an automatic production signal, not a guarantee or market price.",
   // Pre-gem explains its earlier confirmation without implying a weaker Gem or a guaranteed promotion.
   "Pre-gem":

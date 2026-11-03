@@ -367,7 +367,9 @@ it("automatically migrates saved searches and preserves numeric thresholds", asy
   ).query!;
   expect(
     screenGems([p, { ...p, id: "other", gem: "Watch" }], q).matches,
-  ).toHaveLength(1);
+  ).toHaveLength(0);
+  // Explicitly requiring only Gem restores its match; the old Gem + Watch alternatives now correctly require both.
+  expect(screenGems([p, { ...p, id: "other", gem: "Watch" }], { ...q, signals: ["Gem"] }).matches).toHaveLength(1);
   expect(decodeGemFilters(encodeGemFilters(q), "1").issue).toBe("");
   const cleared = decodeGemFilters(
     { gemFilterVersion: "2", gemSignals: "[]", gemTrendMin: "2" },
