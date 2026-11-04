@@ -177,7 +177,8 @@ export function GroupedTradeRows({
   m: Model;
   render: (row: SearchRow) => ReactNode;
 }) {
-  const [closed, setClosed] = useState<string[]>([]),
+  // Result groups start collapsed; only the user's clicks reveal offers and nested alternatives.
+  const [opened, setOpened] = useState<string[]>([]),
     [expanded, setExpanded] = useState<string[]>([]);
   const toggle = (
     key: string,
@@ -191,7 +192,7 @@ export function GroupedTradeRows({
   return (
     <>
       {tradeResultGroups(m, rows).map((group) => {
-        const teamOpen = !closed.includes(group.team);
+        const teamOpen = opened.includes(group.team);
         return (
           <tbody key={group.team}>
             <tr>
@@ -199,7 +200,7 @@ export function GroupedTradeRows({
                 <button
                   type="button"
                   aria-expanded={teamOpen}
-                  onClick={() => toggle(group.team, closed, setClosed)}
+                  onClick={() => toggle(group.team, opened, setOpened)}
                 >
                   {teamOpen ? "▾" : "▸"}{" "}
                   {String(
@@ -309,7 +310,8 @@ export function GroupedChains({
   m: Model;
   render: (chain: TradeChain, i: number) => ReactNode;
 }) {
-  const [closed, setClosed] = useState<string[]>([]),
+  // Connected and sequential plans share the same opt-in expansion, independent of their search calculations.
+  const [opened, setOpened] = useState<string[]>([]),
     [expanded, setExpanded] = useState<string[]>([]);
   const team = (id: string) =>
     String(
@@ -319,7 +321,7 @@ export function GroupedChains({
   return (
     <>
       {chainResultGroups(m, chains).map((group) => {
-        const groupOpen = !closed.includes(group.key);
+        const groupOpen = opened.includes(group.key);
         return (
           <div className="trade-chain-group" key={group.key}>
             <button
@@ -327,10 +329,10 @@ export function GroupedChains({
               className="trade-result-toggle"
               aria-expanded={groupOpen}
               onClick={() =>
-                setClosed((old) =>
+                setOpened((old) =>
                   groupOpen
-                    ? [...old, group.key]
-                    : old.filter((key) => key !== group.key),
+                    ? old.filter((key) => key !== group.key)
+                    : [...old, group.key],
                 )
               }
             >

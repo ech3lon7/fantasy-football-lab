@@ -10,10 +10,17 @@ import {
 import { evaluate } from "../../src/domain/valuation";
 import { evaluateTrade } from "../../src/domain/trades";
 
-// Group headers are separate from offers; expand every alternative when checking the full evaluated set.
-async function expandSearchAlternatives(search: Locator) {
+// Tests opt into team contents explicitly, just as the user now does after every new search.
+async function openSearchTeams(search: Locator) {
   await expect(search.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
   await expect(search.getByRole("button", { name: "Loading results…", exact: true })).toHaveCount(0);
+  const teams = search.locator('tbody > tr > th button[aria-expanded="false"]');
+  while (await teams.count()) await teams.first().click();
+}
+
+// Group headers are separate from offers; expand every alternative when checking the full evaluated set.
+async function expandSearchAlternatives(search: Locator) {
+  await openSearchTeams(search);
   const buttons = search.getByRole("button", { name: /^Show \d+ (alternative offers involving|outgoing alternatives for) / });
   for (let i = 0; i < 1000 && await buttons.count(); i++) await buttons.first().click();
 }
@@ -233,8 +240,8 @@ test("compact search groups link deficit protection and support visual pool move
   await field.getByRole("article", { name: /^QB: Bench QB/ }).dragTo(board.getByLabel("Standard tradable pool drop zone", { exact: true }));
   await expect(board.getByLabel("Move Bench QB in standard pool", { exact: true })).toHaveValue("pool");
   const starter = board.locator("article").filter({ has: page.getByRole("link", { name: "Main QB", exact: true }) });
-  // Drag from the card's grip, avoiding its native Move selector and player-profile link.
-  await starter.locator("svg").first().dragTo(board.getByLabel("Standard offering drop zone", { exact: true }));
+  // Target the HTML card at its grip position; the decorative SVG deliberately passes pointer events through.
+  await dragPoolCard(page, board, starter, board.getByLabel("Standard offering drop zone", { exact: true }));
   await expect.poll(async () => (await storedWorkspace(page)).state.draft.give).toEqual(["100"]);
   await expect.poll(async () => JSON.parse((await storedWorkspace(page)).state.filters.tradeSearchSettings).standard.query.discovery.flexible.pool).toEqual(expect.arrayContaining(["101", "100"]));
   await page.screenshot({ path: "test-results/compact-trade-search-desktop.png", fullPage: true });
@@ -283,6 +290,108 @@ test("lineup field adds owned players to offering and tradable pool without a no
   await page.reload();
   await expect(board.getByLabel("Move Bench QB in standard pool", { exact: true })).toHaveValue("pool");
   await page.screenshot({ path: "test-results/lineup-field-player-pool.png", fullPage: true });
+});
+
+// Start a real native drag before crossing the card boundary; keep the drop visible instead of scrolling toward an offscreen heading mid-gesture.
+async function dragPoolCard(page: Page, board: Locator, source: Locator, destination?: Locator) {
+  if (destination) await destination.scrollIntoViewIfNeeded();
+  await source.scrollIntoViewIfNeeded();
+  const start = (await source.boundingBox())!;
+  const bounds = (await board.boundingBox())!;
+  const viewport = page.viewportSize()!;
+  const target = destination ? (await destination.boundingBox())! : null;
+  const end = target
+    ? { x: target.x + target.width / 2, y: target.y + target.height / 2 }
+    : { x: bounds.x + bounds.width + 12 < viewport.width ? bounds.x + bounds.width + 12 : bounds.x - 12, y: start.y + 20 };
+  expect(end.x).toBeGreaterThan(0);
+  expect(end.x).toBeLessThan(viewport.width);
+  expect(end.y).toBeGreaterThan(0);
+  expect(end.y).toBeLessThan(viewport.height);
+  if (!destination) expect(await board.evaluate((element, point) => element.contains(document.elementFromPoint(point.x, point.y)), end)).toBe(false);
+  await page.mouse.move(start.x + 5, start.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 12, start.y + 21, { steps: 4 });
+  await page.mouse.move(end.x, end.y, { steps: 12 });
+  await page.mouse.move(end.x, end.y);
+  await page.mouse.up();
+}
+
+// Native drag-out removes only the selected options, persists in both finder modes, and never changes roster ownership.
+test("dragging selected pool cards outside removes them without changing rosters", async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 1200 });
+  await seed(page);
+  const original = await storedWorkspace(page);
+  const board = page.getByRole("region", { name: "Standard visual player pool", exact: true });
+  const card = (name: string) => board.locator("article").filter({ has: page.getByRole("link", { name, exact: true }) });
+  await dragPoolCard(page, board, card("Bench QB"));
+  await expect.poll(async () => (await storedWorkspace(page)).state.draft.give).toEqual([]);
+  await expect(card("Bench QB")).toHaveCount(0);
+  // Set up the next removal through the existing selector; field-to-pool native drags have their own dedicated test.
+  await panel(page).getByLabel("Find outgoing combinations", { exact: true }).check();
+  await board.getByLabel("Move Bench QB in standard pool", { exact: true }).selectOption("pool");
+  await dragPoolCard(page, board, card("Bench QB"));
+  await expect(board.getByLabel("Move Bench QB in standard pool", { exact: true })).toHaveValue("protected");
+  await expect.poll(async () => JSON.parse((await storedWorkspace(page)).state.filters.tradeSearchSettings).standard.query.discovery.flexible.pool).toEqual([]);
+  // Flexible-mode offerings are also in the search pool; removing one clears both, retaining other selected players.
+  await board.getByLabel("Move Main QB in standard pool", { exact: true }).selectOption("offering");
+  await board.getByLabel("Move Bench QB in standard pool", { exact: true }).selectOption("pool");
+  await dragPoolCard(page, board, card("Main QB"));
+  await expect.poll(async () => (await storedWorkspace(page)).state.draft.give).toEqual([]);
+  await expect.poll(async () => JSON.parse((await storedWorkspace(page)).state.filters.tradeSearchSettings).standard.query.discovery.flexible.pool).toEqual(["101"]);
+  // Escape must cancel without removing the card, unlike a completed outside drop.
+  const grip = await card("Bench QB").locator("svg").first().boundingBox();
+  await page.mouse.move(grip!.x + grip!.width / 2, grip!.y + grip!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip!.x + 70, grip!.y + 30, { steps: 10 });
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect(board.getByLabel("Move Bench QB in standard pool", { exact: true })).toHaveValue("pool");
+  await page.reload();
+  await expect(board.getByLabel("Move Main QB in standard pool", { exact: true })).toHaveValue("protected");
+  await expect(board.getByLabel("Move Bench QB in standard pool", { exact: true })).toHaveValue("pool");
+  const current = await storedWorkspace(page);
+  expect(current.dataset).toEqual(original.dataset);
+  expect(current.state.settings).toEqual(original.state.settings);
+});
+
+// A fast drag must be removable before React's passive effects run, while a cancelled drag never authorizes a later drop.
+test("drag-out handlers accept immediate drops and ignore cancelled drag payloads", async ({ page }) => {
+  await seed(page);
+  const outsideDrop = async (cancel: boolean) => page.evaluate((cancelled) => {
+    const board = document.querySelector('[aria-label="Standard visual player pool"]')!;
+    const source = board.querySelector('.trade-pool-player')!;
+    const target = document.querySelector('h1')!;
+    const dataTransfer = new DataTransfer();
+    // Keep the native event sequence in one task so a state-driven effect cannot hide its registration delay.
+    source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
+    if (cancelled) source.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer }));
+    const over = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer });
+    target.dispatchEvent(over);
+    target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
+    if (!cancelled) source.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer }));
+    return over.defaultPrevented;
+  }, cancel);
+  expect(await outsideDrop(true)).toBe(false);
+  expect((await storedWorkspace(page)).state.draft.give).toEqual(["101"]);
+  expect(await outsideDrop(false)).toBe(true);
+  await expect.poll(async () => (await storedWorkspace(page)).state.draft.give).toEqual([]);
+});
+
+// The shared chain board removes only its own pool selection; it cannot clear the standard offering or pool.
+test("dragging a chain pool card outside preserves standard selections", async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 1200 });
+  await seed(page);
+  const original = await storedWorkspace(page);
+  await page.getByRole("button", { name: "Two-trade chain planner", exact: true }).click();
+  const board = page.getByRole("region", { name: "Chain visual player pool", exact: true });
+  await board.getByLabel("Move Main QB in chain pool", { exact: true }).selectOption("pool");
+  await dragPoolCard(page, board, board.locator("article").filter({ has: page.getByRole("link", { name: "Main QB", exact: true }) }));
+  await expect(board.getByLabel("Move Main QB in chain pool", { exact: true })).toHaveValue("protected");
+  await expect.poll(async () => JSON.parse((await storedWorkspace(page)).state.filters.tradeSearchSettings).chain.query.pool.includes("100")).toBe(false);
+  expect((await storedWorkspace(page)).state.draft).toEqual(original.state.draft);
+  await page.reload();
+  await page.getByRole("button", { name: "Two-trade chain planner", exact: true }).click();
+  await expect(board.getByLabel("Move Main QB in chain pool", { exact: true })).toHaveValue("protected");
 });
 
 // Legacy saved minimums cannot hide straight swaps, and the recipient safeguard uses the actual worker and persists independently.
@@ -1071,6 +1180,7 @@ test("incoming Gem/Watch and position filters intersect without changing existin
     await expect(
       search.getByRole("button", { name: "Cancel", exact: true }),
     ).toHaveCount(0);
+    await openSearchTeams(search);
     await expect(search.locator("tbody tr[data-trade-result]").first()).toBeVisible();
   };
   await run();
@@ -1152,6 +1262,7 @@ test("saved trades persist names notes and original results and restore the save
     })
     .fill("1.5");
   await search.getByRole("button", { name: "Search", exact: true }).click();
+  await openSearchTeams(search);
   await expect(
     search.getByRole("button", { name: "Save trade", exact: true }),
   ).toBeEnabled();
@@ -1393,6 +1504,7 @@ test("weekly sliders filter exact averages for either or both teams without chan
   await expect(
     search.getByText("12 index matches.", { exact: false }),
   ).toBeVisible();
+  await openSearchTeams(search);
   await expect(
     search
       .locator("tbody tr[data-trade-result]")
@@ -1625,6 +1737,7 @@ test("upgrade assignments never reuse an opposing player or label one offer as b
   await expect(
     search.getByText("13 index matches.", { exact: false }),
   ).toBeVisible();
+  await openSearchTeams(search);
   await details.getByText("Trade details", { exact: true }).click();
   await expect(
     details.getByText(/Starter upgrade:|Depth upgrade:/),
@@ -1644,6 +1757,7 @@ test("upgrade assignments never reuse an opposing player or label one offer as b
   await expect(
     search.getByText("13 index matches.", { exact: false }),
   ).toBeVisible();
+  await openSearchTeams(search);
   await details.getByText("Trade details", { exact: true }).click();
   await expect(details.getByText(/Starter upgrade: Bench QB/)).toHaveCount(1);
   await expect(details.getByText(/Depth upgrade: Bench QB/)).toHaveCount(0);
@@ -2076,6 +2190,7 @@ test("opponent search gains use full rosters while details retain both impact me
   await expect(
     search.getByText("1 index matches.", { exact: false }),
   ).toBeVisible();
+  await openSearchTeams(search);
   await search.getByRole("button", { name: "Load trade", exact: true }).click();
   const potential = page
     .locator("section")
@@ -2317,6 +2432,7 @@ test("best-at-position target compares the full roster and enforces distinct-pos
   await expect(
     search.getByLabel("Minimum positions upgraded", { exact: true }),
   ).toHaveValue("1");
+  await openSearchTeams(search);
   await expect(
     search.getByRole("button", { name: "Load trade" }).first(),
   ).toBeEnabled();
@@ -2364,6 +2480,7 @@ test("best-at-position target compares the full roster and enforces distinct-pos
   await expect(
     search.getByText("13 index matches.", { exact: false }),
   ).toBeVisible();
+  await openSearchTeams(search);
   await row.getByText("Trade details", { exact: true }).click();
   await expect(row.getByText(/Best-at-position upgrade:/)).toHaveCount(1);
   await expect(
@@ -2408,6 +2525,7 @@ test("guided search defaults to automatic singles and packages and configures tr
   await page.screenshot({ path: "test-results/trade-goal-search.png" });
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(search.getByText(/\d+ index matches\. Ranked by/)).toBeVisible();
+  await openSearchTeams(search);
   await expect(search.locator("tbody tr[data-trade-result]")).not.toHaveCount(0);
   await search
     .getByLabel("Search goal", { exact: true })
@@ -2584,6 +2702,7 @@ test("opponent team checkboxes restrict packages and restore with saved searches
   await expect(search.getByText(/Search inputs changed/)).toBeVisible();
   await search.getByLabel("Create package", { exact: true }).check();
   await search.getByRole("button", { name: "Search", exact: true }).click();
+  await openSearchTeams(search);
   await expect(rows.filter({ hasText: "Test 3" }).first()).toBeVisible();
   await expect(rows.filter({ hasText: "Test B" })).toHaveCount(0);
   await rows
@@ -2666,6 +2785,12 @@ test("result expansions indent names smoothly without shifting numerical columns
   await search.getByLabel("Maximum players to receive", { exact: true }).selectOption("2");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await expect(search.getByText("78 index matches.", { exact: false })).toBeVisible();
+  // No result content or nested alternative is revealed before a deliberate team expansion.
+  const teams = search.locator("tbody > tr > th button");
+  await expect(teams.first()).toHaveAttribute("aria-expanded", "false");
+  await expect(search.locator("tr[data-trade-result]")).toHaveCount(0);
+  await openSearchTeams(search);
+  await expect(search.getByRole("button", { name: /^Hide .*alternative/ })).toHaveCount(0);
   const buttons = search.getByRole("button", { name: /^Show .*alternative offers involving/ });
   await buttons.first().click();
   const nested = search.locator('tr[data-trade-result][data-result-depth="2"]').first();
@@ -2689,6 +2814,11 @@ test("result expansions indent names smoothly without shifting numerical columns
   expect(await page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length)).toBe(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(391);
+  // A fresh search resets the disclosure state instead of carrying expanded plans into the new results.
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(search.getByText("78 index matches.", { exact: false })).toBeVisible();
+  await expect(teams.first()).toHaveAttribute("aria-expanded", "false");
+  await expect(search.locator("tr[data-trade-result]")).toHaveCount(0);
 });
 
 
@@ -2699,6 +2829,7 @@ test("compact workspace previews authoritative scoring and weekly roles without 
   await search.getByLabel("Below outgoing total (index points)", { exact: true }).fill("1000");
   await search.getByLabel("Above outgoing total (index points)", { exact: true }).fill("1000");
   await search.getByRole("button", { name: "Search", exact: true }).click();
+  await openSearchTeams(search);
   const row = search.locator("tr[data-trade-result]").first();
   await expect(row).toBeVisible();
   const before = await storedWorkspace(page);
@@ -2772,6 +2903,7 @@ test("trade workspace hides ID controls and distinguishes traded departures from
   await search.getByLabel("Below outgoing total (index points)", { exact: true }).fill("1000");
   await search.getByLabel("Above outgoing total (index points)", { exact: true }).fill("1000");
   await search.getByRole("button", { name: "Search", exact: true }).click();
+  await openSearchTeams(search);
   const load = search.getByRole("button", { name: "Load trade", exact: true }).first();
   await expect(load).toHaveClass(/\bbutton\b/);
   await expect(load).toBeEnabled();

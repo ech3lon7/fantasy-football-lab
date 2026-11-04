@@ -137,6 +137,8 @@ test("retires legacy surface restrictions from preferences and saved trades", as
   ).toHaveCount(0);
   await panel.getByRole("button", { name: "Search", exact: true }).click();
   await expect(panel.getByText(/1 index matches/)).toBeVisible();
+  // Saving an offer now follows the same explicit team-group expansion used in the regular finder.
+  await panel.locator('tbody > tr > th button[aria-expanded="false"]').first().click();
   const row = panel.locator("tr[data-trade-result]");
   await row.getByRole("button", { name: "Save trade", exact: true }).click();
   await expect

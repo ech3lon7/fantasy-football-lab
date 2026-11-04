@@ -142,6 +142,12 @@ async function stored(page: Page) {
   });
 }
 
+// Result inspection explicitly opens each team pair; the application itself leaves every plan group collapsed.
+async function openChainTeams(page: Page) {
+  const groups = page.locator('.trade-chain-group > button[aria-expanded="false"]');
+  while (await groups.count()) await groups.first().click();
+}
+
 // Both worker paths retain sequential scoring and contextual saves while requiring each recipient to benefit.
 test("finds positive and flat safe chains, explains replacements, and saves steps without moving rosters", async ({
   page,
@@ -163,6 +169,11 @@ test("finds positive and flat safe chains, explains replacements, and saves step
   await expect(
     page.getByText(/Skipped full scoring for \d+ candidates/),
   ).toBeVisible();
+  // Connected plans are hidden initially and reveal only after the user opens their team-pair group.
+  const collapsedGroups = page.locator(".trade-chain-group > button");
+  await expect(collapsedGroups.first()).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator(".trade-chain-group article")).toHaveCount(0);
+  await openChainTeams(page);
 
   const safe = page
     .locator("article")
@@ -668,6 +679,7 @@ test("loads a saved second leg with the correct prerequisite baseline", async ({
   await expect(
     page.getByText(/[1-9][0-9]* qualifying chains found/),
   ).toBeVisible();
+  await openChainTeams(page);
   const safe = page
     .locator("article")
     .filter({

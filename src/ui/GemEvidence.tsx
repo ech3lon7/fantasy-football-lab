@@ -10,12 +10,14 @@ import {
   type HistoricalContext,
 } from "../domain/historical-label-reference";
 import { FilterHelp } from "./FilterHelp";
+import { EvidenceMeter, EvidenceStatus, EvidenceText } from "./EvidenceMeter";
 
-// Share one evidence table across all active tags; numeric comparisons arrive from the domain, never from UI formulas.
-function EvidenceTable({
+// All active tags share compact meters; classification, source scores and exact AND/OR requirements remain domain-owned.
+function EvidenceChecks({
   rows,
   label,
-  results = false,
+  tag,
+  remainingWeeks,
 }: {
   rows: (TagEvidenceRow & {
     status?: GemCheck["status"];
@@ -23,127 +25,97 @@ function EvidenceTable({
     provisionalFloor?: boolean;
   })[];
   label: string;
-  results?: boolean;
+  tag: string;
+  remainingWeeks: number;
 }) {
   return (
-    <>
-      <div className="table-wrap gem-checks">
-        <table aria-label={label}>
-          <thead>
-            <tr>
-              <th>Check</th>
-              <th>Required</th>
-              <th>Actual evidence</th>
-              <th>Margin</th>
-              {results && <th>Result</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.flatMap((row) => {
-              // Compound gates get their own numeric lines; original requirements, game scores and weeks remain visible once.
-              const comparisons = row.comparisons?.length
-                ? row.comparisons
-                : [null];
-              return comparisons.map((comparison, i) => {
-                const actual = comparison?.actual ?? row.actual;
-                return (
-                  <tr key={`${row.check}:${i}`}>
-                    <td className={row.kind}>
-                      {row.check}
-                      {comparison?.note && (
-                        <small className="evidence-note">
-                          {comparison.note}
-                        </small>
-                      )}
-                    </td>
-                    <td
-                      className={
-                        comparison?.required === "Unavailable"
-                          ? "muted"
-                          : (row.requiredKind ??
-                            (comparison ? "input-text" : undefined))
-                      }
+    <div className="evidence-panel">
+      <div className="evidence-checks" role="group" aria-label={label}>
+        {rows.map((row, i) => {
+          const numeric = !!row.comparisons?.length;
+          return (
+            <article
+              className={`evidence-card${numeric ? "" : " evidence-card--context"}${(row.comparisons?.length ?? 0) > 1 ? " evidence-card--compound" : ""}`}
+              key={`${row.check}:${i}`}
+            >
+              <header className="evidence-card-heading">
+                <h4 className={row.kind}>{row.check}</h4>
+                {row.status && <EvidenceStatus status={row.status} />}
+              </header>
+              {/* Every compound condition keeps its own marker and numeric comparison; a passing OR route does not hide failed alternatives. */}
+              <div className="evidence-comparisons">
+                {row.comparisons?.map((comparison, j) => (
+                  <EvidenceMeter
+                    key={j}
+                    comparison={comparison}
+                    tag={tag}
+                    remainingWeeks={remainingWeeks}
+                    check={row.check}
+                    kind={row.kind}
+                    requiredKind={row.requiredKind ?? "input-text"}
+                    status={row.status}
+                    showStatus={!row.status || row.comparisons!.length > 1}
+                  />
+                ))}
+              </div>
+              <p className={row.requiredKind ?? "explanation"}>
+                <EvidenceText text={row.required} />
+              </p>
+              {(!numeric ||
+                !row.comparisons!.some((c) =>
+                  c.actual.startsWith(row.actual),
+                )) && (
+                <p
+                  className={
+                    row.actual === "Unavailable" || row.status === "UNKNOWN"
+                      ? "muted"
+                      : row.kind
+                  }
+                >
+                  <EvidenceText text={row.actual} />
+                </p>
+              )}
+              {/* Preserve the exact games, weeks, research context and provisional-floor notes alongside the new visual. */}
+              {row.provisionalFloor && (
+                <small className="evidence-note">
+                  Provisional floor; historically redundant alongside the other
+                  current Gem gates.
+                </small>
+              )}
+              {row.historical && (
+                <small className="evidence-note">
+                  <FilterHelp
+                    label="Historical reference"
+                    help={row.historical.note}
+                  >
+                    <span
+                      className={row.historical.unavailable ? "muted" : "fact"}
                     >
-                      {comparison ? (
-                        <strong>{comparison.required}</strong>
-                      ) : (
-                        row.required
-                      )}
-                      {comparison && i === 0 && (
-                        <small className="evidence-note">{row.required}</small>
-                      )}
-                      {/* Keep the mandatory numerical gate visible while distinguishing historical redundancy from validation. */}
-                      {row.provisionalFloor && i === 0 && (
-                        <small className="evidence-note">
-                          Provisional floor; historically redundant alongside
-                          the other current Gem gates.
-                        </small>
-                      )}
-                    </td>
-                    <td
-                      className={
-                        actual === "Unavailable" || row.status === "UNKNOWN"
-                          ? "muted"
-                          : row.kind
-                      }
-                    >
-                      {comparison ? <strong>{actual}</strong> : actual}
-                      {comparison && i === 0 && (
-                        <small className="evidence-note">{row.actual}</small>
-                      )}
-                      {/* Historical context stays beside evidence, once per check, without replacing scores or adding a wide column. */}
-                      {i === 0 && row.historical && (
-                        <small className="evidence-note">
-                          <FilterHelp
-                            label="Historical reference"
-                            help={row.historical.note}
-                          >
-                            <span
-                              className={
-                                row.historical.unavailable ? "muted" : "fact"
-                              }
-                            >
-                              {row.historical.text}
-                            </span>
-                          </FilterHelp>
-                        </small>
-                      )}
-                    </td>
-                    <td
-                      className={
-                        !comparison || comparison.margin === "Unavailable"
-                          ? "muted"
-                          : "model"
-                      }
-                    >
-                      {comparison?.margin ?? "—"}
-                    </td>
-                    {results && i === 0 && (
-                      <td
-                        rowSpan={comparisons.length}
-                        className={
-                          row.status === "PASS" ? "model" : "notice warning"
-                        }
-                      >
-                        {row.status ?? "—"}
-                      </td>
-                    )}
-                  </tr>
-                );
-              });
-            })}
-          </tbody>
-        </table>
+                      {row.historical.text}
+                    </span>
+                  </FilterHelp>
+                </small>
+              )}
+            </article>
+          );
+        })}
       </div>
-      <p>
+      {/* Keep scale interpretation available without repeating a large legend below every badge. */}
+      <details className="evidence-meter-legend">
+        <summary>How to read meters</summary>
         <small>
-          Margin measures clearance in the required direction: positive clears
-          the numeric limit; negative falls short. Equality passes only
-          inclusive limits (≥ or ≤). “—” means context without a numeric
-          threshold. All gates and any OR routes still apply.
+          Diamond: player value. Dashed line: badge threshold. Red to green
+          means less to more favorable player evidence, not stronger
+          qualification for a negative badge. Checkmarks and Xs indicate whether
+          a criterion is met. Axis endpoints are display limits, not league
+          extremes or predicted outcomes. Margins use the required direction;
+          strict limits exclude equality. All AND/OR routes still apply. Yes/no
+          requirements use Not met and Met endpoints; gray tracks mean
+          unavailable or waived evidence. Recorded context has no invented
+          cutoff.
         </small>
-      </p>
-    </>
+      </details>
+    </div>
   );
 }
 
@@ -166,7 +138,8 @@ export function GemEvidence({ p, m }: { p: Player; m: Model }) {
         <details>
           <summary className="model">Why Gem?</summary>
           <p>{assessment.explanation}</p>
-          <EvidenceTable
+          <EvidenceChecks
+            remainingWeeks={m.weeks.length}
             label="Breakout evidence checks"
             rows={assessment.checks.map((check) => ({
               ...check,
@@ -176,7 +149,7 @@ export function GemEvidence({ p, m }: { p: Player; m: Model }) {
               // Annotate only individual-game workload support; scoring and mean-workload requirements remain unchanged.
               provisionalFloor: check.check.endsWith("workload support"),
             }))}
-            results
+            tag="Gem"
           />
           {/* Floor sensitivity describes the complete researched rule, never an independently optimized cutoff. */}
           <p>
@@ -222,9 +195,10 @@ export function GemEvidence({ p, m }: { p: Player; m: Model }) {
         <details key={explanation.tag}>
           <summary className="model">Why {explanation.tag}?</summary>
           <p>{explanation.meaning}</p>
-          <EvidenceTable
+          <EvidenceChecks
+            remainingWeeks={m.weeks.length}
             label={`${explanation.tag} evidence checks`}
-            results={explanation.tag === "Pre-gem"}
+            tag={explanation.tag}
             rows={explanation.rows.map((row) => ({
               ...row,
               historical: historicalLabelContext(

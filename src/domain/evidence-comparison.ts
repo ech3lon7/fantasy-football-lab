@@ -4,6 +4,40 @@ export interface EvidenceComparison {
   actual: string;
   margin: string;
   note?: string;
+  // Eligibility checks have discrete outcomes, not invented numeric performance scores.
+  condition?: "PASS" | "FAIL" | "UNKNOWN" | "WAIVED";
+  // Preserve unrounded operands for read-only meters; never reverse-engineer numbers from formatted text.
+  numeric?: {
+    threshold: number | null;
+    value: number | null;
+    unit: string;
+    operator: "≥" | ">" | "≤" | "<";
+  };
+}
+
+// Supply a meter for every nonnumeric requirement while keeping waived and missing evidence neutral.
+export function evidenceCondition(
+  required: string,
+  actual: string,
+  met: boolean | null | "WAIVED",
+  note?: string,
+): EvidenceComparison {
+  const condition =
+    met === "WAIVED" ? met : met === null ? "UNKNOWN" : met ? "PASS" : "FAIL";
+  return {
+    required,
+    actual,
+    note,
+    condition,
+    margin:
+      condition === "PASS"
+        ? "Requirement met"
+        : condition === "FAIL"
+          ? "Requirement not met"
+          : condition === "WAIVED"
+            ? "Not required"
+            : "Unavailable",
+  };
 }
 
 // Measure clearance in the passing direction, keeping strict boundaries, missing values and percentage points explicit.
@@ -52,5 +86,11 @@ export function evidenceComparison(
     actual: format(actual),
     margin,
     note,
+    numeric: {
+      threshold: known(required) ? required : null,
+      value: known(actual) ? actual : null,
+      unit,
+      operator,
+    },
   };
 }

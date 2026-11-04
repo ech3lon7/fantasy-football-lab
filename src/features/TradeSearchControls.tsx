@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, GripVertical } from "lucide-react";
 import type { Position } from "../domain/contracts";
 import { str } from "../domain/contracts";
@@ -60,6 +60,51 @@ export function TradePoolBoard({
   active?: boolean;
 }) {
   const [over, setOver] = useState("");
+  const dragged = useRef("");
+  const board = useRef<HTMLElement>(null);
+  // Install listeners before any drag begins. The source ref updates synchronously, so fast drops cannot outrun a state-driven effect.
+  useEffect(() => {
+    const outside = (event: DragEvent) =>
+      !event.defaultPrevented &&
+      event.target instanceof Element &&
+      !board.current?.contains(event.target) &&
+      !event.target.closest(".trade-pool-board");
+    const allowRemoval = (event: DragEvent) => {
+      if (dragged.current && outside(event) && event.dataTransfer?.types.includes(tradePlayerDrag)) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+      }
+    };
+    const remove = (event: DragEvent) => {
+      const id = dragged.current;
+      if (!id || !outside(event)) return;
+      // Consume only this board's active gesture; cancelled, foreign and repeated drops cannot remove a selection.
+      dragged.current = "";
+      try {
+        const value = JSON.parse(
+          event.dataTransfer?.getData(tradePlayerDrag) ?? "",
+        );
+        if (
+          value.id === id &&
+          value.scope === scope &&
+          value.team === team &&
+          m.byId.get(id)?.owner === team
+        ) {
+          event.preventDefault();
+          move(id, "protected");
+        }
+      } catch {
+        /* Ignore unrelated or malformed drag payloads. */
+      }
+      setOver("");
+    };
+    document.addEventListener("dragover", allowRemoval);
+    document.addEventListener("drop", remove);
+    return () => {
+      document.removeEventListener("dragover", allowRemoval);
+      document.removeEventListener("drop", remove);
+    };
+  }, [m, move, scope, team]);
   const owned = m.players
     .filter((p) => p.owner === team)
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -71,6 +116,7 @@ export function TradePoolBoard({
     : (["protected", "pool"] as const);
   return (
     <section
+      ref={board}
       className="trade-pool-board"
       aria-label={`${scope} visual player pool`}
     >
@@ -84,7 +130,7 @@ export function TradePoolBoard({
       {/* Inactive pools never imply protection from the fixed search's existing required-drop rules. */}
       <FilterHelp
         label="Player pool moves"
-        help="Drag a card from Lineup impact or use Move to. Moving to Tradable pool enables flexible search, which explores subsets of the whole pool and protects other players from offers and drops. Offering edits the manual draft; it is not a required subset in flexible searches. In fixed-offer mode, unoffered players can still appear as proposed required drops."
+        help="Drag a card from Lineup impact or use Move to. Drop an Offering or Tradable pool card outside this box to remove it from both selections; the player stays on your roster. Press Escape to cancel a drag. Moving to Tradable pool enables flexible search, which explores subsets of the whole pool and protects other players from offers and drops. Offering edits the manual draft; it is not a required subset in flexible searches. In fixed-offer mode, unoffered players can still appear as proposed required drops."
       >
         <small className="muted">
           Drag or use Move to ·{" "}
@@ -116,6 +162,7 @@ export function TradePoolBoard({
               onDrop={(event) => {
                 event.preventDefault();
                 setOver("");
+                dragged.current = "";
                 try {
                   const value = JSON.parse(
                     event.dataTransfer.getData(tradePlayerDrag),
@@ -149,15 +196,21 @@ export function TradePoolBoard({
                     className="trade-pool-player"
                     draggable
                     onDragStart={(event) => {
+                      // Protected players remain available to move into a lane; only selected players can be removed by dragging out.
+                      dragged.current = lane === "protected" ? "" : player.id;
                       event.dataTransfer.effectAllowed = "move";
                       event.dataTransfer.setData(
                         tradePlayerDrag,
                         JSON.stringify({ scope, team, id: player.id }),
                       );
                     }}
-                    onDragEnd={() => setOver("")}
+                    onDragEnd={() => {
+                      setOver("");
+                      dragged.current = "";
+                    }}
                   >
-                    <GripVertical size={12} aria-hidden="true" />
+                    {/* The decorative SVG must not intercept the native drag gesture intended for its HTML card. */}
+                    <GripVertical size={12} aria-hidden="true" style={{ pointerEvents: "none" }} />
                     <TradePortrait player={player} />
                     <div>
                       <PlayerName p={player} />

@@ -1,11 +1,20 @@
 import { openTradeDetails, openTradeFilters } from "./trade-workspace-helpers";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import {
   initialState,
   type Dataset,
   type Workspace,
 } from "../../src/domain/contracts";
+
+// Roster-sensitive score checks must explicitly open the collapsed result teams, just as a user does after searching.
+async function openSearchTeams(search: Locator) {
+  await expect(search.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
+  await expect(search.getByRole("button", { name: "Loading results…", exact: true })).toHaveCount(0);
+  const groups = search.locator("tbody > tr > th button");
+  await expect(groups.first()).toHaveAttribute("aria-expanded", "false");
+  for (let i = 0; i < await groups.count(); i++) await groups.nth(i).click();
+}
 
 // Exercise the built app and real workers using synthetic league data and the normal IndexedDB workspace.
 async function seed(page: Page, flexBye = false, temporary = false) {
@@ -489,6 +498,7 @@ test("hypothetical search ignores byes and returning to live restores scheduled 
     await search.getByLabel("Search goal", { exact: true }).selectOption("custom");
     await search.getByLabel("Create package", { exact: true }).uncheck();
     await search.getByRole("button", { name: "Search", exact: true }).click();
+    await openSearchTeams(search);
     const row = search.locator("tbody tr").filter({ has: page.getByRole("link", { name: "Synthetic 2", exact: true }) });
     await expect(row).toBeVisible();
     return row;
@@ -542,6 +552,7 @@ test("forced trades update both simulated rosters and later searches and undo to
   await search.getByLabel("Create package", { exact: true }).uncheck();
   await search.getByRole("combobox", { name: "Required incoming player", exact: true }).selectOption("101");
   await search.getByRole("button", { name: "Search", exact: true }).click();
+  await openSearchTeams(search);
   const row = search.locator("tbody tr").filter({ has: page.getByRole("link", { name: "Bench QB", exact: true }) });
   await expect(row).toBeVisible();
   await expect(row.locator("td").nth(2)).toHaveText(/\+10\.00/);
@@ -642,6 +653,7 @@ test("hypothetical cards, overview, analyzer and search share temporary-injury t
     .getByLabel("Search goal", { exact: true })
     .selectOption("custom");
   await search.getByRole("button", { name: "Search", exact: true }).click();
+  await openSearchTeams(search);
   const row = search
     .locator("tbody tr")
     .filter({

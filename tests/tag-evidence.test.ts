@@ -166,7 +166,7 @@ it("reuses sustained-decline evidence and does not invent explanations for inact
     actual: p.breakout!.reducedWorkload!.actual,
   });
   // Decline averages, relative loss, sustained-game support and sample size appear as separate AND requirements.
-  expect(explanations[0].rows[0].comparisons).toMatchObject([
+  expect(explanations[0].rows[0].comparisons!.slice(0, 4)).toMatchObject([
     {
       required: "≥ 2.00 targets/game",
       actual: "3.50 targets/game",
@@ -467,6 +467,41 @@ it("provides Gem comparisons for both scoring windows and preserves exact 20 per
   expect(
     checks.find((c) => c.check === "Previous window scoring support")!.actual,
   ).toContain("2026 W1: 10.00");
+  // Every support-count requirement also exposes all three individual floors, including the failed game in a passing window.
+  for (const window of ["Recent window", "Previous window"]) {
+    for (const metric of ["scoring", "workload"]) {
+      const comparisons = checks.find(
+        (c) => c.check === `${window} ${metric} support`,
+      )!.comparisons!;
+      expect(comparisons).toHaveLength(4);
+      expect(
+        comparisons
+          .slice(1)
+          .every(
+            (c) => c.numeric!.threshold === (metric === "scoring" ? 16 : 5),
+          ),
+      ).toBe(true);
+      expect(comparisons.slice(1).map((c) => c.note)).toEqual(
+        (window === "Recent window" ? [2, 3, 4] : [1, 2, 3]).map(
+          (week) => `2026 W${week}: ${metric} floor`,
+        ),
+      );
+    }
+  }
+  expect(
+    checks.find((c) => c.check === "Previous window scoring support")!
+      .comparisons![1].numeric!.value,
+  ).toBe(10);
+  expect(
+    checks
+      .find((c) => c.check === "Verified history")!
+      .comparisons!.some((c) => c.condition === "PASS"),
+  ).toBe(true);
+  expect(
+    checks
+      .find((c) => c.check === "Availability")!
+      .comparisons!.some((c) => c.condition === "PASS"),
+  ).toBe(true);
   const before = JSON.stringify(m);
   activeTagExplanations(p, m);
   expect(JSON.stringify(m)).toBe(before);

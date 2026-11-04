@@ -1587,6 +1587,36 @@ pre {
   font-weight: normal;
 }
 
+/* Label evidence uses compact responsive cards; the shared legend and exact source values do not depend on color. */
+.evidence-panel { min-width: 0; margin: 8px 0; }
+.evidence-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); align-items: start; gap: 8px; min-width: 0; }
+.evidence-card { min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 7px; background: #fff; overflow-wrap: anywhere; }
+.evidence-card--context { grid-column: 1 / -1; background: #f7f8f5; }
+/* Compound gates share a compact row instead of stacking meters into one tall card. */
+.evidence-card--compound { grid-column: 1 / -1; }
+.evidence-comparisons { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); align-items: start; gap: 8px; }
+.evidence-comparison { min-width: 0; }
+.evidence-card-heading { display: flex; align-items: start; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.evidence-card-heading h4 { margin: 0; font-size: 13px; line-height: 1.4; }
+.evidence-card p { margin: 4px 0 0; font-size: 12px; line-height: 1.4; }
+.evidence-card .evidence-note { display: block; margin-top: 3px; font-size: 11px; font-weight: normal; line-height: 1.4; }
+.evidence-status { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 19px; height: 19px; border-radius: 50%; }
+.evidence-status--met { color: #166534; background: #dcfce7; }
+.evidence-status--missed { color: #b91c1c; background: #fee2e2; }
+/* Favorability always increases left-to-right; numeric axes reverse when lower values are better for the player. */
+.evidence-meter-numbers { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px; font-size: 12px; line-height: 1.4; margin-bottom: 5px; }
+/* Thin, bounded tracks stay compact even when a card or player popover is wide. */
+.evidence-meter-track { position: relative; width: calc(100% - 10px); max-width: 210px; height: 6px; margin: 0 5px; border-radius: 4px; background: linear-gradient(to right, #ef4444 0%, #fbbf24 50%, #22c55e 100%); }
+.evidence-meter-threshold { position: absolute; top: -3px; bottom: -3px; border-left: 2px dashed #152c29; transform: translateX(-1px); z-index: 1; }
+.evidence-meter-player { position: absolute; top: 50%; width: 8px; height: 8px; background: #152c29; border: 1px solid #fff; box-shadow: 0 0 0 1px #152c29; transform: translate(-50%, -50%) rotate(45deg); z-index: 2; }
+.evidence-meter-axis { display: flex; justify-content: space-between; width: calc(100% - 10px); max-width: 210px; margin: 4px 5px 0; gap: 8px; font-size: 10px; line-height: 1.3; color: #334155; font-variant-numeric: tabular-nums; }
+.evidence-meter-axis > span:last-child { text-align: right; }
+.evidence-comparison > small { display: block; font-size: 11px; line-height: 1.4; }
+/* Neutral tracks preserve missing and waived requirements without showing a false red failure. */
+.evidence-meter-unavailable { font-size: 11px; margin-bottom: 2px; }
+.evidence-meter-track--unavailable { background: #cbd5e1; }
+.evidence-meter-legend { margin: 6px 0 0; font-size: 11px; color: #334155; }
+
 /* Search controls wrap on phones while retaining the existing editable-control appearance. */
 .trade-search-controls {
   display: flex;

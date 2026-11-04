@@ -246,3 +246,10 @@ This amendment supersedes the earlier mandatory nonnegative recipient gain, conn
 - Named custom presets (up to ten) save explicitly inside existing private workspace preferences. Other edits are remembered as Custom, without automatically saving trades, roster moves or results. Team/pool scopes are preserved when loading a custom preset.
 
 Verification includes synthetic recipient-loss boundaries, strictness/scenario combinations, protected recovery fields, actual connected/independent worker searches, locked-first ownership preservation, named preset reload, source-stat parity and private real-snapshot package regressions. Real league datasets and debug exports remain outside the repository and public assets.
+
+
+## Player-label evidence meters
+
+All active player-badge Why sections share responsive meter cards in profiles and popovers. Numerical comparisons carry their original unrounded threshold, value, unit and operator as presentation metadata; label rules, thresholds, valuation and filtering are unchanged. A player diamond and dashed cutoff line sit on a red/amber/green favorability axis, with exact formatted values, original margins, strict/inclusive boundaries, source scores, weeks, compound AND/OR routes and research caveats preserved. Engine check outcomes use green checkmarks/red Xs with accessible names; unknown evidence stays gray and never becomes a failed check.
+
+Color describes favorable player evidence, independently of negative-badge eligibility. Greater workload decline, more declining games, elevated touchdown conversion and low-volume caution criteria move toward red even when their badge criterion is met. Verified sample size stays positive evidence. No other comparisons or badge color conventions change. Numeric axes can reverse where lower is more favorable; availability uses the real remaining horizon. Other axes are stable cutoff-based display ranges, not claimed league extrema, historical percentiles, predicted scores or probabilities. Outliers keep the exact value with a labeled clipped marker; nonnumeric/waived context gets no invented meter.

@@ -235,11 +235,11 @@ test("Pre-gem filters and evidence persist across screener, roster, profile, pop
   await expect(dialog.getByText("Why Gem?", { exact: true })).toHaveCount(0);
   await expect(dialog.getByText("Why Watch?", { exact: true })).toHaveCount(0);
   await dialog.getByText("Why Pre-gem?", { exact: true }).click();
-  const evidence = dialog.getByRole("table", { name: "Pre-gem evidence checks", exact: true });
+  const evidence = dialog.getByRole("group", { name: "Pre-gem evidence checks", exact: true });
   await expect(evidence).toContainText("2026 W3: 16.00");
   await expect(evidence).toContainText("Scoring improvement");
   await expect(evidence).toContainText("Stable or rising workload");
-  await expect(evidence).toContainText("PASS");
+  await expect(evidence.getByRole("img", { name: "Check met", exact: true })).not.toHaveCount(0);
   await dialog.getByRole("link", { name: "Open full player page", exact: true }).click();
   await expect(page.getByText("Why Pre-gem?", { exact: true })).toBeVisible();
   await page.goto("./#/teams");
@@ -443,7 +443,7 @@ test("unsupported prospective journal stays preserved while live Gem evidence re
   ).toBeVisible();
   await expect(
     page
-      .getByRole("table", { name: "Breakout evidence checks" })
+      .getByRole("group", { name: "Breakout evidence checks" })
       .getByText(/2026 W5: 16.00/),
   ).toBeVisible();
 });
@@ -608,13 +608,13 @@ test("active analytical tag explanations agree across popovers and profiles", as
       const details = summary.locator("..");
       await expect(details).not.toHaveAttribute("open");
       await summary.click();
-      await expect(details.getByRole("table")).toBeVisible();
-      // Every active tag shares numerical comparisons while retaining its original evidence and source weeks.
-      const table = details.getByRole("table");
-      await expect(
-        table.getByRole("columnheader", { name: "Margin", exact: true }),
-      ).toBeVisible();
-      await expect(table.locator("td strong")).not.toHaveCount(0);
+      // All active tags share accessible meters while preserving source numbers, exact margins and weeks.
+      const table = details.getByRole("group", { name: tag === "Gem" ? "Breakout evidence checks" : `${tag} evidence checks`, exact:true });
+      await expect(table).toBeVisible();
+      // Compound context rows use the same symbols as numeric checks, leaving no raw engine statuses visible.
+      await expect(table).not.toContainText(/\b(PASS|FAIL)\b/);
+      await expect(table.getByRole("meter")).not.toHaveCount(0);
+      await expect(table.locator(".evidence-meter-numbers strong")).not.toHaveCount(0);
       // Descriptive history uses matched windows and retains the original numeric requirements and season/week trail.
       if (tag === "Gem") {
         await expect(table).toContainText(
@@ -632,6 +632,14 @@ test("active analytical tag explanations agree across popovers and profiles", as
       const explanation = activeTagExplanations(p, model).find(
         (e) => e.tag === tag,
       );
+      // Every domain requirement has its own compact track on both numeric and yes/no routes; only reference context has no cutoff.
+      const comparisons = (tag === "Gem" ? p.breakout!.checks : explanation!.rows).flatMap((row) => row.comparisons ?? []);
+      await expect(table.locator(".evidence-comparison")).toHaveCount(comparisons.length);
+      await expect(table.locator(".evidence-meter-track")).toHaveCount(comparisons.length);
+      for (const size of await table.locator(".evidence-meter-track").evaluateAll((tracks) => tracks.map((track) => ({height: track.getBoundingClientRect().height, width: track.getBoundingClientRect().width})))) {
+        expect(size.height).toBe(6);
+        expect(size.width).toBeLessThanOrEqual(210);
+      }
       if (explanation) {
         await expect(details).toContainText(explanation.meaning);
         await expect(details).toContainText(explanation.interpretation);
@@ -664,26 +672,22 @@ test("active analytical tag explanations agree across popovers and profiles", as
     ).toBeVisible();
   await dialog.getByText("Why BUY LOW?", { exact: true }).click();
   await expect(
-    dialog.getByRole("table", { name: "BUY LOW evidence checks", exact: true }),
+    dialog.getByRole("group", { name: "BUY LOW evidence checks", exact: true }),
   ).toContainText("80th-percentile");
-  // The popover uses the same comparison table as the profile, including its numeric margin column.
+  // The popover shares the profile's meters and exact margins without retaining the old wide columns.
+  await expect(dialog.getByRole("group", { name:"BUY LOW evidence checks",exact:true }).getByRole("meter")).not.toHaveCount(0);
   await expect(
     dialog
-      .getByRole("table", { name: "BUY LOW evidence checks", exact: true })
-      .getByRole("columnheader", { name: "Margin", exact: true }),
-  ).toBeVisible();
-  await expect(
-    dialog
-      .getByRole("table", { name: "BUY LOW evidence checks", exact: true })
-      .locator("td.fact"),
+      .getByRole("group", { name: "BUY LOW evidence checks", exact: true })
+      .locator(".fact"),
   ).not.toHaveCount(0);
   await expect(
     dialog
-      .getByRole("table", { name: "BUY LOW evidence checks", exact: true })
-      .locator("td.model"),
+      .getByRole("group", { name: "BUY LOW evidence checks", exact: true })
+      .locator(".model"),
   ).not.toHaveCount(0);
   await expect(
-    dialog.getByRole("table", { name: "BUY LOW evidence checks", exact: true }),
+    dialog.getByRole("group", { name: "BUY LOW evidence checks", exact: true }),
   ).toContainText("2026 W1: 8.00 points; 14.00 targets; 0.00 TDs");
   await dialog.getByRole("button", { name: "Close player details" }).click();
   await page.goto("./#/player/107");
@@ -767,12 +771,13 @@ test("automatic Gems need no review, relabeling or Apply after saved-filter migr
   const dialog = page.getByRole("dialog");
   await dialog.getByText("Why Gem?", { exact: true }).click();
   await expect(
-    dialog.getByRole("table", { name: "Breakout evidence checks" }),
+    dialog.getByRole("group", { name: "Breakout evidence checks" }),
   ).toContainText("Previous window scoring support");
   await expect(
     dialog
-      .getByRole("table", { name: "Breakout evidence checks" })
-      .getByRole("cell", { name: "PASS", exact: true }),
+      .getByRole("group", { name: "Breakout evidence checks" })
+      .locator(".evidence-card-heading")
+      .getByRole("img", { name: "Check met", exact: true }),
   ).toHaveCount(10);
   await expect(dialog).toContainText(
     "no manual role review, approval or news entry is required",
@@ -833,7 +838,7 @@ test("sustained reduced workload remains selectable, persistent and independent 
   await dialog.getByText("Why Gem?", { exact: true }).click();
   await dialog.getByText("Why Reduced workload?", { exact: true }).click();
   await expect(
-    dialog.getByRole("table", {
+    dialog.getByRole("group", {
       name: "Reduced workload evidence checks",
       exact: true,
     }),
@@ -849,7 +854,7 @@ test("sustained reduced workload remains selectable, persistent and independent 
   await page.goto("./#/player/2");
   await page.getByText("Why Reduced workload?", { exact: true }).click();
   await expect(
-    page.getByRole("table", {
+    page.getByRole("group", {
       name: "Reduced workload evidence checks",
       exact: true,
     }),
@@ -1237,4 +1242,45 @@ test("cleared saved signals permit rising RBs and survive Apply and reload", asy
   await expect(
     page.getByLabel("Minimum trend PPG", { exact: true }),
   ).toHaveValue("2");
+});
+
+// Favorability colors and qualification symbols remain independent, with exact values and both markers accessible in each surface.
+test("evidence meters show favorable direction, exact cutoffs and symbols without changing badges",async({page})=>{
+  await seed(page,{},true);
+  await page.goto("./#/player/2");
+  await page.getByText("Why Gem?",{exact:true}).click();
+  const gem=page.getByRole("group",{name:"Breakout evidence checks",exact:true});
+  await expect(gem.locator(".evidence-card-heading").getByRole("img",{name:"Check met",exact:true})).toHaveCount(10);
+  await expect(gem.getByText(/^(PASS|FAIL)$/)).toHaveCount(0);
+  const scoring=gem.getByRole("meter",{name:"Recent window actual PPG",exact:true});
+  await expect(scoring).toHaveAttribute("aria-valuenow","16");
+  await expect(scoring).toHaveAttribute("aria-valuetext",/threshold .*16.00 PPG/);
+  const gradient=await scoring.evaluate(el=>getComputedStyle(el).backgroundImage);
+  expect(gradient).toContain("rgb(239, 68, 68)");expect(gradient).toContain("rgb(34, 197, 94)");
+  await expect(scoring.locator(".evidence-meter-player")).toBeVisible();
+  await expect(scoring.locator(".evidence-meter-threshold")).toBeVisible();
+  // Compactness includes the enclosing card, so neighboring compound gates cannot stretch a simple requirement into blank space.
+  expect(await scoring.locator("xpath=ancestor::article").evaluate((card) => card.getBoundingClientRect().height)).toBeLessThan(220);
+  await expect(gem.getByRole("meter",{name:/^Availability: Remaining available games/})).toHaveAttribute("aria-valuemax","12");
+  // Support counts no longer replace the individual scoring/workload cutoffs; all six per-window game requirements have meters.
+  for (const window of ["Recent window", "Previous window"]) {
+    await expect(gem.getByRole("meter", {name: new RegExp(`^${window} scoring support: .*scoring floor$`)})).toHaveCount(3);
+    await expect(gem.getByRole("meter", {name: new RegExp(`^${window} workload support: .*workload floor$`)})).toHaveCount(3);
+  }
+  await expect(gem.getByRole("meter", {name: "Verified history: History completeness", exact: true})).toHaveAttribute("aria-valuetext", /Binary eligibility/);
+  await expect(gem.getByRole("meter", {name: "Availability: Availability scenario", exact: true})).toHaveAttribute("aria-valuenow", "1");
+  await page.getByText("Why Reduced workload?",{exact:true}).click();
+  const risk=page.getByRole("group",{name:"Reduced workload evidence checks",exact:true});
+  const decline=risk.getByRole("meter",{name:/Relative average decline/});
+  await expect(decline).toHaveAttribute("aria-valuetext",/Lower is more favorable/);
+  const positions=await decline.evaluate(el=>({player:parseFloat((el.querySelector(".evidence-meter-player") as HTMLElement).style.left),threshold:parseFloat((el.querySelector(".evidence-meter-threshold") as HTMLElement).style.left)}));
+  expect(positions.player).toBeLessThan(positions.threshold);
+  await expect(risk.getByRole("img",{name:"Threshold met",exact:true})).toHaveCount(8);
+  await expect(risk).toContainText("13.50");await expect(risk).toContainText("10.00");
+  await page.mouse.move(0,0);
+  await gem.locator(".evidence-card").filter({has:page.getByRole("heading",{name:"Recent window actual PPG",exact:true})}).screenshot({path:"test-results/evidence-meter-positive.png"});
+  await risk.screenshot({path:"test-results/evidence-meter-negative.png"});
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await risk.screenshot({path:"test-results/evidence-meter-mobile.png"});
 });

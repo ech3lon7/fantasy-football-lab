@@ -6,6 +6,7 @@ import type { GemCheck } from "./gems";
 import { playerSignals, type Model, type Player } from "./valuation";
 import {
   evidenceComparison,
+  evidenceCondition,
   type EvidenceComparison,
 } from "./evidence-comparison";
 
@@ -154,6 +155,23 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
     "Verified history and model",
     "Complete played-game history and usable model data",
     `${p.games} played games; ${p.historyComplete ? "history complete" : "history incomplete"}; ${p.value === null ? "model unavailable" : "model usable"}`,
+    "fact",
+    undefined,
+    // Completeness and a usable model are independent eligibility requirements, not numeric scoring gates.
+    [
+      evidenceCondition(
+        "Complete played-game history",
+        p.historyComplete ? "Complete" : "Incomplete",
+        p.historyComplete,
+        "History completeness",
+      ),
+      evidenceCondition(
+        "Usable model data",
+        p.value === null ? "Unavailable" : "Usable",
+        p.value === null ? null : true,
+        "Model data",
+      ),
+    ],
   );
   const projection = row(
     "ESPN season projected PPG",
@@ -200,6 +218,32 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           "Verified history",
           "Complete played-game history and usable workload counts",
           `${p.games} played games; ${p.historyComplete ? "history complete" : "history incomplete"}`,
+          "fact",
+          undefined,
+          // Primary Watch has a short-sample branch; do not impose Gem's four-game minimum on it.
+          [
+            evidenceComparison(
+              short ? 1 : labelPolicy.watchGames,
+              p.games,
+              "games",
+            ),
+            ...(assessment.checks
+              .find((check) => check.check === "Verified history")
+              ?.comparisons?.filter((comparison) => comparison.condition) ??
+              []),
+            evidenceCondition(
+              "Usable workload counts",
+              assessment.recent === null ||
+                (!short && assessment.previous === null)
+                ? "Unavailable"
+                : "Available",
+              assessment.recent === null ||
+                (!short && assessment.previous === null)
+                ? null
+                : true,
+              "Workload data",
+            ),
+          ],
         ),
         row(
           "Recent workload",
@@ -251,12 +295,12 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
                   ),
                   ...(assessment.previous === 0
                     ? [
-                        {
-                          required: "Waived: earlier workload is zero",
-                          actual: "Percentage undefined",
-                          margin: "Not required",
-                          note: "Growth route — percentage gate waived",
-                        },
+                        evidenceCondition(
+                          "Waived: earlier workload is zero",
+                          "Percentage undefined",
+                          "WAIVED",
+                          "Growth route — percentage gate waived",
+                        ),
                       ]
                     : [
                         evidenceComparison(
@@ -278,6 +322,18 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
             .map((c) => `${c.check}: ${c.status}`)
             .join("; ") || "Unavailable",
           "model",
+          undefined,
+          // Show the exclusion predicates explicitly; these are not numeric measures of player quality.
+          [
+            evidenceCondition(
+              "At least one Gem gate is not met",
+              assessment.checks
+                .filter((c) => c.status !== "PASS")
+                .map((c) => c.check)
+                .join("; ") || "All Gem gates met",
+              assessment.checks.some((c) => c.status !== "PASS"),
+            ),
+          ],
         ),
         // A workload Watch may clear recent scoring but still fail Pre-gem trend, stability or availability.
         row(
@@ -288,6 +344,17 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
             .map((c) => `${c.check}: ${c.status}; ${c.actual}`)
             .join("; ") || "Unavailable",
           "model",
+          undefined,
+          [
+            evidenceCondition(
+              "At least one Pre-gem gate is not met",
+              assessment.preGemChecks
+                .filter((c) => c.status !== "PASS")
+                .map((c) => c.check)
+                .join("; ") || "All Pre-gem gates met",
+              assessment.preGemChecks.some((c) => c.status !== "PASS"),
+            ),
+          ],
         ),
       ],
       interpretation:
@@ -495,11 +562,11 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
           p.projected !== null && p.projected > 0
             ? [evidenceComparison(s.GemMinGapPct, p.gapPct, "%")]
             : [
-                {
-                  required: "Waived: projected PPG is zero or negative",
-                  actual: percent(p.gapPct),
-                  margin: "Not required",
-                },
+                evidenceCondition(
+                  "Waived: projected PPG is zero or negative",
+                  percent(p.gapPct),
+                  "WAIVED",
+                ),
               ],
         ),
         row(

@@ -2,6 +2,7 @@ import { mean, n, num, str, type Dataset, type Row } from "./contracts";
 import type { Player } from "./valuation";
 import {
   evidenceComparison,
+  evidenceCondition,
   type EvidenceComparison,
 } from "./evidence-comparison";
 
@@ -178,6 +179,35 @@ export function assessGem(
         "≥",
         "Verified played-game sample",
       ),
+      // Display every prerequisite and individual decline cutoff, without changing qualification.
+      evidenceCondition(
+        "Complete, unique played-game history",
+        complete ? "Complete" : "Incomplete",
+        complete,
+        "History completeness",
+      ),
+      evidenceCondition(
+        "Usable workload counts",
+        usable ? "Available" : "Unavailable",
+        usable ? true : null,
+        "Workload data",
+      ),
+      evidenceComparison(
+        0,
+        result.previous,
+        `${unit}/game`,
+        ">",
+        "Positive earlier workload",
+      ),
+      ...recentRows.map((game, i) =>
+        evidenceComparison(
+          result.previous === null ? null : result.previous - declineMinimum,
+          usable ? recent[i] : null,
+          unit,
+          "≤",
+          `${game.Season} W${game.Week}: individual decline cutoff`,
+        ),
+      ),
     ],
   };
   // Gem uses overlapping three-game windows from the latest four played games; Watch/decline retain their earlier windows.
@@ -247,6 +277,16 @@ export function assessGem(
             "≥",
             `Of three games, each scoring ≥ ${rule.points} points`,
           ),
+          // Keep each game's floor visible beside the required support count.
+          ...window.rows.map((game, i) =>
+            evidenceComparison(
+              rule.points,
+              pointsUsable ? points[i] : null,
+              "points",
+              "≥",
+              `${game.Season} W${game.Week}: scoring floor`,
+            ),
+          ),
         ],
       },
       {
@@ -277,6 +317,16 @@ export function assessGem(
             "≥",
             `Of three games, each with ≥ ${rule.floor} ${unit}`,
           ),
+          // Individual opportunity floors are separate from the window-average cutoff.
+          ...window.rows.map((game, i) =>
+            evidenceComparison(
+              rule.floor,
+              workloadUsable ? workload[i] : null,
+              unit,
+              "≥",
+              `${game.Season} W${game.Week}: workload floor`,
+            ),
+          ),
         ],
       },
     ];
@@ -291,6 +341,12 @@ export function assessGem(
       // Sample size and availability retain their additional nonnumeric requirements in the original evidence text.
       comparisons: [
         evidenceComparison(labelPolicy.gemGames, rows.length, "games"),
+        evidenceCondition(
+          "Complete, unique played-game history",
+          complete ? "Complete" : "Incomplete",
+          complete,
+          "History completeness",
+        ),
       ],
     },
     ...windows.flat(),
@@ -306,6 +362,15 @@ export function assessGem(
           "games",
           ">",
           "Remaining available games; active status also required",
+        ),
+        // Availability's scenario requirement is distinct from the numeric remaining-game test.
+        evidenceCondition(
+          "No unresolved availability scenario",
+          p.uncertain
+            ? `${p.injury}; unresolved scenario`
+            : `${p.injury}; no unresolved scenario`,
+          !p.uncertain,
+          "Availability scenario",
         ),
       ],
     },
@@ -386,6 +451,12 @@ export function assessGem(
           : "FAIL",
       comparisons: [
         evidenceComparison(preGemPolicy.games, rows.length, "games"),
+        evidenceCondition(
+          "Complete, unique played-game history",
+          complete ? "Complete" : "Incomplete",
+          complete,
+          "History completeness",
+        ),
       ],
     },
     ...windows[0],
