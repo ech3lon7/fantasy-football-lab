@@ -512,3 +512,26 @@ it("provides Gem comparisons for both scoring windows and preserves exact 20 per
     margin: "+0.00 percentage points; at threshold",
   });
 });
+
+// Watch explanations must provide numeric comparison meters for each failed Gem and Pre-gem gate, not just binary conditions.
+it("provides numeric comparison meters for failed Gem and Pre-gem gates in Watch evidence", async () => {
+  const { m, p } = await sample([10, 10, 10, 10, 10], [2, 2, 5, 5, 5]);
+  expect(p.gem).toBe("Watch");
+  const watch = activeTagExplanations(p, m).find((e) => e.tag === "Watch")!;
+  const gemUnmet = watch.rows.find((r) => r.check === "Gem requirements not met")!;
+  expect(gemUnmet.comparisons!.length).toBeGreaterThan(1);
+  expect(
+    gemUnmet.comparisons!.some(
+      (c) => c.numeric?.unit === "PPG" && c.numeric?.threshold === 16,
+    ),
+  ).toBe(true);
+  const preGemUnmet = watch.rows.find(
+    (r) => r.check === "Pre-gem requirements not met",
+  )!;
+  expect(preGemUnmet.comparisons!.length).toBeGreaterThan(1);
+  expect(
+    preGemUnmet.comparisons!.some(
+      (c) => c.numeric?.unit === "PPG" && c.numeric?.threshold === 16,
+    ),
+  ).toBe(true);
+});

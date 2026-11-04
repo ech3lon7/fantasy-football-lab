@@ -314,46 +314,56 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
                 ],
               ),
             ]),
+        // Gem exclusion evidence: summarize failed gate count and provide individual threshold meters
         row(
           "Gem requirements not met",
           "At least one Gem gate is not PASS; otherwise the primary label is Gem",
-          assessment.checks
-            .filter((c) => c.status !== "PASS")
-            .map((c) => `${c.check}: ${c.status}`)
-            .join("; ") || "Unavailable",
+          `${assessment.checks.filter((c) => c.status !== "PASS").length} gates not met`,
           "model",
           undefined,
-          // Show the exclusion predicates explicitly; these are not numeric measures of player quality.
+          // Expose both the overall exclusion status and the individual numeric comparisons for each failed gate.
+          // This allows users to see exact numeric margins and meters showing how close or far the player was to qualifying.
           [
             evidenceCondition(
               "At least one Gem gate is not met",
-              assessment.checks
-                .filter((c) => c.status !== "PASS")
-                .map((c) => c.check)
-                .join("; ") || "All Gem gates met",
+              `${assessment.checks.filter((c) => c.status !== "PASS").length} gates not met`,
               assessment.checks.some((c) => c.status !== "PASS"),
             ),
+            ...assessment.checks
+              .filter((c) => c.status !== "PASS")
+              .flatMap((c) =>
+                (c.comparisons ?? [])
+                  .filter((comp) => comp.numeric)
+                  .map((comp) => ({
+                    ...comp,
+                    note: comp.note ? `${c.check}: ${comp.note}` : c.check,
+                  })),
+              ),
           ],
         ),
-        // A workload Watch may clear recent scoring but still fail Pre-gem trend, stability or availability.
+        // Pre-gem exclusion evidence: summarize failed gate count and provide individual threshold meters
         row(
           "Pre-gem requirements not met",
           "At least one earlier-confirmation requirement is not PASS",
-          assessment.preGemChecks
-            .filter((c) => c.status !== "PASS")
-            .map((c) => `${c.check}: ${c.status}; ${c.actual}`)
-            .join("; ") || "Unavailable",
+          `${assessment.preGemChecks.filter((c) => c.status !== "PASS").length} gates not met`,
           "model",
           undefined,
           [
             evidenceCondition(
               "At least one Pre-gem gate is not met",
-              assessment.preGemChecks
-                .filter((c) => c.status !== "PASS")
-                .map((c) => c.check)
-                .join("; ") || "All Pre-gem gates met",
+              `${assessment.preGemChecks.filter((c) => c.status !== "PASS").length} gates not met`,
               assessment.preGemChecks.some((c) => c.status !== "PASS"),
             ),
+            ...assessment.preGemChecks
+              .filter((c) => c.status !== "PASS")
+              .flatMap((c) =>
+                (c.comparisons ?? [])
+                  .filter((comp) => comp.numeric)
+                  .map((comp) => ({
+                    ...comp,
+                    note: comp.note ? `${c.check}: ${comp.note}` : c.check,
+                  })),
+              ),
           ],
         ),
       ],

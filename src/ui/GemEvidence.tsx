@@ -58,9 +58,11 @@ function EvidenceChecks({
                   />
                 ))}
               </div>
+              {/* Descriptive requirements text */}
               <p className={row.requiredKind ?? "explanation"}>
                 <EvidenceText text={row.required} />
               </p>
+              {/* Render actual outcome when not already displayed as a comparison meter */}
               {(!numeric ||
                 !row.comparisons!.some((c) =>
                   c.actual.startsWith(row.actual),

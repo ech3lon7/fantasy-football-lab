@@ -1589,13 +1589,18 @@ pre {
 
 /* Label evidence uses compact responsive cards; the shared legend and exact source values do not depend on color. */
 .evidence-panel { min-width: 0; margin: 8px 0; }
-.evidence-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); align-items: start; gap: 8px; min-width: 0; }
-.evidence-card { min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 7px; background: #fff; overflow-wrap: anywhere; }
-.evidence-card--context { grid-column: 1 / -1; background: #f7f8f5; }
-/* Compound gates share a compact row instead of stacking meters into one tall card. */
-.evidence-card--compound { grid-column: 1 / -1; }
-.evidence-comparisons { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); align-items: start; gap: 8px; }
-.evidence-comparison { min-width: 0; }
+/* Responsive dual-column masonry layout: cards flow down columns without rigid row-height gaps */
+.evidence-checks { columns: 2 340px; column-gap: 10px; min-width: 0; }
+/* Cards avoid column breaks and fill column width cleanly without stretching empty rows */
+.evidence-card { break-inside: avoid; margin-bottom: 10px; display: inline-block; width: 100%; box-sizing: border-box; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 7px; background: #fff; overflow-wrap: anywhere; }
+/* Context cards span across all columns when full width is needed */
+.evidence-card--context { column-span: all; background: #f7f8f5; }
+/* Compound gates keep their meters organized in their own column rather than spanning full width */
+.evidence-card--compound { min-width: 0; }
+/* Stack compound meters with clean dividers to make multi-gate threshold comparisons readable */
+.evidence-comparisons { display: flex; flex-direction: column; gap: 8px; }
+.evidence-comparison { min-width: 0; padding-bottom: 6px; border-bottom: 1px solid #f1f5f9; }
+.evidence-comparison:last-child { padding-bottom: 0; border-bottom: none; }
 .evidence-card-heading { display: flex; align-items: start; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
 .evidence-card-heading h4 { margin: 0; font-size: 13px; line-height: 1.4; }
 .evidence-card p { margin: 4px 0 0; font-size: 12px; line-height: 1.4; }
