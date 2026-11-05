@@ -34,6 +34,7 @@ async function seed(
   incomingSignals = false,
   guided = false,
   teamFilter = false,
+  protectedDrop = false,
 ) {
   const dataset: Dataset = JSON.parse(
     execFileSync(
@@ -92,6 +93,12 @@ async function seed(
                d.tables.ModelRosters.push({PlayerID:id,TeamID:team,LineupSlotID:baseID===200?0:4});
              }
            }
+         }
+         // A full roster and a stronger incoming QB force a named, unoffered incumbent drop only in this regression.
+         if(${protectedDrop}) {
+           Object.assign(d.tables.ModelContext[0],{QBSlots:1,RBSlots:1,WRSlots:1,TESlots:0,KSlots:0,DSTSlots:0,FlexSlots:0,BenchSlots:0});
+           Object.assign(d.tables.ModelPlayers.find(p=>p.PlayerID===200),{ActualPoints:200,Actual_PPG:40,Last3_PPG:40,ScoreSD:0,ESPN_Projected_PPG:40,ESPN_Projected_Total:680});
+           d.tables.ModelHistory.filter(h=>h.PlayerID===200).forEach(h=>{h.Points=40});
          }
          process.stdout.write(JSON.stringify(await fromTables(d.tables,d.settings)));`,
       ],
@@ -802,7 +809,36 @@ test("incoming range returns singles and packages together and restores saved bo
     .getByRole("group", { name: "Value range", exact: true })
     .screenshot({ path: "test-results/incoming-range-mobile.png" });
 });
-// Flexible discovery preserves protected players and the exact outgoing subset through worker details, saving and loading.
+// The real worker retains a one-for-two match and exposes its named proposed drop without changing the saved roster.
+test("flexible search keeps protected-drop matches with a brief warning", async ({ page }) => {
+  await seed(page, false, false, false, false, false, false, true);
+  const search = panel(page);
+  await search.getByLabel("Use strict index range", { exact: true }).uncheck();
+  await search.getByLabel("Find outgoing combinations", { exact: true }).check();
+  await search.getByLabel("Maximum outgoing players", { exact: true }).fill("1");
+  await search.getByLabel("Create package", { exact: true }).check();
+  // The current package control includes singles; inspect the exact two-player result below.
+  await search.getByLabel("Maximum players to receive", { exact: true }).selectOption("2");
+  await search.getByLabel("Find a target player", { exact: true }).fill("Incoming QB");
+  await search.getByRole("combobox", { name: "Required incoming player", exact: true }).selectOption("200");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expandSearchAlternatives(search);
+  const row = search.locator("tbody tr[data-trade-result]").filter({
+    has: page.getByRole("link", { name: "Synthetic 2", exact: true }),
+  });
+  await expect(row).toHaveCount(1);
+  await row.getByText("Trade details", { exact: true }).click();
+  await expect(row.getByText("Proposed drop: Main QB (outside your tradable pool).", { exact: true })).toBeVisible();
+  await expect(row).toContainText("Your proposed drops: Main QB");
+  await row.getByRole("button", { name: "Save trade", exact: true }).click();
+  const workspace = await storedWorkspace(page);
+  const saved = JSON.parse(workspace.state.filters.savedTrades).trades[0];
+  expect(saved.draft.give).toEqual(["101"]);
+  expect([...saved.draft.get].sort()).toEqual(["2", "200"]);
+  expect(workspace.dataset?.tables.ModelRosters.some((p) => p.PlayerID === 100 && p.TeamID === 1)).toBe(true);
+});
+
+// Flexible discovery preserves protected offers and the exact outgoing subset through details, saving and loading.
 test("flexible targeted discovery ranks packages and saves the actual outgoing players", async ({
   page,
 }) => {
@@ -1481,6 +1517,8 @@ test("weekly sliders filter exact averages for either or both teams without chan
   await first.getByText("Trade details", { exact: true }).click();
   await expect(first.getByText(/Your horizon gain:/)).toContainText("+40.00");
   await expect(first.locator("td").nth(2)).toHaveText("+3.33");
+  // Close the fixed detail panel before clicking filters behind it, matching the visible user workflow on Linux too.
+  await first.getByRole("button", { name: "Close details", exact: true }).click();
   // Both sides must pass: existing bench replacements hold their gain at +20/week, below this +21/week requirement.
   await otherToggle.check();
   await expect(
@@ -2174,6 +2212,8 @@ test("opponent search gains use full rosters while details retain both impact me
   await expect(marked.getByText(/QB: Incoming QB/).first()).toContainText(
     "+20.00 points",
   );
+  // Return to the visible filter controls after inspecting the fixed trade-details panel.
+  await row.getByRole("button", { name: "Close details", exact: true }).click();
   // Opponent weekly filters use the corrected +5 potential, not the +20 marked-starter difference.
   await search.getByLabel("Filter their weekly gain", { exact: true }).check();
   await search

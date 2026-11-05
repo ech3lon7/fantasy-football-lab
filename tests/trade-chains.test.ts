@@ -475,6 +475,35 @@ it("preserves actual IR slots through the ownership checkpoint", async () => {
   expect(chain.after).toBe(67);
 });
 
+// Scheduled-week IR carry-forward may invalidate marked roles; it must not crash best-available search or activate the source IR card.
+it("keeps scheduled IR checkpoint errors separate from best-available scoring", async () => {
+  const d = await fairChainFixture();
+  d.tables.ModelRosters.find((r) => r.PlayerID === 2)!.LineupSlotID = 21;
+  d.tables.ModelPlayers.find((p) => p.PlayerID === 2)!.InjuryStatus =
+    "QUESTIONABLE";
+  const source = await fromTables(d.tables, d.settings);
+  const m = evaluate(source, source.settings);
+  const first = { teamA: "1", teamB: "2", give: ["3"], get: ["2"] };
+  const after = advanceChainRoster(m, first);
+  const second = evaluateChainLeg(
+    after,
+    { teamA: "1", teamB: "3", give: ["2", "8"], get: ["5"] },
+    "best-available",
+  );
+  expect(second.result.valid).toBe(true);
+  expect(second.leg.row.own).not.toBeNull();
+  if (!second.result.valid) throw Error("Expected valid synthetic trade");
+  expect(second.result.directA.errors.join(" ")).toContain("IR players cannot");
+  expect(second.result.directA.expected).toBeNull();
+  // Marked-starter mode retains the same explicit unavailable result instead of treating it as a scoring gain.
+  const marked = evaluateChainLeg(after, { teamA: "1", teamB: "3", give: ["2", "8"], get: ["5"] }, "marked-starters");
+  expect(marked.leg.row.own).toBeNull();
+  expect(after.byId.get("2")!.slot).toBe(21);
+  expect(m.byId.get("2")!.owner).toBe("2");
+  expect(m.byId.get("2")!.slot).toBe(21);
+  expect(() => searchTradeChains(m, query())).not.toThrow();
+});
+
 // Previously accepted losing-counterparty chains now fail independently of their attractive final gain and one-sided PASS labels.
 it("rejects the old unfair chains and reports captured recipient reasons", async () => {
   const d = await chainFixture(),
@@ -707,17 +736,17 @@ it("applies five presets without overwriting mode, sizes, teams, fit, pool or de
       fit: { surplus: defaultChainFit("surplus") },
     },
   });
-  expect(chainPresets).toHaveLength(7);
+  expect(chainPresets).toHaveLength(8);
   for (const preset of chainPresets) {
     const applied = applyChainPreset(original, preset.id, "negotiable");
     expect(applied.first.teams).toBe(original.first.teams);
     expect(applied.second.teams).toBe(original.second.teams);
     expect(applied.pool).toBe(original.pool);
     expect(applied.depth).toBe("deeper");
-    expect(applied.minimumGain).toBe(2);
+    expect(applied.minimumGain).toBe(preset.id === "coverage" ? 1 : 2);
     expect(applied.first.fit!.surplus!.enabled).toBe(false);
     expect(applied.recipient!.minimumGain).toBe(
-      preset.id === "mutual" ? 0 : -3.25,
+      preset.id === "mutual" || preset.id === "coverage" ? 0 : -3.25,
     );
   }
 });

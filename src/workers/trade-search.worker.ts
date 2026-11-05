@@ -22,7 +22,6 @@ import {
   findDiscoveryMatches,
   opponentIncentive,
   retainSuggestion,
-  violatesProtection,
 } from "../domain/trade-discovery";
 
 // Keep one completed search in this dedicated worker; cancellation terminates the whole worker.
@@ -207,8 +206,6 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
           stats.managerExcluded = (stats.managerExcluded ?? 0) + 1;
         if (surfaceFailures(row, request.query.surface).length)
           stats.surfaceExcluded = (stats.surfaceExcluded ?? 0) + 1;
-        if (violatesProtection(row, request.query))
-          stats.protectedExcluded = (stats.protectedExcluded ?? 0) + 1;
         if (
           request.query.usefulness &&
           row.usefulness?.length !== (row.give ?? request.query.give).length
@@ -222,10 +219,8 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
           stats.positionExcluded = (stats.positionExcluded ?? 0) + 1;
         if (request.query.weekly && !matchesWeekly(row, request.query.weekly))
           stats.weeklyExcluded = (stats.weeklyExcluded ?? 0) + 1;
-        if (
-          request.query.discovery?.nearMisses &&
-          !violatesProtection(row, request.query)
-        )
+        // Drop warnings do not suppress exact matches or otherwise useful near misses.
+        if (request.query.discovery?.nearMisses)
           retainSuggestion(
             suggestions,
             row,

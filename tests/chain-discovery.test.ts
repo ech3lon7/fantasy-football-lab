@@ -81,9 +81,9 @@ it("permits bounded recipient losses without changing their displayed scoring or
   ).toHaveLength(1);
 });
 
-// Seven scenario choices and three strictness levels preserve the user's scopes, position, protected pool and targets.
+// Scenario choices and strictness preserve hard selections; coverage keeps recipients nonnegative.
 it("applies scenario presets independently of strictness and hard selections", () => {
-  expect(chainPresets).toHaveLength(7);
+  expect(chainPresets).toHaveLength(8);
   const q = query();
   q.discovery!.position = "WR";
   for (const p of chainPresets)
@@ -104,7 +104,7 @@ it("applies scenario presets independently of strictness and hard selections", (
       expect(applied.first.offer).toEqual(q.first.offer);
       expect(applied.first.receive).toEqual(q.first.receive);
       expect(applied.recipient!.minimumGain).toBe(
-        p.id === "mutual"
+        p.id === "mutual" || p.id === "coverage"
           ? 0
           : { conservative: 0, balanced: -1.5, negotiable: -3.25 }[strictness],
       );

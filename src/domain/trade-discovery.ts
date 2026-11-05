@@ -135,8 +135,7 @@ export function discoveryFailures(
     reasons.push(
       "Your requested position does not have a positive weekly scoring gain.",
     );
-  if (violatesProtection(row, q))
-    reasons.push("Requires dropping a protected player.");
+  // Proposed drops outside the offer pool remain review warnings, never search exclusions.
   const receive = incomingCountRange(q);
   if (row.get.length < receive.minimum || row.get.length > receive.maximum)
     reasons.push(

@@ -54,6 +54,12 @@ import {
   type ChainSurfaceFilter,
 } from "./chain-plausibility";
 import type { Model, Player } from "./valuation";
+import {
+  chainPositionImpact,
+  chainGradeFailures,
+  type ChainGradeLimit,
+  type ChainPositionImpact,
+} from "./chain-position-impact";
 import { lineup, teamsAssessment, type PositionGrade } from "./lineups";
 import {
   deficitProtectionErrors,
@@ -89,6 +95,11 @@ export interface ChainFitRule {
   positions: Position[];
 }
 export interface ChainStep {
+  // Original players required in step two remain reserved until that offer; each leg owns its independent anchors.
+  requiredGive?: string[];
+  requiredGet?: string[];
+  receivePosition?: Position;
+  gradeLimit?: ChainGradeLimit;
   deficitProtection?: DeficitProtection;
   offer: ChainRange;
   receive: ChainRange;
@@ -179,6 +190,21 @@ function fitAssessor(m: Model, step: ChainStep) {
 const fitScore = (evidence?: ChainFitEvidence[]) =>
   evidence?.filter((e) => e.matched).length ?? 0;
 
+// Requiring an acquired card in offer two also anchors its acquisition in trade one; the original saved query stays unchanged.
+function anchoredFirstStep(m: Model, q: ChainQuery): ChainStep {
+  const acquired = (q.second.requiredGive ?? []).filter(
+    (id) => m.byId.get(id)?.owner !== q.team,
+  );
+  return acquired.length
+    ? {
+        ...q.first,
+        requiredGet: [
+          ...new Set([...(q.first.requiredGet ?? []), ...acquired]),
+        ],
+      }
+    : q.first;
+}
+
 export const defaultChainRecipient = {
   maximumValueLossPct: 0.1,
   minimumGain: 1,
@@ -202,6 +228,7 @@ export interface ChainRange {
   maximum: number;
 }
 export interface ChainLeg {
+  positionImpact?: ChainPositionImpact;
   draft: Draft;
   row: SearchRow;
   recipient: ChainRecipientEvidence;
@@ -225,8 +252,9 @@ export interface TradeChain {
   relaxations?: string[];
 }
 // Identify search semantics independently of the user-managed app version in progress and debug exports.
-export const chainSearchVersion = "negotiable-sequence-search-5";
+export const chainSearchVersion = "coverage-grade-search-6";
 export interface ChainStats {
+  rejectedGrades?: number;
   limits?: {
     firstEvaluations: number;
     totalEvaluations: number;
@@ -490,9 +518,58 @@ export function chainErrors(m: Model, q: ChainQuery): string[] {
       "Use a valid chain route, acquired contribution above 0–100%, and a positive interaction-gain minimum.",
     );
   for (const [name, step] of [
-    ["First", q.first],
+    ["First", anchoredFirstStep(m, q)],
     ["Second", q.second],
   ] as const) {
+    // Stale ownership, conflicting teams and oversized required packages are actionable errors rather than weakened filters.
+    for (const [direction, ids, range] of [
+      ["offer", step.requiredGive ?? [], step.offer],
+      ["receive", step.requiredGet ?? [], step.receive],
+    ] as const) {
+      if (
+        !Array.isArray(ids) ||
+        new Set(ids).size !== ids.length ||
+        ids.length > range.maximum ||
+        ids.some((id) => {
+          const p = m.byId.get(id);
+          if (!p || !usable(p)) return true;
+          if (direction === "receive")
+            return (
+              p.owner === q.team ||
+              p.owner === "0" ||
+              (!!step.teams && !step.teams.includes(p.owner))
+            );
+          return name === "First"
+            ? !q.pool.includes(id)
+            : p.owner === q.team
+              ? !q.pool.includes(id)
+              : p.owner === "0" ||
+                (!!q.first.teams && !q.first.teams.includes(p.owner));
+        })
+      )
+        errors.push(
+          `${name} trade required ${direction} players must fit the package size, ownership and selected pool/teams.`,
+        );
+      if (
+        direction === "receive" &&
+        new Set(ids.map((id) => m.byId.get(id)?.owner)).size > 1
+      )
+        errors.push(
+          `${name} trade required receive players must belong to the same opponent.`,
+        );
+    }
+    if (step.receivePosition && !positions.includes(step.receivePosition))
+      errors.push(`${name} trade has an invalid required incoming position.`);
+    if (
+      step.gradeLimit &&
+      (!["own", "other", "both"].includes(step.gradeLimit.side) ||
+        !Number.isInteger(step.gradeLimit.maximumDrop) ||
+        step.gradeLimit.maximumDrop < 0 ||
+        step.gradeLimit.maximumDrop >= positionGradeScale.length)
+    )
+      errors.push(
+        `${name} trade needs a whole-number maximum grade drop from 0–${positionGradeScale.length - 1}.`,
+      );
     errors.push(
       ...deficitProtectionErrors(step.deficitProtection).map(
         (error) => `${name} trade: ${error}`,
@@ -551,6 +628,29 @@ export function chainErrors(m: Model, q: ChainQuery): string[] {
   }
   if (q.first.offer.minimum > q.pool.length)
     errors.push("Your pool is smaller than the first offer minimum.");
+  // A player cannot depart twice; a locked first exchange must honor the same constraints as an enumerated exchange.
+  if (
+    (q.first.requiredGive ?? []).some((id) =>
+      q.second.requiredGive?.includes(id),
+    )
+  )
+    errors.push(
+      "A player required in trade two cannot also be required in trade one.",
+    );
+  const pin = q.discovery?.pinnedFirst;
+  if (
+    pin &&
+    ((q.first.requiredGive ?? []).some((id) => !pin.give.includes(id)) ||
+      (anchoredFirstStep(m, q).requiredGet ?? []).some(
+        (id) => !pin.get.includes(id),
+      ) ||
+      (q.second.requiredGive ?? []).some((id) => pin.give.includes(id)) ||
+      (q.first.receivePosition &&
+        !pin.get.some((id) => m.byId.get(id)?.pos === q.first.receivePosition)))
+  )
+    errors.push(
+      "The locked first trade conflicts with a required player or incoming position.",
+    );
   if (!m.weeks.length)
     errors.push("The remaining fantasy horizon is complete.");
   return errors;
@@ -710,13 +810,21 @@ function* combinations(
 function* balancedOffers(
   ids: string[],
   range: ChainRange,
+  required: string[] = [],
 ): Generator<string[]> {
+  // Seed each package with its anchors, preserving finite search work for relevant combinations rather than late exclusions.
+  if (
+    required.some((id) => !ids.includes(id)) ||
+    required.length > range.maximum
+  )
+    return;
+  const remaining = ids.filter((id) => !required.includes(id));
   let streams = Array.from(
-    { length: range.maximum - range.minimum + 1 },
+    { length: range.maximum - Math.max(range.minimum, required.length) + 1 },
     (_, i) =>
-      combinations(ids, {
-        minimum: range.minimum + i,
-        maximum: range.minimum + i,
+      combinations(remaining, {
+        minimum: Math.max(range.minimum, required.length) + i - required.length,
+        maximum: Math.max(range.minimum, required.length) + i - required.length,
       }),
   );
   while (streams.length) {
@@ -725,11 +833,40 @@ function* balancedOffers(
       const entry = stream.next();
       if (entry.done) continue;
       next.push(stream);
-      yield entry.value;
+      yield [...required, ...entry.value];
     }
     streams = next;
   }
 }
+// Anchor the incoming position directly, assigning each package to its earliest matching card so no duplicate or unbounded hidden scan is introduced.
+function* incomingPackages(
+  m: Model,
+  ids: string[],
+  count: number,
+  step: ChainStep,
+): Generator<string[]> {
+  const required = step.requiredGet ?? [],
+    range = { minimum: count, maximum: count };
+  if (
+    !step.receivePosition ||
+    required.some((id) => m.byId.get(id)?.pos === step.receivePosition)
+  ) {
+    yield* balancedOffers(ids, range, required);
+    return;
+  }
+  const earlier = new Set<string>();
+  for (const id of ids.filter(
+    (id) => m.byId.get(id)?.pos === step.receivePosition,
+  )) {
+    yield* balancedOffers(
+      ids.filter((player) => !earlier.has(player)),
+      range,
+      [...required, id],
+    );
+    earlier.add(id);
+  }
+}
+
 function* candidates(
   m: Model,
   q: ChainQuery,
@@ -743,7 +880,12 @@ function* candidates(
   const opponents = m.dataset.tables.ModelTeams.map((t) => str(t.TeamID))
     .filter(
       (id) =>
-        id !== "0" && id !== q.team && (!step.teams || step.teams.includes(id)),
+        id !== "0" &&
+        id !== q.team &&
+        (!step.teams || step.teams.includes(id)) &&
+        (step.requiredGet ?? []).every(
+          (player) => m.byId.get(player)?.owner === id,
+        ),
     )
     .sort(cmpId);
   const players = (team: string) =>
@@ -767,7 +909,11 @@ function* candidates(
   const orderedPool = [...pool].sort(
     (a, b) => offerScore(b) - offerScore(a) || cmpId(a, b),
   );
-  for (const give of balancedOffers(orderedPool, step.offer)) {
+  for (const give of balancedOffers(
+    orderedPool,
+    step.offer,
+    step.requiredGive,
+  )) {
     const cohort: typeof jobs = [];
     const offered = sum(give.map((id) => m.byId.get(id)!.index!));
     for (
@@ -806,7 +952,8 @@ function* candidates(
           preference: hasFit
             ? fitScore(assess({ teamA: q.team, teamB, give, get: ids }))
             : 0,
-          iterator: combinations(ordered, { minimum: count, maximum: count }),
+          // Incoming anchors constrain enumeration itself, including exact two-player returns.
+          iterator: incomingPackages(m, ordered, count, step),
         });
       }
     // Explore fit-friendly counterparties first for each offered package, with nonmatching teams still in the stream.
@@ -1051,6 +1198,23 @@ export function searchTradeChains(
     plans?: string,
   ) => {
     const config = step === 1 ? q.first : q.second;
+    // Grade protection runs only when explicitly enabled, after normal legality/scoring/recipient checks.
+    if (config.gradeLimit) {
+      leg.positionImpact = chainPositionImpact(model, leg.draft, result);
+      const failures = chainGradeFailures(
+        leg.positionImpact,
+        config.gradeLimit,
+      );
+      if (failures.length) {
+        stats.rejectedGrades = (stats.rejectedGrades ?? 0) + 1;
+        if (
+          plausibilityRejections.filter((entry) => entry.step === step).length <
+          5
+        )
+          plausibilityRejections.push({ step, draft: leg.draft, failures });
+        return false;
+      }
+    }
     if (config.indexWindow)
       leg.indexWindow = chainIndexEvidence(
         model,
@@ -1288,11 +1452,22 @@ export function searchTradeChains(
         });
       return false;
     }
-    if (!row.legal || row.dropsA.some((id) => protectedIds.has(id))) {
+    if (
+      !row.legal ||
+      row.dropsA.some(
+        (id) =>
+          protectedIds.has(id) ||
+          (step === 1 && q.second.requiredGive?.includes(id)),
+      )
+    ) {
       stats.rejectedRoster++;
       if (plausibilityRejections.length < 10) {
         const cuts = row.dropsA
-          .filter((id) => protectedIds.has(id))
+          .filter(
+            (id) =>
+              protectedIds.has(id) ||
+              (step === 1 && q.second.requiredGive?.includes(id)),
+          )
           .map((id) => m.byId.get(id)?.name ?? "Unknown player");
         plausibilityRejections.push({
           step,
@@ -1376,7 +1551,8 @@ export function searchTradeChains(
     return result;
   };
   // Required fit rejects before expensive scoring; disabled/Prefer rules never exclude a candidate.
-  const firstFit = fitAssessor(m, q.first);
+  const firstStep = anchoredFirstStep(m, q);
+  const firstFit = fitAssessor(m, firstStep);
   const passesFit = (evidence: ChainFitEvidence[]) => {
     if (evidence.some((e) => e.mode === "require" && !e.matched)) {
       stats.rejectedFit++;
@@ -1387,7 +1563,13 @@ export function searchTradeChains(
   // A follow-up request searches its exact first exchange, without mutating either saved roster.
   const first = q.discovery?.pinnedFirst
     ? [q.discovery.pinnedFirst][Symbol.iterator]()
-    : candidatePortfolio(m, q, q.first, q.pool, firstFit);
+    : candidatePortfolio(
+        m,
+        q,
+        firstStep,
+        q.pool.filter((id) => !q.second.requiredGive?.includes(id)),
+        firstFit,
+      );
   let firstScans = 0,
     firstEvaluations = 0;
   while (firstScans < budget.scans && firstEvaluations < budget.first) {
@@ -1644,6 +1826,17 @@ export function searchTradeChains(
             Math.abs(second.row.ownBefore! - intermediate) < 0.000001 &&
             gain >= q.minimumGain
           ) {
+            // Retained results show both teams' grade sacrifices even when grade filtering is disabled.
+            seed.leg.positionImpact ??= chainPositionImpact(
+              m,
+              seed.leg.draft,
+              seed.result,
+            );
+            second.positionImpact ??= chainPositionImpact(
+              afterFirst,
+              second.draft,
+              evaluatedSecond.result,
+            );
             const chain: TradeChain = {
               key: JSON.stringify([seed.leg.row.key, second.row.key]),
               mode: (

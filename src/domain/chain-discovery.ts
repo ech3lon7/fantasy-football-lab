@@ -24,6 +24,7 @@ export const chainPresets = [
   { id: "depth", label: "Turn a star into depth" },
   { id: "surface", label: "Surface-stat opportunities" },
   { id: "connected", label: "Connected chains" },
+  { id: "coverage", label: "Acquire coverage, then upgrade" },
   { id: "speculative", label: "Speculative sequences" },
 ] as const;
 const strictnessLimits = {
@@ -98,6 +99,8 @@ export function applyChainPreset(
   });
   const first = step(q.first),
     second = step(q.second);
+  // The coverage preset requires a first-step WR while allowing either meaningful connected route by default.
+  if (id === "coverage") first.receivePosition ??= "WR";
   if (id === "star") {
     first.offer.minimum = 2;
     first.receive.maximum = 2;
@@ -123,19 +126,28 @@ export function applyChainPreset(
     second,
     mode: id === "speculative" ? "both" : "safe",
     maximumLoss: id === "speculative" ? 3 : 0,
-    minimumGain: 2,
+    minimumGain: id === "coverage" ? 1 : 2,
     pricePolicy: strictness === "conservative" ? "required" : "warnings",
     recipient: {
       maximumValueLossPct: limits.value,
-      minimumGain: mutual ? 0 : limits.gain,
+      minimumGain: mutual || id === "coverage" ? 0 : limits.gain,
     },
+    dependency:
+      id === "coverage"
+        ? {
+            minimumAcquiredShare: 0.25,
+            minimumInteractionGain: 2,
+            ...q.dependency,
+            route: "either",
+          }
+        : q.dependency,
     discovery: {
       ...q.discovery,
-      sequences: id === "connected" ? "connected" : "both",
+      sequences: id === "connected" || id === "coverage" ? "connected" : "both",
       ranking: mutual ? "mutual" : id === "surface" ? "appeal" : "own",
       broaden: {
         enabled: true,
-        maximumRecipientLoss: mutual ? 0 : limits.lossCap,
+        maximumRecipientLoss: mutual || id === "coverage" ? 0 : limits.lossCap,
         maximumValueLossPct: limits.valueCap,
         indexExtra: limits.index,
       },

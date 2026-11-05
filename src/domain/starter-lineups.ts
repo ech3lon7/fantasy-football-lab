@@ -279,16 +279,43 @@ export function directStarterImpact(
       const plan = carried.find(
         (entry) => entry.team === team && entry.week === week,
       );
-      const plans = plan
-        ? saveStarterLineup(context, team, plan.ids, raw, plan.assignments)
-        : raw;
-      return directStarterImpact(
+      // An invalid carried marked lineup must report unavailable direct scoring, not abort an independent best-available evaluation.
+      let plans = raw;
+      let planError: string | undefined;
+      if (plan) {
+        try {
+          plans = saveStarterLineup(
+            context,
+            team,
+            plan.ids,
+            raw,
+            plan.assignments,
+          );
+        } catch (error) {
+          planError =
+            error instanceof Error
+              ? error.message
+              : "Carried starter lineup is invalid.";
+        }
+      }
+      const part = directStarterImpact(
         { ...context, weeks: [week] },
         team,
         after,
         incoming,
         plans,
       );
+      // Keep the existing IR guard and source roster intact; marked-starter searches cannot use fallback points from a rejected plan.
+      return planError
+        ? {
+            ...part,
+            errors: [...part.errors, planError],
+            expected: null,
+            value: null,
+            expectedPerWeek: null,
+            valuePerWeek: null,
+          }
+        : part;
     });
     const unique = (
       key:

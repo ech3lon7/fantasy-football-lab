@@ -194,11 +194,73 @@ it("enumerates tradable subsets, protects unselected starters and round-trips sa
     expect(saved.trades[0].query?.discovery).toEqual(q.discovery);
   }
   expect(JSON.stringify(m.players)).toBe(before);
-  // Protected incumbents may not be silently removed by automatic roster repair, including in near-miss searches.
+  // Drop detection remains available without turning a proposed drop into an exclusion.
   const row = scoreTradeMatch(m, q, matches[0]);
   expect(violatesProtection({ ...row, dropsA: ["1"] }, q)).toBe(true);
   expect(violatesProtection({ ...row, dropsA: ["100"] }, q)).toBe(false);
   expect(violatesProtection({ ...row, dropsA: [...row.get] }, q)).toBe(false);
+});
+
+// A full roster reproduces the one-for-two search omission with synthetic players and real roster repair.
+it("warns about proposed drops outside the pool without excluding the trade", async () => {
+  const d = await tradeSearchFixture();
+  Object.assign(d.tables.ModelContext[0], {
+    QBSlots: 1,
+    RBSlots: 1,
+    WRSlots: 1,
+    TESlots: 0,
+    KSlots: 0,
+    DSTSlots: 0,
+    FlexSlots: 0,
+    BenchSlots: 0,
+  });
+  Object.assign(
+    d.tables.ModelPlayers.find((p) => p.PlayerID === 200)!,
+    {
+      ActualPoints: 200,
+      Actual_PPG: 40,
+      Last3_PPG: 40,
+      ScoreSD: 0,
+      ESPN_Projected_PPG: 40,
+      ESPN_Projected_Total: 680,
+    },
+  );
+  d.tables.ModelHistory.filter((h) => h.PlayerID === 200).forEach((h) => {
+    h.Points = 40;
+  });
+  const m = evaluate(d, d.settings);
+  const q: TradeSearchQuery = {
+    teamA: "1",
+    give: ["101"],
+    count: 2,
+    below: 1000,
+    above: 1000,
+    discovery: { flexible: { pool: ["101"], minimum: 1, maximum: 1 } },
+  };
+  const match = findDiscoveryMatches(m, q).matches.find(
+    (candidate) => candidate.get.includes("200") && candidate.get.includes("2"),
+  )!;
+  const row = scoreTradeMatch(m, q, match);
+  expect(row.dropsA).toEqual(["100"]);
+  expect(row.warnings).toContain(
+    "Proposed drop: Main QB (outside your tradable pool).",
+  );
+  expect(discoveryFailures(row, q)).toEqual([]);
+  expect(outgoingPackages(q)).toEqual([["101"]]);
+  // Scoring requirements still exclude a trade independently of its non-blocking drop warning.
+  expect(
+    discoveryFailures(row, {
+      ...q,
+      weekly: { own: { minimum: row.own! + 1, maximum: null } },
+    }),
+  ).toContain("Your weekly gain is 1.00 points/week below your minimum.");
+  const permitted = {
+    ...q,
+    discovery: { flexible: { pool: ["101", "100"], minimum: 1, maximum: 1 } },
+  };
+  expect(scoreTradeMatch(m, permitted, match).warnings).not.toContain(
+    "Proposed drop: Main QB (outside your tradable pool).",
+  );
 });
 
 // Invalid pools, targets, ownership and size limits fail before worker enumeration; changes invalidate stale results.

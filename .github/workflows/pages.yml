@@ -67,9 +67,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      # Deploy to GitHub Pages with an extended timeout to prevent aborting during backend queue delays.
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          timeout: 1200000
       # Verify the public artifact, since successful local tests cannot detect a wrong publisher.
       - name: Verify published app assets
         env:

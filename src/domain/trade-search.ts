@@ -1273,6 +1273,13 @@ export function scoreTradeMatch(
         : "",
     ].filter(Boolean);
   });
+  // Keep roster-repair drops visible without requiring the user to offer those players for trade.
+  const tradablePool = q.discovery?.flexible?.pool;
+  const protectedDrops = tradablePool
+    ? r.dropsA.filter(
+        (id) => !tradablePool.includes(id) && !match.get.includes(id),
+      )
+    : [];
   return {
     ...match,
     // Scored/direct inspections must use the complete package too, rather than retaining a broad team-level comparison.
@@ -1376,6 +1383,11 @@ export function scoreTradeMatch(
         ...r.potentialA.errors,
         ...r.potentialB.errors,
         ...availability,
+        ...(protectedDrops.length
+          ? [
+              `Proposed drop${protectedDrops.length > 1 ? "s" : ""}: ${protectedDrops.map((id) => m.byId.get(id)!.name).join(", ")} (outside your tradable pool).`,
+            ]
+          : []),
         ...(m.simulation?.issues ?? []),
         ...(!r.legality ? ["Unresolved roster conflict"] : []),
       ]),

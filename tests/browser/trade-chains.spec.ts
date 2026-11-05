@@ -93,6 +93,39 @@ async function seed(page: Page) {
   }
 }
 
+// Failed and empty searches announce different outcomes above the collapsed filter drawer.
+test("shows failed and empty chain search status beside the active filters", async ({ page }) => {
+  await seed(page);
+  await page.getByRole("spinbutton", { name: "Minimum final gain (EPPG)", exact: true }).fill("1000");
+  await page.getByRole("button", { name: "Chain filters", exact: true }).click();
+  await page.getByRole("button", { name: "Run chain trade search", exact: true }).click();
+  const status = page.getByLabel("Active chain-search filters");
+  await expect(status.getByRole("status")).toContainText("No matching chains found.");
+  await expect(status.getByRole("status")).toBeVisible();
+
+  // Inject a worker error only after the real empty search, keeping the other application workers unchanged.
+  await page.evaluate(() => {
+    const Original = window.Worker;
+    window.Worker = class extends Original {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options);
+        if (String(url).includes("trade-chains.worker")) {
+          this.postMessage = (request: { id: string; context: string }) => {
+            queueMicrotask(() => this.dispatchEvent(new MessageEvent("message", {
+              data: { id: request.id, context: request.context, type: "error", message: "Synthetic carried lineup failure." },
+            })));
+          };
+        }
+      }
+    };
+  });
+  await page.getByRole("button", { name: "Run chain trade search", exact: true }).click();
+  await expect(status.getByRole("alert")).toContainText("Chain search failed. No complete results are available.");
+  await expect(status.getByRole("alert")).toContainText("Synthetic carried lineup failure.");
+  await expect(status.getByRole("alert")).toBeVisible();
+  await expect(status.getByRole("status")).toHaveCount(0);
+});
+
 // Each chain leg keeps its own grade/gain safeguard through reload, without sharing it with the standard finder.
 test("remembers independent weak-position safeguards on both chain legs", async ({ page }) => {
   await seed(page);
@@ -120,6 +153,83 @@ test("remembers independent weak-position safeguards on both chain legs", async 
   await page.getByRole("button", { name: "Clear chain filters", exact: true }).click();
   await expect(first.getByLabel("First trade: Protect their weak positions", { exact: true })).not.toBeChecked();
   await expect(second.getByLabel("Second trade: Protect their weak positions", { exact: true })).not.toBeChecked();
+});
+
+// Coverage restores the shared route default without erasing hard player anchors, and Clear removes the new constraints too.
+test("coverage preset applies either connected route and clear removes per-leg requirements", async ({ page }) => {
+  await seed(page);
+  const first = page.getByRole("group", { name: "First trade", exact: true });
+  await first.locator("summary").filter({ hasText: "First trade: Required players" }).click();
+  await page.getByRole("combobox", { name: "First trade: Require offered player", exact: true }).selectOption("3");
+  await page.getByLabel("First trade: Limit positional grade drops", { exact: true }).check();
+  await page.getByText("Chain dependency", { exact: true }).click();
+  await page.getByRole("combobox", { name: "Dependency route", exact: true }).selectOption("retain");
+  await page.getByRole("combobox", { name: "Chain preset", exact: true }).selectOption("coverage");
+  await expect(page.getByRole("combobox", { name: "Dependency route", exact: true })).toHaveValue("either");
+  await expect(page.getByRole("combobox", { name: "First trade: Required incoming position", exact: true })).toHaveValue("WR");
+  await expect(page.getByRole("spinbutton", { name: "Minimum final gain (EPPG)", exact: true })).toHaveValue("1");
+  await expect.poll(async () => JSON.parse((await stored(page)).state.filters.tradeSearchSettings).chain.query.first.requiredGive).toEqual(["3"]);
+  // Restore the former coverage-preset save to verify the new default reaches existing devices without erasing their anchors.
+  const legacy = await stored(page);
+  const settings = JSON.parse(legacy.state.filters.tradeSearchSettings);
+  settings.chain.preset = "coverage";
+  settings.chain.query.dependency.route = "retain";
+  legacy.state.filters.tradeSearchSettings = JSON.stringify(settings);
+  await page.evaluate(async (value) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("fantasy-football-lab", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction("current", "readwrite");
+      transaction.objectStore("current").put(value, "local");
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    db.close();
+  }, legacy);
+  await page.reload();
+  await page.getByRole("button", { name: "Two-trade chain planner", exact: true }).click();
+  await openTradeFilters(page, "Chain");
+  await page.getByText("Chain dependency", { exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Dependency route", exact: true })).toHaveValue("either");
+  await expect.poll(async () => JSON.parse((await stored(page)).state.filters.tradeSearchSettings).chain.query.first.requiredGive).toEqual(["3"]);
+  await page.getByRole("button", { name: "Clear chain filters", exact: true }).click();
+  await expect(page.getByLabel("First trade: Limit positional grade drops", { exact: true })).not.toBeChecked();
+  await expect(page.getByRole("combobox", { name: "First trade: Required incoming position", exact: true })).toHaveValue("");
+  await expect.poll(async () => JSON.parse((await stored(page)).state.filters.tradeSearchSettings).chain.query.first.requiredGive).toBeUndefined();
+});
+
+// Required players and grade safeguards survive reload and reach the actual worker; expanded results show both teams' grade sacrifices.
+test("reserves second-step offers, remembers grade limits, and shows per-step positional changes", async ({ page }) => {
+  await seed(page);
+  for (const name of ["First trade", "Second trade"]) {
+    const group = page.getByRole("group", { name, exact: true });
+    await group.locator("summary").filter({ hasText: `${name}: Required players` }).click();
+  }
+  await page.getByRole("combobox", { name: "First trade: Require offered player", exact: true }).selectOption("3");
+  await page.getByRole("combobox", { name: "First trade: Require received player", exact: true }).selectOption("2");
+  await page.getByRole("combobox", { name: "First trade: Required incoming position", exact: true }).selectOption("WR");
+  await page.getByRole("combobox", { name: "Second trade: Require offered player", exact: true }).selectOption("8");
+  await page.getByRole("combobox", { name: "Second trade: Require offered player", exact: true }).selectOption("2");
+  await page.getByRole("combobox", { name: "Second trade: Require received player", exact: true }).selectOption("5");
+  await page.getByLabel("Second trade: Limit positional grade drops", { exact: true }).check();
+  await page.getByRole("combobox", { name: "Second trade: Protect grades for", exact: true }).selectOption("both");
+  await page.getByRole("combobox", { name: "Second trade: Maximum grade steps lost", exact: true }).selectOption("12");
+  await expect.poll(async () => JSON.parse((await stored(page)).state.filters.tradeSearchSettings).chain.query.second.requiredGive).toEqual(["8", "2"]);
+  await page.reload();
+  await page.getByRole("button", { name: "Two-trade chain planner", exact: true }).click();
+  await openTradeFilters(page, "Chain");
+  await expect(page.getByRole("combobox", { name: "Second trade: Maximum grade steps lost", exact: true })).toHaveValue("12");
+  await expect(page.getByRole("combobox", { name: "First trade: Required incoming position", exact: true })).toHaveValue("WR");
+  await page.getByRole("button", { name: "Search trade chains", exact: true }).click();
+  await expect(page.getByText(/[1-9][0-9]* qualifying chains found/)).toBeVisible();
+  await openChainTeams(page);
+  const plan = page.locator("article").filter({ has: page.getByRole("heading", { name: /Safe.*EPPG overall/ }) }).first();
+  await expect(plan.getByRole("table", { name: "Step 1 positional grade changes", exact: true })).toBeVisible();
+  await expect(plan.getByRole("table", { name: "Step 2 positional grade changes", exact: true })).toContainText("Their grade");
+  await plan.getByRole("table", { name: "Step 2 positional grade changes", exact: true }).screenshot({ path: "test-results/chain-grade-changes.png" });
 });
 
 // Read durable saved records without relying on optimistic button text or changing the current roster recipe.
@@ -164,7 +274,7 @@ test("finds positive and flat safe chains, explains replacements, and saves step
   await page.getByText("Chain search exclusions", { exact: true }).click();
   await expect(page.getByText(/Search coverage: complete/)).toBeVisible();
   await expect(page.getByText(/deferred first trades: 0/)).toBeVisible();
-  await expect(page.getByText(/negotiable-sequence-search-5/)).toBeVisible();
+  await expect(page.getByText(/coverage-grade-search-6/)).toBeVisible();
   // The worker distinguishes cheap score-ceiling rejections from full evaluations.
   await expect(
     page.getByText(/Skipped full scoring for \d+ candidates/),
@@ -403,7 +513,7 @@ test("isolates scopes and presets, retains optional fit settings and remembers b
   expect(report.chainSearch.currentQuery.second.teams).toEqual(["3"]);
   expect(report.chainSearch.status).toBe("complete");
   // Both download routes retain algorithm/build identity and exact remaining work from the dedicated worker.
-  expect(report.chainSearch.searchVersion).toBe("negotiable-sequence-search-5");
+  expect(report.chainSearch.searchVersion).toBe("coverage-grade-search-6");
   expect(Number.isFinite(Date.parse(report.chainSearch.appBuild.builtAt))).toBe(
     true,
   );

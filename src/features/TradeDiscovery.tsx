@@ -128,7 +128,7 @@ export function TradeDiscoveryControls({
       <div className="trade-search-controls">
         <FilterHelp
           label="Find outgoing combinations"
-          help="Select up to 12 tradable players, then choose how many to offer (1–5). Every unselected player is protected from offers and automatic drops. The worker checks every eligible combination; larger searches may take longer and can be cancelled."
+          help="Select up to 12 tradable players, then choose how many to offer (1–5). Unselected players are never offered. Proposed drops outside the pool show a warning and do not block results. The worker checks every eligible combination; larger searches may take longer and can be cancelled."
         >
           <label className="check">
             <input

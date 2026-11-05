@@ -70,6 +70,12 @@ import { DeficitProtectionControls } from "./DeficitProtectionControls";
 import { defaultDeficitProtection } from "../domain/trade-safeguards";
 import { PlayerName } from "../ui/PlayerName";
 import { fmt, signed, Signal } from "../ui/components";
+import {
+  ChainPlayerRequirements,
+  ChainGradeLimitControls,
+  ChainGradeChanges,
+  ChainRequirementChips,
+} from "./ChainLegControls";
 
 // Chain diagnostics list only independent controls; imported league facts and the selected roster data remain common inputs.
 const chainFilterScope = {
@@ -95,6 +101,8 @@ const chainFilterScope = {
     "per-leg raw index windows",
     "per-leg Surface Trading",
     "per-leg weak-position protection",
+    "per-leg required offered/received players and incoming position",
+    "per-leg optional positional grade-drop limits",
   ],
   "Single-trade only": [
     "search goal",
@@ -280,10 +288,14 @@ export function TradeChains({
       initial?.controls.recipientGain ??
         String(defaultChainRecipient.minimumGain),
     );
-  // New dependency defaults normalize old saved preferences while preserving raw editable thresholds and every unrelated selection.
+  // Refresh the old coverage-preset default; saved custom route choices and all editable thresholds remain intact.
   const [dependencyRoute, setDependencyRoute] = useState<
     ChainDependencySettings["route"]
-  >(initial?.query.dependency?.route ?? defaultChainDependency.route);
+  >(
+    initial?.preset === "coverage"
+      ? defaultChainDependency.route
+      : (initial?.query.dependency?.route ?? defaultChainDependency.route),
+  );
   const [acquiredShare, setAcquiredShare] = useState(
     initial?.controls.acquiredShare ??
       String(
@@ -674,6 +686,8 @@ export function TradeChains({
     setPricePolicy(next.pricePolicy ?? "required");
     setFirst(next.first);
     setSecond(next.second);
+    // Applying coverage restores the shared route default; ordinary presets retain the user's materiality controls.
+    if (label === "coverage") setDependencyRoute(defaultChainDependency.route);
     setDiscovery(next.discovery ?? { sequences: "connected", ranking: "own" });
     setPreset(label);
   }
@@ -812,6 +826,19 @@ export function TradeChains({
               ))}
             </div>
           ))}
+          {/* These independent anchors let a kept first-step acquisition enable a required second-step offer. */}
+          <ChainPlayerRequirements
+            m={m}
+            team={team}
+            pool={pool}
+            label={label}
+            value={value}
+            teams={
+              label === "First trade" ? query.first.teams : query.second.teams
+            }
+            firstTeams={query.first.teams}
+            change={change}
+          />
           <details>
             <summary>
               {label} teams ({override ? "override: " : "planner scope: "}
@@ -1123,6 +1150,8 @@ export function TradeChains({
           </div>
         );
       })}
+      {/* Keep the optional grade safeguard next to this leg's surplus/deficit controls. */}
+      <ChainGradeLimitControls label={label} value={value} change={change} />
     </fieldset>
   );
 
@@ -1308,6 +1337,7 @@ export function TradeChains({
           <Signal text={row.points} /> · Legal modeled rosters.
         </p>
         {/* Match the standard finder’s compact recipient upgrades on each independently evaluated chain leg. */}
+        <ChainGradeChanges step={step} value={leg.positionImpact} />
         <OpponentIncentiveView
           m={m}
           value={detail?.incentive}
@@ -1524,6 +1554,19 @@ export function TradeChains({
           aria-label="Active chain-search filters"
         >
           <span>Final gain ≥ {gain} EPPG</span>
+          {/* Every new hard constraint remains visible and individually removable when the drawer is closed. */}
+          <ChainRequirementChips
+            m={m}
+            label="First trade"
+            value={first}
+            change={setFirst}
+          />
+          <ChainRequirementChips
+            m={m}
+            label="Second trade"
+            value={second}
+            change={setSecond}
+          />
           {(
             [
               ["First trade", first, setFirst],
@@ -1576,6 +1619,27 @@ export function TradeChains({
               </button>
             ) : null,
           )}
+          {/* Terminal status stays visible above the drawer; a failed search must never look like zero matches. */}
+          {job?.error && (
+            <p className="notice warning" role="alert">
+              <strong>
+                Chain search failed. No complete results are available.
+              </strong>{" "}
+              {job.error}
+            </p>
+          )}
+          {job?.status === "complete" &&
+            !stale &&
+            job.result &&
+            !job.result.chains.length && (
+              <p role="status">
+                No matching chains found.{" "}
+                {job.result.stats.limited
+                  ? "The search reached its limit; more possibilities may exist."
+                  : "No chains met all selected requirements."}{" "}
+                Review the search exclusions below.
+              </p>
+            )}
         </div>
         <TradeFiltersDrawer
           scope="Chain"
@@ -1622,7 +1686,7 @@ export function TradeChains({
               </FilterHelp>
               <FilterHelp
                 label="Chain preset"
-                help="Seven provisional trading scenarios, with separate strictness. Explicit selection changes gain, package and recipient defaults while preserving team scopes, protected players, targets and optional fit requirements. Subsequent edits become Custom."
+                help="Provisional trading scenarios with separate strictness. Applying a preset preserves team scopes, protected players, targets and optional fit requirements. Acquire coverage, then upgrade requires a first-step WR and connected trades, defaulting to either connected route; its incoming position can be changed. Subsequent edits become Custom."
               >
                 <label className="control">
                   <span>Chain preset</span>
@@ -2359,7 +2423,6 @@ export function TradeChains({
               controls.
             </p>
           )}
-          {job?.error && <p className="notice warning">{job.error}</p>}
           {detailError && <p role="status">{detailError}</p>}
           {job?.result && (
             <>
@@ -2482,8 +2545,10 @@ export function TradeChains({
                   failures: {job.result.stats.rejectedValue}. Surplus/deficit
                   exclusions: {job.result.stats.rejectedFit ?? 0}.
                   Roster/protection failures: {job.result.stats.rejectedRoster}.
-                  Scoring/mode/gain failures: {job.result.stats.rejectedGain}.
-                  Recipient fairness/benefit failures:{" "}
+                  Scoring/mode/gain failures: {job.result.stats.rejectedGain}.{" "}
+                  Positional grade-limit exclusions:{" "}
+                  {job.result.stats.rejectedGrades ?? 0}. Recipient
+                  fairness/benefit failures:{" "}
                   {job.result.stats.rejectedRecipient}. Eligible first trades:{" "}
                   {job.result.stats.firstEligible}; explored:{" "}
                   {job.result.stats.firstExplored}.
