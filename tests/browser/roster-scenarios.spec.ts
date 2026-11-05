@@ -9,11 +9,15 @@ import {
 
 // Roster-sensitive score checks must explicitly open the collapsed result teams, just as a user does after searching.
 async function openSearchTeams(search: Locator) {
-  await expect(search.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
-  await expect(search.getByRole("button", { name: "Loading results…", exact: true })).toHaveCount(0);
+  await expect(
+    search.getByRole("button", { name: "Cancel", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    search.getByRole("button", { name: "Loading results…", exact: true }),
+  ).toHaveCount(0);
   const groups = search.locator("tbody > tr > th button");
   await expect(groups.first()).toHaveAttribute("aria-expanded", "false");
-  for (let i = 0; i < await groups.count(); i++) await groups.nth(i).click();
+  for (let i = 0; i < (await groups.count()); i++) await groups.nth(i).click();
 }
 
 // Exercise the built app and real workers using synthetic league data and the normal IndexedDB workspace.
@@ -228,7 +232,9 @@ test("My team stays selected and hypothetical moves are independent, durable and
   await simulator
     .getByRole("button", { name: "Redo move", exact: true })
     .click();
-  await simulator.getByRole("button", { name: "Save to slot 1", exact: true }).click();
+  await simulator
+    .getByRole("button", { name: "Save to slot 1", exact: true })
+    .click();
   await expect
     .poll(
       async () =>
@@ -242,10 +248,18 @@ test("My team stays selected and hypothetical moves are independent, durable and
     page.getByText("Hypothetical: Plan A", { exact: true }),
   ).toBeVisible();
   // A saved hypothetical remains active after reload without permanent routine warnings or a forced live-roster switch.
-  await expect(page.getByText(/Player indices use the real snapshot/)).toHaveCount(0);
-  await expect(page.getByText(/Updated player data applied to saved moves/)).toHaveCount(0);
-  await expect(page.getByText(/This source snapshot is older than 24 hours/)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Return to live roster", exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText(/Player indices use the real snapshot/),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText(/Updated player data applied to saved moves/),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText(/This source snapshot is older than 24 hours/),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Return to live roster", exact: true }),
+  ).toHaveCount(0);
   await expect(page.getByLabel("My team", { exact: true })).toHaveValue("1");
   await page.goto("./#/trades");
   await openTradeDetails(page);
@@ -256,10 +270,14 @@ test("My team stays selected and hypothetical moves are independent, durable and
       .locator('option[value="200"]'),
   ).toHaveCount(1);
   // Switching back is an explicit My team selection, never a prompt on another screen.
-  await expect(page.getByRole("button", { name: "Return to live roster", exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Return to live roster", exact: true }),
+  ).toHaveCount(0);
   await page.goto("./#/overview");
   await page.getByLabel("Roster simulation", { exact: true }).selectOption("");
-  await expect(page.getByText("Hypothetical: Plan A", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText("Hypothetical: Plan A", { exact: true }),
+  ).toHaveCount(0);
   await page.goto("./#/trades");
   await openTradeDetails(page);
   await openTradeFilters(page);
@@ -314,7 +332,9 @@ test("simulation optimize and reset restore imported starters without modifying 
       exact: true,
     }),
   ).toHaveValue("Bench");
-  await page.getByRole("button", { name: "Save to slot 1", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Save to slot 1", exact: true })
+    .click();
   await expect
     .poll(
       async () =>
@@ -390,9 +410,15 @@ test("saved hypothetical trades restore their own recipe and debug exports conta
       exact: true,
     }),
   });
-  await search.getByLabel("Search goal", { exact: true }).selectOption("custom");
+  await search
+    .getByLabel("Search goal", { exact: true })
+    .selectOption("custom");
   // This case verifies saved-scenario diagnostics independently of the new optional opponent safeguard.
-  await search.getByLabel("Standard search: Protect their weak positions", { exact: true }).uncheck();
+  await search
+    .getByLabel("Standard search: Protect their weak positions", {
+      exact: true,
+    })
+    .uncheck();
   await search.getByLabel("Use strict index range", { exact: true }).check();
   await search
     .getByLabel("Below outgoing total (index points)", { exact: true })
@@ -433,73 +459,184 @@ test("saved hypothetical trades restore their own recipe and debug exports conta
 });
 
 // A bye changes scoring availability, not the user's saved starter/bench designation or another card edit.
-test("manual FLEX placement overrides scoring order and survives bye, edits and reload", async ({ page }) => {
+test("manual FLEX placement overrides scoring order and survives bye, edits and reload", async ({
+  page,
+}) => {
   await seed(page, true);
-  await page.getByRole("button", { name: "New simulation", exact: true }).click();
-  await page.getByRole("combobox", { name: "Board week", exact: true }).selectOption("8");
-  const after = page.getByRole("region", { name: "Hypothetical roster", exact: true });
-  const flex = after.locator(".sim-slot").filter({ has: page.getByRole("button", { name: "Replace FLEX 1", exact: true }) });
-  const rb = after.locator(".sim-slot").filter({ has: page.getByRole("button", { name: "Replace RB 1", exact: true }) });
+  await page
+    .getByRole("button", { name: "New simulation", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Board week", exact: true })
+    .selectOption("8");
+  const after = page.getByRole("region", {
+    name: "Hypothetical roster",
+    exact: true,
+  });
+  const flex = after
+    .locator(".sim-slot")
+    .filter({
+      has: page.getByRole("button", { name: "Replace FLEX 1", exact: true }),
+    });
+  const rb = after
+    .locator(".sim-slot")
+    .filter({
+      has: page.getByRole("button", { name: "Replace RB 1", exact: true }),
+    });
   // Bye-free optimization starts the strongest RB; create a deliberately different manual plan before testing exact FLEX placement.
-  await expect(rb.getByRole("link", { name: "Bye RB", exact: true })).toBeVisible();
+  await expect(
+    rb.getByRole("link", { name: "Bye RB", exact: true }),
+  ).toBeVisible();
   await rb.getByRole("button", { name: "Replace RB 1", exact: true }).click();
   await page.getByRole("dialog").getByRole("searchbox").fill("Synthetic 1");
-  await page.getByRole("button", { name: "Choose Synthetic 1", exact: true }).click();
-  await flex.getByRole("button", { name: "Replace FLEX 1", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Choose Synthetic 1", exact: true })
+    .click();
+  await flex
+    .getByRole("button", { name: "Replace FLEX 1", exact: true })
+    .click();
   await page.getByRole("dialog").getByRole("searchbox").fill("Reserve RB");
-  await page.getByRole("button", { name: "Choose Reserve RB", exact: true }).click();
-  await expect(rb.getByRole("link", { name: "Synthetic 1", exact: true })).toBeVisible();
-  await expect(flex.getByRole("link", { name: "Reserve RB", exact: true })).toBeVisible();
-  await flex.getByRole("button", { name: "Replace FLEX 1", exact: true }).click();
-  const picker = page.getByRole("dialog", { name: "Choose FLEX starter", exact: true });
-  await picker.getByRole("searchbox", { name: "Search league players", exact: true }).fill("Bye RB");
-  await picker.getByRole("button", { name: "Choose Bye RB", exact: true }).click();
-  await expect(flex.getByRole("link", { name: "Bye RB", exact: true })).toBeVisible();
-  await expect(flex.getByText("Bye · Week 8 · ignored in simulation", { exact: true })).toBeVisible();
-  await expect(rb.getByRole("link", { name: "Synthetic 1", exact: true })).toBeVisible();
-  await page.getByRole("combobox", { name: "Board week", exact: true }).selectOption("9");
-  await expect(flex.getByRole("link", { name: "Bye RB", exact: true })).toBeVisible();
-  await expect(rb.getByRole("link", { name: "Synthetic 1", exact: true })).toBeVisible();
-  await page.getByRole("combobox", { name: "Board week", exact: true }).selectOption("8");
-  await expect(after.locator(".sim-reserves").getByRole("link", { name: "Bye RB", exact: true })).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Choose Reserve RB", exact: true })
+    .click();
+  await expect(
+    rb.getByRole("link", { name: "Synthetic 1", exact: true }),
+  ).toBeVisible();
+  await expect(
+    flex.getByRole("link", { name: "Reserve RB", exact: true }),
+  ).toBeVisible();
+  await flex
+    .getByRole("button", { name: "Replace FLEX 1", exact: true })
+    .click();
+  const picker = page.getByRole("dialog", {
+    name: "Choose FLEX starter",
+    exact: true,
+  });
+  await picker
+    .getByRole("searchbox", { name: "Search league players", exact: true })
+    .fill("Bye RB");
+  await picker
+    .getByRole("button", { name: "Choose Bye RB", exact: true })
+    .click();
+  await expect(
+    flex.getByRole("link", { name: "Bye RB", exact: true }),
+  ).toBeVisible();
+  await expect(
+    flex.getByText("Bye · Week 8 · ignored in simulation", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    rb.getByRole("link", { name: "Synthetic 1", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("combobox", { name: "Board week", exact: true })
+    .selectOption("9");
+  await expect(
+    flex.getByRole("link", { name: "Bye RB", exact: true }),
+  ).toBeVisible();
+  await expect(
+    rb.getByRole("link", { name: "Synthetic 1", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("combobox", { name: "Board week", exact: true })
+    .selectOption("8");
+  await expect(
+    after
+      .locator(".sim-reserves")
+      .getByRole("link", { name: "Bye RB", exact: true }),
+  ).toHaveCount(0);
   // Editing an unrelated card must retain the selected bye player in FLEX.
-  await after.getByRole("button", { name: "Replace QB 1", exact: true }).click();
+  await after
+    .getByRole("button", { name: "Replace QB 1", exact: true })
+    .click();
   await page.getByRole("dialog").getByRole("searchbox").fill("Main QB");
-  await page.getByRole("button", { name: "Choose Main QB", exact: true }).click();
-  await expect(flex.getByRole("link", { name: "Bye RB", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Save to slot 1", exact: true }).click();
-  await expect.poll(async () => JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(4);
+  await page
+    .getByRole("button", { name: "Choose Main QB", exact: true })
+    .click();
+  await expect(
+    flex.getByRole("link", { name: "Bye RB", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Save to slot 1", exact: true })
+    .click();
+  await expect
+    .poll(
+      async () =>
+        JSON.parse((await stored(page)).state.filters.rosterScenarios)
+          .scenarios[0].cursor,
+    )
+    .toBe(4);
   await page.reload();
-  await expect(page.getByRole("combobox", { name: "Lineup view", exact: true })).toHaveValue("marked");
-  await page.getByRole("combobox", { name: "Board week", exact: true }).selectOption("8");
-  await expect(flex.getByRole("link", { name: "Bye RB", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("combobox", { name: "Lineup view", exact: true }),
+  ).toHaveValue("marked");
+  await page
+    .getByRole("combobox", { name: "Board week", exact: true })
+    .selectOption("8");
+  await expect(
+    flex.getByRole("link", { name: "Bye RB", exact: true }),
+  ).toBeVisible();
   // Clearing RB leaves a deliberate vacancy; the saved FLEX cannot slide back into RB.
-  await rb.getByRole("button", { name: "Bench Synthetic 1", exact: true }).click();
-  await expect(rb.getByText("No available starter", { exact: true })).toBeVisible();
-  await expect(flex.getByRole("link", { name: "Bye RB", exact: true })).toBeVisible();
+  await rb
+    .getByRole("button", { name: "Bench Synthetic 1", exact: true })
+    .click();
+  await expect(
+    rb.getByText("No available starter", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    flex.getByRole("link", { name: "Bye RB", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Undo move", exact: true }).click();
-  await expect(rb.getByRole("link", { name: "Synthetic 1", exact: true })).toBeVisible();
-  await expect(flex.getByRole("link", { name: "Bye RB", exact: true })).toBeVisible();
-  await page.getByRole("combobox", { name: "Lineup view", exact: true }).selectOption("optimized");
-  await expect(rb.getByRole("link", { name: "Bye RB", exact: true })).toBeVisible();
-  await expect(flex.getByRole("link", { name: "Synthetic 1", exact: true })).toBeVisible();
+  await expect(
+    rb.getByRole("link", { name: "Synthetic 1", exact: true }),
+  ).toBeVisible();
+  await expect(
+    flex.getByRole("link", { name: "Bye RB", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("combobox", { name: "Lineup view", exact: true })
+    .selectOption("optimized");
+  await expect(
+    rb.getByRole("link", { name: "Bye RB", exact: true }),
+  ).toBeVisible();
+  await expect(
+    flex.getByRole("link", { name: "Synthetic 1", exact: true }),
+  ).toBeVisible();
 });
 
 // Exercise the actual trade-search worker: scenario scoring ignores the known bye, while switching back to live restores it.
-test("hypothetical search ignores byes and returning to live restores scheduled gains", async ({ page }) => {
+test("hypothetical search ignores byes and returning to live restores scheduled gains", async ({
+  page,
+}) => {
   await seed(page, true);
-  await page.getByRole("button", { name: "New simulation", exact: true }).click();
+  await page
+    .getByRole("button", { name: "New simulation", exact: true })
+    .click();
   await page.goto("./#/trades");
   await openTradeDetails(page);
   await openTradeFilters(page);
-  await page.getByLabel("Outgoing player 1", { exact: true }).selectOption("401");
-  const search = page.locator("section").filter({ has: page.getByRole("heading", { name: "Find matching trades", exact: true }) });
+  await page
+    .getByLabel("Outgoing player 1", { exact: true })
+    .selectOption("401");
+  const search = page
+    .locator("section")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Find matching trades",
+        exact: true,
+      }),
+    });
   async function run() {
-    await search.getByLabel("Search goal", { exact: true }).selectOption("custom");
+    await search
+      .getByLabel("Search goal", { exact: true })
+      .selectOption("custom");
     await search.getByLabel("Create package", { exact: true }).uncheck();
     await search.getByRole("button", { name: "Search", exact: true }).click();
     await openSearchTeams(search);
-    const row = search.locator("tbody tr").filter({ has: page.getByRole("link", { name: "Synthetic 2", exact: true }) });
+    const row = search
+      .locator("tbody tr")
+      .filter({
+        has: page.getByRole("link", { name: "Synthetic 2", exact: true }),
+      });
     await expect(row).toBeVisible();
     return row;
   }
@@ -518,57 +655,128 @@ test("hypothetical search ignores byes and returning to live restores scheduled 
 });
 
 // Force a deliberately unfavorable exchange without an acceptance gate, then search with both sides' new ownership through real workers.
-test("forced trades update both simulated rosters and later searches and undo together", async ({ page }) => {
+test("forced trades update both simulated rosters and later searches and undo together", async ({
+  page,
+}) => {
   const dataset = await seed(page);
   await page.goto("./#/trades");
   await openTradeDetails(page);
   await openTradeFilters(page);
-  const apply = page.getByRole("button", { name: "Apply trade to hypothetical roster", exact: true });
+  const apply = page.getByRole("button", {
+    name: "Apply trade to hypothetical roster",
+    exact: true,
+  });
   await expect(apply).toBeEnabled();
   await apply.click();
-  await expect(page.getByRole("status").filter({ hasText: "Applied hypothetical trade: Bench QB ↔ Incoming QB" })).toBeVisible();
-  await expect(page.getByLabel("Outgoing player 1", { exact: true })).toHaveValue("");
-  await expect(page.getByLabel("Outgoing player 1", { exact: true }).locator('option[value="200"]')).toHaveCount(1);
-  await expect(page.getByLabel("Outgoing player 1", { exact: true }).locator('option[value="101"]')).toHaveCount(0);
-  await expect(page.getByLabel("Incoming player 1", { exact: true }).locator('option[value="101"]')).toHaveCount(1);
+  await expect(
+    page
+      .getByRole("status")
+      .filter({
+        hasText: "Applied hypothetical trade: Bench QB ↔ Incoming QB",
+      }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Outgoing player 1", { exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page
+      .getByLabel("Outgoing player 1", { exact: true })
+      .locator('option[value="200"]'),
+  ).toHaveCount(1);
+  await expect(
+    page
+      .getByLabel("Outgoing player 1", { exact: true })
+      .locator('option[value="101"]'),
+  ).toHaveCount(0);
+  await expect(
+    page
+      .getByLabel("Incoming player 1", { exact: true })
+      .locator('option[value="101"]'),
+  ).toHaveCount(1);
   await page.goto("./#/overview");
-  await page.getByRole("button", { name: "Save to slot 1", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Save to slot 1", exact: true })
+    .click();
   await page.goto("./#/trades");
   await openTradeDetails(page);
   await openTradeFilters(page);
-  await expect.poll(async () => {
-    const w = await stored(page);
-    const collection = JSON.parse(w.state.filters.rosterScenarios);
-    return collection.scenarios.find((s: { id: string }) => s.id === collection.active)?.moves[0]?.kind;
-  }).toBe("trade");
+  await expect
+    .poll(async () => {
+      const w = await stored(page);
+      const collection = JSON.parse(w.state.filters.rosterScenarios);
+      return collection.scenarios.find(
+        (s: { id: string }) => s.id === collection.active,
+      )?.moves[0]?.kind;
+    })
+    .toBe("trade");
   expect((await stored(page)).dataset).toEqual(dataset);
   await page.reload();
   await openTradeDetails(page);
   await openTradeFilters(page);
-  await expect(page.getByLabel("Outgoing player 1", { exact: true }).locator('option[value="200"]')).toHaveCount(1);
-  await page.getByLabel("Outgoing player 1", { exact: true }).selectOption("200");
-  const search = page.locator("section").filter({ has: page.getByRole("heading", { name: "Find matching trades", exact: true }) });
-  await search.getByLabel("Search goal", { exact: true }).selectOption("custom");
+  await expect(
+    page
+      .getByLabel("Outgoing player 1", { exact: true })
+      .locator('option[value="200"]'),
+  ).toHaveCount(1);
+  await page
+    .getByLabel("Outgoing player 1", { exact: true })
+    .selectOption("200");
+  const search = page
+    .locator("section")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Find matching trades",
+        exact: true,
+      }),
+    });
+  await search
+    .getByLabel("Search goal", { exact: true })
+    .selectOption("custom");
   await search.getByLabel("Create package", { exact: true }).uncheck();
-  await search.getByRole("combobox", { name: "Required incoming player", exact: true }).selectOption("101");
+  await search
+    .getByRole("combobox", { name: "Required incoming player", exact: true })
+    .selectOption("101");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await openSearchTeams(search);
-  const row = search.locator("tbody tr").filter({ has: page.getByRole("link", { name: "Bench QB", exact: true }) });
+  const row = search
+    .locator("tbody tr")
+    .filter({ has: page.getByRole("link", { name: "Bench QB", exact: true }) });
   await expect(row).toBeVisible();
   await expect(row.locator("td").nth(2)).toHaveText(/\+10\.00/);
   await page.goto("./#/overview");
-  await expect(page.getByLabel("Roster simulation", { exact: true })).not.toHaveValue("");
+  await expect(
+    page.getByLabel("Roster simulation", { exact: true }),
+  ).not.toHaveValue("");
   await page.getByRole("button", { name: "Undo move", exact: true }).click();
-  await expect(page.getByText("0 / 1 moves applied", { exact: true })).toBeVisible();
-  expect(JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(1);
+  await expect(
+    page.getByText("0 / 1 moves applied", { exact: true }),
+  ).toBeVisible();
+  expect(
+    JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0]
+      .cursor,
+  ).toBe(1);
   await page.goto("./#/trades");
   await openTradeDetails(page);
   await openTradeFilters(page);
-  await expect(page.getByLabel("Outgoing player 1", { exact: true }).locator('option[value="101"]')).toHaveCount(1);
-  await expect(page.getByLabel("Incoming player 1", { exact: true }).locator('option[value="200"]')).toHaveCount(1);
+  await expect(
+    page
+      .getByLabel("Outgoing player 1", { exact: true })
+      .locator('option[value="101"]'),
+  ).toHaveCount(1);
+  await expect(
+    page
+      .getByLabel("Incoming player 1", { exact: true })
+      .locator('option[value="200"]'),
+  ).toHaveCount(1);
   await page.goto("./#/overview");
   await page.getByRole("button", { name: "Redo move", exact: true }).click();
-  await expect.poll(async () => JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(1);
+  await expect
+    .poll(
+      async () =>
+        JSON.parse((await stored(page)).state.filters.rosterScenarios)
+          .scenarios[0].cursor,
+    )
+    .toBe(1);
   expect((await stored(page)).dataset).toEqual(dataset);
 });
 
@@ -608,7 +816,9 @@ test("hypothetical cards, overview, analyzer and search share temporary-injury t
       })
       .locator("strong"),
   ).toHaveText(own);
-  await page.getByRole("combobox", { name: "Board week", exact: true }).selectOption("8");
+  await page
+    .getByRole("combobox", { name: "Board week", exact: true })
+    .selectOption("8");
   await expect(after.locator(".sim-score strong")).toHaveText(own);
   await page
     .getByRole("combobox", { name: "Simulated team to edit", exact: true })
@@ -621,16 +831,17 @@ test("hypothetical cards, overview, analyzer and search share temporary-injury t
   await openTradeDetails(page);
   await openTradeFilters(page);
   await page
-    .getByRole("combobox", { name: "Evaluate lineup impact using", exact: true })
+    .getByRole("combobox", {
+      name: "Evaluate lineup impact using",
+      exact: true,
+    })
     .selectOption("best-available");
-  const primary = page
-    .locator("section")
-    .filter({
-      has: page.getByRole("heading", {
-        name: "Expected team gain per week",
-        exact: true,
-      }),
-    });
+  const primary = page.locator("section").filter({
+    has: page.getByRole("heading", {
+      name: "Expected team gain per week",
+      exact: true,
+    }),
+  });
   await expect(
     primary
       .locator("p.model")
@@ -641,14 +852,12 @@ test("hypothetical cards, overview, analyzer and search share temporary-injury t
       .locator("p.model")
       .filter({ hasText: "Their Expected points/week:" }),
   ).toContainText(`Before ${other}`);
-  const search = page
-    .locator("section")
-    .filter({
-      has: page.getByRole("heading", {
-        name: "Find matching trades",
-        exact: true,
-      }),
-    });
+  const search = page.locator("section").filter({
+    has: page.getByRole("heading", {
+      name: "Find matching trades",
+      exact: true,
+    }),
+  });
   await search
     .getByLabel("Search goal", { exact: true })
     .selectOption("custom");
@@ -670,69 +879,162 @@ test("hypothetical cards, overview, analyzer and search share temporary-injury t
   ).toBeVisible();
 });
 
-
 // Working changes survive in-app navigation but never replace stored recipes or any of the three slots without Save.
-test("three roster slots restore exact working points and require explicit saves", async ({ page }) => {
+test("roster save slots restore exact working points and require explicit saves", async ({
+  page,
+}) => {
   const dataset = await seed(page);
-  await page.getByRole("button", { name: "New simulation", exact: true }).click();
-  const slots = page.getByRole("region", { name: "Roster save slots", exact: true });
-  await expect(slots.getByRole("button", { name: /^Load slot/ })).toHaveCount(3);
-  for (const slot of [1, 2, 3]) await expect(slots.getByRole("button", { name: `Load slot ${slot}`, exact: true })).toBeDisabled();
+  await page
+    .getByRole("button", { name: "New simulation", exact: true })
+    .click();
+  const slots = page.getByRole("region", {
+    name: "Roster save slots",
+    exact: true,
+  });
+  await expect(slots.getByRole("button", { name: /^Load slot/ })).toHaveCount(
+    10,
+  );
+  for (const slot of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    await expect(
+      slots.getByRole("button", { name: `Load slot ${slot}`, exact: true }),
+    ).toBeDisabled();
   expect((await stored(page)).state.filters.rosterScenarios).toBeUndefined();
-  await slots.getByRole("button", { name: "Save to slot 1", exact: true }).click();
-  await expect(slots.getByText("Current roster is saved.", { exact: true })).toBeVisible();
+  await slots
+    .getByRole("button", { name: "Save to slot 1", exact: true })
+    .click();
+  await expect(
+    slots.getByText("Current roster is saved.", { exact: true }),
+  ).toBeVisible();
   await page.getByText("Advanced roster moves", { exact: true }).click();
-  await page.getByRole("combobox", { name: "League player", exact: true }).selectOption("200");
-  await page.getByRole("button", { name: "Move player to selected team", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "League player", exact: true })
+    .selectOption("200");
+  await page
+    .getByRole("button", { name: "Move player to selected team", exact: true })
+    .click();
   await expect(slots.getByText(/^Unsaved changes/)).toBeVisible();
-  expect(JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(0);
+  expect(
+    JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0]
+      .cursor,
+  ).toBe(0);
   await page.goto("./#/trades");
   await openTradeDetails(page);
   await openTradeFilters(page);
-  await expect(page.getByLabel("Outgoing player 1", { exact: true }).locator('option[value="200"]')).toHaveCount(1);
+  await expect(
+    page
+      .getByLabel("Outgoing player 1", { exact: true })
+      .locator('option[value="200"]'),
+  ).toHaveCount(1);
   // An unrelated persisted setting cannot accidentally save the roster draft.
-  await page.getByRole("combobox", { name: "Evaluate lineup impact using", exact: true }).selectOption("marked-starters");
-  await expect.poll(async () => (await stored(page)).state.filters.tradeLineupBasis).toBe("marked-starters");
-  expect(JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(0);
+  await page
+    .getByRole("combobox", {
+      name: "Evaluate lineup impact using",
+      exact: true,
+    })
+    .selectOption("marked-starters");
+  await expect
+    .poll(async () => (await stored(page)).state.filters.tradeLineupBasis)
+    .toBe("marked-starters");
+  expect(
+    JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0]
+      .cursor,
+  ).toBe(0);
   await page.goto("./#/overview");
-  await slots.getByRole("button", { name: "Save to slot 2", exact: true }).click();
+  await slots
+    .getByRole("button", { name: "Save to slot 2", exact: true })
+    .click();
   await page.getByText("Advanced roster moves", { exact: true }).click();
-  await page.getByRole("combobox", { name: "League player", exact: true }).selectOption("200");
-  await page.getByRole("button", { name: "Cut player to available pool", exact: true }).click();
-  await slots.getByRole("button", { name: "Save to slot 3", exact: true }).click();
-  await expect.poll(async () => JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(2);
+  await page
+    .getByRole("combobox", { name: "League player", exact: true })
+    .selectOption("200");
+  await page
+    .getByRole("button", { name: "Cut player to available pool", exact: true })
+    .click();
+  await slots
+    .getByRole("button", { name: "Save to slot 3", exact: true })
+    .click();
+  await expect
+    .poll(
+      async () =>
+        JSON.parse((await stored(page)).state.filters.rosterScenarios)
+          .scenarios[0].cursor,
+    )
+    .toBe(2);
   await slots.getByRole("button", { name: "Load slot 1", exact: true }).click();
-  await expect(page.getByText("0 / 0 moves applied", { exact: true })).toBeVisible();
-  expect(JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0].cursor).toBe(2);
+  await expect(
+    page.getByText("0 / 0 moves applied", { exact: true }),
+  ).toBeVisible();
+  expect(
+    JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0]
+      .cursor,
+  ).toBe(2);
   await slots.getByRole("button", { name: "Load slot 2", exact: true }).click();
-  await expect(page.getByText("1 / 1 moves applied", { exact: true })).toBeVisible();
-  await slots.getByRole("button", { name: "Save to slot 3", exact: true }).click();
-  await expect(slots.getByText("Current roster is saved.", { exact: true })).toBeVisible();
-  await expect.poll(async () => JSON.parse((await stored(page)).state.filters.rosterScenarios).snapshots.map((snapshot: { slot: number; scenario: { cursor: number } }) => [snapshot.slot, snapshot.scenario.cursor])).toEqual([[1, 0], [2, 1], [3, 1]]);
+  await expect(
+    page.getByText("1 / 1 moves applied", { exact: true }),
+  ).toBeVisible();
+  await slots
+    .getByRole("button", { name: "Save to slot 3", exact: true })
+    .click();
+  await expect(
+    slots.getByText("Current roster is saved.", { exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(async () =>
+      JSON.parse(
+        (await stored(page)).state.filters.rosterScenarios,
+      ).snapshots.map(
+        (snapshot: { slot: number; scenario: { cursor: number } }) => [
+          snapshot.slot,
+          snapshot.scenario.cursor,
+        ],
+      ),
+    )
+    .toEqual([
+      [1, 0],
+      [2, 1],
+      [3, 1],
+    ]);
   await page.reload();
-  await expect(page.getByText("1 / 1 moves applied", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("1 / 1 moves applied", { exact: true }),
+  ).toBeVisible();
   expect((await stored(page)).dataset).toEqual(dataset);
   await page.setViewportSize({ width: 390, height: 844 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
   await slots.screenshot({ path: "test-results/roster-save-slots-mobile.png" });
 });
 
 // A hypothetical status must never share the team selector's header position or cover another top-level control.
-test("trade header keeps hypothetical status clear of team and import controls", async ({ page }) => {
+test("trade header keeps hypothetical status clear of team and import controls", async ({
+  page,
+}) => {
   await seed(page);
-  await page.getByRole("textbox", { name: "Simulation name", exact: true }).fill("Los Chilones");
-  await page.getByRole("button", { name: "New simulation", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Simulation name", exact: true })
+    .fill("Los Chilones");
+  await page
+    .getByRole("button", { name: "New simulation", exact: true })
+    .click();
   await page.goto("./#/trades");
   const status = page.getByText("Hypothetical: Los Chilones", { exact: true });
   const team = page.getByRole("combobox", { name: "My team", exact: true });
-  const importButton = page.getByRole("button", { name: "Import workbook", exact: true });
+  const importButton = page.getByRole("button", {
+    name: "Import workbook",
+    exact: true,
+  });
   for (const width of [1920, 1280, 1101, 1024, 780, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await expect(status).toBeVisible();
     await expect(team).toBeVisible();
     await expect(importButton).toBeVisible();
     const header = await page.locator(".topbar").boundingBox();
-    const controls = await Promise.all([status, team, importButton].map((control) => control.boundingBox()));
+    const controls = await Promise.all(
+      [status, team, importButton].map((control) => control.boundingBox()),
+    );
     expect(header).not.toBeNull();
     expect(controls.every(Boolean)).toBe(true);
     expect(controls[0]!.y).toBeGreaterThanOrEqual(header!.y + header!.height);
@@ -742,31 +1044,55 @@ test("trade header keeps hypothetical status clear of team and import controls",
       expect(a.x).toBeGreaterThanOrEqual(0);
       expect(a.x + a.width).toBeLessThanOrEqual(width);
       for (const b of controls.slice(i + 1)) {
-        const overlaps = a.x < b!.x + b!.width && a.x + a.width > b!.x && a.y < b!.y + b!.height && a.y + a.height > b!.y;
+        const overlaps =
+          a.x < b!.x + b!.width &&
+          a.x + a.width > b!.x &&
+          a.y < b!.y + b!.height &&
+          a.y + a.height > b!.y;
         expect(overlaps, `Top controls overlap at ${width}px`).toBe(false);
       }
     }
     if (width === 1280 || width === 390)
-      await page.locator("main").screenshot({ path: `test-results/trade-header-${width}.png` });
+      await page
+        .locator("main")
+        .screenshot({ path: `test-results/trade-header-${width}.png` });
   }
 });
 
 // Refresh requires an explicit discard of unsaved roster edits and returns to the most recently saved point.
-test("refresh warns about unsaved roster edits and preserves saved slots", async ({ page }) => {
+test("refresh warns about unsaved roster edits and preserves saved slots", async ({
+  page,
+}) => {
   await seed(page);
-  await page.getByRole("button", { name: "New simulation", exact: true }).click();
-  await page.getByRole("button", { name: "Save to slot 1", exact: true }).click();
+  await page
+    .getByRole("button", { name: "New simulation", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Save to slot 1", exact: true })
+    .click();
   await page.getByText("Advanced roster moves", { exact: true }).click();
-  await page.getByRole("combobox", { name: "League player", exact: true }).selectOption("200");
-  await page.getByRole("button", { name: "Move player to selected team", exact: true }).click();
-  await expect(page.getByText("1 / 1 moves applied", { exact: true })).toBeVisible();
+  await page
+    .getByRole("combobox", { name: "League player", exact: true })
+    .selectOption("200");
+  await page
+    .getByRole("button", { name: "Move player to selected team", exact: true })
+    .click();
+  await expect(
+    page.getByText("1 / 1 moves applied", { exact: true }),
+  ).toBeVisible();
   const dialogPromise = page.waitForEvent("dialog");
   const reload = page.reload();
   const dialog = await dialogPromise;
   expect(dialog.type()).toBe("beforeunload");
   await dialog.accept();
   await reload;
-  await expect(page.getByText("0 / 0 moves applied", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Load slot 1", exact: true })).toBeEnabled();
-  expect(JSON.parse((await stored(page)).state.filters.rosterScenarios).snapshots).toHaveLength(1);
+  await expect(
+    page.getByText("0 / 0 moves applied", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Load slot 1", exact: true }),
+  ).toBeEnabled();
+  expect(
+    JSON.parse((await stored(page)).state.filters.rosterScenarios).snapshots,
+  ).toHaveLength(1);
 });

@@ -229,8 +229,8 @@ test("Sync now retains in-flight edits and the next sync succeeds", async ({
   );
 });
 
-// A real cloud change still presents both choices and only the user's explicit choice permits replacing it.
-test("Sync now keeps genuine conflicts explicit and resolves the selected copy", async ({
+// On cloud conflict, sync automatically keeps the cloud copy and replaces this device's state.
+test("Sync now automatically adopts cloud workspace on conflict and replaces this device", async ({
   page,
 }) => {
   const cloud = await seedCloud(page);
@@ -242,24 +242,12 @@ test("Sync now keeps genuine conflicts explicit and resolves the selected copy",
       name: "Choose your current workspace",
       exact: true,
     }),
-  ).toBeVisible();
-  expect(cloud.row.state.filters).toEqual({ remote: "preserve until chosen" });
-  expect((await stored(page, cloud.owner)).stateRevision).toBe(3);
-  await page
-    .getByRole("button", {
-      name: "Keep this device and replace cloud",
-      exact: true,
-    })
-    .click();
-  await expect
-    .poll(async () => (await stored(page, cloud.owner)).pendingState)
-    .toBe(false);
-  expect(cloud.row.state.filters).toEqual({});
-  await page.getByRole("button", { name: "Sync now", exact: true }).click();
-  await expect(
-    page.getByRole("heading", {
-      name: "Choose your current workspace",
-      exact: true,
-    }),
   ).toHaveCount(0);
+  await expect
+    .poll(async () => (await stored(page, cloud.owner)).stateRevision)
+    .toBe(4);
+  expect((await stored(page, cloud.owner)).state.filters).toEqual({
+    remote: "preserve until chosen",
+  });
+  expect((await stored(page, cloud.owner)).pendingState).toBe(false);
 });

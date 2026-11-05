@@ -396,8 +396,16 @@ export default function App() {
       // An obsolete request must not show another account's conflict or failure after switching accounts.
       if (wRef.current?.owner !== current.owner) return;
       if (e instanceof Conflict) {
-        setConflict(e.remote);
-        setSyncStatus("Conflict");
+        // When a cloud conflict occurs and a remote workspace exists, automatically adopt the cloud workspace and replace this device.
+        if (e.remote) {
+          commit(e.remote);
+          setConflict(undefined);
+          setSyncStatus("Synced");
+          window.dispatchEvent(new Event("fantasy-sync-negotiations"));
+        } else {
+          setConflict(e.remote);
+          setSyncStatus("Conflict");
+        }
       } else {
         setError(e instanceof Error ? e.message : String(e));
         setSyncStatus(

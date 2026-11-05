@@ -18,9 +18,11 @@ import {
   rosterScenarioDirty,
   scenarioRosterBase,
   rosterScenariosKey,
+  rosterSaveSlots,
   saveRosterSnapshot,
   writeRosterScenarios,
   type RosterScenario,
+  type RosterSaveSlot,
 } from "../src/domain/roster-scenarios";
 
 // Save compact synthetic recipes only; no live dataset, clock-dependent assertion or user roster enters fixtures.
@@ -213,7 +215,7 @@ it("keeps legacy scenarios readable and freezes baseline lineup choices on expli
     ),
   ).toThrow("storage is full");
   expect(saved.saved).toBe(before);
-  expect(() => saveRosterSnapshot(state, legacy, 4 as 1)).toThrow();
+  expect(() => saveRosterSnapshot(state, legacy, 11 as 1)).toThrow();
   const invalid = readRosterScenarios(saved.saved).collection;
   invalid.snapshots!.push(invalid.snapshots![0]);
   expect(readRosterScenarios(JSON.stringify(invalid)).issue).toContain(
@@ -255,4 +257,28 @@ it("restores saved ownership after an import without freezing player scoring dat
   expect(
     applyRosterScenario(fresh, missing).simulation!.issues.join(),
   ).toContain("cannot be fully restored");
+});
+
+// Expanded save capacity supports up to 10 slots per scenario while rejecting out-of-range slots.
+it("supports 10 save slots and rejects slot numbers outside 1-10", async () => {
+  const { state, scenario } = await sample();
+  const working = writeRosterScenarios(state, {
+    version: 1,
+    active: scenario.id,
+    scenarios: [scenario],
+  });
+  expect(rosterSaveSlots).toHaveLength(10);
+  expect(rosterSaveSlots).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  const saved10 = saveRosterSnapshot(state, working, 10 as RosterSaveSlot);
+  expect(
+    readRosterScenarios(saved10.saved).collection.snapshots?.some(
+      (s) => s.slot === 10,
+    ),
+  ).toBe(true);
+  expect(() =>
+    saveRosterSnapshot(state, working, 11 as RosterSaveSlot),
+  ).toThrow();
+  expect(() =>
+    saveRosterSnapshot(state, working, 0 as RosterSaveSlot),
+  ).toThrow();
 });

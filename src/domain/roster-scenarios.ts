@@ -82,22 +82,35 @@ export const rosterScenarioSchema = z
   })
   .strict()
   .refine((s) => s.cursor <= s.moves.length);
-// Each scenario has three independent checkpoints containing recipes only, never another dataset or recursive snapshots.
-export const rosterSaveSlots = [1, 2, 3] as const;
+// Each scenario supports up to 10 independent save slot checkpoints containing recipes only, never another dataset or recursive snapshots.
+export const rosterSaveSlots = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 export type RosterSaveSlot = (typeof rosterSaveSlots)[number];
+// Validates an individual snapshot payload ensuring slot index is between 1 and 10 and UTC timestamp is valid.
 const snapshotSchema = z
   .object({
-    slot: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    slot: z.union([
+      z.literal(1),
+      z.literal(2),
+      z.literal(3),
+      z.literal(4),
+      z.literal(5),
+      z.literal(6),
+      z.literal(7),
+      z.literal(8),
+      z.literal(9),
+      z.literal(10),
+    ]),
     savedUTC: z.string().datetime(),
     scenario: rosterScenarioSchema,
   })
   .strict();
+// Validates the scenario collection structure with up to 10 scenarios and up to 100 snapshot checkpoints.
 const collectionSchema = z
   .object({
     version: z.literal(1),
     active: z.string(),
     scenarios: z.array(rosterScenarioSchema).max(10),
-    snapshots: z.array(snapshotSchema).max(30).optional(),
+    snapshots: z.array(snapshotSchema).max(100).optional(),
   })
   .strict()
   .refine(

@@ -255,6 +255,7 @@ export function RosterSimulator({
               Snapshots restore ownership and exact starter slots. Player
               forecasts use the current imported data.
             </p>
+            {/* Map over all available roster save slots (1-10) to render each snapshot checkpoint card and action buttons */}
             <div className="three-col">
               {rosterSaveSlots.map((slot) => {
                 const snapshot = collection.snapshots?.find(
