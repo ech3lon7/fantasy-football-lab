@@ -61,7 +61,7 @@ function score(m: Model, q: TradeSearchQuery, get = ["106"]) {
     incoming: 0,
     outgoing: 0,
     difference: 0,
-  });
+  })!;
 }
 
 // Optional discovery evidence must not change values, lineup gains or package tests.

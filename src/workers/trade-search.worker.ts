@@ -184,10 +184,12 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
         request.query,
         match,
         request.lineupsRaw,
-      ) as SearchRow | null;
+      );
       if (!row) {
         if (request.query.gradeImpacts?.length)
           stats.gradeImpactExcluded = (stats.gradeImpactExcluded ?? 0) + 1;
+        stats.scored++;
+        progress("Evaluating trades", stats);
         continue;
       }
       evaluated.set(match.key, row);

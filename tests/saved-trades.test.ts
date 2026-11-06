@@ -42,7 +42,7 @@ it("stores a compact validated trade and matches the existing search/analyzer su
     incoming: 0,
     outgoing: 0,
     difference: 0,
-  });
+  })!;
   expect(summaryFromSearch(row)).toEqual(summary);
   const unavailable = summaryFromTrade({
     valid: false,

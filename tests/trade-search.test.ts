@@ -81,7 +81,7 @@ it("keeps fast search summaries identical to full trade evaluations across packa
       };
       const full = evaluateTrade(m, { ...q, teamB: "2", get: match.get });
       if (!full.valid) throw Error(full.errors.join(" "));
-      const row = scoreTradeMatch(m, q, match);
+      const row = scoreTradeMatch(m, q, match)!;
       expect(row).toMatchObject({
         own: full.potentialA.expectedPerWeek,
         other: full.potentialB.expectedPerWeek,
@@ -354,7 +354,7 @@ it("screens authoritative weekly averages without changing index matching, weeks
     },
   };
   expect(findTradeMatches(m, filteredQuery).matches).toEqual(matches);
-  const rows = matches.map((match) => scoreTradeMatch(m, q, match));
+  const rows = matches.map((match) => scoreTradeMatch(m, q, match)!);
   const qb = rows.find((row) => row.get[0] === "200")!,
     wr = rows.find((row) => row.get[0] === "2")!;
   expect(qb.ownTotal).toBe(-130);
@@ -727,8 +727,8 @@ it("keeps the disabled filter unchanged and includes enabled criteria in search 
     const original = unfiltered.matches.find(
       (candidate) => candidate.key === match.key,
     )!;
-    expect(scoreTradeMatch(m, enabled, match)).toMatchObject(
-      scoreTradeMatch(m, q, original),
+    expect(scoreTradeMatch(m, enabled, match)!).toMatchObject(
+      scoreTradeMatch(m, q, original)!,
     );
   }
   expect(
@@ -873,14 +873,14 @@ it("retains invalid evaluations and reports known availability warnings", async 
     out: true,
     bye: m.current,
   });
-  expect(scoreTradeMatch(m, q, match).warnings.join()).toContain(
+  expect(scoreTradeMatch(m, q, match)!.warnings.join()).toContain(
     "Incoming QB: OUT",
   );
-  expect(scoreTradeMatch(m, q, match).warnings.join()).toContain(
+  expect(scoreTradeMatch(m, q, match)!.warnings.join()).toContain(
     "bye this week",
   );
   m.byId.get("200")!.value = null;
-  const row = scoreTradeMatch(m, q, match);
+  const row = scoreTradeMatch(m, q, match)!;
   expect(row.own).toBeNull();
   expect(row.warnings.join()).toContain("Incomplete model data");
   expect(row.get).toEqual(["200"]);
@@ -1082,7 +1082,7 @@ it("explains actual replacements, byes and slot gains for both teams without alt
   expect(
     trace.ownMarked.weekly.find((week) => week.week === 8)!.changes,
   ).toContainEqual({ slot: "QB", before: null, after: "101", gain: 30 });
-  const scored = scoreTradeMatch(m, q, match);
+  const scored = scoreTradeMatch(m, q, match)!;
   for (const [side, average] of [
     [trace.own, scored.own],
     [trace.other, scored.other],

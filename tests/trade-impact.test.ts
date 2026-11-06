@@ -54,7 +54,7 @@ it("shares selected scoring, baseline arithmetic, filters and candidate explanat
       incoming: 0,
       difference: 0,
     };
-    const row = scoreTradeMatch(m, q, match),
+    const row = scoreTradeMatch(m, q, match)!,
       summary = tradeImpact(result, basis)!;
     expect(row.own).toBe(summary.own.expectedPerWeek);
     expect(row.other).toBe(summary.other.expectedPerWeek);

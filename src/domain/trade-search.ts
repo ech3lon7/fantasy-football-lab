@@ -1244,20 +1244,6 @@ export function packageUsefulness(
 // Delegate all trade math to the existing evaluator, retaining invalid matches with unavailable scores.
 export function scoreTradeMatch(
   m: Model,
-  q: TradeSearchQuery & { gradeImpacts: PositionalGradeImpactRule[] },
-  match: SearchMatch,
-  lineupsRaw?: string,
-  evaluated?: TradeResult,
-): SearchRow | null;
-export function scoreTradeMatch(
-  m: Model,
-  q: TradeSearchQuery,
-  match: SearchMatch,
-  lineupsRaw?: string,
-  evaluated?: TradeResult,
-): SearchRow;
-export function scoreTradeMatch(
-  m: Model,
   q: TradeSearchQuery,
   match: SearchMatch,
   lineupsRaw?: string,

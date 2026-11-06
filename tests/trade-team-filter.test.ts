@@ -128,7 +128,7 @@ it("preserves opponent scope through saves, presets, recovery and candidate diag
   for (const option of findTradeRecoveries(m, scoped)) {
     expect(option.query.discovery?.teams).toEqual(["3"]);
     const exact = findDiscoveryMatches(m, option.query)
-      .matches.map((match) => scoreTradeMatch(m, option.query, match))
+      .matches.map((match) => scoreTradeMatch(m, option.query, match)!)
       .filter((row) => !discoveryFailures(row, option.query).length);
     expect(option.count).toBe(exact.length);
   }
@@ -143,7 +143,7 @@ it("preserves opponent scope through saves, presets, recovery and candidate diag
     initialState(dataset),
     m,
     draft,
-    summaryFromSearch(scoreTradeMatch(m, scoped, match)),
+    summaryFromSearch(scoreTradeMatch(m, scoped, match)!),
     scoped,
   );
   expect(readSavedTrades(raw).trades[0].query?.discovery?.teams).toEqual(["3"]);

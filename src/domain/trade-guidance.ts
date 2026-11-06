@@ -141,6 +141,10 @@ export function findTradeRecoveries(
     const match = matches[i];
     const row =
       cache.get(match.key) ?? scoreTradeMatch(m, universe, match, lineupsRaw);
+    if (!row) {
+      progress?.(i + 1, matches.length);
+      continue;
+    }
     for (const option of options)
       if (!discoveryFailures(row, option.query).length) option.count++;
     progress?.(i + 1, matches.length);
