@@ -146,10 +146,12 @@ export function ChainGradeLimitControls({
   label,
   value,
   change,
+  positions,
 }: {
   label: string;
   value: ChainStep;
   change: (value: ChainStep) => void;
+  positions?: string[];
 }) {
   return (
     <div className="trade-search-controls">
@@ -229,6 +231,7 @@ export function ChainGradeLimitControls({
             gradeImpacts: updated.length > 0 ? updated : undefined,
           })
         }
+        positions={positions}
         ariaLabelPrefix={`${label} grade goal`}
       />
     </div>

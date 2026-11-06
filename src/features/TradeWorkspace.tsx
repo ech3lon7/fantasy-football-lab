@@ -246,7 +246,7 @@ export function PositionGradeChips({
             key={`${row.position}-${row.before}-${row.after}-${row.suffix}`}
             className={`position-grade-chip ${tone}`}
             title={
-              row.drop && row.drop > 0
+              row.drop != null && row.drop > 0
                 ? `${row.position} drops ${row.drop} step${row.drop > 1 ? "s" : ""}`
                 : row.before !== row.after
                   ? `${row.position} upgraded`

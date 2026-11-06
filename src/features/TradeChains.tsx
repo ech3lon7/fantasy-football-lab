@@ -76,6 +76,7 @@ import {
   ChainGradeChanges,
   ChainRequirementChips,
 } from "./ChainLegControls";
+import { availableStarterPositions } from "../domain/chain-position-impact";
 
 // Chain diagnostics list only independent controls; imported league facts and the selected roster data remain common inputs.
 const chainFilterScope = {
@@ -1151,7 +1152,12 @@ export function TradeChains({
         );
       })}
       {/* Keep the optional grade safeguard next to this leg's surplus/deficit controls. */}
-      <ChainGradeLimitControls label={label} value={value} change={change} />
+      <ChainGradeLimitControls
+        label={label}
+        value={value}
+        change={change}
+        positions={availableStarterPositions(m)}
+      />
     </fieldset>
   );
 

@@ -1263,13 +1263,26 @@ export function TradeSearch({
         : [],
     ),
     // Removable chips for active positional grade goals
-    ...gradeImpacts.map((rule, idx) => ({
-      label: `Grade goal: ${rule.side === "own" ? "Your" : "Their"} ${rule.position} ${
-        rule.steps >= 0 ? `≥ +${rule.steps}` : `≥ ${rule.steps}`
-      } step${Math.abs(rule.steps) === 1 ? "" : "s"}`,
-      remove: () =>
-        setGradeImpacts((prev) => prev.filter((_, i) => i !== idx)),
-    })),
+    ...gradeImpacts.map((rule, idx) => {
+      const sidePrefix = rule.side === "own" ? "Your" : "Their";
+      const stepCount = Math.abs(rule.steps);
+      const stepLabel = `${stepCount} step${stepCount === 1 ? "" : "s"}`;
+      let action: string;
+      if (rule.side === "other" && rule.steps < 0) {
+        action = `downgrade ≥ ${stepLabel}`;
+      } else if (rule.steps > 0) {
+        action = `upgrade ≥ ${stepLabel}`;
+      } else if (rule.steps === 0) {
+        action = "no drop";
+      } else {
+        action = `drop ≤ ${stepLabel}`;
+      }
+      return {
+        label: `Grade goal: ${sidePrefix} ${rule.position} (${action})`,
+        remove: () =>
+          setGradeImpacts((prev) => prev.filter((_, i) => i !== idx)),
+      };
+    }),
   ];
 
   // Controls express raw index matching; premiums and fairness remain visible only as separate evaluation outputs.

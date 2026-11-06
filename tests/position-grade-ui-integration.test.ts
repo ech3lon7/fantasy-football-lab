@@ -41,6 +41,32 @@ describe("UI Integration: Positional Grade Impact in ChainLegControls", () => {
     expect(html).toContain('aria-label="First trade grade goal 1 target"');
   });
 
+  it("threads custom positions into PositionalGradeImpactControls inside ChainGradeLimitControls", () => {
+    const rules: PositionalGradeImpactRule[] = [
+      { id: "r1", side: "own", position: "WR", steps: 2 },
+    ];
+    const value: ChainStep = {
+      offer: { minimum: 1, maximum: 2 },
+      receive: { minimum: 1, maximum: 2 },
+      gradeImpacts: rules,
+    };
+    const change = vi.fn();
+
+    const html = renderToStaticMarkup(
+      React.createElement(ChainGradeLimitControls, {
+        label: "First trade",
+        value,
+        change,
+        positions: ["RB", "WR", "TE"],
+      })
+    );
+
+    expect(html).toContain('value="RB"');
+    expect(html).toContain('value="WR"');
+    expect(html).toContain('value="TE"');
+    expect(html).not.toContain('value="QB"');
+  });
+
   it("renders clear chip in ChainRequirementChips when value.gradeImpacts has rules", () => {
     const rules: PositionalGradeImpactRule[] = [
       { id: "r1", side: "own", position: "WR", steps: 2 },
@@ -248,5 +274,72 @@ describe("availableStarterPositions domain helper", () => {
       "TE",
       "D/ST",
     ]);
+  });
+});
+
+describe("UI Integration: PositionGradeChips tooltips", () => {
+  it("uses proper tooltip for upgrades, downgrades, and unchanged grades", () => {
+    const impact: ChainPositionImpact = {
+      own: [
+        { position: "WR", before: "C", after: "B", drop: 0, stepDelta: 2 },
+        { position: "RB", before: "B", after: "C", drop: 2, stepDelta: -2 },
+        { position: "TE", before: "B", after: "B", drop: null, stepDelta: null },
+      ],
+      other: [],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(PositionGradeChips, { impact })
+    );
+
+    expect(html).toContain('title="WR upgraded"');
+    expect(html).toContain('title="RB drops 2 steps"');
+    expect(html).toContain('title="TE unchanged"');
+  });
+});
+
+describe("Positional grade goal chip label formatting", () => {
+  function formatGradeGoalChip(rule: PositionalGradeImpactRule) {
+    const sidePrefix = rule.side === "own" ? "Your" : "Their";
+    const stepCount = Math.abs(rule.steps);
+    const stepLabel = `${stepCount} step${stepCount === 1 ? "" : "s"}`;
+    let action: string;
+    if (rule.side === "other" && rule.steps < 0) {
+      action = `downgrade ≥ ${stepLabel}`;
+    } else if (rule.steps > 0) {
+      action = `upgrade ≥ ${stepLabel}`;
+    } else if (rule.steps === 0) {
+      action = "no drop";
+    } else {
+      action = `drop ≤ ${stepLabel}`;
+    }
+    return `Grade goal: ${sidePrefix} ${rule.position} (${action})`;
+  }
+
+  it("formats upgrade goals clearly", () => {
+    expect(
+      formatGradeGoalChip({ id: "1", side: "own", position: "WR", steps: 2 })
+    ).toBe("Grade goal: Your WR (upgrade ≥ 2 steps)");
+    expect(
+      formatGradeGoalChip({ id: "1", side: "own", position: "TE", steps: 1 })
+    ).toBe("Grade goal: Your TE (upgrade ≥ 1 step)");
+  });
+
+  it("formats no-drop goals clearly", () => {
+    expect(
+      formatGradeGoalChip({ id: "1", side: "own", position: "QB", steps: 0 })
+    ).toBe("Grade goal: Your QB (no drop)");
+  });
+
+  it("formats drop limit goals clearly", () => {
+    expect(
+      formatGradeGoalChip({ id: "1", side: "own", position: "RB", steps: -1 })
+    ).toBe("Grade goal: Your RB (drop ≤ 1 step)");
+  });
+
+  it("formats opponent depletion downgrade goals clearly without negative signs", () => {
+    expect(
+      formatGradeGoalChip({ id: "1", side: "other", position: "WR", steps: -2 })
+    ).toBe("Grade goal: Their WR (downgrade ≥ 2 steps)");
   });
 });
