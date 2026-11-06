@@ -1,11 +1,25 @@
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
+import { copyFileSync, mkdirSync } from "node:fs";
 import {
   initialState,
   type Dataset,
   type Workspace,
 } from "../../src/domain/contracts";
 import { openTradeDetails, openTradeFilters } from "./trade-workspace-helpers";
+
+// Capture a screenshot into test-results/ and copy it into the visual artifact directory
+async function captureScreenshot(page: Page, filename: string) {
+  mkdirSync("test-results", { recursive: true });
+  const localPath = `test-results/${filename}`;
+  const artifactPath = `C:/Users/israe/.gemini/antigravity/brain/2eea40f1-347c-49f2-855d-0f59973c47d2/${filename}`;
+  await page.screenshot({ path: localPath, fullPage: true });
+  try {
+    copyFileSync(localPath, artifactPath);
+  } catch {
+    // Artifact copy is optional in detached testing environments
+  }
+}
 
 // Seed synthetic league workspace directly into IndexedDB, supporting starter or chain fixtures
 async function seedWorkspace(
@@ -22,8 +36,8 @@ async function seedWorkspace(
         "--input-type=module",
         "-e",
         fixtureType === "starter"
-          ? `import {starterFixture} from './tests/fixtures.ts';
-             const d = await starterFixture();
+          ? `import {tradeSearchFixture} from './tests/fixtures.ts';
+             const d = await tradeSearchFixture();
              process.stdout.write(JSON.stringify(d));`
           : `import {fairChainFixture} from './tests/chain-fixture.ts';
              const d = await fairChainFixture();
@@ -50,11 +64,11 @@ async function seedWorkspace(
     stateRevision: 0,
     pendingDataset: false,
     pendingState: false,
-    requestId: "test-grade-request",
-    stateRequestId: "test-grade-state-request",
+    requestId: "test-grade-search",
+    stateRequestId: "test-grade-search",
   };
 
-  // Prevent external network requests during browser tests
+  // Block external network requests during browser test run
   await page.route("https://a.espncdn.com/**", (route) => route.abort());
 
   // Navigate to root, initialize IndexedDB with workspace, and reload to pick up seeded state
@@ -101,36 +115,42 @@ test.describe("Positional Grade Search E2E", () => {
       '#standard-trade-filters details.trade-filter-category[data-category="Team needs"]',
     );
     await expect(teamNeedsGroup).toBeVisible();
+
     if ((await teamNeedsGroup.getAttribute("open")) === null) {
       await teamNeedsGroup.locator(":scope > summary").click();
     }
     await expect(teamNeedsGroup).toHaveAttribute("open", "");
 
-    // Verify PositionalGradeImpactControls renders inside Team needs
-    const gradeControls = teamNeedsGroup.locator(".grade-impact-container");
-    await expect(gradeControls).toBeVisible();
+    // Verify Positional Grade Goals controls container renders inside Team needs
+    const gradeImpactControls = teamNeedsGroup.locator(
+      ".grade-impact-container",
+    );
+    await expect(gradeImpactControls).toBeVisible();
     await expect(
-      gradeControls.getByText("Positional Grade Goals", { exact: true }),
+      gradeImpactControls.getByText("Positional Grade Goals", { exact: true }),
     ).toBeVisible();
 
-    // Verify empty state is rendered initially
-    await expect(gradeControls.locator(".grade-impact-empty")).toHaveText(
-      "No positional grade goals configured.",
-    );
+    // Empty state should be visible before adding any goals
+    await expect(
+      gradeImpactControls.locator(".grade-impact-empty"),
+    ).toBeVisible();
+    await expect(
+      gradeImpactControls.locator(".grade-impact-empty"),
+    ).toContainText("No positional grade goals configured.");
 
-    // Click "+ Add Positional Goal" to add a new goal rule
-    const addGoalButton = gradeControls.getByRole("button", {
+    // Click "+ Add Positional Goal" button
+    const addGoalBtn = gradeImpactControls.getByRole("button", {
       name: "+ Add Positional Goal",
       exact: true,
     });
-    await expect(addGoalButton).toBeVisible();
-    await addGoalButton.click();
+    await expect(addGoalBtn).toBeVisible();
+    await addGoalBtn.click();
 
-    // Verify a rule row appeared
-    const ruleRow = gradeControls.locator(".grade-impact-row").first();
+    // Locate the added rule row
+    const ruleRow = gradeImpactControls.locator(".grade-impact-row").first();
     await expect(ruleRow).toBeVisible();
 
-    // Configure the rule: "Your team", "WR", "Upgrade ≥ 1 step"
+    // Configure the rule: Your team -> WR -> Upgrade ≥ 1 step
     const teamSelect = ruleRow.locator(
       'select[aria-label="Standard search grade goal 1 team"]',
     );
@@ -166,10 +186,26 @@ test.describe("Positional Grade Search E2E", () => {
     await expect(runSearchBtn).toBeEnabled();
     await runSearchBtn.click();
 
-    // Capture screenshot of the configured Find Trades positional grade goals
-    await page.screenshot({
-      path: "C:/Users/israe/.gemini/antigravity/brain/2eea40f1-347c-49f2-855d-0f59973c47d2/find-trades-grade-goals.png",
-    });
+    // Await search results: team header toggle button
+    const teamHeaderBtn = page.locator("tbody > tr > th button").first();
+    await expect(teamHeaderBtn).toBeVisible({ timeout: 20000 });
+    // Expand team results if collapsed
+    if ((await teamHeaderBtn.getAttribute("aria-expanded")) !== "true") {
+      await teamHeaderBtn.click();
+    }
+
+    // Verify candidate trade result row is rendered
+    const resultRow = page.locator("tr[data-trade-result]").first();
+    await expect(resultRow).toBeVisible();
+
+    // Verify that the candidate row displays the position grade chip with WR upgrade transition
+    const gradeChip = resultRow.locator(".position-grade-chip.good").first();
+    await expect(gradeChip).toBeVisible();
+    await expect(gradeChip).toContainText("WR");
+    await expect(gradeChip.locator(".pos-grades")).toContainText("→");
+
+    // Capture screenshot of the configured Find Trades positional grade goals and matching result row
+    await captureScreenshot(page, "find-trades-grade-goals.png");
   });
 
   // Test 2: Chain Planner with Positional Grade Goals
@@ -249,12 +285,12 @@ test.describe("Positional Grade Search E2E", () => {
     expect(availableOptions).not.toContain("D/ST");
     expect(availableOptions).not.toContain("FLEX");
 
-    // Configure grade goal on Leg 1: WR Upgrade ≥ 1 step
-    await leg1PosSelect.selectOption("WR");
+    // Configure grade goal on Leg 1: TE No drop (≥ 0)
+    await leg1PosSelect.selectOption("TE");
     const leg1TargetSelect = leg1.locator(
       'select[aria-label="First trade grade goal 1 target"]',
     );
-    await leg1TargetSelect.selectOption("1");
+    await leg1TargetSelect.selectOption("0");
 
     // Verify chain requirement chip displays the active grade goal for Leg 1
     const leg1Chip = page.locator(
@@ -283,8 +319,12 @@ test.describe("Positional Grade Search E2E", () => {
       .allTextContents();
     expect(leg2Options).toEqual(["RB", "WR", "TE"]);
 
-    // Configure Leg 2 goal for TE
-    await leg2PosSelect.selectOption("TE");
+    // Configure Leg 2 goal for WR Upgrade >= 1 step
+    await leg2PosSelect.selectOption("WR");
+    const leg2TargetSelect = leg2.locator(
+      'select[aria-label="Second trade grade goal 1 target"]',
+    );
+    await leg2TargetSelect.selectOption("1");
 
     // Verify chain requirement chip displays the active grade goal for Leg 2
     const leg2Chip = page.locator(
@@ -293,9 +333,52 @@ test.describe("Positional Grade Search E2E", () => {
     await expect(leg2Chip).toBeVisible();
     await expect(leg2Chip).toContainText("Second trade: 1 grade goal");
 
-    // Capture screenshot of the configured Chain Planner positional grade goals
-    await page.screenshot({
-      path: "C:/Users/israe/.gemini/antigravity/brain/2eea40f1-347c-49f2-855d-0f59973c47d2/chain-planner-grade-goals.png",
+    // Configure offer/receive and team bounds to quickly execute search with real solutions
+    for (const name of ["First trade", "Second trade"]) {
+      const group = page.getByRole("group", { name, exact: true });
+      await group
+        .getByRole("combobox", { name: `${name} offer maximum`, exact: true })
+        .selectOption(name === "Second trade" ? "2" : "1");
+      if (name === "Second trade") {
+        await group
+          .getByRole("combobox", { name: `${name} offer minimum`, exact: true })
+          .selectOption("2");
+      }
+      await group
+        .getByRole("combobox", { name: `${name} receive maximum`, exact: true })
+        .selectOption("1");
+      await group.locator("summary").filter({ hasText: new RegExp(`^${name} teams`) }).click();
+      await group
+        .getByRole("checkbox", {
+          name: `Override ${name.toLowerCase()} teams`,
+          exact: true,
+        })
+        .check();
+      await group
+        .getByRole("button", { name: "Clear selection", exact: true })
+        .click();
+      await group
+        .getByRole("checkbox", {
+          name: `${name} team: ${name === "First trade" ? "Chain B" : "Chain C"}`,
+          exact: true,
+        })
+        .check();
+    }
+
+    // Run chain trade search
+    const runChainSearchBtn = page.getByRole("button", {
+      name: "Search trade chains",
+      exact: true,
     });
+    await expect(runChainSearchBtn).toBeEnabled();
+    await runChainSearchBtn.click();
+
+    // Verify qualifying chains found message
+    await expect(
+      page.getByText(/[1-9][0-9]* qualifying chains found/),
+    ).toBeVisible({ timeout: 25000 });
+
+    // Capture screenshot of the configured Chain Planner positional grade goals and active chips
+    await captureScreenshot(page, "chain-planner-grade-goals.png");
   });
 });
