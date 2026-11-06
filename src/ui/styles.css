@@ -3079,3 +3079,126 @@ pre {
     animation: none !important;
   }
 }
+
+/* Positional Grade Impact Goal Controls */
+/* Container card for positional grade impact rules */
+.grade-impact-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--panel, #fffdf8);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 10px;
+  margin-bottom: 12px;
+}
+
+/* Header label for positional grade goals section */
+.grade-impact-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink);
+}
+
+/* Informative prompt when no positional rules are currently configured */
+.grade-impact-empty {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+  margin: 4px 0 6px;
+}
+
+/* Wrapper list for dynamic positional impact rule rows */
+.grade-impact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Single rule row layout aligning side, position, target step deltas, and delete action */
+.grade-impact-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Select dropdown input styling matching existing theme controls */
+.grade-impact-select {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  background: #fffdf1;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--purple);
+  outline: none;
+  flex: 1 1 auto;
+}
+
+.grade-impact-select:focus-visible {
+  outline: 2px solid var(--purple);
+  outline-offset: 1px;
+}
+
+/* Remove button removing a single goal rule row */
+.grade-impact-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.grade-impact-remove:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.grade-impact-remove:focus-visible {
+  outline: 2px solid #b91c1c;
+  outline-offset: 1px;
+}
+
+/* Button to add a new positional goal rule */
+.grade-impact-add-btn {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  min-height: 32px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  background: #fdfefb;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.grade-impact-add-btn:hover {
+  border-color: var(--ink);
+  background: #f5f6f2;
+}
+
+.grade-impact-add-btn:focus-visible {
+  outline: 2px solid var(--purple);
+  outline-offset: 1px;
+}
+
