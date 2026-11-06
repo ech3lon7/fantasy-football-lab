@@ -52,6 +52,12 @@ import {
   type DeficitProtection,
   type DeficitProtectionEvidence,
 } from "./trade-safeguards";
+import {
+  chainPositionImpact,
+  evaluateGradeImpacts,
+  type ChainPositionImpact,
+  type PositionalGradeImpactRule,
+} from "./chain-position-impact";
 // Preserve existing imports of the grade scale while sharing it with both search safeguards.
 export { positionGradeScale } from "./trade-safeguards";
 
@@ -178,6 +184,8 @@ export interface TradeSearchQuery {
   // Manager expectations are a separate opt-in evaluator; old surface settings retain their meaning.
   manager?: ManagerSettings;
   surface?: SurfaceFilter;
+  // Optional positional grade impact rules filter candidate trades by pre/post roster grade deltas.
+  gradeImpacts?: PositionalGradeImpactRule[];
 }
 // Old saved searches keep their exact receive count; only an explicit range broadens package sizes.
 export function incomingCountRange(q: TradeSearchQuery) {
@@ -199,6 +207,8 @@ export interface SearchRow extends SearchMatch {
   deficitProtection?: DeficitProtectionEvidence[];
   manager?: ManagerAssessment;
   surface?: SurfaceEvidence;
+  // Positional grade impact tracks roster before/after grades and signed step deltas per position.
+  positionImpact?: ChainPositionImpact;
   // Compact before/after metadata travels with each result, never recomputed from a different live selection.
   lineupBasis?: LineupBasis;
   ownBefore?: number | null;
@@ -240,6 +250,7 @@ export interface SearchStats {
   protectedExcluded?: number;
   surfaceExcluded?: number;
   managerExcluded?: number;
+  gradeImpactExcluded?: number;
 }
 export interface SearchProgress {
   phase: "Finding matching packages" | "Evaluating trades" | "Sorting results";
@@ -1233,12 +1244,26 @@ export function packageUsefulness(
 // Delegate all trade math to the existing evaluator, retaining invalid matches with unavailable scores.
 export function scoreTradeMatch(
   m: Model,
+  q: TradeSearchQuery & { gradeImpacts: PositionalGradeImpactRule[] },
+  match: SearchMatch,
+  lineupsRaw?: string,
+  evaluated?: TradeResult,
+): SearchRow | null;
+export function scoreTradeMatch(
+  m: Model,
+  q: TradeSearchQuery,
+  match: SearchMatch,
+  lineupsRaw?: string,
+  evaluated?: TradeResult,
+): SearchRow;
+export function scoreTradeMatch(
+  m: Model,
   q: TradeSearchQuery,
   match: SearchMatch,
   lineupsRaw?: string,
   // Chain search can reuse its already evaluated trade without repeating legal-roster and weekly calculations.
   evaluated?: TradeResult,
-): SearchRow {
+): SearchRow | null {
   // Use the chosen subset rather than the draft/pool for every authoritative trade calculation.
   if (match.give) q = { ...q, give: [...match.give] };
   const r =
@@ -1291,8 +1316,49 @@ export function scoreTradeMatch(
         (id) => !tradablePool.includes(id) && !match.get.includes(id),
       )
     : [];
+
+  // Positional grade impact rules filter candidate trades based on pre/post roster grade changes.
+  let positionImpact: ChainPositionImpact | undefined;
+  let nearMissGradeReasons: string[] = [];
+  if (q.gradeImpacts && q.gradeImpacts.length > 0) {
+    const targetPositions = q.gradeImpacts.map((rule) => rule.position);
+    positionImpact = chainPositionImpact(
+      m,
+      {
+        teamA: q.teamA,
+        teamB: match.teamB,
+        give: [...q.give],
+        get: [...match.get],
+      },
+      r,
+      targetPositions,
+    );
+    const evalResult = evaluateGradeImpacts(positionImpact, q.gradeImpacts);
+    if (!evalResult.passes) {
+      if (q.discovery?.nearMisses) {
+        nearMissGradeReasons = evalResult.failures;
+      } else {
+        return null;
+      }
+    }
+  }
+
   return {
     ...match,
+    ...(positionImpact ? { positionImpact } : {}),
+    ...(nearMissGradeReasons.length > 0
+      ? {
+          nearMiss: {
+            reasons: [
+              ...((match as SearchRow).nearMiss?.reasons ?? []),
+              ...nearMissGradeReasons,
+            ],
+            distance:
+              ((match as SearchRow).nearMiss?.distance ?? 0) +
+              nearMissGradeReasons.length,
+          },
+        }
+      : {}),
     // Scored/direct inspections must use the complete package too, rather than retaining a broad team-level comparison.
     ...(q.deficitProtection?.enabled
       ? {

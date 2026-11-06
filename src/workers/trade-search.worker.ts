@@ -175,6 +175,8 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
     if (request.query.usefulness) stats.usefulnessExcluded = 0;
     if (request.query.deficitProtection?.enabled)
       stats.deficitProtectionExcluded = 0;
+    if (request.query.gradeImpacts?.length)
+      stats.gradeImpactExcluded = 0;
     // Every exact match receives the same authoritative evaluation as a manually entered trade.
     for (const match of matches) {
       const row = scoreTradeMatch(
@@ -182,11 +184,16 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
         request.query,
         match,
         request.lineupsRaw,
-      );
+      ) as SearchRow | null;
+      if (!row) {
+        if (request.query.gradeImpacts?.length)
+          stats.gradeImpactExcluded = (stats.gradeImpactExcluded ?? 0) + 1;
+        continue;
+      }
       evaluated.set(match.key, row);
       // Exact matches keep every enabled limit; nearby evaluated packages are a separate, explicitly explained list.
       const failures = discoveryFailures(row, request.query);
-      if (!failures.length) rows.push(row);
+      if (!failures.length && !row.nearMiss) rows.push(row);
       else {
         // Diagnose this safeguard independently from overall weekly gain and positional-deficit targeting.
         if (
@@ -214,12 +221,14 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
           stats.positionExcluded = (stats.positionExcluded ?? 0) + 1;
         if (request.query.weekly && !matchesWeekly(row, request.query.weekly))
           stats.weeklyExcluded = (stats.weeklyExcluded ?? 0) + 1;
+        if (row.nearMiss && request.query.gradeImpacts?.length)
+          stats.gradeImpactExcluded = (stats.gradeImpactExcluded ?? 0) + 1;
         // Drop warnings do not suppress exact matches or otherwise useful near misses.
         if (request.query.discovery?.nearMisses)
           retainSuggestion(
             suggestions,
             row,
-            failures,
+            [...failures, ...(row.nearMiss?.reasons ?? [])],
             request.query.discovery.ranking,
           );
       }
