@@ -694,7 +694,7 @@ export function evaluateChainLeg(
     },
     lineupsRaw,
     result,
-  )!;
+  );
   return {
     leg: {
       draft,

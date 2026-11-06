@@ -77,9 +77,9 @@ it("preserves off-state behavior, private metrics, snapshot identity and explici
     p.index,
     p.gem,
   ]);
-  const ordinary = scoreTradeMatch(m, q, match)!,
+  const ordinary = scoreTradeMatch(m, q, match),
     enabled = { ...q, manager: { version: 1 as const, profiles: {} } },
-    assessed = scoreTradeMatch(m, enabled, match)!;
+    assessed = scoreTradeMatch(m, enabled, match);
   expect(ordinary.manager).toBeUndefined();
   expect(managerFailures(undefined)).toEqual([]);
   expect(assessed.manager).toBeDefined();
@@ -193,7 +193,7 @@ it("reports manager reasons independently and groups every exact offer without d
     outgoing: 1,
     incoming: 2,
     difference: 1,
-  })!;
+  });
   const groups = tradeResultGroups(m, [
     row,
     { ...row, key: "two", give: ["1", "3"] },

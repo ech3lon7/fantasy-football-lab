@@ -1,6 +1,7 @@
 import { managerFailures } from "./manager-expectations";
 import { surfaceFailures } from "./surface-appeal";
 import { deficitProtectionFailures } from "./trade-safeguards";
+import { gradeImpactFailures } from "./chain-position-impact";
 import { cmpId, n, positions, sum } from "./contracts";
 import { irAssignments, lineup, teamsAssessment } from "./lineups";
 import { evaluateTrade } from "./trades";
@@ -126,6 +127,7 @@ export function discoveryFailures(
     ...deficitProtectionFailures(row.deficitProtection, q.deficitProtection),
     ...surfaceFailures(row, q.surface),
     ...managerFailures(row.manager, q.manager),
+    ...gradeImpactFailures(row.positionImpact, q.gradeImpacts),
   ];
   // Receiving a position alone is not an upgrade: its optimized scoring contribution must increase.
   if (

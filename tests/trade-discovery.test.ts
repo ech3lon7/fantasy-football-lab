@@ -50,7 +50,7 @@ it("preserves fixed search behavior and default ranking", async () => {
   const { m, q } = await sample();
   expect(findDiscoveryMatches(m, q)).toEqual(findTradeMatches(m, q));
   const rows = findDiscoveryMatches(m, q).matches.map((match) =>
-    scoreTradeMatch(m, q, match)!,
+    scoreTradeMatch(m, q, match),
   );
   expect([...rows].sort(compareDiscoveryRows)).toEqual(
     [...rows].sort(compareSearchRows),
@@ -87,7 +87,7 @@ it("combines singles and packages with flexible offers, targets and saved ranges
     expect(new Set(match.get.map((id) => m.byId.get(id)!.owner))).toEqual(
       new Set(["2"]),
     );
-    const row = scoreTradeMatch(m, q, match)!;
+    const row = scoreTradeMatch(m, q, match);
     expect(discoveryFailures(row, q)).toEqual([]);
     const draft = {
       teamA: "1",
@@ -138,7 +138,7 @@ it("validates incoming ranges and distinguishes exact sizes from near-miss adjus
     ).toContain("incoming-player range");
   const ranged = { ...q, discovery: { receive: { minimum: 1, maximum: 3 } } };
   expect(tradeSearchContext(m, ranged)).not.toBe(tradeSearchContext(m, q));
-  const base = scoreTradeMatch(m, q, findTradeMatches(m, q).matches[0])!;
+  const base = scoreTradeMatch(m, q, findTradeMatches(m, q).matches[0]);
   expect(discoveryFailures({ ...base, get: ["a", "b"] }, ranged)).toEqual([]);
   expect(
     discoveryFailures({ ...base, get: ["a", "b", "c", "d"] }, ranged),
@@ -155,7 +155,7 @@ it("validates incoming ranges and distinguishes exact sizes from near-miss adjus
   expect(found.some((r) => r.get.length === 1)).toBe(true);
   expect(found.some((r) => r.get.length === 2)).toBe(true);
   for (const match of found) {
-    const row = scoreTradeMatch(m, near, match)!;
+    const row = scoreTradeMatch(m, near, match);
     expect(
       discoveryFailures(row, near).some((r) => r.startsWith("Adjustment:")),
     ).toBe(match.get.length !== 2);
@@ -179,7 +179,7 @@ it("enumerates tradable subsets, protects unselected starters and round-trips sa
   for (const match of matches) {
     expect(match.give).not.toContain("1");
     expect(match.get).toEqual(["200"]);
-    const row = scoreTradeMatch(m, q, match)!;
+    const row = scoreTradeMatch(m, q, match);
     const draft = { teamA: "1", teamB: "2", give: match.give!, get: match.get };
     const expected = evaluateTrade(m, draft);
     expect(expected.valid).toBe(true);
@@ -195,7 +195,7 @@ it("enumerates tradable subsets, protects unselected starters and round-trips sa
   }
   expect(JSON.stringify(m.players)).toBe(before);
   // Drop detection remains available without turning a proposed drop into an exclusion.
-  const row = scoreTradeMatch(m, q, matches[0])!;
+  const row = scoreTradeMatch(m, q, matches[0]);
   expect(violatesProtection({ ...row, dropsA: ["1"] }, q)).toBe(true);
   expect(violatesProtection({ ...row, dropsA: ["100"] }, q)).toBe(false);
   expect(violatesProtection({ ...row, dropsA: [...row.get] }, q)).toBe(false);
@@ -240,7 +240,7 @@ it("warns about proposed drops outside the pool without excluding the trade", as
   const match = findDiscoveryMatches(m, q).matches.find(
     (candidate) => candidate.get.includes("200") && candidate.get.includes("2"),
   )!;
-  const row = scoreTradeMatch(m, q, match)!;
+  const row = scoreTradeMatch(m, q, match);
   expect(row.dropsA).toEqual(["100"]);
   expect(row.warnings).toContain(
     "Proposed drop: Main QB (outside your tradable pool).",
@@ -258,7 +258,7 @@ it("warns about proposed drops outside the pool without excluding the trade", as
     ...q,
     discovery: { flexible: { pool: ["101", "100"], minimum: 1, maximum: 1 } },
   };
-  expect(scoreTradeMatch(m, permitted, match)!.warnings).not.toContain(
+  expect(scoreTradeMatch(m, permitted, match).warnings).not.toContain(
     "Proposed drop: Main QB (outside your tradable pool).",
   );
 });
@@ -292,7 +292,7 @@ it("validates discovery and keeps target and ranking changes in search identity"
 // Ranking compares team point gains separately from value exchange, and missing scoring remains unavailable.
 it("ranks mutually beneficial packages and opponent gains with stable fallback ties", async () => {
   const { m, q } = await sample();
-  const base = scoreTradeMatch(m, q, findTradeMatches(m, q).matches[0])!;
+  const base = scoreTradeMatch(m, q, findTradeMatches(m, q).matches[0]);
   const win = { ...base, own: 2, other: 2, legal: true },
     loss = { ...base, own: 20, other: -1, legal: true };
   expect(compareDiscoveryRows(win, loss, "balanced")).toBeLessThan(0);
@@ -313,7 +313,7 @@ it("separates nearby package adjustments and retains five explained legal altern
   expect(found.matches.some((row) => row.get.length === 2)).toBe(true);
   const suggestions: SearchRow[] = [];
   for (const match of found.matches) {
-    const row = scoreTradeMatch(m, q, match)!,
+    const row = scoreTradeMatch(m, q, match),
       reasons = discoveryFailures(row, q);
     if (match.get.length !== 1)
       expect(reasons.join(" ")).toContain("Adjustment:");
@@ -341,7 +341,7 @@ it("separates nearby package adjustments and retains five explained legal altern
 // Opponent explanations expose gains, losses, original grades and value context without changing values or promising acceptance.
 it("explains recipient incentives on demand without mutating the snapshot", async () => {
   const { m, q } = await sample();
-  const row = scoreTradeMatch(m, q, findTradeMatches(m, q).matches[0])!;
+  const row = scoreTradeMatch(m, q, findTradeMatches(m, q).matches[0]);
   const before = JSON.stringify(m.players),
     details = opponentIncentive(m, q, row);
   expect(details.notes.join(" ")).toContain(
@@ -379,7 +379,7 @@ it("reports affected before/after grades and partial distinct upgrades without a
     incoming: 0,
     outgoing: 0,
     difference: 0,
-  })!;
+  });
   const snapshot = JSON.stringify(m.players),
     detail = opponentIncentive(m, q, row);
   expect(q.upgrade).toBeUndefined();
@@ -422,7 +422,7 @@ it("reports affected before/after grades and partial distinct upgrades without a
     m,
     { ...q, usefulness: { minimum: 0 } },
     row,
-  )!;
+  );
   expect(filtered.usefulness).toEqual([]);
 });
 
@@ -450,7 +450,7 @@ it("uses the advanced chain roster as the recipient grade baseline", async () =>
     incoming: 0,
     outgoing: 0,
     difference: 0,
-  })!;
+  });
   const detail = opponentIncentive(m, q, row);
   for (const p of detail.positions)
     expect(p.grade).toBe(

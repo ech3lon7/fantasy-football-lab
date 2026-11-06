@@ -51,8 +51,8 @@ it("automatic matching includes out-of-range returns without changing their scor
   expect(matches).toEqual(broad);
   expect(matches.length).toBeGreaterThan(strict.length);
   const outside = matches.find((r) => r.incoming !== r.outgoing)!;
-  const row = scoreTradeMatch(m, automatic, outside)!;
-  expect(row).toEqual(scoreTradeMatch(m, q, outside)!);
+  const row = scoreTradeMatch(m, automatic, outside);
+  expect(row).toEqual(scoreTradeMatch(m, q, outside));
   expect(discoveryFailures(row, q)).not.toEqual([]);
   expect(discoveryFailures(row, automatic)).toEqual([]);
   expect(tradeSearchContext(m, automatic)).not.toBe(tradeSearchContext(m, q));
@@ -93,7 +93,7 @@ it("goal presets configure transparent scoring criteria and preserve player choi
     "QB",
   );
   const rows = findDiscoveryMatches(m, positional).matches.map((match) =>
-    scoreTradeMatch(m, positional, match)!,
+    scoreTradeMatch(m, positional, match),
   );
   expect(rows.length).toBeGreaterThan(0);
   for (const row of rows) {
@@ -117,7 +117,7 @@ it("recovery previews are exact, preserve hard criteria and never mutate the ori
   expect(options.some((o) => o.changes.length > 1)).toBe(true);
   for (const option of options) {
     const rows = findDiscoveryMatches(m, option.query).matches.map((match) =>
-      scoreTradeMatch(m, option.query, match)!,
+      scoreTradeMatch(m, option.query, match),
     );
     expect(option.count).toBe(
       rows.filter((row) => !discoveryFailures(row, option.query).length).length,
@@ -143,7 +143,7 @@ it("round-trips guided searches and keeps legacy mode absent", async () => {
   const { d, m, q } = await sample();
   const automatic = guidedQuery(q, "explore");
   const match = findDiscoveryMatches(m, automatic).matches[0];
-  const row = scoreTradeMatch(m, automatic, match)!;
+  const row = scoreTradeMatch(m, automatic, match);
   const state = initialState(d);
   const saved = saveTrade(
     state,

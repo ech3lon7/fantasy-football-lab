@@ -2,6 +2,7 @@ import { browseTradeResults } from "../domain/trade-result-groups";
 import { managerFailures } from "../domain/manager-expectations";
 import { surfaceFailures } from "../domain/surface-appeal";
 import { deficitProtectionFailures } from "../domain/trade-safeguards";
+import { gradeImpactFailures } from "../domain/chain-position-impact";
 import { findTradeRecoveries } from "../domain/trade-guidance";
 import { evaluate, type Model } from "../domain/valuation";
 import { applyRosterScenario } from "../domain/roster-scenarios";
@@ -185,13 +186,6 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
         match,
         request.lineupsRaw,
       );
-      if (!row) {
-        if (request.query.gradeImpacts?.length)
-          stats.gradeImpactExcluded = (stats.gradeImpactExcluded ?? 0) + 1;
-        stats.scored++;
-        progress("Evaluating trades", stats);
-        continue;
-      }
       evaluated.set(match.key, row);
       // Exact matches keep every enabled limit; nearby evaluated packages are a separate, explicitly explained list.
       const failures = discoveryFailures(row, request.query);
@@ -223,7 +217,10 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
           stats.positionExcluded = (stats.positionExcluded ?? 0) + 1;
         if (request.query.weekly && !matchesWeekly(row, request.query.weekly))
           stats.weeklyExcluded = (stats.weeklyExcluded ?? 0) + 1;
-        if (row.nearMiss && request.query.gradeImpacts?.length)
+        if (
+          gradeImpactFailures(row.positionImpact, request.query.gradeImpacts)
+            .length
+        )
           stats.gradeImpactExcluded = (stats.gradeImpactExcluded ?? 0) + 1;
         // Drop warnings do not suppress exact matches or otherwise useful near misses.
         if (request.query.discovery?.nearMisses)

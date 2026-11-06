@@ -20,7 +20,7 @@ async function sample() {
     incoming: 1,
     outgoing: 1,
     difference: 0,
-  })!;
+  });
   const ids = m.players.filter((p) => p.owner === "2").map((p) => p.id);
   const packages = ids.map((id) => [id]);
   for (let i = 0; i < ids.length; i++)

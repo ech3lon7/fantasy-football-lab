@@ -104,7 +104,7 @@ it("forces a completed trade for both teams and supports a subsequent trade in e
     const match = findDiscoveryMatches(projected, q).matches[0];
     expect(match.get).toEqual([target]);
     expect(match.teamB).toBe(teamA === "1" ? "2" : "1");
-    expect(scoreTradeMatch(projected, q, match)!.own).not.toBeNull();
+    expect(scoreTradeMatch(projected, q, match).own).not.toBeNull();
   }
   for (const cursor of [0, 1]) {
     const replay = applyRosterScenario(m, { ...recipe, cursor }, plans);
@@ -277,8 +277,8 @@ it("uses bye-free hypothetical trade gains while live search keeps its scheduled
     discovery: { target: "200" },
   };
   const match = findDiscoveryMatches(projected, q).matches[0];
-  const hypothetical = scoreTradeMatch(projected, q, match)!;
-  const live = scoreTradeMatch(m, q, match)!;
+  const hypothetical = scoreTradeMatch(projected, q, match);
+  const live = scoreTradeMatch(m, q, match);
   expect(hypothetical.own).toBe(-10);
   expect(hypothetical.other).toBe(30);
   expect(live.own).toBe(-9);
@@ -301,7 +301,7 @@ it("uses bye-free hypothetical trade gains while live search keeps its scheduled
     "byes ignored",
   );
   // Returning to live leaves both original values and the bye schedule untouched.
-  expect(scoreTradeMatch(m, q, match)!.own).toBe(live.own);
+  expect(scoreTradeMatch(m, q, match).own).toBe(live.own);
   expect(
     projected.players.map((p) => [p.index, p.available, p.expected]),
   ).toEqual(m.players.map((p) => [p.index, p.available, p.expected]));
@@ -708,7 +708,7 @@ it("uses symmetric weekly optimized gains while retaining zero direct impact for
   expect(result.potentialA.expectedPerWeek).toBeCloseTo(
     (-20 * (m.weeks.length - 1)) / m.weeks.length,
   );
-  expect(scoreTradeMatch(m, q, match, raw)!.own).toBe(
+  expect(scoreTradeMatch(m, q, match, raw).own).toBe(
     result.potentialA.expectedPerWeek,
   );
   const details = searchLineupDetails(m, q, match, raw);
@@ -850,7 +850,7 @@ it("shares full hypothetical Expected-PPG totals across boards, trades, search a
     discovery: { target: "200" },
   };
   const match = findDiscoveryMatches(projected, q).matches[0];
-  const row = scoreTradeMatch(projected, q, match)!;
+  const row = scoreTradeMatch(projected, q, match);
   for (const [team, direct, potential, excluded] of [
     ["1", result.directA, result.potentialA, "102"],
     ["2", result.directB, result.potentialB, "103"],

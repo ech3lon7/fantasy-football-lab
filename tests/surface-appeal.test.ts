@@ -60,7 +60,7 @@ it.each(["best-available", "marked-starters"] as const)(
     const { m, q, match } = await sample();
     q.lineupBasis = basis;
     const source = JSON.stringify(m.players);
-    const row = scoreTradeMatch(m, q, match)!;
+    const row = scoreTradeMatch(m, q, match);
     expect(row.own).toBeCloseTo(12.5);
     expect(row.other).toBeCloseTo(-2.5);
     expect(row.surplus).toBe("FAIL");
@@ -81,7 +81,7 @@ it.each(["best-available", "marked-starters"] as const)(
         " ",
       ),
     ).toMatch(/value tests/);
-    const ordinary = scoreTradeMatch(m, { ...q, surface: undefined }, match)!;
+    const ordinary = scoreTradeMatch(m, { ...q, surface: undefined }, match);
     expect(ordinary.surface).toBeUndefined();
     expect(row.own).toBe(ordinary.own);
     expect(row.other).toBe(ordinary.other);
@@ -104,7 +104,7 @@ it("does not add unused bench points into apparent lineup gains", async () => {
 it("distinguishes missing projection/history from genuine zero and negative source points", async () => {
   const { m, q, match } = await sample();
   m.byId.get("2")!.weekly = null;
-  let row = scoreTradeMatch(m, q, match)!;
+  let row = scoreTradeMatch(m, q, match);
   expect(row.surface?.projection.gain).toBeNull();
   expect(row.surface?.projection.missing).toContain("2");
   expect(surfaceFailures(row, q.surface).join(" ")).toMatch(/unavailable/);
@@ -116,13 +116,13 @@ it("distinguishes missing projection/history from genuine zero and negative sour
   d.tables.ModelPlayers.find((p) => p.PlayerID === 2)!.Current_Week_Projection =
     0;
   const zero = evaluate(await fromTables(d.tables, d.settings), d.settings);
-  row = scoreTradeMatch(zero, q, match)!;
+  row = scoreTradeMatch(zero, q, match);
   expect(row.surface?.projection.before).toBe(15);
   expect(row.surface?.projection.gain).toBe(15);
   d.tables.ModelPlayers.find((p) => p.PlayerID === 2)!.Current_Week_Projection =
     -2;
   const negative = evaluate(await fromTables(d.tables, d.settings), d.settings);
-  row = scoreTradeMatch(negative, q, match)!;
+  row = scoreTradeMatch(negative, q, match);
   expect(row.surface?.projection.before).toBe(13);
   expect(row.surface?.projection.gain).toBe(17);
 });
@@ -130,7 +130,7 @@ it("distinguishes missing projection/history from genuine zero and negative sour
 // A zero minimum still means a genuine improvement, while positive numeric thresholds are inclusive and no rounding changes eligibility.
 it("enforces positive surface/model gains and threshold boundaries", async () => {
   const { m, q, match } = await sample();
-  const row = scoreTradeMatch(m, q, match)!;
+  const row = scoreTradeMatch(m, q, match);
   expect(surfaceFailures(row, { ...q.surface!, minimum: 3 })).toEqual([]);
   expect(surfaceFailures(row, { ...q.surface!, minimum: 3.001 }).length).toBe(
     1,
@@ -181,7 +181,7 @@ it("separates bye-neutral averages from the imported week's real projection avai
   const match = findDiscoveryMatches(m, q).matches.find((r) =>
     r.get.includes("2"),
   )!;
-  const row = scoreTradeMatch(m, q, match)!;
+  const row = scoreTradeMatch(m, q, match);
   expect(row.surface?.average.gain).toBe(8);
   expect(row.surface?.projection.after).toBe(15);
   expect(row.surface?.projection.gain).toBe(-12);
@@ -197,7 +197,7 @@ it("retains historical calculations and removes retired saved-query restrictions
   expect(preset.weekly?.other).toBeUndefined();
   expect(preset.discovery?.ranking).toBe("own");
   expect(preset.indexMode).toBe("automatic");
-  const row = scoreTradeMatch(m, q, match)!;
+  const row = scoreTradeMatch(m, q, match);
   const raw = saveTrade(initialState(d), m, draft, summaryFromSearch(row), q);
   expect(readSavedTrades(raw).trades[0].query?.surface).toBeUndefined();
   const invalid: SurfaceFilter = { ...q.surface!, minimum: NaN };

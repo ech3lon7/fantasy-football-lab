@@ -196,3 +196,12 @@ export function evaluateGradeImpacts(
     failures,
   };
 }
+
+// Convert grade impact evaluation results into formatted failure strings for diagnostic reporting.
+export function gradeImpactFailures(
+  impact?: ChainPositionImpact,
+  rules?: PositionalGradeImpactRule[],
+): string[] {
+  if (!rules || rules.length === 0 || !impact) return [];
+  return evaluateGradeImpacts(impact, rules).failures;
+}

@@ -99,7 +99,7 @@ it("requires net positional improvement, not total team gain or a weaker bench c
     m,
     { ...q, give: ["14", "3"] },
     { ...match, give: ["14", "3"] },
-  )!;
+  );
   expect(row.other).toBeGreaterThan(2);
   expect(row.deficitProtection?.[0]).toMatchObject({
     position: "WR",
@@ -138,7 +138,7 @@ it.each(["QB", "RB", "TE"] as const)(
 // The inclusive +2 boundary passes without rounding; disabled protection preserves the pre-existing result.
 it("accepts the exact adjustable boundary and permits disabling the safeguard", async () => {
   const { m, q, match } = await sample(23);
-  const row = scoreTradeMatch(m, q, match)!;
+  const row = scoreTradeMatch(m, q, match);
   expect(row.deficitProtection?.[0].gain).toBeCloseTo(2, 10);
   expect(discoveryFailures(row, q)).toEqual([]);
   const stricter = {
@@ -146,14 +146,14 @@ it("accepts the exact adjustable boundary and permits disabling the safeguard", 
     deficitProtection: { ...defaultDeficitProtection, minimum: 2.01 },
   };
   expect(
-    discoveryFailures(scoreTradeMatch(m, stricter, match)!, stricter),
+    discoveryFailures(scoreTradeMatch(m, stricter, match), stricter),
   ).not.toEqual([]);
   const off = {
     ...q,
     deficitProtection: { ...defaultDeficitProtection, enabled: false },
   };
-  expect(scoreTradeMatch(m, off, match)!.deficitProtection).toBeUndefined();
-  expect(discoveryFailures(scoreTradeMatch(m, off, match)!, off)).toEqual([]);
+  expect(scoreTradeMatch(m, off, match).deficitProtection).toBeUndefined();
+  expect(discoveryFailures(scoreTradeMatch(m, off, match), off)).toEqual([]);
   expect(tradeSearchContext(m, q)).not.toBe(tradeSearchContext(m, off));
 });
 
@@ -267,7 +267,7 @@ it("enforces each chain leg and reports broader, explicit evaluation limits", as
 // Saved-trade restoration and guided presets preserve the exact safeguard rather than dropping or weakening it.
 it("persists safeguard settings and rejects unavailable evidence or invalid inputs", async () => {
   const { m, q, match, draft } = await sample(23);
-  const row = scoreTradeMatch(m, q, match)!;
+  const row = scoreTradeMatch(m, q, match);
   const saved = saveTrade(
     initialState(m.dataset),
     m,

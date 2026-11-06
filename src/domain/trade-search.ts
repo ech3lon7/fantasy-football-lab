@@ -54,7 +54,6 @@ import {
 } from "./trade-safeguards";
 import {
   chainPositionImpact,
-  evaluateGradeImpacts,
   type ChainPositionImpact,
   type PositionalGradeImpactRule,
 } from "./chain-position-impact";
@@ -1249,7 +1248,7 @@ export function scoreTradeMatch(
   lineupsRaw?: string,
   // Chain search can reuse its already evaluated trade without repeating legal-roster and weekly calculations.
   evaluated?: TradeResult,
-): SearchRow | null {
+): SearchRow {
   // Use the chosen subset rather than the draft/pool for every authoritative trade calculation.
   if (match.give) q = { ...q, give: [...match.give] };
   const r =
@@ -1303,11 +1302,12 @@ export function scoreTradeMatch(
       )
     : [];
 
-  // Positional grade impact rules filter candidate trades based on pre/post roster grade changes.
+  // Positional grade impact rules track roster before/after grades and signed step deltas per position.
   let positionImpact: ChainPositionImpact | undefined;
-  let nearMissGradeReasons: string[] = [];
   if (q.gradeImpacts && q.gradeImpacts.length > 0) {
-    const targetPositions = q.gradeImpacts.map((rule) => rule.position);
+    const targetPositions = [
+      ...new Set(q.gradeImpacts.map((rule) => rule.position)),
+    ];
     positionImpact = chainPositionImpact(
       m,
       {
@@ -1319,32 +1319,11 @@ export function scoreTradeMatch(
       r,
       targetPositions,
     );
-    const evalResult = evaluateGradeImpacts(positionImpact, q.gradeImpacts);
-    if (!evalResult.passes) {
-      if (q.discovery?.nearMisses) {
-        nearMissGradeReasons = evalResult.failures;
-      } else {
-        return null;
-      }
-    }
   }
 
   return {
     ...match,
     ...(positionImpact ? { positionImpact } : {}),
-    ...(nearMissGradeReasons.length > 0
-      ? {
-          nearMiss: {
-            reasons: [
-              ...((match as SearchRow).nearMiss?.reasons ?? []),
-              ...nearMissGradeReasons,
-            ],
-            distance:
-              ((match as SearchRow).nearMiss?.distance ?? 0) +
-              nearMissGradeReasons.length,
-          },
-        }
-      : {}),
     // Scored/direct inspections must use the complete package too, rather than retaining a broad team-level comparison.
     ...(q.deficitProtection?.enabled
       ? {

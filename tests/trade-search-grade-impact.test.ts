@@ -7,6 +7,7 @@ import {
   type SearchMatch,
   type TradeSearchQuery,
 } from "../src/domain/trade-search";
+import { discoveryFailures } from "../src/domain/trade-discovery";
 import type { PositionalGradeImpactRule } from "../src/domain/chain-position-impact";
 
 describe("Trade search positional grade impact integration", () => {
@@ -49,13 +50,15 @@ describe("Trade search positional grade impact integration", () => {
 
     const row = scoreTradeMatch(m, queryWithUpgrade, match);
 
-    // Trade should pass and return row
-    expect(row).not.toBeNull();
-    // positionImpact must be populated
-    expect(row!.positionImpact).toBeDefined();
-    const wrImpact = row!.positionImpact!.own.find((p) => p.position === "WR");
+    // positionImpact must be populated on the scored row
+    expect(row.positionImpact).toBeDefined();
+    const wrImpact = row.positionImpact!.own.find((p) => p.position === "WR");
     expect(wrImpact).toBeDefined();
     expect(wrImpact!.stepDelta).toBeGreaterThanOrEqual(2);
+
+    // Candidate trade satisfies the grade impact rule
+    const failures = discoveryFailures(row, queryWithUpgrade);
+    expect(failures).toEqual([]);
   });
 
   it("rejects candidate trades that do not achieve the specified upgrade target", async () => {
@@ -89,21 +92,12 @@ describe("Trade search positional grade impact integration", () => {
       gradeImpacts: [wrUpgradeRule],
     };
 
-    // When nearMisses is not enabled, scoreTradeMatch should return null for failed candidates
-    const rejectedRow = scoreTradeMatch(m, queryWithUpgrade, matchQb);
-    expect(rejectedRow).toBeNull();
+    const row = scoreTradeMatch(m, queryWithUpgrade, matchQb);
+    expect(row.positionImpact).toBeDefined();
 
-    // When nearMisses is enabled, candidate is retained with nearMiss explanation
-    const queryWithNearMisses: TradeSearchQuery = {
-      ...queryWithUpgrade,
-      discovery: { nearMisses: true },
-    };
-    const nearMissRow = scoreTradeMatch(m, queryWithNearMisses, matchQb);
-    expect(nearMissRow).not.toBeNull();
-    expect(nearMissRow!.nearMiss).toBeDefined();
-    expect(nearMissRow!.nearMiss!.reasons.some((r) => r.includes("WR"))).toBe(true);
-    expect(nearMissRow!.nearMiss!.distance).toBeGreaterThanOrEqual(1);
-    expect(nearMissRow!.positionImpact).toBeDefined();
+    // discoveryFailures reports the unmet WR upgrade requirement
+    const failures = discoveryFailures(row, queryWithUpgrade);
+    expect(failures.some((r) => r.includes("WR"))).toBe(true);
   });
 
   it("allows trades where drop budget position is untouched (0 >= -1) but rejects trades exceeding budget", async () => {
@@ -138,10 +132,10 @@ describe("Trade search positional grade impact integration", () => {
     };
 
     const passedRow = scoreTradeMatch(m, queryRbBudget, matchUntouched);
-    expect(passedRow).not.toBeNull();
-    const rbImpact = passedRow!.positionImpact!.own.find((p) => p.position === "RB");
+    const rbImpact = passedRow.positionImpact!.own.find((p) => p.position === "RB");
     expect(rbImpact).toBeDefined();
     expect(rbImpact!.stepDelta).toBe(0);
+    expect(discoveryFailures(passedRow, queryRbBudget)).toEqual([]);
 
     // Trade 2: Team 1 gives their only starting RB (1) for WR 300.
     // RB drops dramatically (> 1 step drop, so stepDelta < -1).
@@ -161,7 +155,8 @@ describe("Trade search positional grade impact integration", () => {
     };
 
     const failedRow = scoreTradeMatch(m, queryGiveRb, matchDropRb);
-    expect(failedRow).toBeNull();
+    const failures = discoveryFailures(failedRow, queryGiveRb);
+    expect(failures.some((r) => r.includes("RB"))).toBe(true);
   });
 
   it("leaves search behavior completely unchanged when gradeImpacts is absent or empty", async () => {
@@ -189,17 +184,20 @@ describe("Trade search positional grade impact integration", () => {
     const rowWithoutGradeImpacts = scoreTradeMatch(m, baseQuery, match);
     const rowWithEmptyGradeImpacts = scoreTradeMatch(m, { ...baseQuery, gradeImpacts: [] }, match);
 
-    expect(rowWithoutGradeImpacts).not.toBeNull();
-    expect(rowWithEmptyGradeImpacts).not.toBeNull();
-    expect(rowWithoutGradeImpacts!.grade).toEqual(rowWithEmptyGradeImpacts!.grade);
-    expect(rowWithoutGradeImpacts!.own).toEqual(rowWithEmptyGradeImpacts!.own);
-    expect(rowWithoutGradeImpacts!.other).toEqual(rowWithEmptyGradeImpacts!.other);
+    expect(rowWithoutGradeImpacts.positionImpact).toBeUndefined();
+    expect(rowWithEmptyGradeImpacts.positionImpact).toBeUndefined();
+    expect(rowWithoutGradeImpacts.grade).toEqual(rowWithEmptyGradeImpacts.grade);
+    expect(rowWithoutGradeImpacts.own).toEqual(rowWithEmptyGradeImpacts.own);
+    expect(rowWithoutGradeImpacts.other).toEqual(rowWithEmptyGradeImpacts.other);
+    expect(discoveryFailures(rowWithoutGradeImpacts, baseQuery)).toEqual(
+      discoveryFailures(rowWithEmptyGradeImpacts, { ...baseQuery, gradeImpacts: [] }),
+    );
   });
 
   it("filters candidate trades to only those satisfying all gradeImpacts rules", async () => {
     const m = await setupModel();
 
-    // We have two candidate matches: one gets WR 300, one gets QB 200
+    // Two candidate matches: one gets WR 300, one gets QB 200
     const matchWr: SearchMatch = {
       key: "match-wr",
       teamB: "2",
@@ -234,11 +232,67 @@ describe("Trade search positional grade impact integration", () => {
     const candidates = [matchWr, matchQb];
     const scoredRows = candidates
       .map((c) => scoreTradeMatch(m, query, c))
-      .filter((r): r is NonNullable<typeof r> => r !== null);
+      .filter((r) => discoveryFailures(r, query).length === 0);
 
     // Only the WR trade satisfies the WR upgrade rule
     expect(scoredRows).toHaveLength(1);
     expect(scoredRows[0].get).toEqual(["300"]);
     expect(scoredRows[0].positionImpact).toBeDefined();
+  });
+
+  it("evaluates side: 'other' rules to filter candidates based on opponent positional grade impact", async () => {
+    const m = await setupModel();
+
+    // Trade 1: Team 1 gives QB 101 (Bench QB, 30 PPG) to Team 2 for WR 300.
+    // Team 2 upgrades their QB position.
+    const matchGiveQb: SearchMatch = {
+      key: "trade-give-qb",
+      teamB: "2",
+      give: ["101"],
+      get: ["300"],
+      incoming: m.byId.get("300")!.index!,
+      outgoing: m.byId.get("101")!.index!,
+      difference: m.byId.get("300")!.index! - m.byId.get("101")!.index!,
+    };
+
+    // Scenario A: Opponent upgrade requirement (Team 2 must upgrade QB by at least 1 step)
+    const opponentUpgradeQuery: TradeSearchQuery = {
+      teamA: "1",
+      give: ["101"],
+      count: 1,
+      below: 1000,
+      above: 1000,
+      indexMode: "automatic",
+      gradeImpacts: [
+        { id: "opp-qb-upgrade", side: "other", position: "QB", steps: 1 },
+      ],
+    };
+
+    // Trade giving QB 101 upgrades Team 2's QB
+    const rowUpgrade = scoreTradeMatch(m, opponentUpgradeQuery, matchGiveQb);
+    expect(rowUpgrade.positionImpact).toBeDefined();
+    const oppQbImpact = rowUpgrade.positionImpact!.other.find((p) => p.position === "QB");
+    expect(oppQbImpact).toBeDefined();
+    expect(oppQbImpact!.stepDelta).toBeGreaterThanOrEqual(1);
+    expect(discoveryFailures(rowUpgrade, opponentUpgradeQuery)).toEqual([]);
+
+    // Trade giving RB 1 does not upgrade Team 2's QB (stepDelta is 0 < 1)
+    const matchGiveRb: SearchMatch = {
+      key: "trade-give-rb",
+      teamB: "2",
+      give: ["1"],
+      get: ["300"],
+      incoming: m.byId.get("300")!.index!,
+      outgoing: m.byId.get("1")!.index!,
+      difference: m.byId.get("300")!.index! - m.byId.get("1")!.index!,
+    };
+    const queryGiveRb: TradeSearchQuery = {
+      ...opponentUpgradeQuery,
+      give: ["1"],
+    };
+    const rowNoOpponentUpgrade = scoreTradeMatch(m, queryGiveRb, matchGiveRb);
+    expect(rowNoOpponentUpgrade.positionImpact).toBeDefined();
+    const failures = discoveryFailures(rowNoOpponentUpgrade, queryGiveRb);
+    expect(failures.some((r) => r.includes("QB") && r.includes("Their"))).toBe(true);
   });
 });

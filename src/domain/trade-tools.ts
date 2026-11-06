@@ -156,10 +156,6 @@ export function diagnoseTradeCandidate(
       difference: (incoming ?? 0) - (outgoing ?? 0),
     };
     const scored = scoreTradeMatch(m, child, match, lineupsRaw);
-    if (!scored) {
-      reasons.push("Positional grade impact criteria are not met.");
-      return { outgoing, incoming, reasons: [...new Set(reasons)] };
-    }
     reasons.push(...discoveryFailures(scored, q));
     return {
       outgoing,
@@ -192,12 +188,12 @@ export function diagnoseTradeCandidate(
         const alternate = scoreTradeMatch(m, alternateQuery, match, lineupsRaw);
         return {
           basis: alternateQuery.lineupBasis,
-          own: alternate?.own ?? null,
-          other: alternate?.other ?? null,
-          ownBefore: alternate?.ownBefore ?? null,
-          ownAfter: alternate?.ownAfter ?? null,
-          otherBefore: alternate?.otherBefore ?? null,
-          otherAfter: alternate?.otherAfter ?? null,
+          own: alternate.own,
+          other: alternate.other,
+          ownBefore: alternate.ownBefore,
+          ownAfter: alternate.ownAfter,
+          otherBefore: alternate.otherBefore,
+          otherAfter: alternate.otherAfter,
         };
       })(),
       basisLabel: lineupBasisLabel(q.lineupBasis),
