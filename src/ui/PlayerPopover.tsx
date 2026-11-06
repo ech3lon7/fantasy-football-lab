@@ -16,6 +16,8 @@ import { X } from "lucide-react";
 import { str, num } from "../domain/contracts";
 import type { Model, Player } from "../domain/valuation";
 import { marketStatus, playedHistory } from "../domain/opportunity";
+// Calculate dual moving average momentum trends for fast breakout vs anchor baseline detection
+import { calculatePlayerTrend } from "../domain/player-trend";
 import {
   extendedColumns,
   fmt,
@@ -270,6 +272,11 @@ function PlayerInspection({ p, m }: { p: Player; m: Model }) {
             ?.TeamName,
         ) || "Unknown team";
   const scores = playedHistory(m.dataset).get(p.id) ?? [];
+  // Evaluate dual moving average momentum trend (2-game Fast WMA vs 5-game Slow WMA)
+  const trendSummary = useMemo(
+    () => calculatePlayerTrend(scores, p.pos, p.projected),
+    [scores, p.pos, p.projected],
+  );
   const stale =
     !m.dataset.sourceUTC ||
     Date.now() - Date.parse(m.dataset.sourceUTC) > 86400000;
@@ -320,6 +327,16 @@ function PlayerInspection({ p, m }: { p: Player; m: Model }) {
       <NextRefreshScenarios m={m} p={p} />
       <div className="player-popover-signals">
         <Trend p={p} />
+        {/* Compact stock-style dual moving average trend pill */}
+        {trendSummary.latest && (
+          <span
+            className={`stock-trend-pill ${trendSummary.latest.tone}`}
+            title={trendSummary.latest.label}
+            aria-label={`Stock momentum trend: ${trendSummary.latest.label}`}
+          >
+            {trendSummary.latest.badge}
+          </span>
+        )}
         <PlayerSignals p={p} />
         <Signal text={p.regression} />
       </div>

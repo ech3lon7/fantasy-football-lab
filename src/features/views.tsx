@@ -30,6 +30,9 @@ import {
   type RosterSaveSlot,
 } from "../domain/roster-scenarios";
 import { chainPositionImpact } from "../domain/chain-position-impact";
+// Performance momentum and dual moving average stock trends
+import { calculatePlayerTrend } from "../domain/player-trend";
+import { PlayerStockChart } from "../ui/PlayerStockChart";
 import { Bookmark } from "lucide-react";
 // Prospective tracking is an isolated read-only audit, not another input to the valuation model.
 import { GemTracking } from "./GemTracking";
@@ -694,6 +697,8 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
   const scores = m.dataset.tables.ModelHistory.filter(
     (r) => str(r.PlayerID) === id && r.HistoryStatus === "Valid",
   ).sort((a, b) => num(a.Week) - num(b.Week));
+  // Compute dual moving average trend (2-game Fast WMA vs 5-game Slow WMA)
+  const trend = calculatePlayerTrend(scores, p.pos, p.projected);
   const pool = m.pools.find((x) => x.position === p.pos)!;
   return (
     <>
@@ -715,6 +720,16 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
         <Signal text={p.injury} />
         <PlayerSignals p={p} />
         <Trend p={p} />
+        {/* Compact stock-style dual moving average trend pill */}
+        {trend.latest && (
+          <span
+            className={`stock-trend-pill ${trend.latest.tone}`}
+            title={trend.latest.label}
+            aria-label={`Stock momentum trend: ${trend.latest.label}`}
+          >
+            {trend.latest.badge}
+          </span>
+        )}
       </div>
       {/* Explain only active analytical tags using the same domain evidence shown in player popovers. */}
       <GemEvidence p={p} m={m} />
@@ -743,6 +758,17 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
         <Metric label="Value PPG" value={fmt(p.value)} />
         <Metric label="Surplus index" value={fmt(p.index)} />
       </div>
+      {/* Interactive stock trend chart displaying Fast MA vs Slow MA with hollow opportunity bars */}
+      <Panel
+        title="Performance momentum & moving averages"
+        note="Dual moving averages: 2-game Fast WMA (reaction) vs 5-game Slow WMA (grounded baseline). Hollow bars display weekly opportunities (carries + targets or QB attempts)."
+      >
+        <PlayerStockChart
+          trend={trend}
+          playerName={p.name}
+          position={p.pos}
+        />
+      </Panel>
       <Panel title="Why this value?" note={`${p.status}; ${p.baselineStatus}`}>
         <p>
           Expected PPG blends observed scoring with ESPN’s season forecast.
