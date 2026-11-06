@@ -161,8 +161,8 @@ it("excludes a scoring-positive chain at an inclusive recipient grade-drop bound
 // Side selection, unavailable evidence and disabled parity preserve the distinction between grades and EPPG.
 it("keeps own, recipient, both and unavailable grade limits separate", () => {
   const value = {
-    own: [{ position: "WR", before: "B", after: "C", drop: 3 }],
-    other: [{ position: "RB", before: "A", after: "B+", drop: 2 }],
+    own: [{ position: "WR", before: "B", after: "C", drop: 3, stepDelta: -3 }],
+    other: [{ position: "RB", before: "A", after: "B+", drop: 2, stepDelta: -2 }],
   };
   expect(chainGradeFailures(value)).toEqual([]);
   expect(chainGradeFailures(value, { side: "other", maximumDrop: 2 })).toEqual(
@@ -178,7 +178,15 @@ it("keeps own, recipient, both and unavailable grade limits separate", () => {
     chainGradeFailures(
       {
         own: [],
-        other: [{ position: "RB", before: "n.a.", after: "B", drop: null }],
+        other: [
+          {
+            position: "RB",
+            before: "n.a.",
+            after: "B",
+            drop: null,
+            stepDelta: null,
+          },
+        ],
       },
       { side: "other", maximumDrop: 12 },
     )[0],

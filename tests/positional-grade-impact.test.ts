@@ -1,10 +1,16 @@
 import { describe, it, expect } from "vitest";
 import {
+  chainPositionImpact,
   evaluateGradeImpacts,
   gradeStepDelta,
   type ChainPositionImpact,
   type PositionalGradeImpactRule,
 } from "../src/domain/chain-position-impact";
+import { positionGradeScale } from "../src/domain/trade-safeguards";
+import { starterFixture } from "./fixtures";
+import { evaluate } from "../src/domain/valuation";
+import { withoutByeWeeks } from "../src/domain/lineups";
+import { evaluateTrade } from "../src/domain/trades";
 
 describe("positional grade impact domain engine", () => {
   it("calculates signed grade step delta between grades", () => {
@@ -286,5 +292,99 @@ describe("positional grade impact domain engine", () => {
       passes: true,
       failures: [],
     });
+  });
+
+  it("evaluates multiple simultaneous rules across own and other teams (conjunction)", () => {
+    const rules: PositionalGradeImpactRule[] = [
+      { id: "1", side: "own", position: "WR", steps: 2 },
+      { id: "2", side: "own", position: "FLEX", steps: -2 },
+      { id: "3", side: "other", position: "WR", steps: -2 },
+      { id: "4", side: "other", position: "FLEX", steps: 2 },
+    ];
+
+    // All rules pass:
+    // own WR: +2 (>= 2)
+    // own FLEX: -1 (>= -2)
+    // other WR: -3 (<= -2)
+    // other FLEX: +2 (>= 2)
+    const passingImpact: ChainPositionImpact = {
+      own: [
+        { position: "WR", before: "C+", after: "B", drop: 0, stepDelta: 2 },
+        { position: "FLEX", before: "B", after: "B−", drop: 1, stepDelta: -1 },
+      ],
+      other: [
+        { position: "WR", before: "B+", after: "C", drop: 4, stepDelta: -3 },
+        { position: "FLEX", before: "C", after: "C+", drop: 0, stepDelta: 2 },
+      ],
+    };
+    const allPass = evaluateGradeImpacts(passingImpact, rules);
+    expect(allPass.passes).toBe(true);
+    expect(allPass.failures).toEqual([]);
+
+    // One rule fails: own WR only +1 (< 2)
+    const oneFailImpact: ChainPositionImpact = {
+      own: [
+        { position: "WR", before: "C+", after: "B−", drop: 0, stepDelta: 1 },
+        { position: "FLEX", before: "B", after: "B−", drop: 1, stepDelta: -1 },
+      ],
+      other: passingImpact.other,
+    };
+    const oneFail = evaluateGradeImpacts(oneFailImpact, rules);
+    expect(oneFail.passes).toBe(false);
+    expect(oneFail.failures).toHaveLength(1);
+    expect(oneFail.failures[0]).toContain("Your WR");
+
+    // Multiple rules fail: own WR +1 (< 2) and other WR -1 (> -2, not depleted enough)
+    const multiFailImpact: ChainPositionImpact = {
+      own: oneFailImpact.own,
+      other: [
+        { position: "WR", before: "B+", after: "B", drop: 1, stepDelta: -1 },
+        { position: "FLEX", before: "C", after: "C+", drop: 0, stepDelta: 2 },
+      ],
+    };
+    const multiFail = evaluateGradeImpacts(multiFailImpact, rules);
+    expect(multiFail.passes).toBe(false);
+    expect(multiFail.failures).toHaveLength(2);
+    expect(multiFail.failures.some((f) => f.includes("Your WR"))).toBe(true);
+    expect(multiFail.failures.some((f) => f.includes("Their WR"))).toBe(true);
+  });
+
+  it("evaluates real trade positional impact, stepDelta, and targetPositions for untouched positions", async () => {
+    const d = await starterFixture();
+    const m = withoutByeWeeks(evaluate(d, d.settings));
+    const draft = { teamA: "1", teamB: "2", give: ["101"], get: ["200"] };
+    const result = evaluateTrade(m, draft, false);
+    if (!result.valid) throw Error(result.errors.join());
+
+    // Evaluate without targetPositions: only affected positions are assessed
+    const defaultImpact = chainPositionImpact(m, draft, result);
+    expect(defaultImpact.own.length).toBeGreaterThan(0);
+    expect(defaultImpact.other.length).toBeGreaterThan(0);
+    for (const change of [...defaultImpact.own, ...defaultImpact.other]) {
+      expect(typeof change.position).toBe("string");
+      if (change.stepDelta !== null) {
+        const first = positionGradeScale.findIndex((g) => g === change.before);
+        const last = positionGradeScale.findIndex((g) => g === change.after);
+        expect(change.stepDelta).toBe(last - first);
+      }
+    }
+
+    // Now include an untouched position (RB) via targetPositions
+    const impactWithTarget = chainPositionImpact(m, draft, result, ["RB"]);
+    const ownRb = impactWithTarget.own.find((p) => p.position === "RB");
+    expect(ownRb).toBeDefined();
+    expect(ownRb!.before).toBe(ownRb!.after);
+    expect(ownRb!.stepDelta).toBe(0);
+
+    // A drop budget rule on the untouched position must pass without "grade unavailable"
+    const rbDropBudget: PositionalGradeImpactRule = {
+      id: "rb-budget",
+      side: "own",
+      position: "RB",
+      steps: -1,
+    };
+    const budgetEval = evaluateGradeImpacts(impactWithTarget, [rbDropBudget]);
+    expect(budgetEval.passes).toBe(true);
+    expect(budgetEval.failures).toEqual([]);
   });
 });

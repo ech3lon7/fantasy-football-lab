@@ -24,7 +24,7 @@ export interface ChainPositionChange {
   before: string;
   after: string;
   drop: number | null;
-  stepDelta?: number | null; // Signed: positive = upgrade, negative = downgrade
+  stepDelta: number | null; // Signed: positive = upgrade, negative = downgrade
 }
 
 export interface ChainPositionImpact {
@@ -45,6 +45,7 @@ export function chainPositionImpact(
   m: Model,
   draft: Draft,
   result: TradeResult,
+  targetPositions?: Iterable<string>,
 ): ChainPositionImpact {
   if (!result.valid || !result.legality) return { own: [], other: [] };
   const own = new Set(result.legalA),
@@ -70,11 +71,12 @@ export function chainPositionImpact(
       players,
       byId: new Map(players.map((p) => [p.id, p])),
     });
-  const affected = new Set(
-    [...draft.give, ...draft.get, ...result.dropsA, ...result.dropsB].map(
+  const affected = new Set([
+    ...[...draft.give, ...draft.get, ...result.dropsA, ...result.dropsB].map(
       (id) => m.byId.get(id)!.pos,
     ),
-  );
+    ...(targetPositions ?? []),
+  ]);
   const changes = (team: string) =>
     [...positions, "FLEX"]
       .filter(
