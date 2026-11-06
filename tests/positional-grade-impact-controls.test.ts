@@ -250,4 +250,71 @@ describe("PositionalGradeImpactControls component", () => {
     expect(html).toContain('aria-label="Trade leg 1 grade goal 1 target"');
     expect(html).toContain('aria-label="Trade leg 1 grade goal 1 remove"');
   });
+
+  it("wraps header label with FilterHelp tooltip", () => {
+    const onChange = vi.fn();
+    const html = renderToStaticMarkup(
+      React.createElement(PositionalGradeImpactControls, {
+        rules: [],
+        onChange,
+      })
+    );
+
+    expect(html).toContain("filter-help-control");
+    expect(html).toContain("Positional Grade Goals");
+  });
+
+  it("defensively renders rule position in select options if not in availablePositions", () => {
+    const rules: PositionalGradeImpactRule[] = [
+      { id: "r1", side: "own", position: "CUSTOM_POS", steps: 2 },
+    ];
+    const onChange = vi.fn();
+    const html = renderToStaticMarkup(
+      React.createElement(PositionalGradeImpactControls, {
+        rules,
+        onChange,
+        positions: ["RB", "WR"],
+      })
+    );
+
+    expect(html).toMatch(/<option[^>]*value="CUSTOM_POS"[^>]*>CUSTOM_POS<\/option>/);
+    expect(html).toMatch(/<option[^>]*value="RB"[^>]*>RB<\/option>/);
+    expect(html).toMatch(/<option[^>]*value="WR"[^>]*>WR<\/option>/);
+  });
+
+  it("selects next untargeted position when adding a rule", () => {
+    const rules: PositionalGradeImpactRule[] = [
+      { id: "r1", side: "own", position: "QB", steps: 2 },
+    ];
+    const onChange = vi.fn();
+    const vdom = PositionalGradeImpactControls({
+      rules,
+      onChange,
+      positions: ["QB", "RB", "WR"],
+    });
+
+    const findButton = (node: any): any => {
+      if (!node || typeof node !== "object") return null;
+      if (node.props?.className?.includes("grade-impact-add-btn")) return node;
+      if (Array.isArray(node.props?.children)) {
+        for (const child of node.props.children) {
+          const res = findButton(child);
+          if (res) return res;
+        }
+      } else if (node.props?.children) {
+        return findButton(node.props.children);
+      }
+      return null;
+    };
+
+    const addBtn = findButton(vdom);
+    addBtn.props.onClick();
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const updated = onChange.mock.calls[0][0];
+    expect(updated).toHaveLength(2);
+    // Since 'QB' was already targeted by 'own', next position should be 'RB'
+    expect(updated[1].position).toBe("RB");
+  });
 });
+

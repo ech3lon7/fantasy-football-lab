@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { FilterHelp } from "../ui/FilterHelp";
 import type {
   PositionalGradeImpactRule,
   GradeImpactSide,
@@ -6,6 +7,13 @@ import type {
 
 // Default position list if not explicitly provided
 const DEFAULT_POSITIONS: string[] = ["QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"];
+
+// Generate a unique ID for new rules using crypto.randomUUID when available
+function generateRuleId(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `rule-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
 
 // Step dropdown options for the user's team (upgrades and drop limits)
 const OWN_STEP_OPTIONS: { value: number; label: string }[] = [
@@ -57,18 +65,19 @@ export function PositionalGradeImpactControls({
     positions && positions.length > 0 ? positions : DEFAULT_POSITIONS;
   const activeRules = rules ?? [];
 
-  // Generate a unique ID for new rules using crypto.randomUUID when available
-  const generateRuleId = (): string =>
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `rule-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-
-  // Append a new default positional goal rule
+  // Append a new default positional goal rule targeting next available position
   const handleAddRule = () => {
+    const targetedByOwn = new Set(
+      activeRules.filter((r) => r.side === "own").map((r) => r.position),
+    );
+    const nextPosition =
+      availablePositions.find((p) => !targetedByOwn.has(p)) ||
+      availablePositions[0] ||
+      "WR";
     const newRule: PositionalGradeImpactRule = {
       id: generateRuleId(),
       side: "own",
-      position: availablePositions[0] || "WR",
+      position: nextPosition,
       steps: 2,
     };
     onChange([...activeRules, newRule]);
@@ -92,7 +101,12 @@ export function PositionalGradeImpactControls({
   return (
     <div className="grade-impact-container">
       <div className="grade-impact-header">
-        <span>Positional Grade Goals</span>
+        <FilterHelp
+          label="Positional Grade Goals"
+          help="Require specific grade improvements, set maximum drop limits on your roster, or enforce opponent positional depletion targets across candidate trades."
+        >
+          <span>Positional Grade Goals</span>
+        </FilterHelp>
       </div>
 
       {activeRules.length === 0 ? (
@@ -102,6 +116,9 @@ export function PositionalGradeImpactControls({
           {activeRules.map((rule, index) => {
             const stepOptions =
               rule.side === "other" ? OTHER_STEP_OPTIONS : OWN_STEP_OPTIONS;
+            const positionOptions = availablePositions.includes(rule.position)
+              ? availablePositions
+              : [rule.position, ...availablePositions];
 
             return (
               <div key={rule.id} className="grade-impact-row">
@@ -120,7 +137,7 @@ export function PositionalGradeImpactControls({
                   <option value="other">Their team</option>
                 </select>
 
-                {/* Position selector */}
+                {/* Position selector with defensive fallback for custom positions */}
                 <select
                   className="grade-impact-select"
                   aria-label={`${ariaLabelPrefix} ${index + 1} position`}
@@ -129,7 +146,7 @@ export function PositionalGradeImpactControls({
                     handleUpdateRule(index, { position: e.target.value })
                   }
                 >
-                  {availablePositions.map((pos) => (
+                  {positionOptions.map((pos) => (
                     <option key={pos} value={pos}>
                       {pos}
                     </option>
