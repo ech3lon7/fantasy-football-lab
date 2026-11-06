@@ -20,6 +20,7 @@ export interface ChainRequest {
   roleWeight: string;
   lineupsRaw?: string;
   scenario?: RosterScenario;
+  // ChainQuery deserialization passes first.gradeImpacts and second.gradeImpacts directly to discoverTradeChains.
   query: ChainQuery;
 }
 self.onmessage = (event: MessageEvent<ChainRequest>) => {

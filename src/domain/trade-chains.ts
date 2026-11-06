@@ -57,8 +57,10 @@ import type { Model, Player } from "./valuation";
 import {
   chainPositionImpact,
   chainGradeFailures,
+  gradeImpactFailures,
   type ChainGradeLimit,
   type ChainPositionImpact,
+  type PositionalGradeImpactRule,
 } from "./chain-position-impact";
 import { lineup, teamsAssessment, type PositionGrade } from "./lineups";
 import {
@@ -100,6 +102,8 @@ export interface ChainStep {
   requiredGet?: string[];
   receivePosition?: Position;
   gradeLimit?: ChainGradeLimit;
+  // Positional grade impact goals evaluate signed grade step changes per position and side.
+  gradeImpacts?: PositionalGradeImpactRule[];
   deficitProtection?: DeficitProtection;
   offer: ChainRange;
   receive: ChainRange;
@@ -570,6 +574,24 @@ export function chainErrors(m: Model, q: ChainQuery): string[] {
       errors.push(
         `${name} trade needs a whole-number maximum grade drop from 0–${positionGradeScale.length - 1}.`,
       );
+    // Positional grade impact goals require valid side, non-empty position, and whole-number step target.
+    if (step.gradeImpacts) {
+      if (
+        !Array.isArray(step.gradeImpacts) ||
+        step.gradeImpacts.some(
+          (rule) =>
+            !rule ||
+            !["own", "other"].includes(rule.side) ||
+            typeof rule.position !== "string" ||
+            rule.position.trim() === "" ||
+            !Number.isInteger(rule.steps),
+        )
+      ) {
+        errors.push(
+          `${name} trade has invalid positional grade impact rules.`,
+        );
+      }
+    }
     errors.push(
       ...deficitProtectionErrors(step.deficitProtection).map(
         (error) => `${name} trade: ${error}`,
@@ -1200,12 +1222,38 @@ export function searchTradeChains(
     const config = step === 1 ? q.first : q.second;
     // Grade protection runs only when explicitly enabled, after normal legality/scoring/recipient checks.
     if (config.gradeLimit) {
-      leg.positionImpact = chainPositionImpact(model, leg.draft, result);
+      const targetPositions =
+        config.gradeImpacts && config.gradeImpacts.length > 0
+          ? config.gradeImpacts.map((r) => r.position)
+          : undefined;
+      leg.positionImpact =
+        leg.positionImpact ??
+        chainPositionImpact(model, leg.draft, result, targetPositions);
       const failures = chainGradeFailures(
         leg.positionImpact,
         config.gradeLimit,
       );
       if (failures.length) {
+        stats.rejectedGrades = (stats.rejectedGrades ?? 0) + 1;
+        if (
+          plausibilityRejections.filter((entry) => entry.step === step).length <
+          5
+        )
+          plausibilityRejections.push({ step, draft: leg.draft, failures });
+        return false;
+      }
+    }
+    // Positional grade impact goals evaluate signed grade step changes per position and side.
+    if (config.gradeImpacts && config.gradeImpacts.length > 0) {
+      const targetPositions = config.gradeImpacts.map((r) => r.position);
+      leg.positionImpact =
+        leg.positionImpact ??
+        chainPositionImpact(model, leg.draft, result, targetPositions);
+      const failures = gradeImpactFailures(
+        leg.positionImpact,
+        config.gradeImpacts,
+      );
+      if (failures.length > 0) {
         stats.rejectedGrades = (stats.rejectedGrades ?? 0) + 1;
         if (
           plausibilityRejections.filter((entry) => entry.step === step).length <
