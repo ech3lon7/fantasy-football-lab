@@ -211,6 +211,62 @@ export function TradeScoreStrip({
   );
 }
 
+/**
+ * Renders colored positional grade chips for each affected position.
+ * Displays before and after grades with .good, .bad, or .neutral tone classes.
+ */
+export function PositionGradeChips({
+  impact,
+  side,
+}: {
+  impact?: ChainPositionImpact;
+  side?: "own" | "other";
+}) {
+  if (!impact) return null;
+  // If side is specified, only show that side's changes; otherwise show own then other
+  const ownList = side === "other" ? [] : (impact.own ?? []);
+  const otherList = side === "own" ? [] : (impact.other ?? []);
+  const all = [
+    ...ownList.map((r) => ({ ...r, suffix: "" })),
+    ...otherList.map((r) => ({ ...r, suffix: side ? "" : " (them)" })),
+  ];
+  if (all.length === 0) return null;
+
+  return (
+    <div className="trade-position-chips" aria-label="Positional grade changes">
+      {all.map((row) => {
+        const tone =
+          row.drop === null || row.before === row.after
+            ? "neutral"
+            : row.drop > 0
+              ? "bad"
+              : "good";
+        return (
+          <span
+            key={`${row.position}-${row.before}-${row.after}-${row.suffix}`}
+            className={`position-grade-chip ${tone}`}
+            title={
+              row.drop && row.drop > 0
+                ? `${row.position} drops ${row.drop} step${row.drop > 1 ? "s" : ""}`
+                : row.before !== row.after
+                  ? `${row.position} upgraded`
+                  : `${row.position} unchanged`
+            }
+          >
+            <span className="pos-label">
+              {row.position}
+              {row.suffix}
+            </span>
+            <span className="pos-grades">
+              {row.before} → {row.after}
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 // The field reads exact beforeIds/ids from the evaluator's weekly result; the week control distinguishes one lineup from headline season averages.
 export function TradeLineupField({
   m,
@@ -291,34 +347,7 @@ export function TradeLineupField({
           aria-label={`${side === "own" ? "Your" : "Their"} positional grade changes`}
         >
           <span className="trade-position-grades-label">Grades:</span>
-          <div className="trade-position-chips">
-            {posChanges.map((row) => {
-              const tone =
-                row.drop === null || row.before === row.after
-                  ? "neutral"
-                  : row.drop > 0
-                    ? "bad"
-                    : "good";
-              return (
-                <span
-                  key={row.position}
-                  className={`position-grade-chip ${tone}`}
-                  title={
-                    row.drop && row.drop > 0
-                      ? `${row.position} drops ${row.drop} step${row.drop > 1 ? "s" : ""}`
-                      : row.before !== row.after
-                        ? `${row.position} upgraded`
-                        : `${row.position} unchanged`
-                  }
-                >
-                  <span className="pos-label">{row.position}</span>
-                  <span className="pos-grades">
-                    {row.before} → {row.after}
-                  </span>
-                </span>
-              );
-            })}
-          </div>
+          <PositionGradeChips impact={positionImpact} side={side} />
         </div>
       )}
       <div className="trade-field-controls">

@@ -40,6 +40,23 @@ export function gradeStepDelta(before: string, after: string): number | null {
   return first < 0 || last < 0 ? null : last - first;
 }
 
+/**
+ * Computes available starter positions with active slots in this league format from ModelContext[0].
+ */
+export function availableStarterPositions(m: Model): string[] {
+  const ctx = m?.dataset?.tables?.ModelContext?.[0];
+  if (!ctx) return ["QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"];
+  const list: string[] = [];
+  if (Number(ctx.QBSlots) > 0) list.push("QB");
+  if (Number(ctx.RBSlots) > 0) list.push("RB");
+  if (Number(ctx.WRSlots) > 0) list.push("WR");
+  if (Number(ctx.TESlots) > 0) list.push("TE");
+  if (Number(ctx.FlexSlots) > 0) list.push("FLEX");
+  if (Number(ctx.KSlots) > 0) list.push("K");
+  if (Number(ctx.DSTSlots) > 0) list.push("D/ST");
+  return list.length > 0 ? list : ["QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"];
+}
+
 // Reassess both legal rosters at this exact step, including required drops and IR, with the existing league-relative Teams grades.
 export function chainPositionImpact(
   m: Model,

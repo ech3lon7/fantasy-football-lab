@@ -1,10 +1,16 @@
 import {
+  PositionGradeChips,
   TradeFiltersButton,
   TradeFiltersDrawer,
   TradePortrait,
   type TradeWorkspaceMode,
   type TradeWorkspacePreview,
 } from "./TradeWorkspace";
+import { PositionalGradeImpactControls } from "./PositionalGradeImpactControls";
+import {
+  availableStarterPositions,
+  type PositionalGradeImpactRule,
+} from "../domain/chain-position-impact";
 import { GroupedTradeRows } from "./TradeResultGroups";
 import {
   emptyTradeBrowse,
@@ -235,6 +241,12 @@ export function TradeSearch({
   const [deficitProtection, setDeficitProtection] = useState<DeficitProtection>(
     { ...defaultDeficitProtection },
   );
+  // Positional grade impact goals specify required grade improvements or drop limits on standard search
+  const [gradeImpacts, setGradeImpacts] = useState<PositionalGradeImpactRule[]>(
+    [],
+  );
+  // Available starter positions with active slots in this league format
+  const availablePositions = availableStarterPositions(m);
   // Empty selections disable each category; active categories count only the same qualifying incoming players.
   const [signals, setSignals] = useState<(typeof primaryGemSignals)[number][]>(
       [],
@@ -405,6 +417,8 @@ export function TradeSearch({
       ownWeekly.enabled || otherWeekly.enabled
         ? { own: weeklyRange(ownWeekly), other: weeklyRange(otherWeekly) }
         : undefined,
+    // Positional grade impact goals
+    gradeImpacts: gradeImpacts.length > 0 ? gradeImpacts : undefined,
   };
   const standardControls = {
     below,
@@ -438,6 +452,7 @@ export function TradeSearch({
     deficitCeiling,
     // Remember dormant protection separately from the effective query, which must disable it with its parent.
     deficitProtection,
+    gradeImpacts,
   };
   const settingsText = JSON.stringify({
     version: 1,
@@ -554,6 +569,8 @@ export function TradeSearch({
     setIncomingPositions(q.incoming?.positions ?? []);
     setMinimumSignals(String(q.incoming?.minimumSignals ?? 1));
     setMinimumPositions(String(q.incoming?.minimumPositions ?? 1));
+    // Restore positional grade goals
+    setGradeImpacts(q.gradeImpacts ?? []);
   }
   // Existing controls migrate once; later edits remain independent across route changes and reloads.
   useEffect(() => {
@@ -600,6 +617,8 @@ export function TradeSearch({
         setDeficitPosition(c.deficitPosition);
       if (Object.hasOwn(c, "deficitCeiling"))
         setDeficitCeiling(c.deficitCeiling);
+      if (Object.hasOwn(c, "gradeImpacts"))
+        setGradeImpacts(c.gradeImpacts ?? []);
       // Parent-off searches preserve the user's child toggle/minimum for a later re-enable or reload.
       if (
         c.deficitProtection &&
@@ -845,6 +864,7 @@ export function TradeSearch({
     setDeficitCeiling("C+");
     setOwnWeekly({ enabled: false, minimum: "0", maximum: "" });
     setOtherWeekly({ enabled: false, minimum: "0", maximum: "" });
+    setGradeImpacts([]);
   }
 
   // Loading copies the displayed package, not newly edited filters or outgoing selections; the analyzer recalculates it against current inputs.
@@ -1242,6 +1262,14 @@ export function TradeSearch({
           ]
         : [],
     ),
+    // Removable chips for active positional grade goals
+    ...gradeImpacts.map((rule, idx) => ({
+      label: `Grade goal: ${rule.side === "own" ? "Your" : "Their"} ${rule.position} ${
+        rule.steps >= 0 ? `≥ +${rule.steps}` : `≥ ${rule.steps}`
+      } step${Math.abs(rule.steps) === 1 ? "" : "s"}`,
+      remove: () =>
+        setGradeImpacts((prev) => prev.filter((_, i) => i !== idx)),
+    })),
   ];
 
   // Controls express raw index matching; premiums and fairness remain visible only as separate evaluation outputs.
@@ -1590,9 +1618,16 @@ export function TradeSearch({
           <TradeFilterGroup
             title="Team needs"
             summary={
-              deficitOnly
-                ? `${selectedPosition} ${deficitCeiling} or lower`
-                : "Target deficits · protect weak positions"
+              [
+                deficitOnly
+                  ? `${selectedPosition} ${deficitCeiling} or lower`
+                  : "Target deficits · protect weak positions",
+                gradeImpacts.length > 0
+                  ? `${gradeImpacts.length} positional goal${gradeImpacts.length === 1 ? "" : "s"}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")
             }
             open
           >
@@ -1770,6 +1805,13 @@ export function TradeSearch({
               change={setDeficitProtection}
               targeting={deficitOnly}
               ceiling={deficitCeiling}
+            />
+            {/* Positional grade goals for standard trade search */}
+            <PositionalGradeImpactControls
+              rules={gradeImpacts}
+              onChange={setGradeImpacts}
+              positions={availablePositions}
+              ariaLabelPrefix="Standard search grade goal"
             />
             <fieldset className="trade-search-group">
               <legend>Roster fit</legend>
@@ -2468,6 +2510,10 @@ export function TradeSearch({
                                 )?.TeamName,
                               )}
                             </small>
+                            {/* Positional grade transitions displayed directly on candidate card */}
+                            {row.positionImpact && (
+                              <PositionGradeChips impact={row.positionImpact} />
+                            )}
                           </td>
                           <td
                             className="model"
@@ -2974,6 +3020,10 @@ export function TradeSearch({
                             ? "CONDITIONAL: " + row.warnings.join("; ")
                             : "Legal modeled rosters."}
                         </p>
+                        {/* Positional grade transitions displayed directly on near-miss alternative */}
+                        {row.positionImpact && (
+                          <PositionGradeChips impact={row.positionImpact} />
+                        )}
                         <button
                           type="button"
                           className="subtle"

@@ -4,6 +4,7 @@ import type { ChainPositionImpact } from "../domain/chain-position-impact";
 import { positionGradeScale } from "../domain/trade-search";
 import type { Model } from "../domain/valuation";
 import { FilterHelp } from "../ui/FilterHelp";
+import { PositionalGradeImpactControls } from "./PositionalGradeImpactControls";
 
 // Each leg owns independent player/position requirements; original outgoing cards must come from the protected trade pool.
 export function ChainPlayerRequirements({
@@ -219,6 +220,17 @@ export function ChainGradeLimitControls({
           </label>
         </>
       )}
+      {/* Positional grade goals for this chain leg */}
+      <PositionalGradeImpactControls
+        rules={value.gradeImpacts ?? []}
+        onChange={(updated) =>
+          change({
+            ...value,
+            gradeImpacts: updated.length > 0 ? updated : undefined,
+          })
+        }
+        ariaLabelPrefix={`${label} grade goal`}
+      />
     </div>
   );
 }
@@ -330,6 +342,16 @@ export function ChainRequirementChips({
               ? "their"
               : "both teams’"}{" "}
           grade drop ≤ {value.gradeLimit.maximumDrop} steps ×
+        </button>
+      )}
+      {/* Removable chip for positional grade goals in this leg */}
+      {value.gradeImpacts && value.gradeImpacts.length > 0 && (
+        <button
+          type="button"
+          aria-label={`Clear ${label} grade goals`}
+          onClick={() => change({ ...value, gradeImpacts: undefined })}
+        >
+          {label}: {value.gradeImpacts.length} grade goal{value.gradeImpacts.length === 1 ? "" : "s"} ×
         </button>
       )}
     </>
