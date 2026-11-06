@@ -42,6 +42,7 @@ import {
   rosterScenariosKey,
   rosterScenarioDirty,
   saveRosterSnapshot,
+  clearRosterSlot,
   scenarioRosterBase,
   deleteRosterScenario,
   type RosterSaveSlot,
@@ -463,20 +464,35 @@ export default function App() {
       const validated = writeRosterScenarios(current.state, read.collection);
       rosterDraftRef.current = validated;
       setRosterDraft(validated);
-      if (
+      // Keep persisted active simulation and active slot preferences in sync with staged working edits when scenarios exist
+      const hasSavedScenarios = Boolean(
+        current.state.filters[rosterScenariosKey] &&
+          !saved.issue &&
+          (saved.collection.scenarios.length > 0 ||
+            (saved.collection.snapshots &&
+              saved.collection.snapshots.length > 0)),
+      );
+      const activeChanged =
         !saved.issue &&
         saved.collection.active !== read.collection.active &&
         (!read.collection.active ||
           saved.collection.scenarios.some(
             (scenario) => scenario.id === read.collection.active,
-          ))
-      ) {
+          ));
+      const activeSlotChanged =
+        hasSavedScenarios &&
+        read.collection.activeSlot !== undefined &&
+        saved.collection.activeSlot !== read.collection.activeSlot;
+      if (activeChanged || activeSlotChanged) {
         updateState({
           filters: {
             ...current.state.filters,
             [rosterScenariosKey]: writeRosterScenarios(current.state, {
               ...saved.collection,
-              active: read.collection.active,
+              ...(activeChanged ? { active: read.collection.active } : {}),
+              ...(activeSlotChanged
+                ? { activeSlot: read.collection.activeSlot }
+                : {}),
             }),
           },
         });
@@ -518,6 +534,35 @@ export default function App() {
         error instanceof Error
           ? error.message
           : "Could not save roster snapshot.",
+      );
+      return false;
+    }
+  }
+  // Clearing a slot removes all edits, resets back to the live baseline, and deletes the checkpoint.
+  function clearScenarioSlot(slot: RosterSaveSlot) {
+    const current = wRef.current;
+    if (!current) return false;
+    try {
+      const next = clearRosterSlot(
+        current.state,
+        rosterDraftRef.current ??
+          current.state.filters[rosterScenariosKey] ??
+          "",
+        slot,
+        realModel ? scenarioRosterBase(realModel) : undefined,
+      );
+      updateState({
+        filters: { ...current.state.filters, [rosterScenariosKey]: next.saved },
+      });
+      rosterDraftRef.current = next.working;
+      setRosterDraft(next.working);
+      setError("");
+      return true;
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not clear roster slot.",
       );
       return false;
     }
@@ -623,19 +668,34 @@ export default function App() {
         },
         draft,
       );
+      // Identify the designated active slot from settings (defaulting to slot 1)
+      const targetSlot = (read.collection.activeSlot ?? 1) as RosterSaveSlot;
       const collection = {
         ...read.collection,
         active: next.id,
+        activeSlot: targetSlot,
         scenarios: selected
           ? read.collection.scenarios.map((s) => (s.id === next.id ? next : s))
           : [...read.collection.scenarios, next],
       };
       const raw = writeRosterScenarios(current.state, collection);
-      if (!stageRosterScenarios(raw)) return false;
-      // Clear the consumed trade draft without persisting the unsaved roster recipe.
-      updateState({ draft: { ...draft, give: [], get: [] } });
+      // Auto-save the trade directly to the designated active slot
+      const saved = saveRosterSnapshot(
+        current.state,
+        raw,
+        targetSlot,
+        new Date().toISOString(),
+        scenarioRosterBase(realModel),
+      );
+      updateState({
+        filters: { ...current.state.filters, [rosterScenariosKey]: saved.saved },
+        draft: { ...draft, give: [], get: [] },
+      });
+      rosterDraftRef.current = saved.working;
+      setRosterDraft(saved.working);
       setError("");
-      return true;
+      // Return success along with the targeted slot so calling views know exactly which slot was updated
+      return { ok: true, slot: targetSlot };
     } catch (error) {
       setError(
         error instanceof Error
@@ -1095,6 +1155,7 @@ export default function App() {
                     savedRaw={w.state.filters[rosterScenariosKey]}
                     change={stageRosterScenarios}
                     saveSlot={saveScenarioSlot}
+                    clearSlot={clearScenarioSlot}
                     deleteScenario={deleteScenario}
                   />
                   <Overview

@@ -20,6 +20,7 @@ import {
   rosterScenariosKey,
   rosterSaveSlots,
   saveRosterSnapshot,
+  clearRosterSlot,
   writeRosterScenarios,
   type RosterScenario,
   type RosterSaveSlot,
@@ -282,3 +283,58 @@ it("supports 10 save slots and rejects slot numbers outside 1-10", async () => {
     saveRosterSnapshot(state, working, 0 as RosterSaveSlot),
   ).toThrow();
 });
+
+// Active slot persistence tracks the user's selected slot (1-10) across scenarios and tools.
+it("persists activeSlot in collection schema and survives serialization", async () => {
+  const { state, scenario } = await sample();
+  const working = writeRosterScenarios(state, {
+    version: 1,
+    active: scenario.id,
+    activeSlot: 4,
+    scenarios: [scenario],
+  });
+  const read = readRosterScenarios(working);
+  expect(read.issue).toBe("");
+  expect(read.collection.activeSlot).toBe(4);
+});
+
+// Clearing a slot resets moves to empty, sets cursor to 0, restores live starters, and removes the snapshot.
+it("clears all edits from a slot and takes it back to the live roster", async () => {
+  const { m, state, scenario } = await sample();
+  let working = writeRosterScenarios(state, {
+    version: 1,
+    active: scenario.id,
+    activeSlot: 2,
+    scenarios: [scenario],
+  });
+  // Save an initial snapshot to slot 2
+  const result = saveRosterSnapshot(state, working, 2, "2026-10-27T14:00:00Z");
+  state.filters[rosterScenariosKey] = result.saved;
+
+  // Make edits (trade move)
+  const first = activeRosterScenario(result.working)!;
+  const traded = appendScenarioTrade(m, first, {
+    teamA: "1",
+    teamB: "2",
+    give: ["100"],
+    get: ["200"],
+  });
+  working = writeRosterScenarios(state, {
+    ...readRosterScenarios(result.working).collection,
+    scenarios: [traded],
+  });
+  expect(activeRosterScenario(working)!.moves.length).toBe(1);
+
+  // Clear slot 2
+  const cleared = clearRosterSlot(state, working, 2, scenarioRosterBase(m));
+  const clearedScenario = activeRosterScenario(cleared.working)!;
+  expect(clearedScenario.moves).toHaveLength(0);
+  expect(clearedScenario.cursor).toBe(0);
+
+  // Snapshot for slot 2 should be removed from snapshots
+  const clearedCollection = readRosterScenarios(cleared.saved).collection;
+  expect(
+    clearedCollection.snapshots?.some((s) => s.slot === 2 && s.scenario.id === scenario.id),
+  ).toBe(false);
+});
+

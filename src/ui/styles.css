@@ -2170,7 +2170,14 @@ pre {
 .trade-score-values { display: flex; align-items: center; gap: 10px; white-space: nowrap; font-size: 18px; }
 .trade-score-values strong { font-size: 22px; }
 .trade-score-values b { padding: 6px 9px; background: #f8e7ed; border-radius: 4px; font-size: 17px; }
-.trade-score-context { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
+.trade-score-context-row { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.trade-score-context { color: var(--muted); font-size: 10px; }
+.trade-deal-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 2px 9px; border-radius: 12px; font-weight: 500; border: 1px solid transparent; }
+.trade-deal-pill strong { font-weight: 700; }
+.trade-deal-pill.good { background: #e8f5e9; color: #166534; border-color: #bbf7d0; }
+.trade-deal-pill.orange { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.trade-deal-pill.bad { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.trade-deal-pill.neutral { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
 .trade-workspace-grid { display: grid; grid-template-columns: minmax(400px, .95fr) minmax(500px, 1.05fr); gap: 14px; padding-top: 12px; align-items: start; }
 .trade-workspace-left, .trade-workspace-right { min-width: 0; height: var(--trade-pane-height); }
 /* Let wheel gestures continue into the page at pane boundaries instead of trapping users over the cards. */
@@ -2678,4 +2685,114 @@ pre {
   margin: 0;
   display: flex;
   gap: 8px;
+}
+
+/* Roster slot header and transient auto-dismiss toast */
+.roster-slots-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.roster-slots-header h3 {
+  margin: 0;
+}
+.slot-toast-notification {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: #1e293b;
+  padding: 3px 10px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+.trade-toast {
+  display: inline-block;
+  margin: 6px 0;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* Unsaved changes confirmation dialog when switching slots */
+.roster-slot-switch-dialog {
+  margin: 10px 0 14px;
+  padding: 12px 14px;
+  background: #fefce8;
+  border: 1px solid #fde047;
+  border-radius: 8px;
+}
+.roster-slot-switch-dialog p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #854d0e;
+}
+.roster-slot-switch-dialog .toolbar {
+  margin: 0;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Positional grade changes row in TradeLineupField */
+.trade-position-grades {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: 6px 0 10px;
+  flex-wrap: wrap;
+}
+.trade-position-grades-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.trade-position-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.position-grade-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.position-grade-chip .pos-label {
+  font-weight: 700;
+  opacity: 0.85;
+}
+.position-grade-chip .pos-grades {
+  font-weight: 600;
+}
+.position-grade-chip.good {
+  background: #e8f5e9;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+.position-grade-chip.bad {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+.position-grade-chip.neutral {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
 }

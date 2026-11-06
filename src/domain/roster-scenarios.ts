@@ -14,6 +14,7 @@ import {
   saveStarterLineup,
   starterTemplate,
   starterAssignmentsSchema,
+  starterLineupsKey,
 } from "./starter-lineups";
 
 // Store compact move recipes in existing private settings; never retain another workbook or mutate the live snapshot.
@@ -85,21 +86,23 @@ export const rosterScenarioSchema = z
 // Each scenario supports up to 10 independent save slot checkpoints containing recipes only, never another dataset or recursive snapshots.
 export const rosterSaveSlots = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 export type RosterSaveSlot = (typeof rosterSaveSlots)[number];
+// Validates a slot number from 1 to 10.
+export const rosterSaveSlotSchema = z.union([
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+  z.literal(5),
+  z.literal(6),
+  z.literal(7),
+  z.literal(8),
+  z.literal(9),
+  z.literal(10),
+]);
 // Validates an individual snapshot payload ensuring slot index is between 1 and 10 and UTC timestamp is valid.
 const snapshotSchema = z
   .object({
-    slot: z.union([
-      z.literal(1),
-      z.literal(2),
-      z.literal(3),
-      z.literal(4),
-      z.literal(5),
-      z.literal(6),
-      z.literal(7),
-      z.literal(8),
-      z.literal(9),
-      z.literal(10),
-    ]),
+    slot: rosterSaveSlotSchema,
     savedUTC: z.string().datetime(),
     scenario: rosterScenarioSchema,
   })
@@ -109,6 +112,8 @@ const collectionSchema = z
   .object({
     version: z.literal(1),
     active: z.string(),
+    // Tracks the currently selected active save slot (1-10) across "My team" and the Trade Analyzer.
+    activeSlot: rosterSaveSlotSchema.optional(),
     scenarios: z.array(rosterScenarioSchema).max(10),
     snapshots: z.array(snapshotSchema).max(100).optional(),
   })
@@ -243,11 +248,13 @@ export function saveRosterSnapshot(
   const persisted = {
     ...saved.collection,
     active: scenario.id,
+    activeSlot: slot,
     scenarios: replace(saved.collection.scenarios),
     snapshots,
   };
   const draft = {
     ...working.collection,
+    activeSlot: slot,
     scenarios: replace(working.collection.scenarios),
     snapshots,
   };
@@ -273,10 +280,60 @@ export function loadRosterSnapshot(
   return writeRosterScenarios(state, {
     ...read.collection,
     active: id,
+    activeSlot: slot,
     scenarios: read.collection.scenarios.map((s) =>
       s.id === id ? structuredClone(snapshot.scenario) : s,
     ),
   });
+}
+
+// Clears all hypothetical moves and customized starter assignments from the active scenario, restores baseline live roster state, and deletes the slot checkpoint.
+export function clearRosterSlot(
+  state: AppState,
+  workingRaw: string,
+  slot: RosterSaveSlot,
+  baseRoster?: RosterScenario["baseRoster"],
+) {
+  const saved = readRosterScenarios(state.filters[rosterScenariosKey]),
+    working = readRosterScenarios(workingRaw);
+  if (saved.issue || working.issue) throw Error(saved.issue || working.issue);
+  const current = working.collection.scenarios.find(
+    (s) => s.id === working.collection.active,
+  );
+  if (!current)
+    throw Error("Select a roster scenario before clearing a slot.");
+  // Revert scenario to an unedited baseline with empty moves and live starting lineups
+  const resetScenario: RosterScenario = {
+    ...current,
+    moves: [],
+    cursor: 0,
+    baseLineups: state.filters[starterLineupsKey] ?? "",
+    baseRoster: current.baseRoster ?? baseRoster,
+  };
+  // Filter out the checkpoint for this specific scenario and slot from both persisted and working snapshots
+  const filterSnapshots = (snapshots?: typeof saved.collection.snapshots) =>
+    (snapshots ?? []).filter(
+      (s) => !(s.scenario.id === current.id && s.slot === slot),
+    );
+  // Replace active scenario with the cleaned baseline scenario
+  const replace = (scenarios: RosterScenario[]) =>
+    scenarios.map((s) => (s.id === current.id ? resetScenario : s));
+  const persisted = {
+    ...saved.collection,
+    activeSlot: slot,
+    scenarios: replace(saved.collection.scenarios),
+    snapshots: filterSnapshots(saved.collection.snapshots),
+  };
+  const draft = {
+    ...working.collection,
+    activeSlot: slot,
+    scenarios: replace(working.collection.scenarios),
+    snapshots: filterSnapshots(working.collection.snapshots),
+  };
+  return {
+    saved: writeRosterScenarios(state, persisted),
+    working: writeRosterScenarios(state, draft),
+  };
 }
 
 // Explicit deletion removes only that scenario and its slots from saved and working collections.

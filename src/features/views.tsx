@@ -24,8 +24,12 @@ import {
   sourceDataset,
   scenarioTradeErrors,
   scenarioTeamImpact,
+  readRosterScenarios,
+  rosterScenariosKey,
   type RosterScenario,
+  type RosterSaveSlot,
 } from "../domain/roster-scenarios";
+import { chainPositionImpact } from "../domain/chain-position-impact";
 import { Bookmark } from "lucide-react";
 // Prospective tracking is an isolated read-only audit, not another input to the valuation model.
 import { GemTracking } from "./GemTracking";
@@ -50,7 +54,7 @@ import {
 import type { TradeSearchQuery } from "../domain/trade-search";
 import type { AppState } from "../domain/contracts";
 import { starterLineupsKey } from "../domain/starter-lineups";
-import { useState, useEffect, useId } from "react";
+import { useState, useEffect, useId, useMemo } from "react";
 import {
   Upload,
   ArrowUpRight,
@@ -1721,7 +1725,9 @@ export function TradeView({
   state: AppState;
   saveTrades: (raw: string) => void;
   restoreScenario?: (scenario?: RosterScenario) => boolean;
-  forceTrade?: (draft: Draft) => boolean;
+  forceTrade?: (
+    draft: Draft,
+  ) => { ok: boolean; slot?: RosterSaveSlot } | boolean;
   changeBasis: (basis: LineupBasis) => void;
   saveSearchSettings: (raw: string) => void;
   saveManagerSettings: (raw: string) => void;
@@ -1781,6 +1787,12 @@ export function TradeView({
   const [saveMessage, setSaveMessage] = useState("");
   // Keep an applied-trade receipt separate from save/evaluation messages that reset when the consumed draft is cleared.
   const [forceMessage, setForceMessage] = useState("");
+  // Auto-dismiss the applied hypothetical trade notification after 2.5 seconds
+  useEffect(() => {
+    if (!forceMessage) return;
+    const timer = setTimeout(() => setForceMessage(""), 2500);
+    return () => clearTimeout(timer);
+  }, [forceMessage]);
   const [resultStamp, setResultStamp] = useState("");
   const evaluationStamp = JSON.stringify([
     m.dataset.hash,
@@ -1996,6 +2008,18 @@ export function TradeView({
   }
   const r = result?.valid && resultStamp === evaluationStamp ? result : null,
     primary = r ? tradeImpact(r, lineupBasis)! : null,
+    // Calculate positional grade transitions for both teams from the valid trade evaluation result
+    posImpact = useMemo(
+      () => (r && r.valid ? chainPositionImpact(m, draft, r) : undefined),
+      [
+        m,
+        draft.teamA,
+        draft.teamB,
+        draft.give.join(","),
+        draft.get.join(","),
+        r,
+      ],
+    ),
     alternative = r
       ? tradeImpact(
           r,
@@ -2111,6 +2135,8 @@ export function TradeView({
           impact={pending || resultStamp !== evaluationStamp ? null : primary}
           pending={pending}
           label={preview?.label}
+          dealGrade={r?.grade}
+          dealTone={tone}
         />
       )}
       <div className="trade-workspace-grid">
@@ -2193,10 +2219,19 @@ export function TradeView({
                       disabled={scenarioTradeErrors(m, draft).length > 0}
                       onClick={() => {
                         const exchange = `${draft.give.map((id) => m.byId.get(id)!.name).join(" + ")} ↔ ${draft.get.map((id) => m.byId.get(id)!.name).join(" + ")}`;
-                        if (forceTrade(draft))
+                        const res = forceTrade(draft);
+                        if (res) {
+                          // Determine the targeted slot from the operation result or active state configuration
+                          const activeSlot =
+                            typeof res === "object" && res.slot
+                              ? res.slot
+                              : (readRosterScenarios(
+                                  state.filters[rosterScenariosKey],
+                                ).collection.activeSlot ?? 1);
                           setForceMessage(
-                            `Applied hypothetical trade: ${exchange}. Both rosters and subsequent trade searches now use the new ownership.`,
+                            `Applied hypothetical trade: ${exchange}. Saved to Slot ${activeSlot}.`,
                           );
+                        }
                       }}
                     >
                       Apply trade to hypothetical roster
@@ -2204,7 +2239,11 @@ export function TradeView({
                   </FilterHelp>
                 </div>
               )}
-              {forceMessage && <p role="status">{forceMessage}</p>}
+              {forceMessage && (
+                <p role="status" className="notice trade-toast">
+                  {forceMessage}
+                </p>
+              )}
               <TradeLineupField
                 m={m}
                 draft={draft}
@@ -2214,6 +2253,7 @@ export function TradeView({
                 basis={lineupBasis}
                 plans={lineupsRaw}
                 pending={pending}
+                positionImpact={posImpact}
                 // Captured search results cannot edit the live pool until explicitly loaded.
                 poolScope={
                   !preview && workspaceMode === "standard"

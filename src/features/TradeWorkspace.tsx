@@ -12,6 +12,7 @@ import type { Model, Player } from "../domain/valuation";
 import type { TradeSearchQuery } from "../domain/trade-search";
 import type { LineupBasis } from "../domain/trade-impact";
 import { tradeImpact } from "../domain/trade-impact";
+import type { ChainPositionImpact } from "../domain/chain-position-impact";
 import { scenarioLineupBoard } from "../domain/roster-scenarios";
 import { fmt, signed } from "../ui/components";
 import { PlayerName } from "../ui/PlayerName";
@@ -146,12 +147,17 @@ export function TradeScoreStrip({
   impact,
   pending,
   label,
+  dealGrade,
+  dealTone,
 }: {
   m: Model;
   draft: Draft;
   impact: ReturnType<typeof tradeImpact>;
   pending: boolean;
   label?: string;
+  // Optional surplus deal grade ("Fair deal", "Steal deal", etc.) and visual color tone
+  dealGrade?: string;
+  dealTone?: "good" | "bad" | "orange" | "neutral";
 }) {
   // An incomplete offer has no trade forecast; one compact hint preserves room for player cards and the field.
   if (!draft.give.length || !draft.get.length)
@@ -185,10 +191,22 @@ export function TradeScoreStrip({
           </div>
         </div>
       ))}
-      <small className="trade-score-context">
-        {label ? `${label} · ` : ""}Average across Weeks {m.current}–{m.final};
-        model scoring, not ESPN's weekly projection.
-      </small>
+      {/* Context row displaying calculation bounds alongside a concise, non-invasive surplus deal grade badge */}
+      <div className="trade-score-context-row">
+        <small className="trade-score-context">
+          {label ? `${label} · ` : ""}Average across Weeks {m.current}–{m.final};
+          model scoring, not ESPN's weekly projection.
+        </small>
+        {dealGrade && (
+          <span
+            className={`trade-deal-pill ${dealTone ?? "neutral"}`}
+            role="status"
+            aria-label={`Surplus deal grade: ${dealGrade}`}
+          >
+            Surplus: <strong>{dealGrade}</strong>
+          </span>
+        )}
+      </div>
     </section>
   );
 }
@@ -202,6 +220,7 @@ export function TradeLineupField({
   plans,
   pending,
   poolScope,
+  positionImpact,
 }: {
   m: Model;
   draft: Draft;
@@ -210,6 +229,8 @@ export function TradeLineupField({
   plans?: string;
   pending: boolean;
   poolScope?: string;
+  // Positional grade changes before and after trade for each team
+  positionImpact?: ChainPositionImpact;
 }) {
   const [side, setSide] = useState<"own" | "other">("own"),
     [stage, setStage] = useState<"before" | "after">("after"),
@@ -232,6 +253,8 @@ export function TradeLineupField({
   const before = weekly?.beforeIds ?? base.roles.map((role) => role.id);
   const after = weekly?.ids ?? before;
   const ids = stage === "after" ? after : before;
+  // Retrieve positional grade transitions for the currently selected team side
+  const posChanges = positionImpact?.[side] ?? [];
   // Reset only the chosen week when a replacement snapshot no longer contains it; team/stage preferences remain local view state.
   useEffect(() => {
     if (!m.weeks.includes(selectedWeek)) setWeek(m.current);
@@ -261,6 +284,43 @@ export function TradeLineupField({
           </button>
         </div>
       </div>
+      {/* Positional grade changes: displays before-and-after letter grades colored by upgrade/downgrade */}
+      {posChanges.length > 0 && (
+        <div
+          className="trade-position-grades"
+          aria-label={`${side === "own" ? "Your" : "Their"} positional grade changes`}
+        >
+          <span className="trade-position-grades-label">Grades:</span>
+          <div className="trade-position-chips">
+            {posChanges.map((row) => {
+              const tone =
+                row.drop === null || row.before === row.after
+                  ? "neutral"
+                  : row.drop > 0
+                    ? "bad"
+                    : "good";
+              return (
+                <span
+                  key={row.position}
+                  className={`position-grade-chip ${tone}`}
+                  title={
+                    row.drop && row.drop > 0
+                      ? `${row.position} drops ${row.drop} step${row.drop > 1 ? "s" : ""}`
+                      : row.before !== row.after
+                        ? `${row.position} upgraded`
+                        : `${row.position} unchanged`
+                  }
+                >
+                  <span className="pos-label">{row.position}</span>
+                  <span className="pos-grades">
+                    {row.before} → {row.after}
+                  </span>
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div className="trade-field-controls">
         <span>{tradeTeamName(m, team)}</span>
         <label>

@@ -4,6 +4,7 @@ import { evaluate } from "../src/domain/valuation";
 import { withoutByeWeeks } from "../src/domain/lineups";
 import { evaluateTrade } from "../src/domain/trades";
 import { tradeImpact, lineupBasisKey } from "../src/domain/trade-impact";
+import { chainPositionImpact } from "../src/domain/chain-position-impact";
 import { initialState } from "../src/domain/contracts";
 import {
   scoreTradeMatch,
@@ -157,3 +158,20 @@ it("preserves unavailable scoring instead of averaging a partial horizon", async
   expect(summary.own.expectedPerWeek).toBeNull();
   expect(tradeImpact(result)!.own.expectedPerWeek).toBe(-10);
 });
+
+// A proposed trade evaluates affected positional grade transitions for both teams using league-relative standards.
+it("evaluates positional grade transitions for both teams on proposed trade", async () => {
+  const d = await starterFixture(),
+    m = withoutByeWeeks(evaluate(d, d.settings));
+  const draft = { teamA: "1", teamB: "2", give: ["101"], get: ["200"] };
+  const result = evaluateTrade(m, draft, false);
+  if (!result.valid) throw Error(result.errors.join());
+  const positionImpact = chainPositionImpact(m, draft, result);
+  expect(positionImpact.own.length).toBeGreaterThan(0);
+  expect(positionImpact.other.length).toBeGreaterThan(0);
+  const ownQb = positionImpact.own.find((p) => p.position === "QB");
+  expect(ownQb).toBeDefined();
+  expect(typeof ownQb!.before).toBe("string");
+  expect(typeof ownQb!.after).toBe("string");
+});
+

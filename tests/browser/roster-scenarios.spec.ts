@@ -1005,7 +1005,7 @@ test("roster save slots restore exact working points and require explicit saves"
     .toEqual([
       [1, 0],
       [2, 1],
-      [3, 1],
+      [3, 2],
     ]);
   // Capture visual verification screenshot of the compact desktop save slots interface
   await slots.screenshot({
@@ -1013,7 +1013,7 @@ test("roster save slots restore exact working points and require explicit saves"
   });
   await page.reload();
   await expect(
-    page.getByText("1 / 1 moves applied", { exact: true }),
+    page.getByText("2 / 2 moves applied", { exact: true }),
   ).toBeVisible();
   expect((await stored(page)).dataset).toEqual(dataset);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1112,4 +1112,96 @@ test("refresh warns about unsaved roster edits and preserves saved slots", async
   expect(
     JSON.parse((await stored(page)).state.filters.rosterScenarios).snapshots,
   ).toHaveLength(1);
+});
+
+// Active slot selection, trade analyzer auto-saving to active slot, surplus deal grade pill, positional grade changes, and clear slot.
+test("active save slot auto-saves forced trades, displays deal grade and position impact, prompts on dirty switch, and clears to live", async ({
+  page,
+}) => {
+  await seed(page);
+  await page.getByRole("button", { name: "New simulation", exact: true }).click();
+  const slots = page.getByRole("region", { name: "Roster save slots", exact: true });
+
+  // Select Slot 4 as active
+  await slots.getByRole("tab", { name: /^Slot 4\b/ }).click();
+  await expect(slots.getByRole("button", { name: "Save to slot 4", exact: true })).toBeVisible();
+
+  // Navigate to Trade Analyzer
+  await page.goto("./#/trades");
+  await openTradeDetails(page);
+  await openTradeFilters(page);
+
+  // Set up a trade offer
+  await page.getByLabel("Outgoing player 1", { exact: true }).selectOption("100");
+  await page.getByLabel("Incoming player 1", { exact: true }).selectOption("200");
+
+  // Verify the concise surplus deal grade pill in the top sticky score strip
+  const dealPill = page.locator(".trade-deal-pill");
+  await expect(dealPill).toBeVisible();
+  await expect(dealPill).toContainText("Surplus:");
+
+  // Verify positional grade changes row in the lineup impact panel
+  const gradeChips = page.locator(".trade-position-grades");
+  await expect(gradeChips).toBeVisible();
+  await expect(gradeChips.locator(".position-grade-chip").first()).toBeVisible();
+
+  // Force the trade to hypothetical roster
+  const applyButton = page.getByRole("button", { name: "Apply trade to hypothetical roster", exact: true });
+  await expect(applyButton).toBeEnabled();
+  await applyButton.click();
+
+  // Verify toast message specifies Slot 4
+  const tradeToast = page.locator(".trade-toast");
+  await expect(tradeToast).toBeVisible();
+  await expect(tradeToast).toContainText("Saved to Slot 4");
+
+  // Return to My team overview
+  await page.goto("./#/overview");
+  await expect(slots.getByRole("tab", { name: /^Slot 4\b/ })).toHaveAttribute("aria-selected", "true");
+  await expect(slots.getByRole("tab", { name: /^Slot 4\b/ })).toContainText("●");
+  await expect(page.getByText("1 / 1 moves applied", { exact: true })).toBeVisible();
+
+  // Save initial snapshot in Slot 1 so it has data
+  await slots.getByRole("tab", { name: /^Slot 1\b/ }).click();
+  await slots.getByRole("button", { name: "Save to slot 1", exact: true }).click();
+
+  // Switch back to Slot 4 (auto-loads 1 move)
+  await slots.getByRole("tab", { name: /^Slot 4\b/ }).click();
+  await expect(page.getByText("1 / 1 moves applied", { exact: true })).toBeVisible();
+
+  // Add an edit in Slot 4 (move player 100 back to team)
+  await page.getByText("Advanced roster moves", { exact: true }).click();
+  await page.getByRole("combobox", { name: "League player", exact: true }).selectOption("100");
+  await page.getByRole("button", { name: "Move player to selected team", exact: true }).click();
+  await expect(page.getByText("2 / 2 moves applied", { exact: true })).toBeVisible();
+
+  // Click Slot 1 (which has a snapshot): verify dirty switch prompt dialog appears
+  await slots.getByRole("tab", { name: /^Slot 1\b/ }).click();
+  const dialog = slots.locator(".roster-slot-switch-dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("You have unsaved changes in Slot 4. Save before switching to Slot 1?");
+
+  // Click Cancel: dialog closes and user remains on Slot 4 with edits intact
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(slots.getByRole("tab", { name: /^Slot 4\b/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("2 / 2 moves applied", { exact: true })).toBeVisible();
+
+  // Click "Clear slot 4": resets moves to 0 and reverts back to live roster
+  const clearButton = slots.getByRole("button", { name: "Clear slot 4", exact: true });
+  await expect(clearButton).toBeEnabled();
+  await clearButton.click();
+  await expect(slots.locator(".slot-toast-notification")).toContainText("Slot 4 cleared to live roster.");
+  await expect(page.getByText("0 / 0 moves applied", { exact: true })).toBeVisible();
+  await expect(slots.getByRole("tab", { name: /^Slot 4\b/ })).toContainText("○");
+
+  // Capture verification screenshots
+  await page.goto("./#/trades");
+  await page.screenshot({
+    path: "C:/Users/israe/.gemini/antigravity/brain/2eea40f1-347c-49f2-855d-0f59973c47d2/trade-analyzer-enhancements.png",
+  });
+  await page.goto("./#/overview");
+  await slots.screenshot({
+    path: "C:/Users/israe/.gemini/antigravity/brain/2eea40f1-347c-49f2-855d-0f59973c47d2/active-slot-selection.png",
+  });
 });

@@ -35,6 +35,7 @@ export function RosterSimulator({
   savedRaw,
   change,
   saveSlot,
+  clearSlot,
   deleteScenario,
 }: {
   real: Model;
@@ -43,18 +44,39 @@ export function RosterSimulator({
   savedRaw?: string;
   change: (raw: string) => boolean;
   saveSlot: (slot: RosterSaveSlot) => boolean;
+  clearSlot?: (slot: RosterSaveSlot) => boolean;
   deleteScenario: (id: string) => boolean;
 }) {
   const read = readRosterScenarios(state.filters[rosterScenariosKey]),
     collection = read.collection;
   const current = activeRosterScenario(state.filters[rosterScenariosKey]);
-  // Local UI state for user inputs, active search, feedback messages, and selected roster save slot
+  // Local UI state for user inputs, active search, feedback messages, selected roster save slot, switch prompt, and toast notifications
   const [name, setName] = useState(""),
     [player, setPlayer] = useState(""),
     [search, setSearch] = useState(""),
     [viewTeam, setViewTeam] = useState(""),
     [message, setMessage] = useState(""),
-    [selectedSlot, setSelectedSlot] = useState<RosterSaveSlot>(1);
+    [selectedSlot, setSelectedSlot] = useState<RosterSaveSlot>(
+      collection.activeSlot ?? 1,
+    ),
+    [pendingSwitchSlot, setPendingSwitchSlot] = useState<RosterSaveSlot | null>(
+      null,
+    ),
+    [toastMessage, setToastMessage] = useState("");
+
+  // Keep selected slot in sync with external activeSlot updates
+  useEffect(() => {
+    if (collection.activeSlot && collection.activeSlot !== selectedSlot) {
+      setSelectedSlot(collection.activeSlot);
+    }
+  }, [collection.activeSlot]);
+
+  // Auto-dismiss transient toast notifications after 2.5 seconds
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = setTimeout(() => setToastMessage(""), 2500);
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
   // Names are working edits too; switching or loading a snapshot restores that recipe's own name.
   useEffect(() => {
     setName(current?.name ?? "");
@@ -75,9 +97,11 @@ export function RosterSimulator({
       return false;
     }
   }
+  // Updates the current scenario in the working draft
   function update(next: RosterScenario) {
     return persist({
       ...collection,
+      activeSlot: selectedSlot,
       scenarios: collection.scenarios.map((s) =>
         s.id === next.id
           ? {
@@ -89,6 +113,71 @@ export function RosterSimulator({
           : s,
       ),
     });
+  }
+
+  // Switches to the specified slot, auto-loading any existing snapshot or resetting to clean live roster
+  function switchToSlot(targetSlot: RosterSaveSlot) {
+    setSelectedSlot(targetSlot);
+    const updatedCollection = { ...collection, activeSlot: targetSlot };
+    const hasSnapshot = collection.snapshots?.some(
+      (s) => s.scenario.id === current?.id && s.slot === targetSlot,
+    );
+    if (hasSnapshot && current) {
+      try {
+        const loadedRaw = loadRosterSnapshot(
+          state,
+          state.filters[rosterScenariosKey] ?? "",
+          current.id,
+          targetSlot,
+        );
+        const parsed = readRosterScenarios(loadedRaw);
+        change(
+          writeRosterScenarios(state, {
+            ...parsed.collection,
+            activeSlot: targetSlot,
+          }),
+        );
+      } catch (err) {
+        setMessage(
+          err instanceof Error ? err.message : "Could not load snapshot.",
+        );
+      }
+    } else {
+      persist(updatedCollection);
+    }
+  }
+
+  // Handles clicking a slot pill: checks for unsaved edits before auto-loading another saved slot
+  function handleSelectSlot(targetSlot: RosterSaveSlot) {
+    if (targetSlot === selectedSlot) return;
+    const targetSnapshot = collection.snapshots?.find(
+      (saved) =>
+        saved.scenario.id === current?.id && saved.slot === targetSlot,
+    );
+    const selectedSnapshot = collection.snapshots?.find(
+      (saved) =>
+        saved.scenario.id === current?.id && saved.slot === selectedSlot,
+    );
+    const hasUnsavedChanges = selectedSnapshot
+      ? JSON.stringify(selectedSnapshot.scenario) !== JSON.stringify(current)
+      : Boolean(current && current.moves.length > 0);
+
+    // If switching to another saved slot that would overwrite unsaved changes via auto-load, prompt user
+    if (targetSnapshot && hasUnsavedChanges) {
+      setPendingSwitchSlot(targetSlot);
+      return;
+    }
+    switchToSlot(targetSlot);
+  }
+
+  // Clears all roster moves and resets the slot back to the live baseline roster
+  function handleClearSlot() {
+    if (clearSlot) {
+      if (clearSlot(selectedSlot)) {
+        setToastMessage(`Slot ${selectedSlot} cleared to live roster.`);
+        setMessage("");
+      }
+    }
   }
   function move(action: ScenarioMove) {
     if (current) {
@@ -232,7 +321,63 @@ export function RosterSimulator({
         <>
           {/* Three explicit save slots preserve independent recipe checkpoints; ordinary roster edits never overwrite them. */}
           <section aria-label="Roster save slots">
-            <h3>Roster save slots</h3>
+            <div className="roster-slots-header">
+              <h3>Roster save slots</h3>
+              {/* Transient toast feedback for auto-saves and slot actions */}
+              {toastMessage && (
+                <div
+                  className="slot-toast-notification"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {toastMessage}
+                </div>
+              )}
+            </div>
+            {/* Dirty switch confirmation prompt */}
+            {pendingSwitchSlot !== null && (
+              <div
+                className="roster-slot-switch-dialog"
+                role="alertdialog"
+                aria-labelledby="switch-dialog-title"
+              >
+                <div className="switch-dialog-content">
+                  <p id="switch-dialog-title">
+                    You have unsaved changes in Slot {selectedSlot}. Save before
+                    switching to Slot {pendingSwitchSlot}?
+                  </p>
+                  <div className="toolbar">
+                    <button
+                      className="button primary"
+                      onClick={() => {
+                        if (saveSlot(selectedSlot)) {
+                          setToastMessage(`Saved to Slot ${selectedSlot}.`);
+                        }
+                        switchToSlot(pendingSwitchSlot);
+                        setPendingSwitchSlot(null);
+                      }}
+                    >
+                      Save & Switch
+                    </button>
+                    <button
+                      className="button"
+                      onClick={() => {
+                        switchToSlot(pendingSwitchSlot);
+                        setPendingSwitchSlot(null);
+                      }}
+                    >
+                      Discard & Switch
+                    </button>
+                    <button
+                      className="subtle"
+                      onClick={() => setPendingSwitchSlot(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             <p
               role="status"
               className={
@@ -289,7 +434,7 @@ export function RosterSimulator({
                           aria-selected={isSelected}
                           aria-label={`Slot ${slot}${isSaved ? " (saved)" : " (empty)"}`}
                           className={`slot-pill ${isSelected ? "active" : ""} ${isSaved ? "has-data" : "empty"}`}
-                          onClick={() => setSelectedSlot(slot)}
+                          onClick={() => handleSelectSlot(slot)}
                         >
                           <span className="slot-pill-label">Slot {slot}</span>
                           <span
@@ -335,7 +480,10 @@ export function RosterSimulator({
                             );
                             return;
                           }
-                          if (saveSlot(selectedSlot)) setMessage("");
+                          if (saveSlot(selectedSlot)) {
+                            setMessage("");
+                            setToastMessage(`Saved to Slot ${selectedSlot}.`);
+                          }
                         }}
                       >
                         Save to slot {selectedSlot}
@@ -353,6 +501,7 @@ export function RosterSimulator({
                                 selectedSlot,
                               ),
                             );
+                            setToastMessage(`Loaded Slot ${selectedSlot}.`);
                           } catch (error) {
                             setMessage(
                               error instanceof Error
@@ -363,6 +512,14 @@ export function RosterSimulator({
                         }}
                       >
                         Load slot {selectedSlot}
+                      </button>
+                      {/* Clear slot: wipes all moves and reverts the scenario back to the live baseline roster */}
+                      <button
+                        className="button"
+                        disabled={!selectedSnapshot && current.moves.length === 0}
+                        onClick={handleClearSlot}
+                      >
+                        Clear slot {selectedSlot}
                       </button>
                     </div>
                   </div>
