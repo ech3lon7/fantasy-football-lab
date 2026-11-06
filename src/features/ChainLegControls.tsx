@@ -238,7 +238,7 @@ export function ChainGradeChanges({
   return (
     <FilterHelp
       label={`Step ${step} positional grade changes`}
-      help="Existing Teams grades recalculated immediately before and after this step using Value PPG and current fantasy-league medians, including required drops and FLEX. Red identifies a weaker grade. Total EPPG may improve while one position weakens."
+      help="Existing Teams grades recalculated immediately before and after this step using Value PPG and current fantasy-league medians, including required drops and FLEX. Red identifies a weaker grade, green an improved grade, and gray no change or an unavailable comparison. Total EPPG may improve while one position weakens."
     >
       <div className="table-wrap">
         <table aria-label={`Step ${step} positional grade changes`}>
@@ -255,8 +255,15 @@ export function ChainGradeChanges({
                 <td>{position}</td>
                 {(["own", "other"] as const).map((side) => {
                   const row = value[side].find((r) => r.position === position);
+                  // Color both teams from the existing grade evidence; unchanged or unavailable grades stay neutral.
+                  const tone =
+                    !row || row.drop === null || row.before === row.after
+                      ? "muted"
+                      : row.drop > 0
+                        ? "bad"
+                        : "good";
                   return (
-                    <td key={side} className={row?.drop ? "bad" : "model"}>
+                    <td key={side} className={tone}>
                       {row
                         ? `${row.before} → ${row.after}${row.drop ? ` (−${row.drop} steps)` : ""}`
                         : "Not applicable"}

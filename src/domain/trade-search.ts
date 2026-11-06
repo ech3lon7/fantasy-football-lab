@@ -1,3 +1,7 @@
+import type {
+  TradeBrowseOptions,
+  TradeResultView,
+} from "./trade-result-groups";
 import {
   managerAssessment,
   managerSettingsSchema,
@@ -265,15 +269,23 @@ export type SearchRequest =
       // Workers always value the live source first, then apply the same frozen-index ownership overlay as the UI.
       scenario?: RosterScenario;
     }
-  | { type: "page"; id: string; context: string; offset: number }
+  // Result browsing searches all retained offers without starting another scoring job.
+  | {
+      type: "browse";
+      id: string;
+      context: string;
+      token: string;
+      options: TradeBrowseOptions;
+    }
   | { type: "details"; id: string; context: string; key: string };
 export type SearchResponse = { id: string; context: string } & (
   | { type: "progress"; progress: SearchProgress }
   | {
-      type: "complete" | "page";
+      type: "complete" | "browse";
       rows: SearchRow[];
       total: number;
-      offset: number;
+      view: TradeResultView;
+      token?: string;
       stats: SearchStats;
       suggestions?: SearchRow[];
     }
@@ -292,7 +304,6 @@ export type SearchResponse = { id: string; context: string } & (
       error?: string;
     }
 );
-export const searchPageSize = 50;
 
 // Include only inputs that affect discovery/scoring; changing an incoming draft must not invalidate peers.
 export function tradeSearchContext(

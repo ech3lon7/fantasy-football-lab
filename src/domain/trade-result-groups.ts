@@ -3,6 +3,103 @@ import type { Model } from "./valuation";
 import type { SearchRow } from "./trade-search";
 import type { TradeChain } from "./trade-chains";
 
+// Browsing is ephemeral presentation state; it never changes the completed query or recalculates a trade.
+export interface TradeBrowseOptions {
+  offered: string;
+  received: string;
+  exact: boolean;
+  packages: Record<string, number>;
+  offers: Record<string, number>;
+}
+export const emptyTradeBrowse = (): TradeBrowseOptions => ({
+  offered: "",
+  received: "",
+  exact: false,
+  packages: {},
+  offers: {},
+});
+export interface TradeResultView {
+  totalOffers: number;
+  totalPackages: number;
+  teams: {
+    team: string;
+    totalOffers: number;
+    totalPackages: number;
+    packages: { key: string; totalOffers: number; rowKeys: string[] }[];
+  }[];
+}
+export const tradeResultPageSize = 50;
+
+// Filter the entire ranked result set before paging distinct incoming packages independently for each team.
+export function browseTradeResults(
+  m: Model,
+  rows: SearchRow[],
+  options = emptyTradeBrowse(),
+  defaultGive: string[] = [],
+) {
+  const normalize = (text: string) =>
+    text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().trim();
+  const terms = (text: string) =>
+    text.split(",").map(normalize).filter(Boolean);
+  const offered = terms(options.offered),
+    received = terms(options.received);
+  const names = new Map(m.players.map((p) => [p.id, normalize(p.name)]));
+  const matches = (ids: string[], tokens: string[]) =>
+    !tokens.length ||
+    (tokens.every((token) =>
+      ids.some((id) => names.get(id)?.includes(token)),
+    ) &&
+      (!options.exact ||
+        (ids.length === tokens.length &&
+          ids.every((id) =>
+            tokens.some((token) => names.get(id)?.includes(token)),
+          ))));
+  const teams = new Map<string, Map<string, SearchRow[]>>();
+  for (const row of rows) {
+    if (
+      !matches(row.give ?? defaultGive, offered) ||
+      !matches(row.get, received)
+    )
+      continue;
+    if (!teams.has(row.teamB)) teams.set(row.teamB, new Map());
+    const packages = teams.get(row.teamB)!;
+    const key = JSON.stringify([row.teamB, [...row.get].sort(cmpId)]);
+    if (!packages.has(key)) packages.set(key, []);
+    packages.get(key)!.push(row);
+  }
+  // Send one best-ranked offer per package initially; alternative pages are fetched only after an explicit expansion.
+  const visible: SearchRow[] = [];
+  const view: TradeResultView = { totalOffers: 0, totalPackages: 0, teams: [] };
+  for (const [team, packages] of teams) {
+    const group: TradeResultView["teams"][number] = {
+      team,
+      totalOffers: 0,
+      totalPackages: packages.size,
+      packages: [],
+    };
+    const packageLimit = Math.max(
+      1,
+      options.packages[team] ?? tradeResultPageSize,
+    );
+    let index = 0;
+    for (const [key, offers] of packages) {
+      group.totalOffers += offers.length;
+      if (index++ >= packageLimit) continue;
+      const page = offers.slice(0, Math.max(1, options.offers[key] ?? 1));
+      visible.push(...page);
+      group.packages.push({
+        key,
+        totalOffers: offers.length,
+        rowKeys: page.map((row) => row.key),
+      });
+    }
+    view.totalOffers += group.totalOffers;
+    view.totalPackages += group.totalPackages;
+    view.teams.push(group);
+  }
+  return { rows: visible, view };
+}
+
 // Group identity is private presentation metadata, never an input to the manager acceptance evaluator.
 export function primaryTradeTarget(m: Model, ids: string[]) {
   return (

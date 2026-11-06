@@ -7,6 +7,12 @@ import {
 } from "./TradeWorkspace";
 import { GroupedTradeRows } from "./TradeResultGroups";
 import {
+  emptyTradeBrowse,
+  tradeResultPageSize,
+  type TradeBrowseOptions,
+  type TradeResultView,
+} from "../domain/trade-result-groups";
+import {
   ManagerControls,
   ManagerEvidence,
   useNegotiations,
@@ -86,6 +92,7 @@ interface SearchJob {
   status: "running" | "complete" | "cancelled" | "error" | "stale";
   progress?: SearchProgress;
   rows: SearchRow[];
+  view?: TradeResultView;
   suggestions?: SearchRow[];
   total: number;
   stats?: SearchStats;
@@ -271,6 +278,9 @@ export function TradeSearch({
   ];
   const selectedPosition = deficitPosition || offeredPositions[0] || "";
   const [job, setJob] = useState<SearchJob | null>(null);
+  // Result browsing is local to the completed search and is never saved as a scoring filter.
+  const [resultBrowse, setResultBrowse] = useState(emptyTradeBrowse);
+  const browseToken = useRef("");
   // Preserve the executed controls independently from later edits, so a debug export can identify stale results precisely.
   const appliedSearch = useRef<{
     query: TradeSearchQuery;
@@ -647,6 +657,8 @@ export function TradeSearch({
     // Clear feedback from the previous captured result set.
     setSavedRow("");
     setDiagnostic("");
+    browseToken.current = "";
+    setResultBrowse(emptyTradeBrowse());
     appliedSearch.current = { query: structuredClone(query), context };
     resultModel.current = m;
     resultPlans.current = lineupsRaw;
@@ -663,6 +675,9 @@ export function TradeSearch({
           active.current?.id !== message.id ||
           active.current.context !== message.context
         )
+          return;
+        // Typing or paging can supersede an earlier browse response without invalidating the completed calculations.
+        if (message.type === "browse" && message.token !== browseToken.current)
           return;
         setJob((previous) => {
           if (
@@ -703,19 +718,12 @@ export function TradeSearch({
                 },
               },
             };
-          // Reject out-of-order pages instead of duplicating or skipping rows.
-          if (
-            message.type === "page" &&
-            message.offset !== previous.rows.length
-          )
-            return { ...previous, paging: false };
+          // Each browse response is a complete bounded view, not another raw slice to append.
           return {
             ...previous,
             status: "complete",
-            rows:
-              message.type === "complete"
-                ? message.rows
-                : [...previous.rows, ...message.rows],
+            rows: message.rows,
+            view: message.view,
             total: message.total,
             stats: message.stats,
             suggestions: message.suggestions ?? previous.suggestions,
@@ -891,25 +899,39 @@ export function TradeSearch({
     if (success !== false) setSavedRow(row.key);
   }
 
-  // Fetch the next already-sorted page from the same completed search without rerunning calculations.
-  function more() {
+  // Query retained results rather than restarting the search; explicit tokens discard superseded name/page requests.
+  function browseResults(options: TradeBrowseOptions) {
     if (
       !job ||
       stale ||
       job.status !== "complete" ||
-      job.paging ||
       active.current?.id !== job.id
     )
       return;
-    const message: SearchRequest = {
-      type: "page",
-      id: job.id,
-      context,
-      offset: job.rows.length,
-    };
-    setJob({ ...job, paging: true });
-    active.current.worker.postMessage(message);
+    browseToken.current = crypto.randomUUID();
+    setResultBrowse(options);
+    setJob((previous) => (previous ? { ...previous, paging: true } : previous));
   }
+
+  // Debounce text entry; filtering names never blocks typing or allows an old response to replace newer selections.
+  useEffect(() => {
+    const captured = active.current,
+      token = browseToken.current;
+    if (!captured || !token) return;
+    const timer = window.setTimeout(() => {
+      if (active.current?.id !== captured.id || browseToken.current !== token)
+        return;
+      const message: SearchRequest = {
+        type: "browse",
+        id: captured.id,
+        context: captured.context,
+        token,
+        options: resultBrowse,
+      };
+      captured.worker.postMessage(message);
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [resultBrowse]);
 
   // Fetch actual weekly slot changes only when the matching result is opened.
   function inspect(row: SearchRow) {
@@ -2029,6 +2051,12 @@ export function TradeSearch({
                       stats: job?.stats,
                       total: job?.total,
                       loadedRows: job?.rows.length,
+                      // Distinguish result-only name/page selections from the unchanged scoring query in diagnostics.
+                      resultBrowse: {
+                        options: resultBrowse,
+                        matchingOffers: job?.view?.totalOffers,
+                        matchingPackages: job?.view?.totalPackages,
+                      },
                     },
                   ),
                   appVersion: import.meta.env.VITE_APP_VERSION,
@@ -2245,6 +2273,89 @@ export function TradeSearch({
                     )}
                   </div>
                 )}
+                {/* Name filters inspect every retained offer, including unloaded packages and alternatives; comma-separated names are all required. */}
+                {job.total > 0 && (
+                  <div
+                    className="trade-search-controls"
+                    aria-label="Search within results"
+                  >
+                    <FilterHelp
+                      label="Search within results"
+                      help="Search the entire completed result set without recalculating trades. Separate player names with commas; every name is required on its selected side. Exact player lists excludes additional players on a side where you entered names."
+                    >
+                      <strong>Search within results</strong>
+                    </FilterHelp>
+                    <div className="two-col">
+                      <label>
+                        Offered players in results
+                        <input
+                          value={resultBrowse.offered}
+                          placeholder="Walker"
+                          disabled={stale}
+                          onChange={(event) =>
+                            browseResults({
+                              ...emptyTradeBrowse(),
+                              offered: event.target.value,
+                              received: resultBrowse.received,
+                              exact: resultBrowse.exact,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        Received players in results
+                        <input
+                          value={resultBrowse.received}
+                          placeholder="Jacobs, Swift"
+                          disabled={stale}
+                          onChange={(event) =>
+                            browseResults({
+                              ...emptyTradeBrowse(),
+                              offered: resultBrowse.offered,
+                              received: event.target.value,
+                              exact: resultBrowse.exact,
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
+                    <label className="check">
+                      <input
+                        type="checkbox"
+                        checked={resultBrowse.exact}
+                        disabled={stale}
+                        onChange={(event) =>
+                          browseResults({
+                            ...emptyTradeBrowse(),
+                            offered: resultBrowse.offered,
+                            received: resultBrowse.received,
+                            exact: event.target.checked,
+                          })
+                        }
+                      />
+                      Exact player lists
+                    </label>
+                    <button
+                      type="button"
+                      className="subtle"
+                      disabled={stale}
+                      onClick={() => browseResults(emptyTradeBrowse())}
+                    >
+                      Clear result search
+                    </button>
+                    <p role="status">
+                      {job.paging
+                        ? "Updating results…"
+                        : `${job.view?.totalPackages ?? 0} different packages · ${job.view?.totalOffers ?? 0} matching offers of ${job.total}.`}
+                    </p>
+                    {!job.paging && job.view?.totalOffers === 0 && (
+                      <p>
+                        No completed offers match these player names. Clear
+                        result search to see all packages.
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div className="table-wrap">
                   <table className="trade-search-results">
                     <thead>
@@ -2285,7 +2396,25 @@ export function TradeSearch({
                       </tr>
                     </thead>
                     <GroupedTradeRows
+                      key={job.id}
                       rows={job.rows}
+                      view={job.view}
+                      busy={stale || job.paging}
+                      morePackages={(team, shown) =>
+                        browseResults({
+                          ...resultBrowse,
+                          packages: {
+                            ...resultBrowse.packages,
+                            [team]: shown + tradeResultPageSize,
+                          },
+                        })
+                      }
+                      moreOffers={(key, shown) =>
+                        browseResults({
+                          ...resultBrowse,
+                          offers: { ...resultBrowse.offers, [key]: shown + tradeResultPageSize },
+                        })
+                      }
                       m={resultModel.current ?? m}
                       render={(row) => (
                         <tr
@@ -2943,17 +3072,13 @@ export function TradeSearch({
                 </details>
                 <div className="table-footer">
                   <span>
-                    {job.rows.length} of {job.total} matches
+                    {job.view?.teams.reduce(
+                      (total, team) => total + team.packages.length,
+                      0,
+                    ) ?? 0}{" "}
+                    of {job.view?.totalPackages ?? 0} packages shown ·{" "}
+                    {job.rows.length} offers loaded
                   </span>
-                  {job.rows.length < job.total && (
-                    <button
-                      className="subtle"
-                      disabled={stale || job.paging}
-                      onClick={more}
-                    >
-                      {job.paging ? "Loading results…" : "Show more"}
-                    </button>
-                  )}
                 </div>
               </>
             )}

@@ -1,4 +1,4 @@
-import { tradeResultGroups } from "../domain/trade-result-groups";
+import { browseTradeResults } from "../domain/trade-result-groups";
 import { managerFailures } from "../domain/manager-expectations";
 import { surfaceFailures } from "../domain/surface-appeal";
 import { deficitProtectionFailures } from "../domain/trade-safeguards";
@@ -10,7 +10,6 @@ import {
   matchesWeekly,
   searchLineupDetails,
   type TradeSearchQuery,
-  searchPageSize,
   type SearchRequest,
   type SearchResponse,
   type SearchRow,
@@ -86,25 +85,21 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
       }
       return;
     }
-    // Page only a completed matching request; page size limits rendering, never search completeness.
-    if (request.type === "page") {
+    // Browse only the captured completed set; names, package pages and outgoing alternatives never rerun scoring.
+    if (request.type === "browse") {
       if (!retained || retained.id !== id || retained.context !== context)
         return;
-      if (
-        !Number.isInteger(request.offset) ||
-        request.offset < 0 ||
-        request.offset > retained.rows.length
-      )
-        throw Error("Invalid result page.");
       send({
         id,
         context,
-        type: "page",
-        rows: retained.rows.slice(
-          request.offset,
-          request.offset + searchPageSize,
+        type: "browse",
+        token: request.token,
+        ...browseTradeResults(
+          retained.model,
+          retained.rows,
+          request.options,
+          retained.query.give,
         ),
-        offset: request.offset,
         total: retained.rows.length,
         stats: retained.stats,
       });
@@ -235,13 +230,7 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
     rows.sort((a, b) =>
       compareDiscoveryRows(a, b, request.query.discovery?.ranking),
     );
-    // Group after sorting: group insertion follows its best selected-sort result, not team name.
-    const grouped = tradeResultGroups(model, rows).flatMap((team) =>
-      team.targets.flatMap((target) =>
-        target.packages.flatMap((pack) => pack.alternatives),
-      ),
-    );
-    for (let i = 0; i < grouped.length; i++) rows[i] = grouped[i];
+    // Keep the complete ranked offers in the worker; the first response represents distinct packages for every team.
     retained = {
       id,
       context,
@@ -256,8 +245,7 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
       id,
       context,
       type: "complete",
-      rows: rows.slice(0, searchPageSize),
-      offset: 0,
+      ...browseTradeResults(model, rows, undefined, request.query.give),
       total: rows.length,
       stats,
       suggestions,

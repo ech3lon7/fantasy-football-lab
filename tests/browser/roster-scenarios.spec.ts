@@ -891,13 +891,16 @@ test("roster save slots restore exact working points and require explicit saves"
     name: "Roster save slots",
     exact: true,
   });
-  await expect(slots.getByRole("button", { name: /^Load slot/ })).toHaveCount(
-    10,
-  );
-  for (const slot of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+  // Segmented pill strip presents all 10 slots; verify each slot can be selected and starts disabled when empty
+  await expect(slots.getByRole("tab", { name: /^Slot / })).toHaveCount(10);
+  for (const slot of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+    await slots.getByRole("tab", { name: new RegExp(`^Slot ${slot}\\b`) }).click();
     await expect(
       slots.getByRole("button", { name: `Load slot ${slot}`, exact: true }),
     ).toBeDisabled();
+  }
+  // Select slot 1 before performing initial save to slot 1
+  await slots.getByRole("tab", { name: /^Slot 1\b/ }).click();
   expect((await stored(page)).state.filters.rosterScenarios).toBeUndefined();
   await slots
     .getByRole("button", { name: "Save to slot 1", exact: true })
@@ -940,6 +943,8 @@ test("roster save slots restore exact working points and require explicit saves"
       .cursor,
   ).toBe(0);
   await page.goto("./#/overview");
+  // Switch to slot 2 before saving checkpoint
+  await slots.getByRole("tab", { name: /^Slot 2\b/ }).click();
   await slots
     .getByRole("button", { name: "Save to slot 2", exact: true })
     .click();
@@ -950,6 +955,8 @@ test("roster save slots restore exact working points and require explicit saves"
   await page
     .getByRole("button", { name: "Cut player to available pool", exact: true })
     .click();
+  // Switch to slot 3 before saving checkpoint
+  await slots.getByRole("tab", { name: /^Slot 3\b/ }).click();
   await slots
     .getByRole("button", { name: "Save to slot 3", exact: true })
     .click();
@@ -960,6 +967,8 @@ test("roster save slots restore exact working points and require explicit saves"
           .scenarios[0].cursor,
     )
     .toBe(2);
+  // Switch to slot 1 and restore its snapshot
+  await slots.getByRole("tab", { name: /^Slot 1\b/ }).click();
   await slots.getByRole("button", { name: "Load slot 1", exact: true }).click();
   await expect(
     page.getByText("0 / 0 moves applied", { exact: true }),
@@ -968,10 +977,14 @@ test("roster save slots restore exact working points and require explicit saves"
     JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0]
       .cursor,
   ).toBe(2);
+  // Switch to slot 2 and restore its snapshot
+  await slots.getByRole("tab", { name: /^Slot 2\b/ }).click();
   await slots.getByRole("button", { name: "Load slot 2", exact: true }).click();
   await expect(
     page.getByText("1 / 1 moves applied", { exact: true }),
   ).toBeVisible();
+  // Switch to slot 3 and overwrite snapshot
+  await slots.getByRole("tab", { name: /^Slot 3\b/ }).click();
   await slots
     .getByRole("button", { name: "Save to slot 3", exact: true })
     .click();
@@ -994,6 +1007,10 @@ test("roster save slots restore exact working points and require explicit saves"
       [2, 1],
       [3, 1],
     ]);
+  // Capture visual verification screenshot of the compact desktop save slots interface
+  await slots.screenshot({
+    path: "C:/Users/israe/.gemini/antigravity/brain/2eea40f1-347c-49f2-855d-0f59973c47d2/compact-save-slots.png",
+  });
   await page.reload();
   await expect(
     page.getByText("1 / 1 moves applied", { exact: true }),

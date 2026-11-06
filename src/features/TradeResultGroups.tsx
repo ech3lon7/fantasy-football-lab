@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import {
-  tradeResultGroups,
+  type TradeResultView,
   chainResultGroups,
 } from "../domain/trade-result-groups";
 import type { Model } from "../domain/valuation";
@@ -167,32 +167,38 @@ function ResultBlock({
   );
 }
 
-// Table sections retain every offer/action; each nested layer moves names 24px right while multiple targets can remain open.
+// Each team exposes distinct incoming packages; outgoing alternatives and their pages remain independently collapsed.
 export function GroupedTradeRows({
   rows,
+  view,
   m,
   render,
+  busy,
+  morePackages,
+  moreOffers,
 }: {
   rows: SearchRow[];
+  view?: TradeResultView;
   m: Model;
   render: (row: SearchRow) => ReactNode;
+  busy?: boolean;
+  morePackages: (team: string, shown: number) => void;
+  moreOffers: (key: string, shown: number) => void;
 }) {
-  // Result groups start collapsed; only the user's clicks reveal offers and nested alternatives.
-  const [opened, setOpened] = useState<string[]>([]),
-    [expanded, setExpanded] = useState<string[]>([]);
-  const toggle = (
-    key: string,
-    values: string[],
-    set: (next: string[]) => void,
-  ) =>
-    set(
-      values.includes(key) ? values.filter((x) => x !== key) : [...values, key],
-    );
+  const [opened, setOpened] = useState<string[]>([]);
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const byKey = new Map(rows.map((row) => [row.key, row]));
   const columns = rows.some((row) => row.surface) ? 8 : 6;
   return (
     <>
-      {tradeResultGroups(m, rows).map((group) => {
+      {view?.teams.map((group) => {
         const teamOpen = opened.includes(group.team);
+        const teamName = String(
+          m.dataset.tables.ModelTeams.find(
+            (t) => String(t.TeamID) === group.team,
+          )?.TeamName ?? group.team,
+        );
+        const best = byKey.get(group.packages[0]?.rowKeys[0]);
         return (
           <tbody key={group.team}>
             <tr>
@@ -200,106 +206,120 @@ export function GroupedTradeRows({
                 <button
                   type="button"
                   aria-expanded={teamOpen}
-                  onClick={() => toggle(group.team, opened, setOpened)}
+                  onClick={() =>
+                    setOpened((old) =>
+                      teamOpen
+                        ? old.filter((key) => key !== group.team)
+                        : [...old, group.team],
+                    )
+                  }
                 >
-                  {teamOpen ? "▾" : "▸"}{" "}
-                  {String(
-                    m.dataset.tables.ModelTeams.find(
-                      (t) => String(t.TeamID) === group.team,
-                    )?.TeamName ?? group.team,
-                  )}{" "}
-                  ·{" "}
-                  {group.targets.reduce(
-                    (n, target) => n + target.alternatives.length,
-                    0,
-                  )}{" "}
-                  loaded offers · {group.targets.length} targets · Best{" "}
-                  {signed(group.targets[0].alternatives[0].own)} EPPG
+                  {teamOpen ? "▾" : "▸"} {teamName} · {group.totalPackages}{" "}
+                  packages · {group.totalOffers} offers · Best{" "}
+                  {signed(best?.own ?? null)} EPPG
                 </button>
               </th>
             </tr>
-            {group.targets.map((target) => {
-              const key = JSON.stringify([group.team, target.target]),
-                more = expanded.includes(key);
+            {group.packages.map((pack) => {
+              const first = byKey.get(pack.rowKeys[0]);
+              if (!first) return null;
+              const open = expanded.includes(pack.key);
+              const label = first.get
+                .map((id) => m.byId.get(id)?.name ?? id)
+                .join(" + ");
               return (
-                <Fragment key={key}>
+                <Fragment key={pack.key}>
                   <ResultRow open={teamOpen} depth={1}>
-                    {render(target.alternatives[0])}
+                    {render(first)}
                   </ResultRow>
-                  {target.alternatives.length > 1 && (
+                  {pack.totalOffers > 1 && (
                     <ResultRow open={teamOpen} depth={1}>
                       <tr>
                         <td colSpan={columns}>
                           <button
                             type="button"
                             className="trade-result-toggle"
-                            aria-expanded={more}
-                            onClick={() => toggle(key, expanded, setExpanded)}
+                            aria-expanded={open}
+                            disabled={busy}
+                            onClick={() => {
+                              setExpanded((old) =>
+                                open
+                                  ? old.filter((key) => key !== pack.key)
+                                  : [...old, pack.key],
+                              );
+                              // Fetch alternatives lazily; reopening a previously loaded package uses its retained page.
+                              if (!open && pack.rowKeys.length === 1)
+                                moreOffers(pack.key, 1);
+                            }}
                           >
-                            {more ? "Hide" : "Show"}{" "}
-                            {target.alternatives.length - 1} alternative offers
-                            involving{" "}
-                            {m.byId.get(target.target)?.name ?? target.target}
+                            {open ? "Hide" : "Show"} {pack.totalOffers - 1}{" "}
+                            outgoing alternatives for {label}
                           </button>
                         </td>
                       </tr>
                     </ResultRow>
                   )}
-                  {target.packages.map((pack, i) => {
-                    const packageKey = key + pack.key,
-                      packageOpen = expanded.includes(packageKey);
-                    const label = pack.alternatives[0].get
-                      .map((id) => m.byId.get(id)?.name ?? id)
-                      .join(" + ");
-                    return (
-                      <Fragment key={pack.key}>
-                        {i > 0 && (
-                          <ResultRow open={teamOpen && more} depth={2}>
-                            {render(pack.alternatives[0])}
-                          </ResultRow>
-                        )}
-                        {pack.alternatives.length > 1 && (
-                          <ResultRow open={teamOpen && more} depth={2}>
-                            <tr>
-                              <td colSpan={columns}>
-                                <button
-                                  type="button"
-                                  className="trade-result-toggle"
-                                  aria-expanded={packageOpen}
-                                  onClick={() =>
-                                    toggle(packageKey, expanded, setExpanded)
-                                  }
-                                >
-                                  {packageOpen ? "Hide" : "Show"}{" "}
-                                  {pack.alternatives.length - 1} outgoing
-                                  alternatives for {label}
-                                </button>
-                              </td>
-                            </tr>
-                          </ResultRow>
-                        )}
-                        {pack.alternatives.slice(1).map((row) => (
-                          <ResultRow
-                            key={row.key}
-                            open={teamOpen && more && packageOpen}
-                            depth={3}
-                          >
-                            {render(row)}
-                          </ResultRow>
-                        ))}
-                      </Fragment>
-                    );
+                  {pack.rowKeys.slice(1).map((key) => {
+                    const row = byKey.get(key);
+                    return row ? (
+                      <ResultRow key={key} open={teamOpen && open} depth={2}>
+                        {render(row)}
+                      </ResultRow>
+                    ) : null;
                   })}
+                  {open && pack.rowKeys.length < pack.totalOffers && (
+                    <ResultRow open={teamOpen} depth={2}>
+                      <tr>
+                        <td colSpan={columns}>
+                          <span>
+                            {pack.rowKeys.length} of {pack.totalOffers}{" "}
+                            offers{" "}
+                          </span>
+                          <button
+                            type="button"
+                            className="subtle"
+                            disabled={busy}
+                            onClick={() =>
+                              moreOffers(pack.key, pack.rowKeys.length)
+                            }
+                          >
+                            Show more offers
+                          </button>
+                        </td>
+                      </tr>
+                    </ResultRow>
+                  )}
                 </Fragment>
               );
             })}
+            {group.packages.length < group.totalPackages && (
+              <ResultRow open={teamOpen} depth={1}>
+                <tr>
+                  <td colSpan={columns}>
+                    <span>
+                      {group.packages.length} of {group.totalPackages}{" "}
+                      packages{" "}
+                    </span>
+                    <button
+                      type="button"
+                      className="subtle"
+                      disabled={busy}
+                      onClick={() =>
+                        morePackages(group.team, group.packages.length)
+                      }
+                    >
+                      Show more packages
+                    </button>
+                  </td>
+                </tr>
+              </ResultRow>
+            )}
           </tbody>
         );
       })}
     </>
   );
 }
-
 // Ordered team-pair groups keep chain direction and all saved/loadable variants while animating only these result disclosures.
 export function GroupedChains({
   chains,

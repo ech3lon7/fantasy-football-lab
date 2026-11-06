@@ -2576,3 +2576,106 @@ pre {
 .next-refresh-scenarios th:first-child { position: static; min-width: 0; width: 20%; }
 .next-refresh-scenarios th:nth-child(2) { width: 30%; }
 .next-refresh-scenarios input { width: 100%; max-width: 7rem; box-sizing: border-box; padding: 6px; border: 1px solid var(--line); border-radius: 5px; font: inherit; background: #fffbe8; color: var(--purple); }
+/* Compact roster save slots: Segmented pill selector and unified action bar */
+.roster-slots-container {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  padding: 12px 14px;
+  margin-top: 10px;
+}
+.roster-slot-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.slot-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f9faf7;
+  color: var(--text);
+  font: 600 12px/1 Manrope, sans-serif;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+.slot-pill:hover {
+  border-color: #a8b8a5;
+  background: #f0f4ee;
+}
+.slot-pill.active {
+  border-color: var(--green);
+  background: #eef6ec;
+  color: var(--green);
+  box-shadow: 0 0 0 1px var(--green);
+}
+.slot-pill .slot-dot {
+  font-size: 10px;
+  line-height: 1;
+}
+.slot-pill .slot-dot.saved {
+  color: var(--green);
+}
+.slot-pill .slot-dot.empty {
+  color: var(--muted);
+  opacity: 0.6;
+}
+.roster-slot-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 10px;
+}
+.roster-slot-action-bar .slot-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.roster-slot-action-bar .slot-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.roster-slot-action-bar .slot-header-row strong {
+  font: 700 13px Manrope, sans-serif;
+  color: var(--text);
+}
+.roster-slot-action-bar .slot-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #eef6ec;
+  color: var(--green);
+}
+.roster-slot-action-bar .slot-desc {
+  font-size: 12px;
+  margin: 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.roster-slot-action-bar .slot-desc.empty {
+  color: var(--muted);
+  font-style: italic;
+}
+.roster-slot-action-bar small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.roster-slot-action-bar .toolbar {
+  margin: 0;
+  display: flex;
+  gap: 8px;
+}

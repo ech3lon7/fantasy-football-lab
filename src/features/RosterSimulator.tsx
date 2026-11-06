@@ -48,11 +48,13 @@ export function RosterSimulator({
   const read = readRosterScenarios(state.filters[rosterScenariosKey]),
     collection = read.collection;
   const current = activeRosterScenario(state.filters[rosterScenariosKey]);
+  // Local UI state for user inputs, active search, feedback messages, and selected roster save slot
   const [name, setName] = useState(""),
     [player, setPlayer] = useState(""),
     [search, setSearch] = useState(""),
     [viewTeam, setViewTeam] = useState(""),
-    [message, setMessage] = useState("");
+    [message, setMessage] = useState(""),
+    [selectedSlot, setSelectedSlot] = useState<RosterSaveSlot>(1);
   // Names are working edits too; switching or loading a snapshot restores that recipe's own name.
   useEffect(() => {
     setName(current?.name ?? "");
@@ -255,22 +257,74 @@ export function RosterSimulator({
               Snapshots restore ownership and exact starter slots. Player
               forecasts use the current imported data.
             </p>
-            {/* Map over all available roster save slots (1-10) to render each snapshot checkpoint card and action buttons */}
-            <div className="three-col">
-              {rosterSaveSlots.map((slot) => {
-                const snapshot = collection.snapshots?.find(
-                  (saved) =>
-                    saved.scenario.id === current.id && saved.slot === slot,
-                );
-                return (
-                  <div className="metric" key={slot}>
-                    <h4>Slot {slot}</h4>
-                    <p>{snapshot ? snapshot.scenario.name : "Empty slot"}</p>
-                    {snapshot && (
-                      <small>
-                        Saved {new Date(snapshot.savedUTC).toLocaleString()}
-                      </small>
-                    )}
+            {/* Compact segmented roster save slots: renders a space-saving pill selector and an active action bar */}
+            {(() => {
+              // Retrieve snapshot data for the currently selected slot to determine active details and load button availability
+              const selectedSnapshot = collection.snapshots?.find(
+                (saved) =>
+                  saved.scenario.id === current.id && saved.slot === selectedSlot,
+              );
+
+              return (
+                <div className="roster-slots-container">
+                  {/* Segmented horizontal pill strip displaying all 10 slots with saved (●) versus empty (○) indicators */}
+                  <div
+                    className="roster-slot-pills"
+                    role="tablist"
+                    aria-label="Select save slot"
+                  >
+                    {rosterSaveSlots.map((slot) => {
+                      const isSaved = Boolean(
+                        collection.snapshots?.some(
+                          (saved) =>
+                            saved.scenario.id === current.id && saved.slot === slot,
+                        ),
+                      );
+                      const isSelected = selectedSlot === slot;
+                      return (
+                        <button
+                          key={slot}
+                          type="button"
+                          role="tab"
+                          aria-selected={isSelected}
+                          aria-label={`Slot ${slot}${isSaved ? " (saved)" : " (empty)"}`}
+                          className={`slot-pill ${isSelected ? "active" : ""} ${isSaved ? "has-data" : "empty"}`}
+                          onClick={() => setSelectedSlot(slot)}
+                        >
+                          <span className="slot-pill-label">Slot {slot}</span>
+                          <span
+                            className={`slot-dot ${isSaved ? "saved" : "empty"}`}
+                            aria-hidden="true"
+                          >
+                            {isSaved ? "●" : "○"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Unified inspector and action strip showing selected slot info and primary Save/Load triggers */}
+                  <div className="roster-slot-action-bar">
+                    <div className="slot-info">
+                      <div className="slot-header-row">
+                        <strong>Slot {selectedSlot}</strong>
+                        {selectedSnapshot && (
+                          <span className="slot-tag">Saved</span>
+                        )}
+                      </div>
+                      <p className={`slot-desc ${selectedSnapshot ? "" : "empty"}`}>
+                        {selectedSnapshot
+                          ? selectedSnapshot.scenario.name
+                          : "Empty slot"}
+                      </p>
+                      {selectedSnapshot && (
+                        <small className="muted">
+                          Saved{" "}
+                          {new Date(selectedSnapshot.savedUTC).toLocaleString()}
+                        </small>
+                      )}
+                    </div>
+
                     <div className="toolbar">
                       <button
                         className="button primary"
@@ -281,14 +335,14 @@ export function RosterSimulator({
                             );
                             return;
                           }
-                          if (saveSlot(slot)) setMessage("");
+                          if (saveSlot(selectedSlot)) setMessage("");
                         }}
                       >
-                        Save to slot {slot}
+                        Save to slot {selectedSlot}
                       </button>
                       <button
                         className="button"
-                        disabled={!snapshot}
+                        disabled={!selectedSnapshot}
                         onClick={() => {
                           try {
                             change(
@@ -296,7 +350,7 @@ export function RosterSimulator({
                                 state,
                                 state.filters[rosterScenariosKey] ?? "",
                                 current.id,
-                                slot,
+                                selectedSlot,
                               ),
                             );
                           } catch (error) {
@@ -308,13 +362,13 @@ export function RosterSimulator({
                           }
                         }}
                       >
-                        Load slot {slot}
+                        Load slot {selectedSlot}
                       </button>
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })()}
           </section>
           {/* Undo and redo expose every intermediate roster without silently adding waiver players or altering earlier saved trade snapshots. */}
           <div className="toolbar">

@@ -746,7 +746,8 @@ test("incoming range returns singles and packages together and restores saved bo
   await expect(
     search.getByText("67 index matches.", { exact: false }),
   ).toBeVisible();
-  await search.getByRole("button", { name: "Show more", exact: true }).click();
+  await openSearchTeams(search);
+  await search.getByRole("button", { name: "Show more packages", exact: true }).click();
   await expandSearchAlternatives(search);
   const rows = search.locator("tbody tr[data-trade-result]");
   await expect(rows).toHaveCount(67);
@@ -836,6 +837,51 @@ test("flexible search keeps protected-drop matches with a brief warning", async 
   expect(saved.draft.give).toEqual(["101"]);
   expect([...saved.draft.get].sort()).toEqual(["2", "200"]);
   expect(workspace.dataset?.tables.ModelRosters.some((p) => p.PlayerID === 100 && p.TeamID === 1)).toBe(true);
+});
+
+// Name browsing searches unloaded offers in the same worker, preserves query settings and saves the exact selected package.
+test("completed results find exact unloaded packages without rerunning the search", async ({ page }) => {
+  let workers = 0;
+  page.on("worker", (worker) => { if (worker.url().includes("trade-search.worker")) workers++; });
+  await seed(page);
+  const search = panel(page);
+  await search.getByLabel("Use strict index range", { exact: true }).uncheck();
+  await search.getByLabel("Find outgoing combinations", { exact: true }).check();
+  await search.getByText(/Tradable pool \(1 selected/).click();
+  await search.getByLabel("Tradable Main QB", { exact: true }).check();
+  await search.getByLabel("Maximum outgoing players", { exact: true }).fill("2");
+  await search.getByLabel("Create package", { exact: true }).check();
+  await search.getByLabel("Maximum players to receive", { exact: true }).selectOption("2");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(search.getByText("234 index matches.", { exact: false })).toBeVisible();
+  await expect(search.getByText("78 different packages · 234 matching offers of 234.", { exact: true })).toBeVisible();
+  await openSearchTeams(search);
+  await expect(search.locator("tr[data-trade-result]")).toHaveCount(50);
+  const workerCount = workers;
+  expect(workerCount).toBeGreaterThan(0);
+  const original = JSON.parse((await storedWorkspace(page)).state.filters.tradeSearchSettings).standard.query;
+  // Rapid edits require the latest reply, all comma-separated names and no additional offered or received players.
+  await search.getByLabel("Offered players in results", { exact: true }).fill("Main QB");
+  await search.getByLabel("Received players in results", { exact: true }).fill("Search WR 8, Search WR 9");
+  await search.getByLabel("Exact player lists", { exact: true }).check();
+  await expect(search.getByText("1 different packages · 1 matching offers of 234.", { exact: true })).toBeVisible();
+  const row = search.locator("tr[data-trade-result]");
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText("Offer: Main QB");
+  await expect(row.getByRole("link", { name: "Search WR 8", exact: true })).toBeVisible();
+  await expect(row.getByRole("link", { name: "Search WR 9", exact: true })).toBeVisible();
+  expect(workers).toBe(workerCount);
+  expect(JSON.parse((await storedWorkspace(page)).state.filters.tradeSearchSettings).standard.query).toEqual(original);
+  await row.getByRole("button", { name: "Save trade", exact: true }).click();
+  const saved = JSON.parse((await storedWorkspace(page)).state.filters.savedTrades).trades[0];
+  expect(saved.draft.give).toEqual(["100"]);
+  expect([...saved.draft.get].sort()).toEqual(["308", "309"]);
+  await search.getByLabel("Received players in results", { exact: true }).fill("Search WR 8, missing player");
+  await expect(search.getByText(/No completed offers match these player names/)).toBeVisible();
+  await search.getByRole("button", { name: "Clear result search", exact: true }).click();
+  await expect(search.getByText("78 different packages · 234 matching offers of 234.", { exact: true })).toBeVisible();
+  await expect(search.locator("tr[data-trade-result]")).toHaveCount(50);
+  expect(workers).toBe(workerCount);
 });
 
 // Flexible discovery preserves protected offers and the exact outgoing subset through details, saving and loading.
@@ -1926,7 +1972,8 @@ test("packages paginate complete results and load exactly the selected receive c
   ).toBeVisible();
   await expandSearchAlternatives(search);
   await expect(search.locator("tbody tr[data-trade-result]")).toHaveCount(50);
-  await search.getByRole("button", { name: "Show more", exact: true }).click();
+  await openSearchTeams(search);
+  await search.getByRole("button", { name: "Show more packages", exact: true }).click();
   await expandSearchAlternatives(search);
   await expect(search.locator("tbody tr[data-trade-result]")).toHaveCount(78);
   // An injured player remains discoverable and its uncertainty is explicit in the result details.
@@ -2821,17 +2868,22 @@ test("result expansions indent names smoothly without shifting numerical columns
   await seed(page);
   const search = panel(page);
   await search.getByLabel("Use strict index range", { exact: true }).uncheck();
+  // Distinct packages are visible together; use multiple outgoing offers to exercise nested alternatives.
+  await search.getByLabel("Find outgoing combinations", { exact: true }).check();
+  await search.getByText(/Tradable pool \(1 selected/).click();
+  await search.getByLabel("Tradable Main QB", { exact: true }).check();
+  await search.getByLabel("Maximum outgoing players", { exact: true }).fill("2");
   await search.getByLabel("Create package", { exact: true }).check();
   await search.getByLabel("Maximum players to receive", { exact: true }).selectOption("2");
   await search.getByRole("button", { name: "Search", exact: true }).click();
-  await expect(search.getByText("78 index matches.", { exact: false })).toBeVisible();
+  await expect(search.getByText("234 index matches.", { exact: false })).toBeVisible();
   // No result content or nested alternative is revealed before a deliberate team expansion.
   const teams = search.locator("tbody > tr > th button");
   await expect(teams.first()).toHaveAttribute("aria-expanded", "false");
   await expect(search.locator("tr[data-trade-result]")).toHaveCount(0);
   await openSearchTeams(search);
   await expect(search.getByRole("button", { name: /^Hide .*alternative/ })).toHaveCount(0);
-  const buttons = search.getByRole("button", { name: /^Show .*alternative offers involving/ });
+  const buttons = search.getByRole("button", { name: /^Show .*outgoing alternatives for/ });
   await buttons.first().click();
   const nested = search.locator('tr[data-trade-result][data-result-depth="2"]').first();
   await expect(nested).toBeVisible();
@@ -2843,20 +2895,20 @@ test("result expansions indent names smoothly without shifting numerical columns
   const rootX = (await root.locator('td').nth(1).boundingBox())!.x;
   expect((await nested.locator('td').nth(1).boundingBox())!.x).toBeCloseTo(rootX, 1);
   await buttons.first().click();
-  await expect(search.getByRole("button", { name: /^Hide .*alternative offers involving/ })).toHaveCount(2);
+  await expect(search.getByRole("button", { name: /^Hide .*outgoing alternatives for/ })).toHaveCount(2);
   await page.evaluate(async () => { await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))); });
   await search.locator('table.trade-search-results').screenshot({ path: "test-results/trade-result-hierarchy.png" });
   // Reduced motion closes immediately without losing the ability to reopen the same offers.
   await page.emulateMedia({ reducedMotion: "reduce" });
-  const close = search.getByRole("button", { name: /^Hide .*alternative offers involving/ }).first();
+  const close = search.getByRole("button", { name: /^Hide .*outgoing alternatives for/ }).first();
   await close.press("Enter");
-  await expect(search.getByRole("button", { name: /^Hide .*alternative offers involving/ })).toHaveCount(1);
+  await expect(search.getByRole("button", { name: /^Hide .*outgoing alternatives for/ })).toHaveCount(1);
   expect(await page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length)).toBe(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(391);
   // A fresh search resets the disclosure state instead of carrying expanded plans into the new results.
   await search.getByRole("button", { name: "Search", exact: true }).click();
-  await expect(search.getByText("78 index matches.", { exact: false })).toBeVisible();
+  await expect(search.getByText("234 index matches.", { exact: false })).toBeVisible();
   await expect(teams.first()).toHaveAttribute("aria-expanded", "false");
   await expect(search.locator("tr[data-trade-result]")).toHaveCount(0);
 });
