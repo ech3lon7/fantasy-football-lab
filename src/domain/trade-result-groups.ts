@@ -7,6 +7,7 @@ import type { TradeChain } from "./trade-chains";
 export interface TradeBrowseOptions {
   offered: string;
   received: string;
+  excluded?: string;
   exact: boolean;
   packages: Record<string, number>;
   offers: Record<string, number>;
@@ -14,6 +15,7 @@ export interface TradeBrowseOptions {
 export const emptyTradeBrowse = (): TradeBrowseOptions => ({
   offered: "",
   received: "",
+  excluded: "",
   exact: false,
   packages: {},
   offers: {},
@@ -42,8 +44,13 @@ export function browseTradeResults(
   const terms = (text: string) =>
     text.split(",").map(normalize).filter(Boolean);
   const offered = terms(options.offered),
-    received = terms(options.received);
-  const names = new Map(m.players.map((p) => [p.id, normalize(p.name)]));
+    received = terms(options.received),
+    excluded = terms(options.excluded ?? "");
+  const playerSearchText = (p: { name: string; nfl?: string; pos?: string }) =>
+    normalize(
+      `${p.name} ${p.nfl ?? ""} ${p.pos === "D/ST" ? "defense dst d/st" : ""}`,
+    );
+  const names = new Map(m.players.map((p) => [p.id, playerSearchText(p)]));
   const matches = (ids: string[], tokens: string[]) =>
     !tokens.length ||
     (tokens.every((token) =>
@@ -54,10 +61,18 @@ export function browseTradeResults(
           ids.every((id) =>
             tokens.some((token) => names.get(id)?.includes(token)),
           ))));
+  const hasExcluded = (ids: string[]) =>
+    excluded.length > 0 &&
+    excluded.some((token) =>
+      ids.some((id) => names.get(id)?.includes(token)),
+    );
   const teams = new Map<string, Map<string, SearchRow[]>>();
   for (const row of rows) {
+    const give = row.give ?? defaultGive;
     if (
-      !matches(row.give ?? defaultGive, offered) ||
+      hasExcluded(give) ||
+      hasExcluded(row.get) ||
+      !matches(give, offered) ||
       !matches(row.get, received)
     )
       continue;

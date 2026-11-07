@@ -539,5 +539,66 @@ describe("positional grade impact domain engine", () => {
       expect(fail.passes).toBe(false);
       expect(fail.failures[0]).toContain("overall");
     });
+
+    it("evaluates other team matching your overall net step improvement (type: 'match_net')", () => {
+      const matchRule: PositionalGradeImpactRule = {
+        id: "match-overall-steps",
+        side: "other",
+        position: "OVERALL",
+        steps: 0,
+        type: "match_net",
+      };
+
+      // Both gain +2 net steps: passes
+      const equalGain = evaluateGradeImpacts(
+        {
+          own: [
+            { position: "TE", before: "B", after: "A", drop: 0, stepDelta: 2 },
+          ],
+          other: [
+            { position: "RB", before: "C", after: "B-", drop: 0, stepDelta: 2 },
+          ],
+        },
+        [matchRule],
+        "Chorizo",
+      );
+      expect(equalGain.passes).toBe(true);
+      expect(equalGain.failures).toHaveLength(0);
+
+      // Both net 0 steps: passes
+      const equalZero = evaluateGradeImpacts(
+        {
+          own: [
+            { position: "TE", before: "B", after: "A", drop: 0, stepDelta: 2 },
+            { position: "WR", before: "A", after: "B", drop: 2, stepDelta: -2 },
+          ],
+          other: [
+            { position: "RB", before: "C", after: "B-", drop: 0, stepDelta: 2 },
+            { position: "TE", before: "B", after: "C", drop: 2, stepDelta: -2 },
+          ],
+        },
+        [matchRule],
+        "Chorizo",
+      );
+      expect(equalZero.passes).toBe(true);
+
+      // Mismatch: we gain +2, they gain +1: fails
+      const mismatch = evaluateGradeImpacts(
+        {
+          own: [
+            { position: "TE", before: "B", after: "A", drop: 0, stepDelta: 2 },
+          ],
+          other: [
+            { position: "RB", before: "C", after: "C+", drop: 0, stepDelta: 1 },
+          ],
+        },
+        [matchRule],
+        "Chorizo",
+      );
+      expect(mismatch.passes).toBe(false);
+      expect(mismatch.failures[0]).toContain(
+        "Chorizo overall step delta (+1) does not match your overall step delta (+2)",
+      );
+    });
   });
 });

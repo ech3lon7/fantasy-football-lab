@@ -194,9 +194,30 @@ it("drops retired surface restrictions without altering unrelated saved-query se
 // The UI always emits gradeImpacts; omitted, undefined and empty goals must save, while active rules survive restoring the saved search.
 it("round-trips positional grade goals and accepts their inactive query key", async () => {
   const { m, state, draft, query, summary } = await sample();
+  // The controls always set an explicit type; legacy rules without one must still load.
   const goals = [
-    { id: "own-wr", side: "own" as const, position: "WR", steps: 2 },
-    { id: "their-flex", side: "other" as const, position: "FLEX", steps: -1 },
+    {
+      id: "own-wr",
+      side: "own" as const,
+      position: "WR",
+      steps: 2,
+      type: "upgrade" as const,
+    },
+    {
+      id: "their-flex",
+      side: "other" as const,
+      position: "FLEX",
+      steps: -1,
+      type: "deplete" as const,
+    },
+    {
+      id: "their-net",
+      side: "other" as const,
+      position: "OVERALL",
+      steps: 0,
+      type: "match_net" as const,
+    },
+    { id: "legacy", side: "own" as const, position: "RB", steps: 0 },
   ];
   for (const gradeImpacts of [undefined, [], goals]) {
     const saved = readSavedTrades(
@@ -212,6 +233,7 @@ it("round-trips positional grade goals and accepts their inactive query key", as
     { ...goals[0], steps: 1.5 },
     { ...goals[0], position: " " },
     { ...goals[0], id: "" },
+    { ...goals[0], type: "boost" as "upgrade" },
   ])
     expect(() =>
       saveTrade(state, m, draft, summary, { ...query, gradeImpacts: [rule] }),

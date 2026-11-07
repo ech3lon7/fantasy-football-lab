@@ -338,3 +338,74 @@ it("clears all edits from a slot and takes it back to the live roster", async ()
   ).toBe(false);
 });
 
+// A realistic league with 12 teams, full starting lineups, and 10 saved slots fits well under the 64-KiB storage limit without false capacity alarms.
+it("saves 10 full save slots without exceeding workspace storage limit even with realistic league-wide rosters", async () => {
+  const { m, state, scenario } = await sample();
+  // Build realistic 12-team starting lineups and roster baseline
+  const teams: Record<string, any> = {};
+  for (let t = 1; t <= 12; t++) {
+    teams[String(t)] = {
+      season: 2026,
+      teamName: "Team " + t,
+      week: 8,
+      savedUTC: new Date().toISOString(),
+      starters: Array.from({ length: 9 }, (_, i) => String(t * 100 + i)),
+      assignments: [null, null, null, null, null, null, null, null, null],
+      roster: Array.from({ length: 16 }, (_, i) => String(t * 100 + i)),
+    };
+  }
+  state.filters.startingLineups = JSON.stringify({ version: 1, teams });
+
+  const realisticBaseRoster: NonNullable<RosterScenario["baseRoster"]> = [];
+  for (let t = 1; t <= 12; t++) {
+    for (let p = 0; p < 16; p++) {
+      realisticBaseRoster.push([String(t * 100 + p), String(t), p < 9 ? p : null]);
+    }
+  }
+
+  const baseScenario: RosterScenario = {
+    ...scenario,
+    baseLineups: state.filters.startingLineups,
+    baseRoster: realisticBaseRoster,
+  };
+
+  let working = writeRosterScenarios(state, {
+    version: 1,
+    active: baseScenario.id,
+    activeSlot: 1,
+    scenarios: [baseScenario],
+  });
+
+  // Save all 10 slots with moves
+  for (let slot = 1; slot <= 10; slot++) {
+    const s = activeRosterScenario(working)!;
+    const modified = appendScenarioTrade(m, s, {
+      teamA: "1",
+      teamB: "2",
+      give: ["100"],
+      get: ["200"],
+    });
+    working = writeRosterScenarios(state, {
+      ...readRosterScenarios(working).collection,
+      scenarios: [modified],
+    });
+    const saved = saveRosterSnapshot(
+      state,
+      working,
+      slot as RosterSaveSlot,
+      new Date().toISOString(),
+      realisticBaseRoster,
+    );
+    state.filters[rosterScenariosKey] = saved.saved;
+    working = saved.working;
+  }
+
+  const finalCollection = readRosterScenarios(state.filters[rosterScenariosKey]).collection;
+  expect(finalCollection.snapshots).toHaveLength(10);
+
+  // Loading any slot should restore full baseLineups and baseRoster from the parent scenario
+  const loaded = loadRosterSnapshot(state, working, baseScenario.id, 5 as RosterSaveSlot);
+  const loadedScenario = activeRosterScenario(loaded)!;
+  expect(loadedScenario.baseRoster).toEqual(realisticBaseRoster);
+  expect(loadedScenario.baseLineups).toBe(state.filters.startingLineups);
+});

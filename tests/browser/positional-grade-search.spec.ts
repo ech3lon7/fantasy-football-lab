@@ -165,6 +165,7 @@ test.describe("Positional Grade Search E2E", () => {
     await teamSelect.selectOption("own");
 
     await expect(posSelect).toBeVisible();
+    await expect(posSelect.locator('option[value="OVERALL"]')).toHaveText("Overall (Net)");
     await posSelect.selectOption("WR");
 
     await expect(targetSelect).toBeVisible();
@@ -278,7 +279,7 @@ test.describe("Positional Grade Search E2E", () => {
     const availableOptions = await leg1PosSelect
       .locator("option")
       .allTextContents();
-    expect(availableOptions).toEqual(["RB", "WR", "TE"]);
+    expect(availableOptions).toEqual(["RB", "WR", "TE", "Overall (Net)"]);
     // Confirm unstarted positions are excluded
     expect(availableOptions).not.toContain("QB");
     expect(availableOptions).not.toContain("K");
@@ -317,7 +318,7 @@ test.describe("Positional Grade Search E2E", () => {
     const leg2Options = await leg2PosSelect
       .locator("option")
       .allTextContents();
-    expect(leg2Options).toEqual(["RB", "WR", "TE"]);
+    expect(leg2Options).toEqual(["RB", "WR", "TE", "Overall (Net)"]);
 
     // Configure Leg 2 goal for WR Upgrade >= 1 step
     await leg2PosSelect.selectOption("WR");

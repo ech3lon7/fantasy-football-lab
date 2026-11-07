@@ -57,6 +57,23 @@ describe("PositionalGradeImpactControls component", () => {
     expect(html).not.toContain('value="QB"');
   });
 
+  it("always includes 'OVERALL' as 'Overall (Net)' even when custom positions prop is passed", () => {
+    const rules: PositionalGradeImpactRule[] = [
+      { id: "r1", side: "other", position: "WR", steps: 2 },
+    ];
+    const onChange = vi.fn();
+    const html = renderToStaticMarkup(
+      React.createElement(PositionalGradeImpactControls, {
+        rules,
+        onChange,
+        positions: ["QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"],
+      })
+    );
+
+    expect(html).toContain('value="OVERALL"');
+    expect(html).toContain("Overall (Net)");
+  });
+
   it("renders own team steps dropdown options correctly", () => {
     const rules: PositionalGradeImpactRule[] = [
       { id: "r1", side: "own", position: "WR", steps: 2 },
@@ -315,6 +332,38 @@ describe("PositionalGradeImpactControls component", () => {
     expect(updated).toHaveLength(2);
     // Since 'QB' was already targeted by 'own', next position should be 'RB'
     expect(updated[1].position).toBe("RB");
+  });
+
+  it("renders 'Match your overall steps' option for opponent overall position", () => {
+    const rules: PositionalGradeImpactRule[] = [
+      { id: "r_match", side: "other", position: "OVERALL", steps: 0, type: "match_net" },
+    ];
+    const onChange = vi.fn();
+    const html = renderToStaticMarkup(
+      React.createElement(PositionalGradeImpactControls, {
+        rules,
+        onChange,
+      })
+    );
+
+    expect(html).toContain('value="match_net"');
+    expect(html).toContain("Match your overall steps");
+  });
+
+  it("does not render 'Match your overall steps' option for individual positions", () => {
+    const rules: PositionalGradeImpactRule[] = [
+      { id: "r_wr", side: "other", position: "WR", steps: 2 },
+    ];
+    const onChange = vi.fn();
+    const html = renderToStaticMarkup(
+      React.createElement(PositionalGradeImpactControls, {
+        rules,
+        onChange,
+      })
+    );
+
+    expect(html).not.toContain('value="match_net"');
+    expect(html).not.toContain("Match your overall steps");
   });
 });
 

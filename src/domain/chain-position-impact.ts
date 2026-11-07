@@ -11,7 +11,14 @@ export interface ChainGradeLimit {
 }
 
 export type GradeImpactSide = "own" | "other";
-export type GradeImpactType = "upgrade" | "drop_limit" | "deplete";
+// One list drives both the type and saved-trade validation, so new goal types cannot silently break saving.
+export const gradeImpactTypes = [
+  "upgrade",
+  "drop_limit",
+  "deplete",
+  "match_net",
+] as const;
+export type GradeImpactType = (typeof gradeImpactTypes)[number];
 
 export interface PositionalGradeImpactRule {
   id: string;
@@ -90,11 +97,15 @@ export function chainPositionImpact(
       players,
       byId: new Map(players.map((p) => [p.id, p])),
     });
+  const hasOverall = Array.from(targetPositions ?? []).some(
+    (p: string) => p.toUpperCase() === "OVERALL",
+  );
   const affected = new Set([
     ...[...draft.give, ...draft.get, ...result.dropsA, ...result.dropsB].map(
       (id) => m.byId.get(id)!.pos,
     ),
     ...(targetPositions ?? []),
+    ...(hasOverall ? [...positions, "FLEX"] : []),
   ]);
   const changes = (team: string) =>
     [...positions, "FLEX"]
@@ -158,6 +169,7 @@ export function chainGradeFailures(
 export function evaluateGradeImpacts(
   impact: ChainPositionImpact,
   rules?: PositionalGradeImpactRule[],
+  otherTeamName?: string,
 ): { passes: boolean; failures: string[] } {
   // If no rules are specified, all trades pass with zero failures.
   if (!rules || rules.length === 0) {
@@ -188,7 +200,18 @@ export function evaluateGradeImpacts(
       const netDelta = netGradeStepDelta(sideImpacts);
       const sign = netDelta > 0 ? `+${netDelta}` : `${netDelta}`;
 
-      if (effectiveType === "upgrade") {
+      if (effectiveType === "match_net") {
+        const ownNet = netGradeStepDelta(impact.own ?? []);
+        const otherNet = netGradeStepDelta(impact.other ?? []);
+        if (otherNet !== ownNet) {
+          const teamLabel = otherTeamName ?? "Their team";
+          const otherSign = otherNet > 0 ? `+${otherNet}` : `${otherNet}`;
+          const ownSign = ownNet > 0 ? `+${ownNet}` : `${ownNet}`;
+          failures.push(
+            `${teamLabel} overall step delta (${otherSign}) does not match your overall step delta (${ownSign}).`,
+          );
+        }
+      } else if (effectiveType === "upgrade") {
         const requiredSteps = Math.abs(rule.steps);
         if (netDelta < requiredSteps) {
           failures.push(
@@ -260,9 +283,10 @@ export function evaluateGradeImpacts(
 export function gradeImpactFailures(
   impact?: ChainPositionImpact,
   rules?: PositionalGradeImpactRule[],
+  otherTeamName?: string,
 ): string[] {
   if (!rules || rules.length === 0 || !impact) return [];
-  return evaluateGradeImpacts(impact, rules).failures;
+  return evaluateGradeImpacts(impact, rules, otherTeamName).failures;
 }
 
 /**

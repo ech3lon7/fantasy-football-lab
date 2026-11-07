@@ -20,7 +20,8 @@ const DEFAULT_POSITIONS: string[] = [
 
 // Generate a unique ID for new rules using crypto.randomUUID when available
 function generateRuleId(): string {
-  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+  return typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
     : `rule-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -48,6 +49,13 @@ const OWN_STEP_OPTIONS: StepOption[] = [
 ];
 
 // Step dropdown options for opponent team (upgrades, loss limits, and depletion targets)
+const MATCH_NET_OPTION: StepOption = {
+  key: "match_net",
+  type: "match_net",
+  steps: 0,
+  label: "Match your overall steps",
+};
+
 const OTHER_STEP_OPTIONS: StepOption[] = [
   { key: "5", type: "upgrade", steps: 5, label: "Upgrade ≥ 5 steps" },
   { key: "4", type: "upgrade", steps: 4, label: "Upgrade ≥ 4 steps" },
@@ -55,11 +63,36 @@ const OTHER_STEP_OPTIONS: StepOption[] = [
   { key: "2", type: "upgrade", steps: 2, label: "Upgrade ≥ 2 steps" },
   { key: "1", type: "upgrade", steps: 1, label: "Upgrade ≥ 1 step" },
   { key: "0", type: "drop_limit", steps: 0, label: "No drop for them (≥ 0)" },
-  { key: "limit:-1", type: "drop_limit", steps: -1, label: "Drop at most 1 step" },
-  { key: "limit:-2", type: "drop_limit", steps: -2, label: "Drop at most 2 steps" },
-  { key: "limit:-3", type: "drop_limit", steps: -3, label: "Drop at most 3 steps" },
-  { key: "limit:-4", type: "drop_limit", steps: -4, label: "Drop at most 4 steps" },
-  { key: "limit:-5", type: "drop_limit", steps: -5, label: "Drop at most 5 steps" },
+  {
+    key: "limit:-1",
+    type: "drop_limit",
+    steps: -1,
+    label: "Drop at most 1 step",
+  },
+  {
+    key: "limit:-2",
+    type: "drop_limit",
+    steps: -2,
+    label: "Drop at most 2 steps",
+  },
+  {
+    key: "limit:-3",
+    type: "drop_limit",
+    steps: -3,
+    label: "Drop at most 3 steps",
+  },
+  {
+    key: "limit:-4",
+    type: "drop_limit",
+    steps: -4,
+    label: "Drop at most 4 steps",
+  },
+  {
+    key: "limit:-5",
+    type: "drop_limit",
+    steps: -5,
+    label: "Drop at most 5 steps",
+  },
   { key: "-1", type: "deplete", steps: -1, label: "Downgrade by ≥ 1 step" },
   { key: "-2", type: "deplete", steps: -2, label: "Downgrade by ≥ 2 steps" },
   { key: "-3", type: "deplete", steps: -3, label: "Downgrade by ≥ 3 steps" },
@@ -68,6 +101,9 @@ const OTHER_STEP_OPTIONS: StepOption[] = [
 ];
 
 function getRuleKey(rule: PositionalGradeImpactRule): string {
+  if (rule.type === "match_net") {
+    return "match_net";
+  }
   if (rule.side === "other" && rule.type === "drop_limit" && rule.steps < 0) {
     return `limit:${rule.steps}`;
   }
@@ -90,8 +126,11 @@ export function PositionalGradeImpactControls({
   positions?: string[];
   ariaLabelPrefix?: string;
 }): JSX.Element {
-  const availablePositions =
+  const rawPositions =
     positions && positions.length > 0 ? positions : DEFAULT_POSITIONS;
+  const availablePositions = rawPositions.includes("OVERALL")
+    ? rawPositions
+    : [...rawPositions, "OVERALL"];
   const activeRules = rules ?? [];
 
   // Append a new default positional goal rule targeting next available position
@@ -119,7 +158,9 @@ export function PositionalGradeImpactControls({
     patch: Partial<PositionalGradeImpactRule>,
   ) => {
     onChange(
-      activeRules.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)),
+      activeRules.map((rule, i) =>
+        i === index ? { ...rule, ...patch } : rule,
+      ),
     );
   };
 
@@ -140,12 +181,18 @@ export function PositionalGradeImpactControls({
       </div>
 
       {activeRules.length === 0 ? (
-        <p className="grade-impact-empty">No positional grade goals configured.</p>
+        <p className="grade-impact-empty">
+          No positional grade goals configured.
+        </p>
       ) : (
         <div className="grade-impact-list">
           {activeRules.map((rule, index) => {
             const stepOptions =
-              rule.side === "other" ? OTHER_STEP_OPTIONS : OWN_STEP_OPTIONS;
+              rule.side === "other"
+                ? rule.position.toUpperCase() === "OVERALL"
+                  ? [MATCH_NET_OPTION, ...OTHER_STEP_OPTIONS]
+                  : OTHER_STEP_OPTIONS
+                : OWN_STEP_OPTIONS;
             const positionOptions = availablePositions.includes(rule.position)
               ? availablePositions
               : [rule.position, ...availablePositions];
@@ -157,11 +204,17 @@ export function PositionalGradeImpactControls({
                   className="grade-impact-select"
                   aria-label={`${ariaLabelPrefix} ${index + 1} team`}
                   value={rule.side}
-                  onChange={(e) =>
-                    handleUpdateRule(index, {
-                      side: e.target.value as GradeImpactSide,
-                    })
-                  }
+                  onChange={(e) => {
+                    const newSide = e.target.value as GradeImpactSide;
+                    const patch: Partial<PositionalGradeImpactRule> = {
+                      side: newSide,
+                    };
+                    if (newSide === "own" && rule.type === "match_net") {
+                      patch.type = "upgrade";
+                      patch.steps = 2;
+                    }
+                    handleUpdateRule(index, patch);
+                  }}
                 >
                   <option value="own">Your team</option>
                   <option value="other">Their team</option>
@@ -172,9 +225,20 @@ export function PositionalGradeImpactControls({
                   className="grade-impact-select"
                   aria-label={`${ariaLabelPrefix} ${index + 1} position`}
                   value={rule.position}
-                  onChange={(e) =>
-                    handleUpdateRule(index, { position: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const newPos = e.target.value;
+                    const patch: Partial<PositionalGradeImpactRule> = {
+                      position: newPos,
+                    };
+                    if (
+                      rule.type === "match_net" &&
+                      newPos.toUpperCase() !== "OVERALL"
+                    ) {
+                      patch.type = "upgrade";
+                      patch.steps = 1;
+                    }
+                    handleUpdateRule(index, patch);
+                  }}
                 >
                   {positionOptions.map((pos) => (
                     <option key={pos} value={pos}>
@@ -197,7 +261,12 @@ export function PositionalGradeImpactControls({
                       const patch: Partial<PositionalGradeImpactRule> = {
                         steps: selected.steps,
                       };
-                      if (selected.type === "drop_limit" && rule.side === "other") {
+                      if (selected.type === "match_net") {
+                        patch.type = "match_net";
+                      } else if (
+                        selected.type === "drop_limit" &&
+                        rule.side === "other"
+                      ) {
                         patch.type = "drop_limit";
                       } else if (selected.type === "deplete") {
                         patch.type = "deplete";

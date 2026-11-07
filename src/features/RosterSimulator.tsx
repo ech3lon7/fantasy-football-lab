@@ -12,6 +12,7 @@ import {
   rosterScenarioDirty,
   loadRosterSnapshot,
   scenarioRosterBase,
+  snapshotMatchesScenario,
   type RosterSaveSlot,
   type RosterScenario,
   type ScenarioMove,
@@ -151,16 +152,16 @@ export function RosterSimulator({
   function handleSelectSlot(targetSlot: RosterSaveSlot) {
     if (targetSlot === selectedSlot) return;
     const targetSnapshot = collection.snapshots?.find(
-      (saved) =>
-        saved.scenario.id === current?.id && saved.slot === targetSlot,
+      (saved) => saved.scenario.id === current?.id && saved.slot === targetSlot,
     );
     const selectedSnapshot = collection.snapshots?.find(
       (saved) =>
         saved.scenario.id === current?.id && saved.slot === selectedSlot,
     );
-    const hasUnsavedChanges = selectedSnapshot
-      ? JSON.stringify(selectedSnapshot.scenario) !== JSON.stringify(current)
-      : Boolean(current && current.moves.length > 0);
+    const hasUnsavedChanges =
+      selectedSnapshot && current
+        ? !snapshotMatchesScenario(selectedSnapshot.scenario, current)
+        : Boolean(current && current.moves.length > 0);
 
     // If switching to another saved slot that would overwrite unsaved changes via auto-load, prompt user
     if (targetSnapshot && hasUnsavedChanges) {
@@ -407,7 +408,8 @@ export function RosterSimulator({
               // Retrieve snapshot data for the currently selected slot to determine active details and load button availability
               const selectedSnapshot = collection.snapshots?.find(
                 (saved) =>
-                  saved.scenario.id === current.id && saved.slot === selectedSlot,
+                  saved.scenario.id === current.id &&
+                  saved.slot === selectedSlot,
               );
 
               return (
@@ -422,7 +424,8 @@ export function RosterSimulator({
                       const isSaved = Boolean(
                         collection.snapshots?.some(
                           (saved) =>
-                            saved.scenario.id === current.id && saved.slot === slot,
+                            saved.scenario.id === current.id &&
+                            saved.slot === slot,
                         ),
                       );
                       const isSelected = selectedSlot === slot;
@@ -457,7 +460,9 @@ export function RosterSimulator({
                           <span className="slot-tag">Saved</span>
                         )}
                       </div>
-                      <p className={`slot-desc ${selectedSnapshot ? "" : "empty"}`}>
+                      <p
+                        className={`slot-desc ${selectedSnapshot ? "" : "empty"}`}
+                      >
                         {selectedSnapshot
                           ? selectedSnapshot.scenario.name
                           : "Empty slot"}
@@ -516,7 +521,9 @@ export function RosterSimulator({
                       {/* Clear slot: wipes all moves and reverts the scenario back to the live baseline roster */}
                       <button
                         className="button"
-                        disabled={!selectedSnapshot && current.moves.length === 0}
+                        disabled={
+                          !selectedSnapshot && current.moves.length === 0
+                        }
                         onClick={handleClearSlot}
                       >
                         Clear slot {selectedSlot}

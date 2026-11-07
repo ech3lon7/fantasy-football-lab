@@ -1275,6 +1275,13 @@ export function TradeSearch({
           : rule.steps > 0
             ? "upgrade"
             : "drop_limit");
+      if (effectiveType === "match_net") {
+        return {
+          label: `Grade goal: Their overall steps match yours`,
+          remove: () =>
+            setGradeImpacts((prev) => prev.filter((_, i) => i !== idx)),
+        };
+      }
       if (effectiveType === "deplete") {
         action = `downgrade ≥ ${stepLabel}`;
       } else if (effectiveType === "upgrade") {
@@ -2344,7 +2351,7 @@ export function TradeSearch({
                   >
                     <FilterHelp
                       label="Search within results"
-                      help="Search the entire completed result set without recalculating trades. Separate player names with commas; every name is required on its selected side. Exact player lists excludes additional players on a side where you entered names."
+                      help="Search the entire completed result set without recalculating trades. Separate player or defense names with commas; every name is required on its selected side. Exclude players hides any deal involving those players or defenses. Exact player lists excludes additional players on a side where you entered names."
                     >
                       <strong>Search within results</strong>
                     </FilterHelp>
@@ -2360,6 +2367,7 @@ export function TradeSearch({
                               ...emptyTradeBrowse(),
                               offered: event.target.value,
                               received: resultBrowse.received,
+                              excluded: resultBrowse.excluded,
                               exact: resultBrowse.exact,
                             })
                           }
@@ -2376,12 +2384,30 @@ export function TradeSearch({
                               ...emptyTradeBrowse(),
                               offered: resultBrowse.offered,
                               received: event.target.value,
+                              excluded: resultBrowse.excluded,
                               exact: resultBrowse.exact,
                             })
                           }
                         />
                       </label>
                     </div>
+                    <label>
+                      Exclude players from results
+                      <input
+                        value={resultBrowse.excluded ?? ""}
+                        placeholder="49ers, Higgins, Swift"
+                        disabled={stale}
+                        onChange={(event) =>
+                          browseResults({
+                            ...emptyTradeBrowse(),
+                            offered: resultBrowse.offered,
+                            received: resultBrowse.received,
+                            excluded: event.target.value,
+                            exact: resultBrowse.exact,
+                          })
+                        }
+                      />
+                    </label>
                     <label className="check">
                       <input
                         type="checkbox"
@@ -2392,6 +2418,7 @@ export function TradeSearch({
                             ...emptyTradeBrowse(),
                             offered: resultBrowse.offered,
                             received: resultBrowse.received,
+                            excluded: resultBrowse.excluded,
                             exact: event.target.checked,
                           })
                         }

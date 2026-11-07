@@ -411,6 +411,9 @@ describe("UI Integration: PositionGradeChips tooltips", () => {
 
 describe("Positional grade goal chip label formatting", () => {
   function formatGradeGoalChip(rule: PositionalGradeImpactRule) {
+    if (rule.type === "match_net") {
+      return "Grade goal: Their overall steps match yours";
+    }
     const sidePrefix = rule.side === "own" ? "Your" : "Their";
     const stepCount = Math.abs(rule.steps);
     const stepLabel = `${stepCount} step${stepCount === 1 ? "" : "s"}`;
@@ -452,5 +455,17 @@ describe("Positional grade goal chip label formatting", () => {
     expect(
       formatGradeGoalChip({ id: "1", side: "other", position: "WR", steps: -2 })
     ).toBe("Grade goal: Their WR (downgrade ≥ 2 steps)");
+  });
+
+  it("formats opponent matching overall steps clearly", () => {
+    expect(
+      formatGradeGoalChip({
+        id: "1",
+        side: "other",
+        position: "OVERALL",
+        steps: 0,
+        type: "match_net",
+      })
+    ).toBe("Grade goal: Their overall steps match yours");
   });
 });

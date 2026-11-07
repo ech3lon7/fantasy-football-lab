@@ -295,4 +295,55 @@ describe("Trade search positional grade impact integration", () => {
     const failures = discoveryFailures(rowNoOpponentUpgrade, queryGiveRb);
     expect(failures.some((r) => r.includes("QB") && r.includes("Their"))).toBe(true);
   });
+
+  it("enforces opponent overall net step matching (type: 'match_net') in trade search discovery", async () => {
+    const m = await setupModel();
+
+    const match: SearchMatch = {
+      key: "trade-match-net",
+      teamB: "2",
+      give: ["101"],
+      get: ["300"],
+      incoming: m.byId.get("300")!.index!,
+      outgoing: m.byId.get("101")!.index!,
+      difference: m.byId.get("300")!.index! - m.byId.get("101")!.index!,
+    };
+
+    const matchNetQuery: TradeSearchQuery = {
+      teamA: "1",
+      give: ["101"],
+      count: 1,
+      below: 1000,
+      above: 1000,
+      indexMode: "automatic",
+      gradeImpacts: [
+        {
+          id: "opp-match-net",
+          side: "other",
+          position: "OVERALL",
+          steps: 0,
+          type: "match_net",
+        },
+      ],
+    };
+
+    const row = scoreTradeMatch(m, matchNetQuery, match);
+    expect(row.positionImpact).toBeDefined();
+
+    const ownNet = row.positionImpact!.own.reduce(
+      (sum, p) => sum + (p.stepDelta ?? 0),
+      0,
+    );
+    const otherNet = row.positionImpact!.other.reduce(
+      (sum, p) => sum + (p.stepDelta ?? 0),
+      0,
+    );
+
+    const failures = discoveryFailures(row, matchNetQuery);
+    if (ownNet === otherNet) {
+      expect(failures).toEqual([]);
+    } else {
+      expect(failures.some((f) => f.includes("overall step delta"))).toBe(true);
+    }
+  });
 });

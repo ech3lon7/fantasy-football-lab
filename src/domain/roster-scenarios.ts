@@ -161,14 +161,25 @@ export function writeRosterScenarios(
     throw Error(
       "Ten roster simulations are already saved. Delete an unused simulation before adding or restoring another.",
     );
-  const raw = JSON.stringify(collectionSchema.parse(collection));
+  // Compact snapshots to strip redundant bulk baselines that are already owned by the parent scenario.
+  const compacted = {
+    ...collection,
+    snapshots: collection.snapshots?.map((s) => ({
+      ...s,
+      scenario: {
+        ...s.scenario,
+        baseLineups: undefined,
+        baseRoster: undefined,
+      },
+    })),
+  };
+  const raw = JSON.stringify(collectionSchema.parse(compacted));
   if (
     new TextEncoder().encode(
-      JSON.stringify(
-        { ...state, filters: { ...state.filters, [rosterScenariosKey]: raw } },
-        null,
-        2,
-      ),
+      JSON.stringify({
+        ...state,
+        filters: { ...state.filters, [rosterScenariosKey]: raw },
+      }),
     ).length > 64000
   )
     throw Error(
@@ -213,6 +224,29 @@ export function rosterScenarioDirty(
   );
 }
 
+// Evaluates whether a save slot snapshot matches the current scenario's moves, cursor, and custom lineups.
+export function snapshotMatchesScenario(
+  snapshotScenario: RosterScenario,
+  current: RosterScenario,
+): boolean {
+  if (snapshotScenario.id !== current.id) return false;
+  if (snapshotScenario.cursor !== current.cursor) return false;
+  if (snapshotScenario.moves.length !== current.moves.length) return false;
+  if (JSON.stringify(snapshotScenario.moves) !== JSON.stringify(current.moves))
+    return false;
+  if (
+    (snapshotScenario.weeklyLineupCursor ?? 0) !==
+    (current.weeklyLineupCursor ?? 0)
+  )
+    return false;
+  if (
+    JSON.stringify(snapshotScenario.weeklyLineups ?? []) !==
+    JSON.stringify(current.weeklyLineups ?? [])
+  )
+    return false;
+  return true;
+}
+
 // Saving commits only the selected scenario and one slot; unsaved work in another scenario remains a draft.
 export function saveRosterSnapshot(
   state: AppState,
@@ -234,7 +268,17 @@ export function saveRosterSnapshot(
     baseLineups: current.baseLineups ?? state.filters.startingLineups ?? "",
     baseRoster: current.baseRoster ?? baseRoster,
   });
-  const snapshot = snapshotSchema.parse({ slot, savedUTC, scenario });
+  // Compact snapshot: do not duplicate bulky baselines when the parent scenario owns them.
+  const snapshotScenario = rosterScenarioSchema.parse({
+    ...scenario,
+    baseLineups: undefined,
+    baseRoster: undefined,
+  });
+  const snapshot = snapshotSchema.parse({
+    slot,
+    savedUTC,
+    scenario: snapshotScenario,
+  });
   const snapshots = [
     ...(saved.collection.snapshots ?? []).filter(
       (s) => s.scenario.id !== scenario.id || s.slot !== slot,
@@ -277,12 +321,23 @@ export function loadRosterSnapshot(
     (s) => s.scenario.id === id && s.slot === slot,
   );
   if (!snapshot) throw Error("This save slot is empty.");
+  const existing = read.collection.scenarios.find((s) => s.id === id);
   return writeRosterScenarios(state, {
     ...read.collection,
     active: id,
     activeSlot: slot,
     scenarios: read.collection.scenarios.map((s) =>
-      s.id === id ? structuredClone(snapshot.scenario) : s,
+      s.id === id
+        ? {
+            ...structuredClone(snapshot.scenario),
+            baseLineups:
+              snapshot.scenario.baseLineups ??
+              existing?.baseLineups ??
+              state.filters[starterLineupsKey] ??
+              "",
+            baseRoster: snapshot.scenario.baseRoster ?? existing?.baseRoster,
+          }
+        : s,
     ),
   });
 }
@@ -300,8 +355,7 @@ export function clearRosterSlot(
   const current = working.collection.scenarios.find(
     (s) => s.id === working.collection.active,
   );
-  if (!current)
-    throw Error("Select a roster scenario before clearing a slot.");
+  if (!current) throw Error("Select a roster scenario before clearing a slot.");
   // Revert scenario to an unedited baseline with empty moves and live starting lineups
   const resetScenario: RosterScenario = {
     ...current,

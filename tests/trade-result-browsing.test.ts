@@ -128,3 +128,59 @@ it("finds an unloaded exact offer with AND name matching and fixed-offer fallbac
     fixed,
   ]);
 });
+
+// Excludes packages containing any named players or defenses on either side of the deal.
+it("excludes trades involving specified player names or defenses across offered and received sides", async () => {
+  const { m, rows, hidden } = await sample();
+  // hidden has give: ["100"] (Main QB), get: ["308", "309"] (Search WR 8, Search WR 9)
+  // rows[0] has give: ["101"] (Bench QB), get: ["200"]
+
+  // 1. Exclude by offered player name
+  const withoutMainQB = browseTradeResults(m, [hidden, rows[0]], {
+    ...emptyTradeBrowse(),
+    excluded: "Main QB",
+  });
+  expect(withoutMainQB.rows).toEqual([rows[0]]);
+  expect(withoutMainQB.rows).not.toContain(hidden);
+
+  // 2. Exclude by received player name
+  const withoutWR8 = browseTradeResults(m, [hidden, rows[0]], {
+    ...emptyTradeBrowse(),
+    excluded: "Search WR 8",
+  });
+  expect(withoutWR8.rows).toEqual([rows[0]]);
+  expect(withoutWR8.rows).not.toContain(hidden);
+
+  // 3. Exclude multiple comma-separated players
+  const withoutBoth = browseTradeResults(m, [hidden, rows[0]], {
+    ...emptyTradeBrowse(),
+    excluded: "Main QB, Bench QB",
+  });
+  expect(withoutBoth.rows).toEqual([]);
+
+  // 4. Exclude by defense team name or NFL abbreviation
+  const dstPlayer = {
+    ...m.players[0],
+    id: "999",
+    name: "49ers D/ST",
+    nfl: "SF",
+    pos: "D/ST" as const,
+  };
+  m.players.push(dstPlayer);
+  const dstRow = {
+    ...hidden,
+    key: "dst-row",
+    get: ["999"],
+  };
+  const without49ers = browseTradeResults(m, [dstRow, rows[0]], {
+    ...emptyTradeBrowse(),
+    excluded: "49ers",
+  });
+  expect(without49ers.rows).toEqual([rows[0]]);
+
+  const withoutSF = browseTradeResults(m, [dstRow, rows[0]], {
+    ...emptyTradeBrowse(),
+    excluded: "SF",
+  });
+  expect(withoutSF.rows).toEqual([rows[0]]);
+});

@@ -25,6 +25,7 @@ import {
 import type { SearchRow, TradeSearchQuery } from "./trade-search";
 import { tradeSearchBounds } from "./trade-search";
 import { tradeImpactVersion } from "./starter-lineups";
+import { gradeImpactTypes } from "./chain-position-impact";
 import { rosterScenarioSchema } from "./roster-scenarios";
 // Optional recipes fit the existing private saved-trade sync payload; older records remain valid.
 import { stressRecipeSchema, type StressRecipe } from "./trade-stress";
@@ -74,6 +75,8 @@ const querySchema = z
               .max(16)
               .refine((value) => value.trim().length > 0),
             steps: finite.int(),
+            // The goal controls always set a type; rules saved before types existed infer it from side and steps.
+            type: z.enum(gradeImpactTypes).optional(),
           })
           .strict(),
       )
@@ -274,9 +277,7 @@ export function writeSavedTrades(state: AppState, trades: SavedTrade[]) {
     ...state,
     filters: { ...state.filters, [savedTradesKey]: raw },
   };
-  if (
-    new TextEncoder().encode(JSON.stringify(next, null, 2)).byteLength > 64000
-  )
+  if (new TextEncoder().encode(JSON.stringify(next)).byteLength > 64000)
     throw Error(
       "Workspace sync storage is full. Shorten notes or remove saved trades before saving another.",
     );
