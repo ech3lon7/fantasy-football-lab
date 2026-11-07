@@ -106,38 +106,59 @@ function ResultRow({
   children: ReactNode;
 }) {
   const { mounted, ref } = useResultReveal(open);
-  if (!mounted || !isValidElement(children)) return null;
-  const row = children as ReactElement<HTMLAttributes<HTMLTableRowElement>>;
+  if (!mounted) return null;
+
+  const childElements = Children.toArray(children).flatMap((child) =>
+    isValidElement(child) && child.type === Fragment
+      ? Children.toArray((child.props as { children?: ReactNode }).children)
+      : [child],
+  );
+
   return (
-    <tr
-      {...row.props}
-      ref={(node) => {
-        ref.current = node;
-      }}
-      className={`trade-result-row ${row.props.className ?? ""}`}
-      data-result-depth={depth}
-      style={{ ...row.props.style, "--result-depth": depth } as CSSProperties}
-      inert={!open}
-      aria-hidden={!open}
-    >
-      {Children.map(row.props.children, (cell, index) => {
-        if (!isValidElement(cell)) return cell;
-        const column = cell as ReactElement<
-          HTMLAttributes<HTMLTableCellElement>
-        >;
-        return cloneElement(
-          column,
-          {},
-          <div className="trade-row-reveal">
-            <div
-              className={`trade-result-cell${index === 0 ? " trade-result-name" : ""}`}
-            >
-              {column.props.children}
-            </div>
-          </div>,
+    <>
+      {childElements.map((elem, rowIdx) => {
+        if (!isValidElement(elem)) return null;
+        const row = elem as ReactElement<HTMLAttributes<HTMLTableRowElement>>;
+        return (
+          <tr
+            {...row.props}
+            key={row.key ?? rowIdx}
+            ref={
+              rowIdx === 0
+                ? (node) => {
+                    ref.current = node;
+                  }
+                : undefined
+            }
+            className={`trade-result-row ${row.props.className ?? ""}`}
+            data-result-depth={depth}
+            style={
+              { ...row.props.style, "--result-depth": depth } as CSSProperties
+            }
+            inert={!open}
+            aria-hidden={!open}
+          >
+            {Children.map(row.props.children, (cell, index) => {
+              if (!isValidElement(cell)) return cell;
+              const column = cell as ReactElement<
+                HTMLAttributes<HTMLTableCellElement>
+              >;
+              return cloneElement(
+                column,
+                {},
+                <div className="trade-row-reveal">
+                  <div
+                    className={`trade-result-cell${index === 0 && rowIdx === 0 ? " trade-result-name" : ""}`}
+                  >
+                    {column.props.children}
+                  </div>
+                </div>,
+              );
+            })}
+          </tr>
         );
       })}
-    </tr>
+    </>
   );
 }
 

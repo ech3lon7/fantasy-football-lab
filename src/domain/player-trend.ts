@@ -27,7 +27,23 @@ export interface PlayerTrendSummary {
     tone: TrendTone;
     label: string;
     badge: string;
+    goldenCross: boolean;
+    deathCross: boolean;
   } | null;
+}
+
+// Check whether a player's trend exhibits a newly formed golden cross (fast MA crossed above slow MA in latest game)
+export function isGoldenCross(
+  trend: PlayerTrendSummary | null | undefined,
+): boolean {
+  return trend?.latest?.goldenCross ?? false;
+}
+
+// Check whether a player's trend exhibits a newly formed death cross (fast MA crossed below slow MA in latest game)
+export function isDeathCross(
+  trend: PlayerTrendSummary | null | undefined,
+): boolean {
+  return trend?.latest?.deathCross ?? false;
 }
 
 // Calculates dual weighted moving averages (2-game Fast WMA vs 5-game Slow WMA) and trend momentum
@@ -161,6 +177,20 @@ export function calculatePlayerTrend(
     badge = `📉 ${spread.toFixed(1)} MA`;
   }
 
+  // Detect newly formed bullish MA crossover (golden cross):
+  // Fast MA was <= Slow MA in the prior game and crossed above (> Slow MA) in the latest game
+  let goldenCross = false;
+  let deathCross = false;
+  if (series.length >= 2) {
+    const prevPoint = series[series.length - 2];
+    goldenCross =
+      prevPoint.fastMA <= prevPoint.slowMA &&
+      latestPoint.fastMA > latestPoint.slowMA;
+    deathCross =
+      prevPoint.fastMA >= prevPoint.slowMA &&
+      latestPoint.fastMA < latestPoint.slowMA;
+  }
+
   return {
     series,
     latest: {
@@ -174,6 +204,75 @@ export function calculatePlayerTrend(
       tone,
       label,
       badge,
+      goldenCross,
+      deathCross,
     },
   };
 }
+
+// Standard positional league average weekly opportunities
+export const DEFAULT_LEAGUE_AVG_VOLUME: Record<string, number> = {
+  QB: 32.5, // Pass attempts
+  RB: 14.0, // Touches (carries + targets)
+  WR: 6.8,  // Targets
+  TE: 4.6,  // Targets
+  K: 0,
+  "D/ST": 0,
+};
+
+// Calculates league average opportunities for a given position from historical games
+export function calculateLeagueAverageVolume(
+  history: Row[],
+  players: Row[],
+  pos: string,
+): number {
+  const positionPlayers = new Set(
+    players
+      .filter((p) => String(p.Position) === pos)
+      .map((p) => String(p.PlayerID)),
+  );
+  if (positionPlayers.size === 0) {
+    return DEFAULT_LEAGUE_AVG_VOLUME[pos] ?? 5.0;
+  }
+  let total = 0;
+  let games = 0;
+  for (const h of history) {
+    if (
+      h.HistoryStatus === "Valid" &&
+      num(h.Games) > 0 &&
+      positionPlayers.has(String(h.PlayerID))
+    ) {
+      const vol =
+        pos === "QB"
+          ? num(h.PassAttempts)
+          : num(h.RushAttempts) + num(h.Targets);
+      if (vol > 0) {
+        total += vol;
+        games++;
+      }
+    }
+  }
+  if (games >= 5) {
+    return Math.round((total / games) * 10) / 10;
+  }
+  return DEFAULT_LEAGUE_AVG_VOLUME[pos] ?? 5.0;
+}
+
+// Benchmark target volume threshold and display label by position
+export interface VolumeBenchmark {
+  value: number;
+  label: string;
+}
+
+export const TARGET_VOLUME_BENCHMARKS: Record<string, VolumeBenchmark> = {
+  RB: { value: 18, label: "18 Touches" },
+  WR: { value: 7, label: "7 Targets" },
+  TE: { value: 6, label: "6 Targets" },
+  QB: { value: 35, label: "35 Pass Att." },
+};
+
+// Returns the position-specific target volume benchmark or null if not applicable
+export function getTargetVolumeBenchmark(pos: string): VolumeBenchmark | null {
+  return TARGET_VOLUME_BENCHMARKS[pos] ?? null;
+}
+

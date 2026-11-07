@@ -192,63 +192,104 @@ export function DataTable<T>({
     </>
   );
 }
-export const playerColumns: Column<Player>[] = [
-  {
-    key: "name",
-    label: "Player",
-    kind: "fact",
-    value: (p) => p.name,
-    render: (p) => (
-      <PlayerName p={p} className="player-link">
+export const playerColumnName: Column<Player> = {
+  key: "name",
+  label: "Player",
+  kind: "fact",
+  value: (p) => p.name,
+  render: (p) => (
+    <PlayerName
+      p={p}
+      className="player-link"
+      ariaLabel={`${p.name} ${p.pos} · ${p.nfl}`}
+    >
+      <span className="gem-player-name-row">
         <b>{p.name}</b>
-        <small>
-          {p.pos} · {p.nfl}
-        </small>
-      </PlayerName>
-    ),
-  },
-  { key: "actual", label: "Actual PPG", kind: "fact", value: (p) => p.actual },
-  { key: "recent", label: "Recent PPG", kind: "fact", value: (p) => p.recent },
-  {
-    key: "projected",
-    label: "ESPN PPG",
-    kind: "projection",
-    value: (p) => p.projected,
-  },
-  {
-    key: "expected",
-    label: "Expected PPG",
-    kind: "model",
-    value: (p) => p.expected,
-  },
-  { key: "value", label: "Value PPG", kind: "model", value: (p) => p.value },
-  {
-    key: "index",
-    label: "Surplus index",
-    kind: "model",
-    value: (p) => p.index,
-  },
-  {
-    key: "gem",
-    label: "Gem signal",
-    kind: "model",
-    value: (p) => p.gem,
-    render: (p) => <PlayerSignals p={p} />,
-  },
-  {
-    key: "trend",
-    label: "Trend Δ PPG",
-    kind: "fact",
-    value: (p) => p.trendDelta,
-    render: (p) => <Trend p={p} />,
-  },
-  {
-    key: "injury",
-    label: "Injury",
-    kind: "fact",
-    value: (p) => p.injury,
-    render: (p) => <Signal text={p.injury} />,
-  },
+        {p.trend?.latest && (
+          <span
+            className={`stock-trend-pill ${p.trend.latest.tone}`}
+            title={p.trend.latest.label}
+            aria-hidden="true"
+          >
+            {p.trend.latest.badge}
+          </span>
+        )}
+      </span>
+      <small>
+        {p.pos} · {p.nfl}
+      </small>
+    </PlayerName>
+  ),
+};
+export const playerColumnTrend: Column<Player> = {
+  key: "trend",
+  label: "Trend Δ PPG",
+  kind: "fact",
+  value: (p) => p.trendDelta,
+  render: (p) => <Trend p={p} />,
+};
+export const playerColumnExpected: Column<Player> = {
+  key: "expected",
+  label: "Expected PPG",
+  kind: "model",
+  value: (p) => p.expected,
+};
+export const playerColumnIndex: Column<Player> = {
+  key: "index",
+  label: "Surplus index",
+  kind: "model",
+  value: (p) => p.index,
+};
+export const playerColumnActual: Column<Player> = {
+  key: "actual",
+  label: "Actual PPG",
+  kind: "fact",
+  value: (p) => p.actual,
+};
+export const playerColumnRecent: Column<Player> = {
+  key: "recent",
+  label: "Recent PPG",
+  kind: "fact",
+  value: (p) => p.recent,
+};
+export const playerColumnProjected: Column<Player> = {
+  key: "projected",
+  label: "ESPN PPG",
+  kind: "projection",
+  value: (p) => p.projected,
+};
+export const playerColumnValue: Column<Player> = {
+  key: "value",
+  label: "Value PPG",
+  kind: "model",
+  value: (p) => p.value,
+};
+export const playerColumnGem: Column<Player> = {
+  key: "gem",
+  label: "Gem signal",
+  kind: "model",
+  value: (p) => p.gem,
+  render: (p) => <PlayerSignals p={p} />,
+};
+export const playerColumnInjury: Column<Player> = {
+  key: "injury",
+  label: "Injury",
+  kind: "fact",
+  value: (p) => p.injury,
+  render: (p) => <Signal text={p.injury} />,
+};
+
+export const playerColumns: Column<Player>[] = [
+  playerColumnName,
+  playerColumnTrend,
+  playerColumnExpected,
+  playerColumnIndex,
+  playerColumnActual,
+  playerColumnRecent,
+  playerColumnProjected,
+  playerColumnValue,
+  playerColumnGem,
+  playerColumnInjury,
 ];
 export const extendedColumns: Column<Player>[] = [
   ...playerColumns,

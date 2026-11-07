@@ -3,6 +3,7 @@ import {
   chainPositionImpact,
   evaluateGradeImpacts,
   gradeStepDelta,
+  netGradeStepDelta,
   type ChainPositionImpact,
   type PositionalGradeImpactRule,
 } from "../src/domain/chain-position-impact";
@@ -386,5 +387,157 @@ describe("positional grade impact domain engine", () => {
     const budgetEval = evaluateGradeImpacts(impactWithTarget, [rbDropBudget]);
     expect(budgetEval.passes).toBe(true);
     expect(budgetEval.failures).toEqual([]);
+  });
+  describe("netGradeStepDelta", () => {
+    it("sums step counts across position changes", () => {
+      expect(
+        netGradeStepDelta([
+          { position: "RB", before: "C+", after: "B", drop: 0, stepDelta: 2 },
+          { position: "WR", before: "A-", after: "B+", drop: 2, stepDelta: -2 },
+        ]),
+      ).toBe(0);
+
+      expect(
+        netGradeStepDelta([
+          { position: "RB", before: "C+", after: "B", drop: 0, stepDelta: 2 },
+          { position: "WR", before: "B", after: "B-", drop: 1, stepDelta: -1 },
+        ]),
+      ).toBe(1);
+
+      expect(
+        netGradeStepDelta([
+          { position: "RB", before: "B", after: "C", drop: 3, stepDelta: -3 },
+          { position: "WR", before: "B", after: "B+", drop: 0, stepDelta: 1 },
+        ]),
+      ).toBe(-2);
+
+      expect(netGradeStepDelta([])).toBe(0);
+      expect(netGradeStepDelta(null)).toBe(0);
+      expect(netGradeStepDelta(undefined)).toBe(0);
+    });
+  });
+
+  describe("loss limit (drop cap) and overall net step goals", () => {
+    it("evaluates other team loss limit (type: drop_limit): passes when stepDelta >= steps, fails when loss exceeds limit", () => {
+      // Opponent loss limit of at most 2 steps drop (steps: -2, type: "drop_limit")
+      const rule: PositionalGradeImpactRule = {
+        id: "other-loss-limit-rb",
+        side: "other",
+        position: "RB",
+        steps: -2,
+        type: "drop_limit",
+      };
+
+      // Drops by 1 step (-1 >= -2): passes
+      expect(
+        evaluateGradeImpacts(
+          {
+            own: [],
+            other: [{ position: "RB", before: "B", after: "B−", drop: 1, stepDelta: -1 }],
+          },
+          [rule],
+        ).passes,
+      ).toBe(true);
+
+      // Drops by 2 steps (-2 >= -2): passes
+      expect(
+        evaluateGradeImpacts(
+          {
+            own: [],
+            other: [{ position: "RB", before: "B", after: "C+", drop: 2, stepDelta: -2 }],
+          },
+          [rule],
+        ).passes,
+      ).toBe(true);
+
+      // Drops by 3 steps (-3 < -2): fails
+      const fail = evaluateGradeImpacts(
+        {
+          own: [],
+          other: [{ position: "RB", before: "B", after: "C", drop: 3, stepDelta: -3 }],
+        },
+        [rule],
+      );
+      expect(fail.passes).toBe(false);
+      expect(fail.failures[0]).toContain("loss limit");
+    });
+
+    it("evaluates overall net step goals for own team", () => {
+      // Overall net upgrade of >= +2 steps
+      const upgradeRule: PositionalGradeImpactRule = {
+        id: "own-overall-upgrade",
+        side: "own",
+        position: "OVERALL",
+        steps: 2,
+        type: "upgrade",
+      };
+
+      // Net +3 steps: passes
+      expect(
+        evaluateGradeImpacts(
+          {
+            own: [
+              { position: "RB", before: "C+", after: "B+", drop: 0, stepDelta: 3 },
+              { position: "WR", before: "B", after: "B", drop: 0, stepDelta: 0 },
+            ],
+            other: [],
+          },
+          [upgradeRule],
+        ).passes,
+      ).toBe(true);
+
+      // Net +1 step: fails
+      const fail = evaluateGradeImpacts(
+        {
+          own: [
+            { position: "RB", before: "C+", after: "B", drop: 0, stepDelta: 2 },
+            { position: "WR", before: "B", after: "B−", drop: 1, stepDelta: -1 },
+          ],
+          other: [],
+        },
+        [upgradeRule],
+      );
+      expect(fail.passes).toBe(false);
+      expect(fail.failures[0]).toContain("overall");
+    });
+
+    it("evaluates overall net step loss limit for other team", () => {
+      // Opponent overall loss limited to at most 1 step drop
+      const limitRule: PositionalGradeImpactRule = {
+        id: "other-overall-loss-limit",
+        side: "other",
+        position: "OVERALL",
+        steps: -1,
+        type: "drop_limit",
+      };
+
+      // Net 0 steps (RB -1, WR +1): passes
+      expect(
+        evaluateGradeImpacts(
+          {
+            own: [],
+            other: [
+              { position: "RB", before: "B", after: "B−", drop: 1, stepDelta: -1 },
+              { position: "WR", before: "C", after: "C+", drop: 0, stepDelta: 1 },
+            ],
+          },
+          [limitRule],
+        ).passes,
+      ).toBe(true);
+
+      // Net -2 steps (RB -2, WR 0): fails
+      const fail = evaluateGradeImpacts(
+        {
+          own: [],
+          other: [
+            { position: "RB", before: "B", after: "C+", drop: 2, stepDelta: -2 },
+            { position: "WR", before: "C", after: "C", drop: 0, stepDelta: 0 },
+          ],
+        },
+        [limitRule],
+      );
+      expect(fail.passes).toBe(false);
+      expect(fail.failures[0]).toContain("overall");
+    });
   });
 });

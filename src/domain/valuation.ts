@@ -26,6 +26,10 @@ import {
 import { assessGem, gemVersion, type GemAssessment } from "./gems";
 import { labelPolicy, labelRuleVersion, preGemVersion } from "./label-rules";
 import type { RosterScenario } from "./roster-scenarios";
+import {
+  calculatePlayerTrend,
+  type PlayerTrendSummary,
+} from "./player-trend";
 export interface Player {
   id: string;
   name: string;
@@ -93,6 +97,7 @@ export interface Player {
   explanation: string;
   opportunity: Workload;
   roleForecast: number | null;
+  trend?: PlayerTrendSummary;
 }
 export interface Pool {
   position: Position;
@@ -366,6 +371,11 @@ export function evaluate(
       explanation: "",
       opportunity,
       roleForecast,
+      trend: calculatePlayerTrend(
+        histories.get(str(r.PlayerID)) ?? [],
+        pos,
+        projected,
+      ),
     };
   });
   const totals = new Map<string, { targets: number; rush: number }>();

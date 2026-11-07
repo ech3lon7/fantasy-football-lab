@@ -61,6 +61,24 @@ const querySchema = z
       .optional(),
     // Preserve the optional usefulness setting when a saved trade restores its search controls.
     usefulness: z.object({ minimum: finite.nonnegative() }).strict().optional(),
+    // Current searches include this optional key even with no goals; persist active goals without rejecting ordinary saves.
+    gradeImpacts: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1).max(100),
+            side: z.enum(["own", "other"]),
+            position: z
+              .string()
+              .min(1)
+              .max(16)
+              .refine((value) => value.trim().length > 0),
+            steps: finite.int(),
+          })
+          .strict(),
+      )
+      .max(100)
+      .optional(),
     // Keep recipient safeguards when saving/loading a trade; existing saved queries remain valid.
     deficitProtection: z
       .object({

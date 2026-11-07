@@ -5,7 +5,9 @@ import {
   ChainGradeLimitControls,
   ChainRequirementChips,
 } from "../src/features/ChainLegControls";
-import { PositionGradeChips } from "../src/features/TradeWorkspace";
+import { PositionGradeChips, TradeLineupField } from "../src/features/TradeWorkspace";
+import { starterFixture } from "./fixtures";
+import { evaluate } from "../src/domain/valuation";
 import type { ChainStep } from "../src/domain/trade-chains";
 import type {
   ChainPositionImpact,
@@ -157,16 +159,19 @@ describe("UI Integration: PositionGradeChips in TradeWorkspace", () => {
     expect(html).toMatch(/position-grade-chip\s+good/);
     expect(html).toContain("WR");
     expect(html).toContain("C → B");
+    expect(html).toContain("+2 steps");
 
     // Downgrade chip (.position-grade-chip.bad)
     expect(html).toMatch(/position-grade-chip\s+bad/);
     expect(html).toContain("RB");
     expect(html).toContain("B → C");
+    expect(html).toContain("-2 steps");
 
     // Unchanged chip (.position-grade-chip.neutral)
     expect(html).toMatch(/position-grade-chip\s+neutral/);
     expect(html).toContain("QB");
     expect(html).toContain("B+ → B+");
+    expect(html).toContain("0 steps");
   });
 
   it("renders opponent chips with team designation when other team has grade changes", () => {
@@ -208,6 +213,112 @@ describe("UI Integration: PositionGradeChips in TradeWorkspace", () => {
       })
     );
     expect(htmlUndefined).toBe("");
+  });
+
+  it("renders TradeLineupField with positional grade chips and overall net step badge", async () => {
+    const raw = await starterFixture();
+    const m = evaluate(raw, raw.settings);
+    const draft = { teamA: "1", teamB: "2", give: [], get: [] };
+    const impact: ChainPositionImpact = {
+      own: [
+        { position: "RB", before: "C+", after: "B", drop: 0, stepDelta: 2 },
+        { position: "WR", before: "B", after: "B-", drop: 1, stepDelta: -1 },
+      ],
+      other: [
+        { position: "WR", before: "A-", after: "B+", drop: 2, stepDelta: -2 },
+        { position: "FLEX", before: "B", after: "A-", drop: 0, stepDelta: 2 },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(TradeLineupField, {
+        m,
+        draft,
+        impact: null as any,
+        basis: "marked-starters",
+        pending: false,
+        positionImpact: impact,
+      })
+    );
+
+    // Displays the grades section
+    expect(html).toContain("trade-position-grades");
+    expect(html).toContain("trade-position-grades-content");
+    expect(html).toContain("Grades:");
+
+    // Displays the per-position step delta inside the chips
+    expect(html).toContain("pos-step-delta");
+    expect(html).toContain("+2 steps");
+    expect(html).toContain("-1 steps");
+
+    // Displays overall net step badge on the right (+2 + -1 = +1)
+    expect(html).toContain("trade-position-net-step good");
+    expect(html).toContain("+1 overall steps");
+  });
+
+  it("in Lineup impact, only displays positional impacts and excludes unchanged positions", async () => {
+    const raw = await starterFixture();
+    const m = evaluate(raw, raw.settings);
+    const draft = { teamA: "1", teamB: "2", give: [], get: [] };
+    const impact: ChainPositionImpact = {
+      own: [
+        { position: "RB", before: "C+", after: "B", drop: 0, stepDelta: 2 },
+        { position: "WR", before: "B", after: "B-", drop: 1, stepDelta: -1 },
+        { position: "QB", before: "A", after: "A", drop: 0, stepDelta: 0 },
+        { position: "TE", before: "B", after: "B", drop: 0, stepDelta: 0 },
+      ],
+      other: [],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(TradeLineupField, {
+        m,
+        draft,
+        impact: null as any,
+        basis: "marked-starters",
+        pending: false,
+        positionImpact: impact,
+      })
+    );
+
+    // Positions that changed are displayed as chips
+    expect(html).toContain('title="RB upgraded"');
+    expect(html).toContain("+2 steps");
+    expect(html).toContain('title="WR drops 1 step"');
+    expect(html).toContain("-1 steps");
+
+    // Positions that stay the same step-wise are NOT displayed as chips
+    expect(html).not.toContain("QB unchanged");
+    expect(html).not.toContain("TE unchanged");
+    expect(html).not.toContain("0 steps");
+  });
+
+  it("in Lineup impact, shows 'No grade changes' when all positions stay the same step-wise", async () => {
+    const raw = await starterFixture();
+    const m = evaluate(raw, raw.settings);
+    const draft = { teamA: "1", teamB: "2", give: [], get: [] };
+    const impact: ChainPositionImpact = {
+      own: [
+        { position: "QB", before: "A", after: "A", drop: 0, stepDelta: 0 },
+        { position: "RB", before: "B", after: "B", drop: 0, stepDelta: 0 },
+      ],
+      other: [],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(TradeLineupField, {
+        m,
+        draft,
+        impact: null as any,
+        basis: "marked-starters",
+        pending: false,
+        positionImpact: impact,
+      })
+    );
+
+    expect(html).toContain("No grade changes");
+    expect(html).not.toContain("0 steps");
+    expect(html).toContain("0 overall steps");
   });
 });
 

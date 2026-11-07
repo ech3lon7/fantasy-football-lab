@@ -190,3 +190,30 @@ it("drops retired surface restrictions without altering unrelated saved-query se
     withoutLegacySurface({ manager: { version: 1 }, goal: "explore" }),
   ).toEqual({ manager: { version: 1 }, goal: "explore" });
 });
+
+// The UI always emits gradeImpacts; omitted, undefined and empty goals must save, while active rules survive restoring the saved search.
+it("round-trips positional grade goals and accepts their inactive query key", async () => {
+  const { m, state, draft, query, summary } = await sample();
+  const goals = [
+    { id: "own-wr", side: "own" as const, position: "WR", steps: 2 },
+    { id: "their-flex", side: "other" as const, position: "FLEX", steps: -1 },
+  ];
+  for (const gradeImpacts of [undefined, [], goals]) {
+    const saved = readSavedTrades(
+      saveTrade(state, m, draft, summary, { ...query, gradeImpacts }),
+    );
+    expect(saved.issue).toBe("");
+    expect(saved.trades).toHaveLength(1);
+    expect(saved.trades[0].query?.gradeImpacts).toEqual(gradeImpacts);
+    expect(saved.trades[0].original).toMatchObject(summary);
+  }
+  // Keep strict validation for malformed goals rather than discarding them or saving unusable controls.
+  for (const rule of [
+    { ...goals[0], steps: 1.5 },
+    { ...goals[0], position: " " },
+    { ...goals[0], id: "" },
+  ])
+    expect(() =>
+      saveTrade(state, m, draft, summary, { ...query, gradeImpacts: [rule] }),
+    ).toThrow("invalid search controls");
+});

@@ -31,7 +31,10 @@ import {
 } from "../domain/roster-scenarios";
 import { chainPositionImpact } from "../domain/chain-position-impact";
 // Performance momentum and dual moving average stock trends
-import { calculatePlayerTrend } from "../domain/player-trend";
+import {
+  calculatePlayerTrend,
+  calculateLeagueAverageVolume,
+} from "../domain/player-trend";
 import { PlayerStockChart } from "../ui/PlayerStockChart";
 import { Bookmark } from "lucide-react";
 // Prospective tracking is an isolated read-only audit, not another input to the valuation model.
@@ -116,6 +119,15 @@ import {
   PlayerSignals,
   DataTable,
   playerColumns,
+  playerColumnName,
+  playerColumnTrend,
+  playerColumnExpected,
+  playerColumnIndex,
+  playerColumnActual,
+  playerColumnRecent,
+  playerColumnProjected,
+  playerColumnValue,
+  playerColumnInjury,
   extendedColumns,
   fmt,
   signed,
@@ -687,6 +699,10 @@ export function PlayerList({
   );
 }
 export function PlayerDetail({ m, id }: { m: Model; id: string }) {
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [id]);
+
   const p = m.byId.get(id);
   if (!p)
     return (
@@ -767,6 +783,11 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
           trend={trend}
           playerName={p.name}
           position={p.pos}
+          leagueAvgVolume={calculateLeagueAverageVolume(
+            m.dataset.tables.ModelHistory,
+            m.dataset.tables.ModelPlayers,
+            p.pos,
+          )}
         />
       </Panel>
       <Panel title="Why this value?" note={`${p.status}; ${p.baselineStatus}`}>
@@ -799,23 +820,7 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
           </dl>
         </details>
       </Panel>
-      <div className="two-col">
-        <Panel
-          title="Completed-game scoring"
-          note="Zero and negative scores count; byes and nonparticipation do not."
-        >
-          <ScoreChart
-            scores={scores.map((r) => ({
-              label: `W${r.Week}`,
-              score: num(r.Points),
-            }))}
-          />
-          <p>
-            {p.games} played games · sample SD{" "}
-            <span className="fact">{fmt(p.scoringSD)}</span>
-          </p>
-        </Panel>
-        <Panel title="Gem and regression evidence" note={p.explanation}>
+      <Panel title="Gem and regression evidence" note={p.explanation}>
           <p>
             <Signal text={p.regression} />
           </p>
@@ -842,7 +847,6 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
             supporting estimate only.
           </p>
         </Panel>
-      </div>
       <NextRefreshScenarios m={m} p={p} />
       {/* Role evidence remains independent of scoring labels and has its own source and sample window. */}
       <Panel title="Role and opportunity" note={p.opportunity.source}>
@@ -993,37 +997,6 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
     </>
   );
 }
-function ScoreChart({
-  scores,
-}: {
-  scores: { label: string; score: number }[];
-}) {
-  const max = Math.max(1, ...scores.map((s) => Math.abs(s.score)));
-  return (
-    <div
-      className="score-chart"
-      role="img"
-      aria-label={scores
-        .map((s) => `${s.label}: ${fmt(s.score)} points`)
-        .join(", ")}
-    >
-      {scores.map((s, i) => (
-        <div key={i}>
-          <b className="fact">{fmt(s.score, 1)}</b>
-          <span className="score-column">
-            <i
-              className={s.score < 0 ? "negative" : ""}
-              style={{
-                height: `${Math.max(2, (Math.abs(s.score) / max) * 100)}%`,
-              }}
-            />
-          </span>
-          <small>{s.label}</small>
-        </div>
-      ))}
-    </div>
-  );
-}
 // Keep screener edits local until Apply, while existing app state owns saved queries.
 export function GemView({
   m,
@@ -1136,9 +1109,35 @@ export function GemView({
     );
   }
 
-  // Reuse current metric renderers while adding search-specific evidence and warnings.
-  const playerMetrics: Column<Player>[] = [
-    playerColumns[0],
+  // Toggle between compact player list (like "players") and full extended fields
+  const all = filters.gemAll === "true";
+  const setAll = (v: boolean) => onFilters({ gemAll: String(v) });
+
+  const signalCol: Column<Player> = {
+    key: "priority",
+    label: "Signal",
+    kind: "model",
+    value: (p) => -p.priority,
+    render: (p) => <PlayerSignals p={p} />,
+  };
+
+  // Compact columns matching "players" (playerColumns) with gem screener signals
+  const compactPlayerMetrics: Column<Player>[] = [
+    playerColumnName,
+    playerColumnTrend,
+    playerColumnExpected,
+    playerColumnIndex,
+    playerColumnActual,
+    playerColumnRecent,
+    playerColumnProjected,
+    playerColumnValue,
+    signalCol,
+    playerColumnInjury,
+  ];
+
+  // Extended columns with full evidence breakdown
+  const extendedPlayerMetrics: Column<Player>[] = [
+    playerColumnName,
     { key: "position", label: "Position", kind: "fact", value: (p) => p.pos },
     {
       key: "owner",
@@ -1152,20 +1151,13 @@ export function GemView({
                 ?.TeamName,
             ),
     },
-    {
-      key: "priority",
-      label: "Signal",
-      kind: "model",
-      value: (p) => -p.priority,
-      render: (p) => <PlayerSignals p={p} />,
-    },
-    playerColumns[8],
-    // Keep Expected PPG immediately after Trend PPG without changing the other screener columns.
-    playerColumns[4],
-    playerColumns[2],
-    playerColumns[6],
-    playerColumns[1],
-    playerColumns[3],
+    signalCol,
+    playerColumnTrend,
+    playerColumnExpected,
+    playerColumnRecent,
+    playerColumnIndex,
+    playerColumnActual,
+    playerColumnProjected,
     {
       key: "gap",
       label: "Projection gap PPG",
@@ -1191,25 +1183,26 @@ export function GemView({
       kind: "fact",
       value: (p) => `${p.injury}; ${p.status}; ${p.baselineStatus}`,
     },
-    // Keep the existing adjusted value, baseline, gap percent and workload columns.
-    playerColumns[5],
+    playerColumnValue,
     extendedColumns[16],
     ...extendedColumns.slice(18, 22),
-    // Role, usage and market evidence follow the existing screener metrics.
     ...extendedColumns.slice(-11),
     { key: "why", label: "Why flagged", value: (p) => p.explanation },
   ];
-  const columns: Column<GemResult>[] = playerMetrics.map((c) => ({
+
+  const activeMetrics = all ? extendedPlayerMetrics : compactPlayerMetrics;
+
+  const columns: Column<GemResult>[] = activeMetrics.map((c) => ({
     ...c,
     value: (r) => c.value(r.player),
     render: c.render ? (r) => c.render!(r.player) : undefined,
   }));
-  columns.splice(14, 0, {
+
+  const matchingCol: Column<GemResult> = {
     key: "matching",
     label: "Matching evidence",
     value: (r) => [...r.missing, ...r.evidence].join(" - "),
     render: (r) => (
-      // Round visible explanations while preserving exact comparisons in the tooltip.
       <span
         className="gem-evidence"
         title={[...r.missing, ...r.evidence].join(" - ")}
@@ -1220,7 +1213,13 @@ export function GemView({
           .replace(/[+-]?\d+\.\d+/g, (value) => fmt(Number(value)))}
       </span>
     ),
-  });
+  };
+
+  if (all) {
+    columns.splice(14, 0, matchingCol);
+  } else {
+    columns.push(matchingCol);
+  }
 
   // Both sections share the applied sort; remounting resets only their visible batch.
   function resultsTable(rows: GemResult[], section: string) {
@@ -1332,6 +1331,46 @@ export function GemView({
                   }
                 />
                 Positive labels only
+              </label>
+            </FilterHelp>
+            <FilterHelp label="Bullish MA crossover (golden cross)">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={draft.goldenCross}
+                  onChange={(e) =>
+                    setEdit({
+                      ...edit,
+                      draft: { ...draft, goldenCross: e.target.checked },
+                    })
+                  }
+                />
+                Golden cross only
+              </label>
+            </FilterHelp>
+            <FilterHelp label="Bearish MA crossover (death cross)">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={draft.deathCross}
+                  onChange={(e) =>
+                    setEdit({
+                      ...edit,
+                      draft: { ...draft, deathCross: e.target.checked },
+                    })
+                  }
+                />
+                Death cross only
+              </label>
+            </FilterHelp>
+            <FilterHelp label={"All fields"}>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={all}
+                  onChange={(e) => setAll(e.target.checked)}
+                />{" "}
+                All fields
               </label>
             </FilterHelp>
           </div>
@@ -1570,6 +1609,37 @@ export function GemView({
                     Positive labels only ×
                   </button>
                 )}
+                {query.goldenCross && (
+                  <button
+                    className="subtle"
+                    aria-label="Remove bullish MA crossover filter"
+                    onClick={() =>
+                      replace({ ...restored.draft, goldenCross: false })
+                    }
+                  >
+                    Golden cross only ×
+                  </button>
+                )}
+                {query.deathCross && (
+                  <button
+                    className="subtle"
+                    aria-label="Remove bearish MA crossover filter"
+                    onClick={() =>
+                      replace({ ...restored.draft, deathCross: false })
+                    }
+                  >
+                    Death cross only ×
+                  </button>
+                )}
+                {all && (
+                  <button
+                    className="subtle"
+                    aria-label="Remove all fields view"
+                    onClick={() => setAll(false)}
+                  >
+                    All fields ×
+                  </button>
+                )}
                 {query.signals.map((s) => (
                   <button
                     className="subtle"
@@ -1696,7 +1766,7 @@ export function Weekly({ m }: { m: Model }) {
         initialSort="weekly"
         id={(p) => p.id}
         columns={[
-          playerColumns[0],
+          playerColumnName,
           {
             key: "opponent",
             label: "Opponent",
@@ -1704,8 +1774,8 @@ export function Weekly({ m }: { m: Model }) {
             value: (p) => p.opponent,
           },
           { key: "bye", label: "Bye week", kind: "fact", value: (p) => p.bye },
-          playerColumns[1],
-          playerColumns[2],
+          playerColumnActual,
+          playerColumnRecent,
           {
             key: "weekly",
             label: "ESPN weekly projection",
@@ -1725,7 +1795,7 @@ export function Weekly({ m }: { m: Model }) {
                     )?.TeamName,
                   ),
           },
-          playerColumns[9],
+          playerColumnInjury,
         ]}
       />
     </Panel>

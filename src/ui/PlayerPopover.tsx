@@ -17,7 +17,11 @@ import { str, num } from "../domain/contracts";
 import type { Model, Player } from "../domain/valuation";
 import { marketStatus, playedHistory } from "../domain/opportunity";
 // Calculate dual moving average momentum trends for fast breakout vs anchor baseline detection
-import { calculatePlayerTrend } from "../domain/player-trend";
+import {
+  calculatePlayerTrend,
+  calculateLeagueAverageVolume,
+} from "../domain/player-trend";
+import { PlayerStockChart } from "./PlayerStockChart";
 import {
   extendedColumns,
   fmt,
@@ -40,6 +44,7 @@ export function PlayerPopoverProvider({
     id: string;
     anchor: HTMLElement;
     trigger: string;
+    target?: "chart";
   } | null>(null);
   const [mobile, setMobile] = useState(
     () => matchMedia("(max-width: 780px)").matches,
@@ -60,10 +65,12 @@ export function PlayerPopoverProvider({
     });
   }, []);
   const open = useCallback(
-    (id: string, anchor: HTMLElement, trigger: string) => {
+    (id: string, anchor: HTMLElement, trigger: string, target?: "chart") => {
       setPosition({ visibility: "hidden" });
       setSelection((previous) =>
-        previous?.trigger === trigger ? null : { id, anchor, trigger },
+        previous?.trigger === trigger
+          ? null
+          : { id, anchor, trigger, target },
       );
     },
     [],
@@ -150,6 +157,20 @@ export function PlayerPopoverProvider({
       document.removeEventListener("scroll", place, true);
     };
   }, [selection, player, mobile, close]);
+
+  // When opened via the MA badge, scroll the card directly to the chart.
+  useLayoutEffect(() => {
+    if (!selection || !player || !panel.current) return;
+    if (selection.target === "chart") {
+      const panelEl = panel.current;
+      const chartEl = panelEl.querySelector("#player-popover-chart-section");
+      if (chartEl) {
+        requestAnimationFrame(() => {
+          chartEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      }
+    }
+  }, [selection, player]);
 
   // Dismiss on Escape or an outside interaction; mobile confines keyboard focus to the sheet.
   useEffect(() => {
@@ -250,7 +271,10 @@ export function PlayerPopoverProvider({
               <a
                 className="button"
                 href={`#/player/${player.id}`}
-                onClick={() => close(false)}
+                onClick={() => {
+                  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+                  close(false);
+                }}
               >
                 Open full player page
               </a>
@@ -276,6 +300,15 @@ function PlayerInspection({ p, m }: { p: Player; m: Model }) {
   const trendSummary = useMemo(
     () => calculatePlayerTrend(scores, p.pos, p.projected),
     [scores, p.pos, p.projected],
+  );
+  const leagueAvgVolume = useMemo(
+    () =>
+      calculateLeagueAverageVolume(
+        m.dataset.tables.ModelHistory,
+        m.dataset.tables.ModelPlayers,
+        p.pos,
+      ),
+    [m.dataset.tables.ModelHistory, m.dataset.tables.ModelPlayers, p.pos],
   );
   const stale =
     !m.dataset.sourceUTC ||
@@ -333,12 +366,33 @@ function PlayerInspection({ p, m }: { p: Player; m: Model }) {
             className={`stock-trend-pill ${trendSummary.latest.tone}`}
             title={trendSummary.latest.label}
             aria-label={`Stock momentum trend: ${trendSummary.latest.label}`}
+            style={{ cursor: "pointer" }}
+            onClick={() => {
+              document
+                .getElementById("player-popover-chart-section")
+                ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }}
           >
             {trendSummary.latest.badge}
           </span>
         )}
         <PlayerSignals p={p} />
         <Signal text={p.regression} />
+      </div>
+      {/* Interactive stock trend chart directly inside the player card */}
+      <div
+        id="player-popover-chart-section"
+        className="player-popover-chart"
+        role="region"
+        aria-label={`Performance stock trend chart for ${p.name}`}
+      >
+        <PlayerStockChart
+          trend={trendSummary}
+          playerName={p.name}
+          position={p.pos}
+          leagueAvgVolume={leagueAvgVolume}
+          height={200}
+        />
       </div>
       <p>{p.explanation}</p>
       {/* Read-only evidence for every active analytical tag matches the full player profile. */}

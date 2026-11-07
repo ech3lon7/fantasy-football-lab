@@ -2742,12 +2742,19 @@ pre {
 .trade-position-grades {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding: 6px 12px;
   background: #f8fafc;
   border: 1px solid var(--line);
   border-radius: 6px;
   margin: 6px 0 10px;
+  flex-wrap: wrap;
+}
+.trade-position-grades-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
 }
 .trade-position-grades-label {
@@ -2781,6 +2788,13 @@ pre {
 .position-grade-chip .pos-grades {
   font-weight: 600;
 }
+.position-grade-chip .pos-step-delta {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.06);
+}
 .position-grade-chip.good {
   background: #e8f5e9;
   color: #166534;
@@ -2795,6 +2809,76 @@ pre {
   background: #f1f5f9;
   color: #475569;
   border-color: #e2e8f0;
+}
+.trade-position-net-step {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-family: monospace;
+  border: 1px solid transparent;
+}
+.trade-position-net-step.good {
+  background: #e8f5e9;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+.trade-position-net-step.bad {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+.trade-position-net-step.neutral {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+
+/* Positional Grade Impact Subrow & Split Layout */
+.trade-position-impact-row > td {
+  padding-top: 0 !important;
+  padding-bottom: 10px !important;
+  border-top: none !important;
+}
+.trade-position-grades-split {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  width: 100%;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-sizing: border-box;
+}
+.trade-position-side-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 320px;
+}
+.trade-position-side-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.trade-position-side-header .side-title {
+  font-weight: 700;
+  color: var(--ink);
+  font-size: 11.5px;
+}
+.trade-position-side-header .trade-position-net-step {
+  margin-left: 0;
+}
+.trade-position-none {
+  font-size: 11px;
+  font-style: italic;
+  color: #64748b;
+  padding: 2px 4px;
 }
 
 /* Player Stock Chart & Dual Moving Average Trend Indicators */
@@ -2948,27 +3032,78 @@ pre {
   fill: #64748b;
   font-weight: 600;
 }
+/* Gold-dashed lightly visible league average volume line */
+.stock-league-avg-line {
+  stroke: #eab308;
+  stroke-dasharray: 4 3;
+  stroke-width: 1.2;
+  opacity: 0.42;
+  pointer-events: none;
+}
+.stock-league-avg-label {
+  fill: #eab308;
+  font-size: 9px;
+  font-weight: 600;
+  opacity: 0.6;
+  pointer-events: none;
+}
+.legend-swatch.dashed-gold {
+  border-top: 1.5px dashed #eab308;
+  height: 0;
+  width: 14px;
+  margin-top: 5px;
+}
+.legend-item.league-avg {
+  color: #b45309;
+}
+/* Blue-dashed target volume benchmark line (e.g. 18 touches RB, 7 targets WR) */
+.stock-target-vol-line {
+  stroke: #3b82f6;
+  stroke-dasharray: 4 3;
+  stroke-width: 1.2;
+  opacity: 0.65;
+  pointer-events: none;
+}
+.stock-target-vol-label {
+  fill: #2563eb;
+  font-size: 9px;
+  font-weight: 600;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.legend-swatch.dashed-blue {
+  border-top: 1.5px dashed #3b82f6;
+  height: 0;
+  width: 14px;
+  margin-top: 5px;
+}
+.legend-item.target-benchmark {
+  color: #2563eb;
+}
+
 .stock-volume-bar {
   fill: rgba(148, 163, 184, 0.16);
   stroke: rgba(100, 116, 139, 0.4);
   stroke-width: 1.2;
   transform-origin: bottom;
-  animation: stockBarGrow 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: stockBarGrow 2.0s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
 }
 .stock-area-fill {
-  animation: stockFadeIn 0.8s ease-out forwards;
+  animation: stockFadeIn 2.2s ease-out forwards;
 }
 .stock-points-line {
   stroke: #cbd5e1;
   stroke-dasharray: 2 3;
   stroke-width: 1.2;
   fill: none;
+  animation: stockFadeIn 1.8s ease-out forwards;
 }
 .stock-point-node {
   fill: #94a3b8;
   stroke: #fff;
   stroke-width: 1.5;
   transition: r 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: stockFadeIn 2.0s ease-out forwards;
 }
 .stock-point-node:hover {
   r: 5;
@@ -2979,14 +3114,14 @@ pre {
   stroke-dasharray: 4 4;
   stroke-width: 2;
   stroke-linecap: round;
-  animation: stockFadeIn 0.7s ease-out forwards;
+  animation: stockFadeIn 2.0s ease-out forwards;
 }
 .stock-fast-ma-line {
   fill: none;
   stroke-width: 2.6;
   stroke-linecap: round;
   stroke-linejoin: round;
-  animation: stockFastDraw 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: stockFastDraw 2.4s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
 }
 .stock-crosshair-line {
   stroke: #94a3b8;
@@ -3006,12 +3141,10 @@ pre {
   cursor: crosshair;
 }
 
-/* Floating interactive tooltip */
+/* Floating interactive tooltip anchored to hovered data point */
 .stock-tooltip-popover {
   position: absolute;
-  top: 10px;
-  right: 15px;
-  background: rgba(15, 23, 42, 0.92);
+  background: rgba(15, 23, 42, 0.94);
   color: #fff;
   padding: 8px 12px;
   border-radius: 6px;
@@ -3023,7 +3156,38 @@ pre {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  animation: stockFadeIn 0.2s ease-out forwards;
+  white-space: nowrap;
+  animation: stockFadeIn 0.15s ease-out forwards;
+}
+
+/* Gem screener player name row with compact stock MA pill */
+.gem-player-name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.gem-player-name-row b {
+  display: inline;
+}
+.gem-player-name-row .stock-trend-pill {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.gem-player-name-row .stock-trend-pill:hover {
+  filter: brightness(0.92);
+  transform: translateY(-1px);
+}
+.player-popover-chart {
+  margin: 14px 0 16px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
 }
 .tooltip-week-title {
   font-weight: 700;
@@ -3075,6 +3239,8 @@ pre {
   .stock-fast-ma-line,
   .stock-slow-ma-line,
   .stock-area-fill,
+  .stock-points-line,
+  .stock-point-node,
   .stock-tooltip-popover {
     animation: none !important;
   }

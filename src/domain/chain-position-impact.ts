@@ -11,12 +11,14 @@ export interface ChainGradeLimit {
 }
 
 export type GradeImpactSide = "own" | "other";
+export type GradeImpactType = "upgrade" | "drop_limit" | "deplete";
 
 export interface PositionalGradeImpactRule {
   id: string;
   side: GradeImpactSide;
   position: string;
   steps: number;
+  type?: GradeImpactType;
 }
 
 export interface ChainPositionChange {
@@ -166,8 +168,52 @@ export function evaluateGradeImpacts(
 
   for (const rule of rules) {
     const sideLabel = rule.side === "own" ? "Your" : "Their";
-    const sideImpacts = impact[rule.side];
-    const row = sideImpacts?.find((r) => r.position === rule.position);
+    const sideImpacts = impact[rule.side] ?? [];
+
+    // Determine effective type if not explicitly set (preserves backward compatibility)
+    const effectiveType: GradeImpactType =
+      rule.type ??
+      (rule.side === "own"
+        ? rule.steps > 0
+          ? "upgrade"
+          : "drop_limit"
+        : rule.steps > 0
+          ? "upgrade"
+          : rule.steps === 0
+            ? "drop_limit"
+            : "deplete");
+
+    // Support overall net step requirements across all positions
+    if (rule.position.toUpperCase() === "OVERALL") {
+      const netDelta = netGradeStepDelta(sideImpacts);
+      const sign = netDelta > 0 ? `+${netDelta}` : `${netDelta}`;
+
+      if (effectiveType === "upgrade") {
+        const requiredSteps = Math.abs(rule.steps);
+        if (netDelta < requiredSteps) {
+          failures.push(
+            `${sideLabel} overall grade change of ${sign} steps does not meet requirement of +${requiredSteps} steps.`,
+          );
+        }
+      } else if (effectiveType === "drop_limit") {
+        const maxDrop = Math.abs(rule.steps);
+        if (netDelta < -maxDrop) {
+          failures.push(
+            `${sideLabel} overall grade change of ${sign} steps exceeds loss limit of ${maxDrop} step${maxDrop === 1 ? "" : "s"}.`,
+          );
+        }
+      } else if (effectiveType === "deplete") {
+        const requiredDepletion = -Math.abs(rule.steps);
+        if (netDelta > requiredDepletion) {
+          failures.push(
+            `${sideLabel} overall grade change of ${sign} steps does not meet depletion requirement of ${requiredDepletion} steps.`,
+          );
+        }
+      }
+      continue;
+    }
+
+    const row = sideImpacts.find((r) => r.position === rule.position);
 
     // If position is not tracked or grade cannot be computed (e.g. 'n.a.'), rule cannot be satisfied.
     if (!row || row.stepDelta === null || row.stepDelta === undefined) {
@@ -177,33 +223,29 @@ export function evaluateGradeImpacts(
       continue;
     }
 
-    if (rule.side === "own") {
-      // For own team:
-      // steps > 0 (upgrade target): requires stepDelta >= steps
-      // steps < 0 (drop budget): requires stepDelta >= steps (e.g. drop <= 2 steps, stepDelta >= -2)
-      // steps === 0 (no drop): requires stepDelta >= 0
-      if (row.stepDelta < rule.steps) {
+    const delta = row.stepDelta;
+    const sign = delta > 0 ? `+${delta}` : `${delta}`;
+
+    if (effectiveType === "upgrade") {
+      const requiredSteps = Math.abs(rule.steps);
+      if (delta < requiredSteps) {
         failures.push(
-          `Your ${rule.position}: ${row.before} → ${row.after}; change of ${row.stepDelta > 0 ? `+${row.stepDelta}` : row.stepDelta} steps does not meet requirement of ${rule.steps > 0 ? `+${rule.steps}` : rule.steps} steps.`,
+          `${sideLabel} ${rule.position}: ${row.before} → ${row.after}; change of ${sign} steps does not meet requirement of +${requiredSteps} steps.`,
         );
       }
-    } else {
-      // For other team:
-      // steps > 0 (incentive upgrade): requires stepDelta >= steps
-      // steps < 0 (depletion target): requires stepDelta <= steps (e.g. drops by at least 2 steps, stepDelta <= -2)
-      // steps === 0 (no drop): requires stepDelta >= 0
-      if (rule.steps < 0) {
-        if (row.stepDelta > rule.steps) {
-          failures.push(
-            `Their ${rule.position}: ${row.before} → ${row.after}; change of ${row.stepDelta > 0 ? `+${row.stepDelta}` : row.stepDelta} steps does not meet depletion requirement of ${rule.steps} steps.`,
-          );
-        }
-      } else {
-        if (row.stepDelta < rule.steps) {
-          failures.push(
-            `Their ${rule.position}: ${row.before} → ${row.after}; change of ${row.stepDelta > 0 ? `+${row.stepDelta}` : row.stepDelta} steps does not meet requirement of ${rule.steps > 0 ? `+${rule.steps}` : rule.steps} steps.`,
-          );
-        }
+    } else if (effectiveType === "drop_limit") {
+      const maxDrop = Math.abs(rule.steps);
+      if (delta < -maxDrop) {
+        failures.push(
+          `${sideLabel} ${rule.position}: ${row.before} → ${row.after}; change of ${sign} steps exceeds loss limit of ${maxDrop} step${maxDrop === 1 ? "" : "s"}.`,
+        );
+      }
+    } else if (effectiveType === "deplete") {
+      const requiredDepletion = -Math.abs(rule.steps);
+      if (delta > requiredDepletion) {
+        failures.push(
+          `${sideLabel} ${rule.position}: ${row.before} → ${row.after}; change of ${sign} steps does not meet depletion requirement of ${requiredDepletion} steps.`,
+        );
       }
     }
   }
@@ -221,4 +263,15 @@ export function gradeImpactFailures(
 ): string[] {
   if (!rules || rules.length === 0 || !impact) return [];
   return evaluateGradeImpacts(impact, rules).failures;
+}
+
+/**
+ * Calculates the total net step delta across a list of position changes.
+ * Positive = overall upgrade, negative = overall downgrade.
+ */
+export function netGradeStepDelta(
+  changes: ChainPositionChange[] | null | undefined,
+): number {
+  if (!changes || changes.length === 0) return 0;
+  return changes.reduce((total, c) => total + (c.stepDelta ?? 0), 0);
 }

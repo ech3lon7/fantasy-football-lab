@@ -1,6 +1,7 @@
 import type { Player } from "./valuation";
 import { playerSignals } from "./valuation";
 import { signalAppearance } from "./signal-appearance";
+import { isGoldenCross, isDeathCross } from "./player-trend";
 
 // Primary breakout classifications stay separate from independent scoring and regression evidence.
 export const gemSignals = [
@@ -127,6 +128,8 @@ export type GemDraft = Record<Threshold, string> & {
   aboveReplacement: boolean;
   includeMissing: boolean;
   positiveOnly: boolean;
+  goldenCross: boolean;
+  deathCross: boolean;
 };
 export type GemQuery = Omit<GemDraft, Threshold> &
   Record<Threshold, number | null>;
@@ -148,6 +151,8 @@ export function defaultGemDraft(team: string): GemDraft {
     aboveReplacement: false,
     includeMissing: false,
     positiveOnly: false,
+    goldenCross: false,
+    deathCross: false,
     trendMin: "",
     indexMin: "",
     indexMax: "",
@@ -227,6 +232,10 @@ export function validateGemDraft(d: GemDraft, teams: string[]) {
   // Keep the opt-in flag boolean rather than interpreting malformed saved values as permission to broaden a search.
   if (typeof d.positiveOnly !== "boolean")
     errors.positiveOnly = "Choose whether to show positive labels only.";
+  if (typeof d.goldenCross !== "boolean")
+    errors.goldenCross = "Choose whether to show bullish MA crossovers only.";
+  if (typeof d.deathCross !== "boolean")
+    errors.deathCross = "Choose whether to show bearish MA crossovers only.";
   return {
     errors,
     query: Object.keys(errors).length
@@ -244,6 +253,8 @@ export function decodeGemFilters(saved: Record<string, string>, team: string) {
   draft.injured = saved.gemInjured === "true";
   // Earlier searches remain unrestricted; the new flag persists through the same string-valued sync state.
   draft.positiveOnly = saved.gemPositiveOnly === "true";
+  draft.goldenCross = saved.gemGoldenCross === "true";
+  draft.deathCross = saved.gemDeathCross === "true";
   if (
     saved.gemPositiveOnly !== undefined &&
     !["true", "false"].includes(saved.gemPositiveOnly)
@@ -335,6 +346,8 @@ export function encodeGemFilters(q: GemQuery): Record<string, string> {
     gemAboveReplacement: String(q.aboveReplacement),
     gemIncludeMissing: String(q.includeMissing),
     gemPositiveOnly: String(q.positiveOnly),
+    gemGoldenCross: String(q.goldenCross),
+    gemDeathCross: String(q.deathCross),
     ...Object.fromEntries(
       gemThresholds.map((f) => [
         f.stored,
@@ -376,6 +389,8 @@ export function gemQuerySummary(q: GemQuery): string {
       ),
     ...(q.aboveReplacement ? ["Above replacement PPG > 0"] : []),
     ...(q.positiveOnly ? ["Positive labels only (no red labels)"] : []),
+    ...(q.goldenCross ? ["Bullish MA crossover (golden cross)"] : []),
+    ...(q.deathCross ? ["Bearish MA crossover (death cross)"] : []),
     q.injured ? "Injuries included" : "Active players only",
   ].join(" AND ");
 }
@@ -415,10 +430,19 @@ export function screenGems(players: Player[], q: GemQuery) {
         !(q.position === "RB / WR / TE"
           ? ["RB", "WR", "TE"].includes(p.pos)
           : p.pos === q.position)) ||
-      (!q.injured && p.uncertain)
+      (!q.injured && p.uncertain) ||
+      (q.goldenCross && !isGoldenCross(p.trend)) ||
+      (q.deathCross && !isDeathCross(p.trend))
     )
       continue;
-    const evidence = playerSignals(p),
+    const evidence = playerSignals(p);
+    if (q.goldenCross) {
+      evidence.push("Bullish MA crossover (golden cross)");
+    }
+    if (q.deathCross) {
+      evidence.push("Bearish MA crossover (death cross)");
+    }
+    const
       missing: string[] = [];
     let failed = false;
     const values: Record<Threshold, number | null> = {

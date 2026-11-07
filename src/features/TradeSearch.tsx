@@ -39,7 +39,7 @@ import {
   readLineupBasis,
   type LineupBasis,
 } from "../domain/trade-impact";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Bookmark, LoaderCircle } from "lucide-react";
 import { sourceDataset } from "../domain/roster-scenarios";
 import {
@@ -1268,17 +1268,25 @@ export function TradeSearch({
       const stepCount = Math.abs(rule.steps);
       const stepLabel = `${stepCount} step${stepCount === 1 ? "" : "s"}`;
       let action: string;
-      if (rule.side === "other" && rule.steps < 0) {
+      const effectiveType =
+        rule.type ??
+        (rule.side === "other" && rule.steps < 0
+          ? "deplete"
+          : rule.steps > 0
+            ? "upgrade"
+            : "drop_limit");
+      if (effectiveType === "deplete") {
         action = `downgrade ≥ ${stepLabel}`;
-      } else if (rule.steps > 0) {
+      } else if (effectiveType === "upgrade") {
         action = `upgrade ≥ ${stepLabel}`;
       } else if (rule.steps === 0) {
         action = "no drop";
       } else {
         action = `drop ≤ ${stepLabel}`;
       }
+      const posLabel = rule.position === "OVERALL" ? "Overall" : rule.position;
       return {
-        label: `Grade goal: ${sidePrefix} ${rule.position} (${action})`,
+        label: `Grade goal: ${sidePrefix} ${posLabel} (${action})`,
         remove: () =>
           setGradeImpacts((prev) => prev.filter((_, i) => i !== idx)),
       };
@@ -2471,14 +2479,21 @@ export function TradeSearch({
                         })
                       }
                       m={resultModel.current ?? m}
-                      render={(row) => (
-                        <tr
-                          key={row.key}
-                          data-trade-result
-                          className={
-                            selectedPreview === row.key ? "is-selected" : ""
-                          }
-                        >
+                      render={(row) => {
+                        const teamBName = str(
+                          m.dataset.tables.ModelTeams.find(
+                            (t) => str(t.TeamID) === row.teamB,
+                          )?.TeamName,
+                        );
+                        const totalColumns = job.rows.some((candidate) => candidate.surface) ? 8 : 6;
+                        return (
+                          <Fragment key={row.key}>
+                            <tr
+                              data-trade-result
+                              className={
+                                selectedPreview === row.key ? "is-selected" : ""
+                              }
+                            >
                           <td>
                             <div className="trade-result-package">
                               <div className="trade-result-faces">
@@ -2516,17 +2531,7 @@ export function TradeSearch({
                                   .join("; ")}
                               </small>
                             )}
-                            <small>
-                              {str(
-                                m.dataset.tables.ModelTeams.find(
-                                  (t) => str(t.TeamID) === row.teamB,
-                                )?.TeamName,
-                              )}
-                            </small>
-                            {/* Positional grade transitions displayed directly on candidate card */}
-                            {row.positionImpact && (
-                              <PositionGradeChips impact={row.positionImpact} />
-                            )}
+                            <small>{teamBName}</small>
                           </td>
                           <td
                             className="model"
@@ -2988,7 +2993,23 @@ export function TradeSearch({
                             </div>
                           </td>
                         </tr>
-                      )}
+                        {row.positionImpact && (
+                          <tr
+                            className="trade-position-impact-row"
+                            key={`${row.key}-pos-impact`}
+                          >
+                            <td colSpan={totalColumns}>
+                              <PositionGradeChips
+                                impact={row.positionImpact}
+                                teamBName={teamBName}
+                                onlyImpacts
+                              />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  }}
                     />
                   </table>
                 </div>
@@ -3035,7 +3056,15 @@ export function TradeSearch({
                         </p>
                         {/* Positional grade transitions displayed directly on near-miss alternative */}
                         {row.positionImpact && (
-                          <PositionGradeChips impact={row.positionImpact} />
+                          <PositionGradeChips
+                            impact={row.positionImpact}
+                            teamBName={str(
+                              m.dataset.tables.ModelTeams.find(
+                                (t) => str(t.TeamID) === row.teamB,
+                              )?.TeamName,
+                            )}
+                            onlyImpacts
+                          />
                         )}
                         <button
                           type="button"

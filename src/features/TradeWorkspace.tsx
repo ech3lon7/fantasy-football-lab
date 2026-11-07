@@ -12,7 +12,7 @@ import type { Model, Player } from "../domain/valuation";
 import type { TradeSearchQuery } from "../domain/trade-search";
 import type { LineupBasis } from "../domain/trade-impact";
 import { tradeImpact } from "../domain/trade-impact";
-import type { ChainPositionImpact } from "../domain/chain-position-impact";
+import { type ChainPositionImpact, type ChainPositionChange, netGradeStepDelta } from "../domain/chain-position-impact";
 import { scenarioLineupBoard } from "../domain/roster-scenarios";
 import { fmt, signed } from "../ui/components";
 import { PlayerName } from "../ui/PlayerName";
@@ -213,56 +213,137 @@ export function TradeScoreStrip({
 
 /**
  * Renders colored positional grade chips for each affected position.
- * Displays before and after grades with .good, .bad, or .neutral tone classes.
+ * When side is specified, displays chips for that side.
+ * When side is omitted, organizes changes into clearly separated "Your team" and
+ * opponent team sections with overall net step count badges and horizontal chip flows.
  */
 export function PositionGradeChips({
   impact,
   side,
+  teamBName,
+  onlyImpacts = false,
 }: {
   impact?: ChainPositionImpact;
   side?: "own" | "other";
+  teamBName?: string;
+  onlyImpacts?: boolean;
 }) {
   if (!impact) return null;
-  // If side is specified, only show that side's changes; otherwise show own then other
   const ownList = side === "other" ? [] : (impact.own ?? []);
   const otherList = side === "own" ? [] : (impact.other ?? []);
-  const all = [
-    ...ownList.map((r) => ({ ...r, suffix: "" })),
-    ...otherList.map((r) => ({ ...r, suffix: side ? "" : " (them)" })),
-  ];
-  if (all.length === 0) return null;
+
+  const renderChip = (row: ChainPositionChange, suffix = "") => {
+    const tone =
+      row.drop === null || row.before === row.after
+        ? "neutral"
+        : row.drop > 0
+          ? "bad"
+          : "good";
+    return (
+      <span
+        key={`${row.position}-${row.before}-${row.after}-${suffix}`}
+        className={`position-grade-chip ${tone}`}
+        title={
+          row.drop != null && row.drop > 0
+            ? `${row.position} drops ${row.drop} step${row.drop > 1 ? "s" : ""}`
+            : row.before !== row.after
+              ? `${row.position} upgraded`
+              : `${row.position} unchanged`
+        }
+      >
+        <span className="pos-label">
+          {row.position}
+          {suffix}
+        </span>
+        <span className="pos-grades">
+          {row.before} → {row.after}
+        </span>
+        {row.stepDelta !== null && row.stepDelta !== undefined && (
+          <span className="pos-step-delta">
+            {row.stepDelta > 0 ? `+${row.stepDelta} steps` : `${row.stepDelta} steps`}
+          </span>
+        )}
+      </span>
+    );
+  };
+
+  // If a single side is requested (e.g. Lineup Impact screen tab), render inline list
+  if (side) {
+    const rawList = side === "own" ? ownList : otherList;
+    const list = onlyImpacts
+      ? rawList.filter((row) => row.stepDelta !== null && row.stepDelta !== 0)
+      : rawList;
+    if (list.length === 0) {
+      return (
+        <span className="trade-position-none" aria-label="No positional grade changes">
+          No grade changes
+        </span>
+      );
+    }
+    return (
+      <div className="trade-position-chips" aria-label={`${side === "own" ? "Your" : "Their"} positional grade changes`}>
+        {list.map((row) => renderChip(row))}
+      </div>
+    );
+  }
+
+  // When both sides are displayed (e.g. candidate trade cards), organize into distinct side-by-side groups
+  if (ownList.length === 0 && otherList.length === 0) return null;
+  const ownNet = netGradeStepDelta(ownList);
+  const otherNet = netGradeStepDelta(otherList);
+  const ownTone = ownNet > 0 ? "good" : ownNet < 0 ? "bad" : "neutral";
+  const otherTone = otherNet > 0 ? "good" : otherNet < 0 ? "bad" : "neutral";
+
+  const ownDisplay = onlyImpacts
+    ? ownList.filter((row) => row.stepDelta !== null && row.stepDelta !== 0)
+    : ownList;
+  const otherDisplay = onlyImpacts
+    ? otherList.filter((row) => row.stepDelta !== null && row.stepDelta !== 0)
+    : otherList;
 
   return (
-    <div className="trade-position-chips" aria-label="Positional grade changes">
-      {all.map((row) => {
-        const tone =
-          row.drop === null || row.before === row.after
-            ? "neutral"
-            : row.drop > 0
-              ? "bad"
-              : "good";
-        return (
-          <span
-            key={`${row.position}-${row.before}-${row.after}-${row.suffix}`}
-            className={`position-grade-chip ${tone}`}
-            title={
-              row.drop != null && row.drop > 0
-                ? `${row.position} drops ${row.drop} step${row.drop > 1 ? "s" : ""}`
-                : row.before !== row.after
-                  ? `${row.position} upgraded`
-                  : `${row.position} unchanged`
-            }
-          >
-            <span className="pos-label">
-              {row.position}
-              {row.suffix}
+    <div className="trade-position-grades-split" aria-label="Positional grade changes">
+      {ownList.length > 0 && (
+        <div className="trade-position-side-group own">
+          <div className="trade-position-side-header">
+            <span className="side-title">Your team:</span>
+            <span
+              className={`trade-position-net-step ${ownTone}`}
+              aria-label={`Your overall net grade step change: ${ownNet > 0 ? `+${ownNet}` : ownNet} steps`}
+            >
+              {ownNet > 0 ? `+${ownNet}` : `${ownNet}`} overall steps
             </span>
-            <span className="pos-grades">
-              {row.before} → {row.after}
+          </div>
+          <div className="trade-position-chips">
+            {ownDisplay.length > 0 ? (
+              ownDisplay.map((row) => renderChip(row))
+            ) : (
+              <span className="trade-position-none">No grade changes</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {otherList.length > 0 && (
+        <div className="trade-position-side-group other">
+          <div className="trade-position-side-header">
+            <span className="side-title">{teamBName ? `${teamBName}:` : "Their team:"}</span>
+            <span
+              className={`trade-position-net-step ${otherTone}`}
+              aria-label={`${teamBName ?? "Their"} overall net grade step change: ${otherNet > 0 ? `+${otherNet}` : otherNet} steps`}
+            >
+              {otherNet > 0 ? `+${otherNet}` : `${otherNet}`} overall steps
             </span>
-          </span>
-        );
-      })}
+          </div>
+          <div className="trade-position-chips">
+            {otherDisplay.length > 0 ? (
+              otherDisplay.map((row) => renderChip(row, " (them)"))
+            ) : (
+              <span className="trade-position-none">No grade changes</span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -346,8 +427,22 @@ export function TradeLineupField({
           className="trade-position-grades"
           aria-label={`${side === "own" ? "Your" : "Their"} positional grade changes`}
         >
-          <span className="trade-position-grades-label">Grades:</span>
-          <PositionGradeChips impact={positionImpact} side={side} />
+          <div className="trade-position-grades-content">
+            <span className="trade-position-grades-label">Grades:</span>
+            <PositionGradeChips impact={positionImpact} side={side} onlyImpacts />
+          </div>
+          {(() => {
+            const net = netGradeStepDelta(posChanges);
+            const netClass = net > 0 ? "good" : net < 0 ? "bad" : "neutral";
+            return (
+              <span
+                className={`trade-position-net-step ${netClass}`}
+                aria-label={`${side === "own" ? "Your" : "Their"} overall net grade step change`}
+              >
+                {net > 0 ? `+${net}` : `${net}`} overall steps
+              </span>
+            );
+          })()}
         </div>
       )}
       <div className="trade-field-controls">

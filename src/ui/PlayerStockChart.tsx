@@ -1,16 +1,23 @@
 import { useState, useId } from "react";
-import type { PlayerTrendSummary, PlayerTrendPoint } from "../domain/player-trend";
+import {
+  DEFAULT_LEAGUE_AVG_VOLUME,
+  getTargetVolumeBenchmark,
+  type PlayerTrendSummary,
+  type PlayerTrendPoint,
+} from "../domain/player-trend";
 
 // Renders an interactive, responsive stock-style chart showing Fast MA, Slow MA, and hollow volume bars
 export function PlayerStockChart({
   trend,
   playerName,
   position,
+  leagueAvgVolume,
   height = 220,
 }: {
   trend: PlayerTrendSummary;
   playerName: string;
   position: string;
+  leagueAvgVolume?: number;
   height?: number;
 }) {
   const [activePoint, setActivePoint] = useState<PlayerTrendPoint | null>(null);
@@ -45,9 +52,42 @@ export function PlayerStockChart({
   const yMax = Math.ceil(maxPoints / 5) * 5;
   const yMin = 0;
 
-  // Determine volume scaling boundaries (for bottom-third volume bars)
-  const maxVolume = Math.max(...series.map((s) => s.volume), 5);
-  const volumeMaxHeight = plotHeight * 0.35;
+  // Determine league average volume benchmark
+  const leagueAvg =
+    leagueAvgVolume !== undefined && Number.isFinite(leagueAvgVolume)
+      ? leagueAvgVolume
+      : (DEFAULT_LEAGUE_AVG_VOLUME[position] ?? 5.0);
+
+  // Position-specific target volume benchmark (e.g. RB 18 touches, WR 7 targets, TE 6 targets)
+  const targetBenchmark = getTargetVolumeBenchmark(position);
+  const targetVolume = targetBenchmark?.value ?? 0;
+
+  // Determine volume scaling boundaries (smaller subtle volume bars)
+  const maxVolume = Math.max(
+    ...series.map((s) => s.volume),
+    leagueAvg * 1.25,
+    targetVolume * 1.15,
+    5,
+  );
+  const volumeMaxHeight = plotHeight * 0.22;
+  const avgLineY = padTop + plotHeight - ((leagueAvg / maxVolume) * volumeMaxHeight);
+  const targetLineY =
+    targetVolume > 0
+      ? padTop + plotHeight - ((targetVolume / maxVolume) * volumeMaxHeight)
+      : null;
+
+  // Prevent collision between league average label and target benchmark label if they are vertically close
+  let avgLabelY = avgLineY - 4;
+  let targetLabelY = targetLineY !== null ? targetLineY - 4 : 0;
+  if (targetLineY !== null && Math.abs(avgLineY - targetLineY) < 14) {
+    if (targetLineY < avgLineY) {
+      targetLabelY = targetLineY - 4;
+      avgLabelY = avgLineY + 11;
+    } else {
+      avgLabelY = avgLineY - 4;
+      targetLabelY = targetLineY + 11;
+    }
+  }
 
   // Coordinate mapping functions
   const getX = (index: number) => {
@@ -114,6 +154,18 @@ export function PlayerStockChart({
             <span className="legend-swatch hollow" />
             {position === "QB" ? "Pass Att." : "Touches"}
           </span>
+          {leagueAvg > 0 && (
+            <span className="legend-item league-avg">
+              <span className="legend-swatch dashed-gold" />
+              Lg Avg ({leagueAvg.toFixed(1)})
+            </span>
+          )}
+          {targetBenchmark && (
+            <span className="legend-item target-benchmark">
+              <span className="legend-swatch dashed-blue" />
+              {targetBenchmark.label}
+            </span>
+          )}
         </div>
         {latest && (
           <div className={`stock-status-badge ${latest.tone}`}>
@@ -159,9 +211,51 @@ export function PlayerStockChart({
             </g>
           ))}
 
-          {/* Hollow volume bars at the bottom representing touches/opportunities */}
+          {/* Gold-dashed lightly visible league average volume baseline across the whole chart */}
+          {leagueAvg > 0 && (
+            <g className="stock-league-avg-group">
+              <line
+                x1={padLeft}
+                y1={avgLineY}
+                x2={svgWidth - padRight}
+                y2={avgLineY}
+                className="stock-league-avg-line"
+              />
+              <text
+                x={svgWidth - padRight - 4}
+                y={avgLabelY}
+                className="stock-league-avg-label"
+                textAnchor="end"
+              >
+                Lg Avg ({leagueAvg.toFixed(1)})
+              </text>
+            </g>
+          )}
+
+          {/* Blue-dashed target volume benchmark line (e.g. 18 Touches for RB, 7 Targets for WR) */}
+          {targetBenchmark && targetLineY !== null && (
+            <g className="stock-target-vol-group">
+              <line
+                x1={padLeft}
+                y1={targetLineY}
+                x2={svgWidth - padRight}
+                y2={targetLineY}
+                className="stock-target-vol-line"
+              />
+              <text
+                x={svgWidth - padRight - 4}
+                y={targetLabelY}
+                className="stock-target-vol-label"
+                textAnchor="end"
+              >
+                {targetBenchmark.label}
+              </text>
+            </g>
+          )}
+
+          {/* Smaller hollow volume bars at the bottom representing touches/opportunities */}
           {series.map((s, i) => {
-            const barWidth = Math.max(plotWidth / (series.length * 2.5), 8);
+            const barWidth = Math.max(plotWidth / (series.length * 3.8), 6);
             const x = getX(i) - barWidth / 2;
             const barH = getVolumeHeight(s.volume);
             const y = padTop + plotHeight - barH;
@@ -251,19 +345,24 @@ export function PlayerStockChart({
             </g>
           )}
 
-          {/* Invisible interactive hover target bands across columns */}
+          {/* Invisible interactive hover targets centered on data points */}
           {series.map((s, i) => {
-            const bandWidth = plotWidth / series.length;
-            const x = getX(i) - bandWidth / 2;
+            const x = getX(i) - 18;
+            const yMinPt = Math.min(getY(s.points), getY(s.fastMA), getY(s.slowMA)) - 16;
+            const yMaxPt = Math.max(getY(s.points), getY(s.fastMA), getY(s.slowMA)) + 16;
+            const targetY = Math.max(padTop, yMinPt);
+            const targetHeight = Math.max(36, yMaxPt - yMinPt);
             return (
               <rect
                 key={`hit-${s.week}`}
                 x={x}
-                y={padTop}
-                width={bandWidth}
-                height={plotHeight}
+                y={targetY}
+                width={36}
+                height={targetHeight}
+                rx={18}
                 fill="transparent"
                 onMouseEnter={() => setActivePoint(s)}
+                onMouseLeave={() => setActivePoint(null)}
                 onTouchStart={() => setActivePoint(s)}
                 className="stock-hit-area"
               />
@@ -271,28 +370,44 @@ export function PlayerStockChart({
           })}
         </svg>
 
-        {/* Floating tooltip inspection card when hovering over a week node */}
-        {activePoint && (
-          <div className="stock-tooltip-popover">
-            <div className="tooltip-week-title">Week {activePoint.week}</div>
-            <div className="tooltip-stat-row">
-              <span className="tooltip-label">Points:</span>
-              <strong>{activePoint.points.toFixed(1)}</strong>
+        {/* Floating tooltip inspection card anchored dynamically to the hovered data point */}
+        {activePoint && (() => {
+          const activeIndex = series.findIndex((p) => p.week === activePoint.week);
+          if (activeIndex < 0) return null;
+          const x = getX(activeIndex);
+          const targetY = Math.min(getY(activePoint.points), getY(activePoint.fastMA));
+          const isNearTop = targetY < 80;
+          const isNearLeft = x < svgWidth * 0.25;
+          const isNearRight = x > svgWidth * 0.75;
+          const transX = isNearRight ? "-85%" : isNearLeft ? "-15%" : "-50%";
+          const transY = isNearTop ? "16px" : "calc(-100% - 12px)";
+          const tooltipStyle: React.CSSProperties = {
+            left: `${(x / svgWidth) * 100}%`,
+            top: `${(targetY / svgHeight) * 100}%`,
+            transform: `translate(${transX}, ${transY})`,
+          };
+          return (
+            <div className="stock-tooltip-popover" style={tooltipStyle}>
+              <div className="tooltip-week-title">Week {activePoint.week}</div>
+              <div className="tooltip-stat-row">
+                <span className="tooltip-label">Points:</span>
+                <strong>{activePoint.points.toFixed(1)}</strong>
+              </div>
+              <div className="tooltip-stat-row">
+                <span className="tooltip-label">Fast MA (2G):</span>
+                <span style={{ color: strokeColor }}>{activePoint.fastMA.toFixed(1)}</span>
+              </div>
+              <div className="tooltip-stat-row">
+                <span className="tooltip-label">Slow MA (5G):</span>
+                <span>{activePoint.slowMA.toFixed(1)}</span>
+              </div>
+              <div className="tooltip-stat-row">
+                <span className="tooltip-label">{position === "QB" ? "Pass Att:" : "Touches:"}</span>
+                <span>{Math.round(activePoint.volume)}</span>
+              </div>
             </div>
-            <div className="tooltip-stat-row">
-              <span className="tooltip-label">Fast MA (2G):</span>
-              <span style={{ color: strokeColor }}>{activePoint.fastMA.toFixed(1)}</span>
-            </div>
-            <div className="tooltip-stat-row">
-              <span className="tooltip-label">Slow MA (5G):</span>
-              <span>{activePoint.slowMA.toFixed(1)}</span>
-            </div>
-            <div className="tooltip-stat-row">
-              <span className="tooltip-label">{position === "QB" ? "Pass Att:" : "Touches:"}</span>
-              <span>{Math.round(activePoint.volume)}</span>
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

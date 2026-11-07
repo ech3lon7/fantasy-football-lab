@@ -491,3 +491,128 @@ it("treats cleared signals as Any signal and round-trips that meaning", () => {
     "2",
   ]);
 });
+
+
+it("filters players by bullish MA crossover (golden cross) and round-trips filter state", () => {
+  const pGolden = player("1", {
+    gem: "Gem",
+    trend: {
+      series: [],
+      latest: {
+        week: 5,
+        points: 20,
+        fastMA: 18,
+        slowMA: 15,
+        spread: 3,
+        status: "bullish",
+        confirmed: true,
+        tone: "good",
+        label: "Bullish",
+        badge: "📈 +3.0 MA",
+        goldenCross: true,
+        deathCross: false,
+      },
+    },
+  });
+  const pNoCross = player("2", {
+    gem: "Gem",
+    trend: {
+      series: [],
+      latest: {
+        week: 5,
+        points: 15,
+        fastMA: 14,
+        slowMA: 14,
+        spread: 0,
+        status: "neutral",
+        confirmed: false,
+        tone: "neutral",
+        label: "Consolidating",
+        badge: "⚖️ 0.0 MA",
+        goldenCross: false,
+        deathCross: false,
+      },
+    },
+  });
+
+  const draft = {
+    ...defaultGemDraft("1"),
+    goldenCross: true,
+  };
+  const q = validateGemDraft(draft, ["1"]).query!;
+  expect(q.goldenCross).toBe(true);
+
+  const screened = screenGems([pGolden, pNoCross], q);
+  expect(screened.matches.map((r) => r.player.id)).toEqual(["1"]);
+  expect(screened.matches[0].evidence).toContain(
+    "Bullish MA crossover (golden cross)",
+  );
+
+  // Round-trip encoding and decoding
+  const encoded = encodeGemFilters(q);
+  expect(encoded.gemGoldenCross).toBe("true");
+  const decoded = decodeGemFilters(encoded, "1").draft;
+  expect(decoded.goldenCross).toBe(true);
+});
+
+it("filters players by bearish MA crossover (death cross) and round-trips filter state", () => {
+  const pDeath = player("1", {
+    gem: "Gem",
+    trend: {
+      series: [],
+      latest: {
+        week: 5,
+        points: 8,
+        fastMA: 10,
+        slowMA: 14,
+        spread: -4,
+        status: "bearish",
+        confirmed: true,
+        tone: "bad",
+        label: "Bearish",
+        badge: "📉 -4.0 MA",
+        goldenCross: false,
+        deathCross: true,
+      },
+    },
+  });
+  const pNoCross = player("2", {
+    gem: "Gem",
+    trend: {
+      series: [],
+      latest: {
+        week: 5,
+        points: 15,
+        fastMA: 14,
+        slowMA: 14,
+        spread: 0,
+        status: "neutral",
+        confirmed: false,
+        tone: "neutral",
+        label: "Consolidating",
+        badge: "⚖️ 0.0 MA",
+        goldenCross: false,
+        deathCross: false,
+      },
+    },
+  });
+
+  const draft = {
+    ...defaultGemDraft("1"),
+    deathCross: true,
+  };
+  const q = validateGemDraft(draft, ["1"]).query!;
+  expect(q.deathCross).toBe(true);
+
+  const screened = screenGems([pDeath, pNoCross], q);
+  expect(screened.matches.map((r) => r.player.id)).toEqual(["1"]);
+  expect(screened.matches[0].evidence).toContain(
+    "Bearish MA crossover (death cross)",
+  );
+
+  // Round-trip encoding and decoding
+  const encoded = encodeGemFilters(q);
+  expect(encoded.gemDeathCross).toBe("true");
+  const decoded = decodeGemFilters(encoded, "1").draft;
+  expect(decoded.deathCross).toBe(true);
+});

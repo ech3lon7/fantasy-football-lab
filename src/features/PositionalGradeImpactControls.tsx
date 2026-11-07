@@ -3,10 +3,20 @@ import { FilterHelp } from "../ui/FilterHelp";
 import type {
   PositionalGradeImpactRule,
   GradeImpactSide,
+  GradeImpactType,
 } from "../domain/chain-position-impact";
 
-// Default position list if not explicitly provided
-const DEFAULT_POSITIONS: string[] = ["QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"];
+// Default position list including overall net roster step impact
+const DEFAULT_POSITIONS: string[] = [
+  "QB",
+  "RB",
+  "WR",
+  "TE",
+  "FLEX",
+  "K",
+  "D/ST",
+  "OVERALL",
+];
 
 // Generate a unique ID for new rules using crypto.randomUUID when available
 function generateRuleId(): string {
@@ -15,40 +25,59 @@ function generateRuleId(): string {
     : `rule-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+export interface StepOption {
+  key: string;
+  type: GradeImpactType;
+  steps: number;
+  label: string;
+}
+
 // Step dropdown options for the user's team (upgrades and drop limits)
-const OWN_STEP_OPTIONS: { value: number; label: string }[] = [
-  { value: 5, label: "Upgrade ≥ 5 steps" },
-  { value: 4, label: "Upgrade ≥ 4 steps" },
-  { value: 3, label: "Upgrade ≥ 3 steps" },
-  { value: 2, label: "Upgrade ≥ 2 steps" },
-  { value: 1, label: "Upgrade ≥ 1 step" },
-  { value: 0, label: "No drop (≥ 0)" },
-  { value: -1, label: "Drop at most 1 step" },
-  { value: -2, label: "Drop at most 2 steps" },
-  { value: -3, label: "Drop at most 3 steps" },
-  { value: -4, label: "Drop at most 4 steps" },
-  { value: -5, label: "Drop at most 5 steps" },
+const OWN_STEP_OPTIONS: StepOption[] = [
+  { key: "5", type: "upgrade", steps: 5, label: "Upgrade ≥ 5 steps" },
+  { key: "4", type: "upgrade", steps: 4, label: "Upgrade ≥ 4 steps" },
+  { key: "3", type: "upgrade", steps: 3, label: "Upgrade ≥ 3 steps" },
+  { key: "2", type: "upgrade", steps: 2, label: "Upgrade ≥ 2 steps" },
+  { key: "1", type: "upgrade", steps: 1, label: "Upgrade ≥ 1 step" },
+  { key: "0", type: "drop_limit", steps: 0, label: "No drop (≥ 0)" },
+  { key: "-1", type: "drop_limit", steps: -1, label: "Drop at most 1 step" },
+  { key: "-2", type: "drop_limit", steps: -2, label: "Drop at most 2 steps" },
+  { key: "-3", type: "drop_limit", steps: -3, label: "Drop at most 3 steps" },
+  { key: "-4", type: "drop_limit", steps: -4, label: "Drop at most 4 steps" },
+  { key: "-5", type: "drop_limit", steps: -5, label: "Drop at most 5 steps" },
 ];
 
-// Step dropdown options for opponent team (upgrades and depletion targets)
-const OTHER_STEP_OPTIONS: { value: number; label: string }[] = [
-  { value: 5, label: "Upgrade ≥ 5 steps" },
-  { value: 4, label: "Upgrade ≥ 4 steps" },
-  { value: 3, label: "Upgrade ≥ 3 steps" },
-  { value: 2, label: "Upgrade ≥ 2 steps" },
-  { value: 1, label: "Upgrade ≥ 1 step" },
-  { value: 0, label: "No drop for them (≥ 0)" },
-  { value: -1, label: "Downgrade by ≥ 1 step" },
-  { value: -2, label: "Downgrade by ≥ 2 steps" },
-  { value: -3, label: "Downgrade by ≥ 3 steps" },
-  { value: -4, label: "Downgrade by ≥ 4 steps" },
-  { value: -5, label: "Downgrade by ≥ 5 steps" },
+// Step dropdown options for opponent team (upgrades, loss limits, and depletion targets)
+const OTHER_STEP_OPTIONS: StepOption[] = [
+  { key: "5", type: "upgrade", steps: 5, label: "Upgrade ≥ 5 steps" },
+  { key: "4", type: "upgrade", steps: 4, label: "Upgrade ≥ 4 steps" },
+  { key: "3", type: "upgrade", steps: 3, label: "Upgrade ≥ 3 steps" },
+  { key: "2", type: "upgrade", steps: 2, label: "Upgrade ≥ 2 steps" },
+  { key: "1", type: "upgrade", steps: 1, label: "Upgrade ≥ 1 step" },
+  { key: "0", type: "drop_limit", steps: 0, label: "No drop for them (≥ 0)" },
+  { key: "limit:-1", type: "drop_limit", steps: -1, label: "Drop at most 1 step" },
+  { key: "limit:-2", type: "drop_limit", steps: -2, label: "Drop at most 2 steps" },
+  { key: "limit:-3", type: "drop_limit", steps: -3, label: "Drop at most 3 steps" },
+  { key: "limit:-4", type: "drop_limit", steps: -4, label: "Drop at most 4 steps" },
+  { key: "limit:-5", type: "drop_limit", steps: -5, label: "Drop at most 5 steps" },
+  { key: "-1", type: "deplete", steps: -1, label: "Downgrade by ≥ 1 step" },
+  { key: "-2", type: "deplete", steps: -2, label: "Downgrade by ≥ 2 steps" },
+  { key: "-3", type: "deplete", steps: -3, label: "Downgrade by ≥ 3 steps" },
+  { key: "-4", type: "deplete", steps: -4, label: "Downgrade by ≥ 4 steps" },
+  { key: "-5", type: "deplete", steps: -5, label: "Downgrade by ≥ 5 steps" },
 ];
+
+function getRuleKey(rule: PositionalGradeImpactRule): string {
+  if (rule.side === "other" && rule.type === "drop_limit" && rule.steps < 0) {
+    return `limit:${rule.steps}`;
+  }
+  return String(rule.steps);
+}
 
 /**
  * Renders positional grade impact goal controls for trade searches and multi-step chains.
- * Allows users to configure target grade step deltas (upgrades, drop protection, or opponent depletion)
- * for specific roster positions.
+ * Allows users to configure target grade step deltas (upgrades, drop protection, loss limits, or opponent depletion)
+ * for specific roster positions or overall team net step impact.
  */
 export function PositionalGradeImpactControls({
   rules,
@@ -73,12 +102,13 @@ export function PositionalGradeImpactControls({
     const nextPosition =
       availablePositions.find((p) => !targetedByOwn.has(p)) ||
       availablePositions[0] ||
-      "WR";
+      "OVERALL";
     const newRule: PositionalGradeImpactRule = {
       id: generateRuleId(),
       side: "own",
       position: nextPosition,
       steps: 2,
+      type: "upgrade",
     };
     onChange([...activeRules, newRule]);
   };
@@ -148,7 +178,7 @@ export function PositionalGradeImpactControls({
                 >
                   {positionOptions.map((pos) => (
                     <option key={pos} value={pos}>
-                      {pos}
+                      {pos === "OVERALL" ? "Overall (Net)" : pos}
                     </option>
                   ))}
                 </select>
@@ -157,15 +187,29 @@ export function PositionalGradeImpactControls({
                 <select
                   className="grade-impact-select"
                   aria-label={`${ariaLabelPrefix} ${index + 1} target`}
-                  value={rule.steps}
-                  onChange={(e) =>
-                    handleUpdateRule(index, {
-                      steps: Number(e.target.value),
-                    })
-                  }
+                  value={getRuleKey(rule)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const selected =
+                      stepOptions.find((o) => o.key === val) ||
+                      stepOptions.find((o) => o.steps === Number(val));
+                    if (selected) {
+                      const patch: Partial<PositionalGradeImpactRule> = {
+                        steps: selected.steps,
+                      };
+                      if (selected.type === "drop_limit" && rule.side === "other") {
+                        patch.type = "drop_limit";
+                      } else if (selected.type === "deplete") {
+                        patch.type = "deplete";
+                      } else if (rule.type) {
+                        patch.type = selected.type;
+                      }
+                      handleUpdateRule(index, patch);
+                    }
+                  }}
                 >
                   {stepOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
+                    <option key={opt.key} value={opt.key}>
                       {opt.label}
                     </option>
                   ))}

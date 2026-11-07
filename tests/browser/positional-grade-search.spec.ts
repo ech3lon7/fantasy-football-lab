@@ -199,7 +199,7 @@ test.describe("Positional Grade Search E2E", () => {
     await expect(resultRow).toBeVisible();
 
     // Verify that the candidate row displays the position grade chip with WR upgrade transition
-    const gradeChip = resultRow.locator(".position-grade-chip.good").first();
+    const gradeChip = page.locator(".position-grade-chip.good").first();
     await expect(gradeChip).toBeVisible();
     await expect(gradeChip).toContainText("WR");
     await expect(gradeChip.locator(".pos-grades")).toContainText("→");

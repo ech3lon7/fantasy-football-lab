@@ -107,7 +107,10 @@ function readRoute() {
 function useRoute() {
   const [route, set] = useState(readRoute);
   useEffect(() => {
-    const fn = () => set(readRoute());
+    const fn = () => {
+      set(readRoute());
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    };
     window.addEventListener("hashchange", fn);
     return () => window.removeEventListener("hashchange", fn);
   }, []);
