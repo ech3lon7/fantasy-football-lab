@@ -12,6 +12,8 @@ import type { Model, Player } from "./valuation";
 // References expose formatted descriptive context only; classification cannot consume percentiles as predicates.
 export interface HistoricalContext {
   text: string;
+  // Concise one-line context for the Why panel; the full note stays in FilterHelp.
+  short: string;
   note: string;
   unavailable?: boolean;
 }
@@ -88,6 +90,8 @@ export function historicalLabelContext(
   )
     return {
       text: "Historical PPG comparison unavailable: scoring compatibility is not fully verified.",
+      short:
+        "Historical comparison unavailable: scoring compatibility is not fully verified.",
       unavailable: true,
       note: "The current player numbers and label are unchanged. Historical observed scoring weights are not enough to verify every current scoring item or bonus.",
     };
@@ -103,8 +107,21 @@ export function historicalLabelContext(
           ? "carries/game"
           : "targets/game"
       : ref.unit;
+  // Keep the short line descriptive and position-specific; the full cohort note stays available separately.
+  const perGame = unit.endsWith("/game")
+    ? `${unit.replace("/game", "")} a game`
+    : unit;
+  const short =
+    metric === "workload"
+      ? `a typical starting ${p.pos} gets about ${ref.median.toFixed(1)} ${perGame} (2023–25). Context only.`
+      : metric === "watchGrowth" || metric === "roleGrowth"
+        ? `a typical starting ${p.pos} adds about ${ref.median.toFixed(1)} ${perGame} (2023–25). Context only.`
+        : metric === "scoringTrend"
+          ? `a typical starting ${p.pos} improves by about ${ref.median.toFixed(1)} PPG (2023–25). Context only.`
+          : `a typical starting ${p.pos} scores about ${ref.median.toFixed(1)} PPG (2023–25). Context only.`;
   return {
     text: `Historical nine-team modeled starter-quality ${p.pos}: median ${ref.median.toFixed(2)} ${unit} (2023–2025; ${ref.observations} observations). Descriptive reference, not a qualification cutoff.`,
+    short,
     note: `${data.method.referenceWindows[metric as keyof typeof data.method.referenceWindows]}. Middle 50%: ${ref.p25.toFixed(2)}–${ref.p75.toFixed(2)} ${unit}; ${ref.players} distinct players, ${ref.playerSeasons} player-seasons. After Weeks 4, 8 and 12. ${data.method.cohort} ${data.method.quantiles} Repeated observations are correlated. The historical scoring/roster cohort may differ from this import; no dated fantasy lineups or team-share history is assumed.`,
   };
 }

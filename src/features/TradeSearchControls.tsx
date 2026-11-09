@@ -363,8 +363,8 @@ export function TeamNeedsPreview({
   initialTeam?: string;
 }) {
   const [chosen, setChosen] = useState("");
-  const [previewPosition, setPreviewPosition] = useState("");
-  const shownPosition = previewPosition || position;
+  const [previewPosition, setPreviewPosition] = useState<string | null>(null);
+  const shownPosition = previewPosition ?? position ?? "";
   const team = teams.includes(chosen)
     ? chosen
     : teams.includes(initialTeam ?? "")
@@ -378,11 +378,15 @@ export function TeamNeedsPreview({
   const rows = grades.get(team) ?? [];
   const visible =
     board?.roles
-      .filter(
-        (role) =>
-          role.id &&
-          (!shownPosition || m.byId.get(role.id)?.pos === shownPosition),
-      )
+      .filter((role) => {
+        if (!role.id) return false;
+        if (!shownPosition) return true;
+        if (shownPosition === "FLEX") return role.slot === "FLEX";
+        return (
+          role.slot === shownPosition ||
+          m.byId.get(role.id)?.pos === shownPosition
+        );
+      })
       .slice(0, 4) ?? [];
   const starters = new Set(board?.roles.map((role) => role.id));
   // An IR player is not a usable reserve; keep the preview consistent with the lineup evaluator's IR exclusions.
@@ -400,7 +404,7 @@ export function TeamNeedsPreview({
         player.owner === team &&
         !starters.has(player.id) &&
         !excludedIR.has(player.id) &&
-        (!shownPosition || player.pos === shownPosition),
+        (!shownPosition || (shownPosition === "FLEX" ? ["RB", "WR", "TE"].includes(player.pos) : player.pos === shownPosition)),
     )
     .sort((a, b) => (b.expected ?? -Infinity) - (a.expected ?? -Infinity))
     .slice(0, 2);
@@ -428,9 +432,7 @@ export function TeamNeedsPreview({
       ) : (
         <>
           <div className="trade-grade-tiles">
-            {rows
-              .filter((row) => ["QB", "RB", "WR", "TE"].includes(row.position))
-              .map((row) => (
+            {rows.map((row) => (
                 <FilterHelp
                   key={row.position}
                   label={`${row.position} grade`}
@@ -441,8 +443,10 @@ export function TeamNeedsPreview({
                     className={`trade-grade-tile${/^[FDC]/.test(row.grade) ? " is-weak" : ""}${row.position === shownPosition ? " is-selected" : ""}`}
                     aria-pressed={row.position === shownPosition}
                     onClick={() => {
-                      setPreviewPosition(row.position);
-                      changePosition?.(row.position as Position);
+                      const next =
+                        shownPosition === row.position ? "" : row.position;
+                      setPreviewPosition(next);
+                      if (next && next !== "FLEX") changePosition?.(next as Position);
                     }}
                   >
                     <small>{row.position}</small>

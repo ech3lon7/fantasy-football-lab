@@ -12,6 +12,16 @@
   --line: #e1e6df;
   --muted: #6e7b74;
   --lime: #c3ed81;
+  --why-met: #1e7b4f;
+  --why-met-text: #1a6b44;
+  --why-met-bg: #e3f2ea;
+  --why-miss: #b4520a;
+  --why-miss-text: #9a4507;
+  --why-miss-bg: #fcebdd;
+  --why-close-bg: #fff4d6;
+  --why-close-text: #7a5300;
+  --why-neutral-bg: #eeecf1;
+  --why-neutral-text: #4a4652;
 }
 * {
   box-sizing: border-box;
@@ -2457,10 +2467,14 @@ pre {
 
 /* Grade tiles and miniature lineups read the existing domain outputs; selected chips are also keyboard-operable drag alternatives. */
 .trade-needs-preview { margin: 8px 0 14px; }
-.trade-grade-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 9px 0; }
+.trade-grade-tiles { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin: 9px 0; }
+@media (max-width: 480px) {
+  .trade-grade-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 .trade-grade-tiles > * { min-width: 0; }
-.trade-grade-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 65px; width: 100%; border: 1px solid var(--line); border-radius: 7px; background: #eef4e9; color: var(--ink); }
-.trade-grade-tile strong { font-size: 24px; }
+.trade-grade-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 56px; padding: 4px 2px; width: 100%; border: 1px solid var(--line); border-radius: 7px; background: #eef4e9; color: var(--ink); }
+.trade-grade-tile strong { font-size: 20px; }
+.trade-grade-tile small { font-size: 10px; }
 .trade-grade-tile.is-selected { border-color: var(--purple); background: #f3edff; }
 .trade-needs-lineup { display: flex; gap: 7px; overflow-x: auto; padding: 6px 0; }
 .trade-needs-lineup article { flex: 0 0 98px; display: flex; flex-direction: column; align-items: center; gap: 3px; background: #f8faf6; border-radius: 6px; padding: 6px; font-size: 10px; text-align: center; }
@@ -3366,5 +3380,580 @@ pre {
 .grade-impact-add-btn:focus-visible {
   outline: 2px solid var(--purple);
   outline-offset: 1px;
+}
+
+/* Label Why panel: chips select one explanation, rows and chart stay presentation-only. */
+.label-why {
+  container-type: inline-size;
+  margin: 10px 0;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.label-why-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.label-why-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 40px;
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.label-why-chip--earned.label-why-chip--positive {
+  border-color: #b9dcc8;
+  background: var(--why-met-bg);
+  color: var(--why-met-text);
+}
+
+.label-why-chip--earned.label-why-chip--warning {
+  border: 2px solid #b07a00;
+  background: var(--why-close-bg);
+  color: var(--why-close-text);
+}
+
+/* Near misses are always dashed; the selected one is filled and thicker. */
+.label-why-chip--near {
+  border: 1px dashed #d9772e;
+  background: #fff;
+  color: var(--why-miss-text);
+}
+
+.label-why-chip--near[aria-pressed="true"] {
+  border: 2px dashed var(--why-miss);
+  background: var(--why-miss-bg);
+}
+
+.label-why-chip[aria-pressed="true"]:not(.label-why-chip--near) {
+  border-width: 2px;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.label-why-hint {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.label-why-panel {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  min-width: 0;
+}
+
+.label-why-eyebrow {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.label-why-verdict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.label-why-verdict-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+
+.label-why-verdict-icon--earned.label-why-verdict-icon--positive {
+  color: var(--why-met-text);
+  background: var(--why-met-bg);
+}
+
+.label-why-verdict-icon--earned.label-why-verdict-icon--warning {
+  color: var(--why-close-text);
+  background: var(--why-close-bg);
+}
+
+.label-why-verdict-icon--near {
+  color: var(--why-miss-text);
+  background: var(--why-miss-bg);
+}
+
+.label-why-summary {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.label-why-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.label-why-main,
+.label-why-side {
+  min-width: 0;
+}
+
+.label-why-group {
+  margin-bottom: 12px;
+}
+
+.label-why-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.label-why-group-head h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.label-why-group-head span {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.label-why-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 112px 96px 104px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid #f1f0f4;
+}
+
+.label-why-row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.label-why-row-icon--pass {
+  color: var(--why-met-text);
+  background: var(--why-met-bg);
+}
+
+.label-why-row-icon--fail {
+  color: var(--why-miss-text);
+  background: var(--why-miss-bg);
+}
+
+.label-why-row-icon--unknown {
+  color: var(--why-neutral-text);
+  background: var(--why-neutral-bg);
+}
+
+/* Warning labels keep the literal check meaning but use amber for a passing condition. */
+.label-why-group--warning .label-why-row-icon--pass {
+  color: var(--why-close-text);
+  background: var(--why-close-bg);
+}
+
+.label-why-row-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.label-why-row-label strong {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.label-why-row-label small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.label-why-row-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+
+.label-why-row-value small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.label-why-mini {
+  position: relative;
+  display: block;
+  width: 96px;
+  height: 14px;
+}
+
+.label-why-mini-track,
+.label-why-mini-favorable {
+  position: absolute;
+  top: 5px;
+  height: 4px;
+  border-radius: 3px;
+}
+
+.label-why-mini-track {
+  left: 0;
+  width: 100%;
+  background: #e3e1e8;
+}
+
+.label-why-mini-favorable {
+  background: #cfe8d8;
+}
+
+.label-why-mini-threshold {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  border-left: 2px solid #4a4652;
+  transform: translateX(-1px);
+}
+
+.label-why-mini-threshold--setting {
+  border-color: var(--purple);
+}
+
+.label-why-mini-threshold--espn {
+  border-color: var(--blue);
+}
+
+.label-why-mini-threshold--policy,
+.label-why-mini-threshold--model {
+  border-color: #4a4652;
+}
+
+.label-why-mini-dot {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.label-why-mini-dot--met {
+  background: var(--why-met);
+}
+
+.label-why-mini-dot--miss {
+  background: var(--why-miss);
+}
+
+.label-why-pill {
+  justify-self: end;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.label-why-pill--spare {
+  color: var(--why-met-text);
+  background: var(--why-met-bg);
+}
+
+.label-why-pill--close {
+  color: var(--why-close-text);
+  background: var(--why-close-bg);
+}
+
+.label-why-pill--at-line,
+.label-why-pill--none {
+  color: var(--why-neutral-text);
+  background: var(--why-neutral-bg);
+}
+
+.label-why-pill--short {
+  color: var(--why-miss-text);
+  background: var(--why-miss-bg);
+}
+
+.label-why-collapsed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-top: 6px;
+}
+
+.label-why-collapsed-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--why-met-bg);
+  color: var(--why-met-text);
+  font-size: 11px;
+}
+
+.label-why-flip,
+.label-why-closest {
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.label-why-flip {
+  border: 1px solid #f0c9a8;
+  background: #fdf3ea;
+}
+
+.label-why-closest {
+  border: 1px solid #f0dfa8;
+  background: #fff8e6;
+}
+
+.label-why-flip strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.label-why-flip p,
+.label-why-closest p {
+  margin: 2px 0;
+}
+
+.label-why-flip small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.label-why-card-eyebrow {
+  margin: 0 0 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--why-miss-text);
+}
+
+.label-why-closest .label-why-card-eyebrow {
+  color: var(--why-close-text);
+}
+
+.label-why-chart {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.label-why-chart h4 {
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+
+.label-why-chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.label-why-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 6px;
+  font-size: 10px;
+  color: #4a4652;
+  font-variant-numeric: tabular-nums;
+}
+
+.label-why-chart-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.label-why-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 0;
+  border-top: 2px solid #4a4652;
+}
+
+.label-why-swatch--threshold.label-why-swatch--setting {
+  border-color: var(--purple);
+  border-top-style: dashed;
+}
+
+.label-why-swatch--threshold.label-why-swatch--espn,
+.label-why-swatch--espn {
+  border-color: var(--blue);
+  border-top-style: dashed;
+}
+
+.label-why-swatch--threshold.label-why-swatch--policy,
+.label-why-swatch--threshold.label-why-swatch--model {
+  border-color: #4a4652;
+  border-top-style: dashed;
+}
+
+.label-why-swatch--recentAvg {
+  border-color: #7a1243;
+}
+
+.label-why-chart-note {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.label-why-historical {
+  margin: 10px 0;
+  font-size: 11px;
+}
+
+.label-why-historical h4 {
+  margin: 0 0 3px;
+  font-size: 11px;
+}
+
+.label-why-historical ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.label-why-historical li {
+  margin-bottom: 3px;
+  line-height: 1.4;
+}
+
+.label-why-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.label-why-action {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fdfefb;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.label-why-action:hover {
+  border-color: var(--ink);
+}
+
+.label-why-games {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.label-why-games caption {
+  text-align: left;
+  color: var(--muted);
+  font-size: 11px;
+  padding-bottom: 4px;
+}
+
+.label-why-games th,
+.label-why-games td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #f1f0f4;
+  text-align: right;
+}
+
+.label-why-games th:first-child,
+.label-why-games td:first-child,
+.label-why-games th:nth-child(2),
+.label-why-games td:nth-child(2) {
+  text-align: left;
+}
+
+.label-why-details {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.label-why-details summary {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.label-why-details p {
+  margin: 6px 0;
+}
+
+/* Two columns appear only when the container has room; the phone sheet stays stacked. */
+@container (min-width: 860px) {
+  .label-why-grid {
+    grid-template-columns: minmax(0, 1fr) 416px;
+    gap: 24px;
+  }
+}
+
+/* Narrow rows move the value and bar under the label without horizontal scrolling. */
+@container (max-width: 559px) {
+  .label-why-row {
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+  }
+
+  .label-why-row-label {
+    grid-column: 2;
+  }
+
+  .label-why-row-value {
+    grid-column: 3;
+  }
+
+  .label-why-mini {
+    grid-column: 2 / 4;
+    width: 100%;
+  }
+
+  .label-why-pill {
+    grid-column: 2 / 4;
+    justify-self: start;
+  }
 }
 

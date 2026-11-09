@@ -121,6 +121,13 @@ test.describe("Positional Grade Search E2E", () => {
     }
     await expect(teamNeedsGroup).toHaveAttribute("open", "");
 
+    // Verify Team needs preview displays all 7 positional grade tiles
+    const previewTiles = teamNeedsGroup.locator(".trade-grade-tiles .trade-grade-tile");
+    await expect(previewTiles).toHaveCount(7);
+    for (const pos of ["QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"]) {
+      await expect(teamNeedsGroup.locator(".trade-grade-tiles").getByText(pos, { exact: true })).toBeVisible();
+    }
+
     // Verify Positional Grade Goals controls container renders inside Team needs
     const gradeImpactControls = teamNeedsGroup.locator(
       ".grade-impact-container",

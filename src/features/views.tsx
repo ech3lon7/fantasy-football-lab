@@ -17,7 +17,7 @@ import {
   tradeImpact,
   type LineupBasis,
 } from "../domain/trade-impact";
-import { GemEvidence } from "../ui/GemEvidence";
+import { LabelWhy } from "../ui/LabelWhy";
 // Keep optional next-refresh assumptions consistent with the player inspection card.
 import { NextRefreshScenarios } from "../ui/NextRefreshScenarios";
 import {
@@ -748,7 +748,7 @@ export function PlayerDetail({ m, id }: { m: Model; id: string }) {
         )}
       </div>
       {/* Explain only active analytical tags using the same domain evidence shown in player popovers. */}
-      <GemEvidence p={p} m={m} />
+      <LabelWhy p={p} m={m} />
       <div className="metric-grid">
         <Metric label="Actual season PPG" value={fmt(p.actual)} kind="fact" />
         <Metric

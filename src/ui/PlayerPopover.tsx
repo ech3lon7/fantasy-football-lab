@@ -1,4 +1,4 @@
-import { GemEvidence } from "./GemEvidence";
+import { LabelWhy } from "./LabelWhy";
 // Player pages and inspection cards share the same optional, isolated next-game calculator.
 import { NextRefreshScenarios } from "./NextRefreshScenarios";
 import {
@@ -396,7 +396,7 @@ function PlayerInspection({ p, m }: { p: Player; m: Model }) {
       </div>
       <p>{p.explanation}</p>
       {/* Read-only evidence for every active analytical tag matches the full player profile. */}
-      <GemEvidence p={p} m={m} />
+      <LabelWhy p={p} m={m} />
       <p
         className={
           p.historyComplete && p.value !== null ? "" : "notice warning"

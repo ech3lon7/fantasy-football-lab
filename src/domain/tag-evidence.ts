@@ -731,3 +731,43 @@ export function activeTagExplanations(p: Player, m: Model): TagExplanation[] {
     ],
   }));
 }
+
+// Build one tag's explanation on demand. Active output above stays byte-for-byte unchanged.
+export function tagExplanation(
+  tag: string,
+  p: Player,
+  m: Model,
+): TagExplanation | null {
+  // Gem is presented outside the active explanation list, so build its rows directly from the classifier.
+  if (tag === "Gem") {
+    const assessment = p.breakout;
+    if (
+      !assessment ||
+      !gemPositions.includes(p.pos as (typeof gemPositions)[number])
+    )
+      return null;
+    return {
+      tag: "Gem",
+      meaning:
+        "Strong actual scoring backed by sustained workload in both consecutive, overlapping three-game windows. Workload growth is not required.",
+      rows: assessment.checks.map((check) => ({
+        ...check,
+        kind: "fact" as const,
+      })),
+      interpretation:
+        "The player has repeated scoring and workload support across two overlapping windows; confirm the role and availability before acting.",
+      limitations:
+        "This identifies a strong production candidate, not a guaranteed breakout or proof of an undervalued player. The individual-game workload floor remains mandatory but provisional; TE evidence is weaker.",
+      window:
+        "Latest three played games AND the previous overlapping three-game window; four or more played games.",
+    };
+  }
+  // Reuse the exact legacy builder; marking the requested tag active does not alter its rows.
+  const current = activeTagExplanations(p, m).find((e) => e.tag === tag);
+  if (current) return current;
+  const clone: Player = {
+    ...p,
+    opportunity: { ...p.opportunity, signals: [...p.opportunity.signals, tag] },
+  };
+  return activeTagExplanations(clone, m).find((e) => e.tag === tag) ?? null;
+}
