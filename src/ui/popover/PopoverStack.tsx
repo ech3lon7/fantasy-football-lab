@@ -14,6 +14,8 @@ interface Entry {
   key: number;
   title: string;
   width: number;
+  flush: boolean;
+  onClose?: () => void;
   // The element that had focus when the popover opened; focus returns there on close.
   opener: HTMLElement | null;
   render: (close: () => void) => ReactNode;
@@ -23,6 +25,9 @@ interface Api {
   open: (options: {
     title: string;
     width?: number;
+    flush?: boolean;
+    // Runs once after the popover has been removed, however it was closed.
+    onClose?: () => void;
     render: (close: () => void) => ReactNode;
   }) => number;
   close: (key?: number) => void;
@@ -58,7 +63,7 @@ function Dialog({
       <div className="gd-backdrop" onClick={top ? close : undefined} />
       <div
         ref={ref}
-        className="gd-popover"
+        className={`gd-popover${entry.flush ? " flush" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={entry.title}
@@ -100,32 +105,48 @@ function Dialog({
 // Render popovers above the page: Escape closes only the top one, and focus returns to each opener.
 export function PopoverProvider({ children }: { children: ReactNode }) {
   const [stack, setStack] = useState<Entry[]>([]),
+    // Keep the list in a ref too, so closing can run side effects outside a state updater.
+    list = useRef<Entry[]>([]),
     next = useRef(1);
+  const commit = (entries: Entry[]) => {
+    list.current = entries;
+    setStack(entries);
+  };
   const close = useCallback((key?: number) => {
-    setStack((current) => {
-      const target = key ?? current[current.length - 1]?.key;
-      const entry = current.find((e) => e.key === target);
-      if (!entry) return current;
-      // Return focus after the dialog unmounts so it lands on the opener, not on the closing dialog.
-      requestAnimationFrame(() => {
-        if (entry.opener?.isConnected)
-          entry.opener.focus({ preventScroll: true });
-      });
-      return current.filter((e) => e.key !== target);
+    const target = key ?? list.current[list.current.length - 1]?.key;
+    const entry = list.current.find((e) => e.key === target);
+    if (!entry) return;
+    commit(list.current.filter((e) => e.key !== target));
+    // Return focus after the dialog unmounts so it lands on the opener, not on the closing dialog.
+    requestAnimationFrame(() => {
+      if (entry.opener?.isConnected)
+        entry.opener.focus({ preventScroll: true });
     });
+    entry.onClose?.();
   }, []);
-  const open = useCallback<Api["open"]>(({ title, width, render }) => {
-    const key = next.current++;
-    const opener =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-    setStack((current) => [
-      ...current,
-      { key, title, width: width ?? 1040, opener, render },
-    ]);
-    return key;
-  }, []);
+  const open = useCallback<Api["open"]>(
+    ({ title, width, flush, onClose, render }) => {
+      const key = next.current++;
+      const opener =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+      commit([
+        ...list.current,
+        {
+          key,
+          title,
+          width: width ?? 1040,
+          flush: !!flush,
+          onClose,
+          opener,
+          render,
+        },
+      ]);
+      return key;
+    },
+    [],
+  );
   const api = useMemo(() => ({ open, close }), [open, close]);
   // Escape closes only the top popover, then the one beneath on the next press.
   useEffect(() => {

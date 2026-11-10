@@ -38,6 +38,8 @@ export const sectionForRoute = (route: string): SectionId | null =>
 // Resolve a new section route to the screen that renders it today; other routes pass through unchanged.
 export const pageForRoute = (route: string): string => {
   const head = route.split("/")[0];
+  // A player link opens the card over This week instead of a separate page.
+  if (head === "player") return "overview";
   return sections.find((s) => s.id === head)?.page ?? head;
 };
 

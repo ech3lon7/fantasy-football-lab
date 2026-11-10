@@ -16,9 +16,10 @@ test("Gameday Plus preview is off by default, toggles on and off, and keeps the 
   await expect(page.getByTestId("ui-preview-on")).toBeVisible();
   await page.reload();
   await expect(page.getByLabel("Use the Gameday Plus preview")).toBeChecked();
-  // An existing workflow still works with the preview on: the player evaluation route renders.
+  // With the preview on, a player address opens the single player card instead of the old page.
   await page.goto("./#/player/2");
-  await expect(page.getByText("WHY GEM?", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.goto("./#/data");
   await page.getByLabel("Use the Gameday Plus preview").uncheck();
   await expect(page.getByTestId("ui-preview-on")).toHaveCount(0);

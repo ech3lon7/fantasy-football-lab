@@ -8,7 +8,15 @@ import type { Model, Player } from "../domain/valuation";
 import { fmt, signed } from "./components";
 
 // Local inputs reset for another snapshot/player/settings; no scenario is saved to valuation or trade state.
-export function NextRefreshScenarios({ m, p }: { m: Model; p: Player }) {
+export function NextRefreshScenarios({
+  m,
+  p,
+  defaultOpen = false,
+}: {
+  m: Model;
+  p: Player;
+  defaultOpen?: boolean;
+}) {
   return (
     <ScenarioInputs
       key={JSON.stringify([
@@ -19,12 +27,21 @@ export function NextRefreshScenarios({ m, p }: { m: Model; p: Player }) {
       ])}
       m={m}
       p={p}
+      defaultOpen={defaultOpen}
     />
   );
 }
 
 // Autofill once per player/snapshot, leaving each assumption independently editable and restoring all three only on Reset.
-function ScenarioInputs({ m, p }: { m: Model; p: Player }) {
+function ScenarioInputs({
+  m,
+  p,
+  defaultOpen,
+}: {
+  m: Model;
+  p: Player;
+  defaultOpen: boolean;
+}) {
   const automatic = nextRefreshDefaults(m, p);
   const defaults = [automatic.lower, automatic.base, automatic.higher].map(
     (value) => (value === null ? "" : String(Number(value.toFixed(2)))),
@@ -32,7 +49,7 @@ function ScenarioInputs({ m, p }: { m: Model; p: Player }) {
   const [values, setValues] = useState(defaults);
   const context = nextRefreshContext(m, p);
   return (
-    <details className="next-refresh-scenarios">
+    <details className="next-refresh-scenarios" open={defaultOpen || undefined}>
       <summary>Next-refresh EPPG scenarios</summary>
       <p>
         Assume a score in the next game played to see how EPPG would update.

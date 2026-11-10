@@ -371,3 +371,284 @@
     opacity: 0.5;
   }
 }
+/* Player card: team-coloured header, four tabs and tokens-only panels. */
+:root[data-gameday] .gd-popover.flush {
+  padding: 0;
+}
+:root[data-gameday] .gd-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 28px 64px 20px 24px;
+}
+:root[data-gameday] .gd-card-id h2 {
+  margin: 4px 0 8px;
+  font-family: var(--gd-font-display);
+  font-size: 40px;
+  text-transform: uppercase;
+  line-height: 1;
+  color: inherit;
+}
+:root[data-gameday] .gd-card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+:root[data-gameday] .gd-card-eppg {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+}
+:root[data-gameday] .gd-card-eppg strong {
+  font-family: var(--gd-font-display);
+  font-size: 64px;
+  line-height: 1;
+}
+:root[data-gameday] .gd-card-step {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+:root[data-gameday] .gd-card-step button {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--gd-surface);
+  color: var(--gd-ink);
+  font-size: 20px;
+}
+:root[data-gameday] .gd-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 24px 0;
+  border-bottom: 2px solid var(--gd-line);
+}
+:root[data-gameday] .gd-tabs button {
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--gd-ink);
+  font-family: var(--gd-font-display);
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  border-radius: var(--gd-radius-sm) var(--gd-radius-sm) 0 0;
+}
+:root[data-gameday] .gd-tabs button[aria-selected="true"] {
+  background: var(--gd-selected);
+  color: var(--gd-selected-ink);
+}
+:root[data-gameday] .gd-tabpanel {
+  padding: 20px 24px;
+  display: grid;
+  gap: 16px;
+}
+:root[data-gameday] .gd-blend {
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-story {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+:root[data-gameday] .gd-radar {
+  margin: 0;
+  max-width: 340px;
+}
+:root[data-gameday] .gd-radar svg {
+  width: 100%;
+  height: auto;
+}
+:root[data-gameday] .gd-radar-grid {
+  fill: none;
+  stroke: var(--gd-line);
+}
+:root[data-gameday] .gd-radar-avg {
+  fill: none;
+  stroke: var(--gd-muted);
+  stroke-dasharray: 4 4;
+}
+:root[data-gameday] .gd-radar-shape {
+  fill: var(--gd-model);
+  fill-opacity: 0.3;
+  stroke: var(--gd-model);
+  stroke-width: 2;
+}
+:root[data-gameday] .gd-radar-label {
+  fill: var(--gd-ink);
+  font-size: 10px;
+}
+:root[data-gameday] .gd-radar-gap {
+  fill: var(--gd-muted);
+  font-size: 10px;
+}
+:root[data-gameday] .gd-radar figcaption {
+  color: var(--gd-muted);
+  font-size: 13px;
+}
+:root[data-gameday] .gd-numbers h3 {
+  margin: 0 0 8px;
+  font-family: var(--gd-font-display);
+  text-transform: uppercase;
+}
+:root[data-gameday] .gd-fact h3 {
+  color: var(--gd-fact);
+}
+:root[data-gameday] .gd-espn h3 {
+  color: var(--gd-espn);
+}
+:root[data-gameday] .gd-model h3 {
+  color: var(--gd-model);
+}
+:root[data-gameday] .gd-numbers dl,
+:root[data-gameday] .gd-unavailable dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 24px;
+  margin: 0;
+}
+:root[data-gameday] .gd-numbers dl div,
+:root[data-gameday] .gd-unavailable dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--gd-line);
+  padding-bottom: 4px;
+}
+:root[data-gameday] .gd-numbers dd,
+:root[data-gameday] .gd-unavailable dd {
+  margin: 0;
+  font-weight: 700;
+}
+:root[data-gameday] .gd-unavailable dd {
+  color: var(--gd-muted);
+  font-weight: 400;
+}
+:root[data-gameday] .gd-calc {
+  margin: 0;
+  padding: 0;
+  list-style: decimal inside;
+  display: grid;
+  gap: 8px;
+}
+:root[data-gameday] .gd-calc li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--gd-line);
+  padding-bottom: 6px;
+}
+:root[data-gameday] .gd-calc li span {
+  display: inline-grid;
+}
+:root[data-gameday] .gd-calc small,
+:root[data-gameday] .gd-status {
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-card-done {
+  margin: 0 24px 20px;
+  padding: 8px 18px;
+  background: var(--gd-selected);
+  color: var(--gd-selected-ink);
+  border-radius: 999px;
+  font-weight: 700;
+}
+/* Legacy chart and panels inside the card read the old colour variables; map them onto the theme tokens. */
+:root[data-gameday] .gd-tabpanel {
+  --ink: var(--gd-ink);
+  --line: var(--gd-line);
+  --muted: var(--gd-muted);
+  color: var(--gd-ink);
+}
+:root[data-gameday] .gd-tabpanel .player-stock-chart-container {
+  background: var(--gd-surface);
+  border-color: var(--gd-line);
+}
+/* Legacy tables, inputs and provenance text inside the card follow the theme instead of fixed light colours. */
+:root[data-gameday] .gd-tabpanel .table-wrap,
+:root[data-gameday] .gd-tabpanel table,
+:root[data-gameday] .gd-tabpanel th,
+:root[data-gameday] .gd-tabpanel td {
+  background: transparent;
+  color: var(--gd-ink);
+  border-color: var(--gd-line);
+}
+:root[data-gameday] .gd-tabpanel input[type="number"] {
+  background: var(--gd-surface-2);
+  color: var(--gd-ink);
+  border: 2px solid var(--gd-edit);
+}
+:root[data-gameday] .gd-tabpanel .model {
+  color: var(--gd-model);
+}
+:root[data-gameday] .gd-tabpanel .fact {
+  color: var(--gd-fact);
+}
+:root[data-gameday] .gd-tabpanel .projection {
+  color: var(--gd-espn);
+}
+:root[data-gameday] .gd-tabpanel .muted {
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-tabpanel summary {
+  color: var(--gd-ink);
+}
+/* The Why panel keeps its layout but takes the theme's surfaces; its verdict colours get dark-readable pairs. */
+:root[data-gameday][data-theme="dark"] {
+  --why-met: #5fd38a;
+  --why-met-text: #a8ecc2;
+  --why-met-bg: #17402b;
+  --why-miss: #f0a35e;
+  --why-miss-text: #ffd0a8;
+  --why-miss-bg: #4a2f16;
+  --why-close-bg: #4a3a12;
+  --why-close-text: #ffd98a;
+  --why-neutral-bg: #2d3348;
+  --why-neutral-text: #d4d8e6;
+}
+:root[data-gameday] .gd-tabpanel .label-why-chip,
+:root[data-gameday] .gd-tabpanel .label-why-chip--near,
+:root[data-gameday] .gd-tabpanel .label-why-panel,
+:root[data-gameday] .gd-tabpanel .label-why-chart,
+:root[data-gameday] .gd-tabpanel .label-why-action {
+  background: var(--gd-surface);
+  color: var(--gd-ink);
+  border-color: var(--gd-line);
+}
+:root[data-gameday] .gd-tabpanel .label-why-flip,
+:root[data-gameday] .gd-tabpanel .label-why-closest {
+  background: var(--gd-warning-bg);
+  color: var(--gd-warning-ink);
+  border-color: var(--gd-line);
+}
+:root[data-gameday] .gd-tabpanel .label-why-mini-track {
+  background: var(--gd-surface-2);
+}
+:root[data-gameday] .gd-tabpanel .label-why-mini-favorable {
+  background: var(--gd-positive-bg);
+}
+:root[data-gameday] .gd-tabpanel .label-why-chart-legend,
+:root[data-gameday] .gd-tabpanel .label-why-chart-note {
+  color: var(--gd-muted);
+}
+/* The Why chart draws with literal light fills; in dark they map onto theme tokens (attribute selectors avoid editing the chart). */
+:root[data-gameday][data-theme="dark"] .label-why-chart rect[fill="#F3F2F5"] {
+  fill: var(--gd-surface-2);
+}
+:root[data-gameday][data-theme="dark"] .label-why-chart rect[fill="#FBEFF4"] {
+  fill: var(--gd-negative-bg);
+}
+:root[data-gameday][data-theme="dark"] .label-why-chart line[stroke="#E3E1E8"] {
+  stroke: var(--gd-line);
+}
+:root[data-gameday][data-theme="dark"] .label-why-chart text[fill="#6E7B74"] {
+  fill: var(--gd-muted);
+}
+:root[data-gameday][data-theme="dark"] .label-why-chart text[fill="#7A1243"] {
+  fill: var(--gd-model);
+}
+:root[data-gameday][data-theme="dark"] .label-why-chart rect[fill="#E3E1E8"] {
+  fill: var(--gd-line);
+}

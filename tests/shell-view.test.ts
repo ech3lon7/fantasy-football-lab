@@ -37,7 +37,7 @@ describe("sections and routes", () => {
   });
   it("maps each new section route to a screen that exists today", () => {
     for (const s of sections) expect(pageForRoute(s.id)).toBe(s.page);
-    expect(pageForRoute("player/12")).toBe("player");
+    expect(pageForRoute("player/12")).toBe("overview");
     expect(pageForRoute("gems")).toBe("gems");
   });
 });

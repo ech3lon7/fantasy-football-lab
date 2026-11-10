@@ -13,6 +13,12 @@ import {
   useAnimationRoot,
 } from "../ui/feel/settings";
 import { GamedayHeader } from "../features/next/Shell";
+import {
+  PlayerCardProvider,
+  PlayerRouteOpener,
+  cardTabKey,
+  readCardTab,
+} from "../features/next/PlayerCard";
 import { PopoverProvider } from "../ui/popover/PopoverStack";
 import { usePlayerRowKeys } from "../ui/popover/rowNavigation";
 import { pageForRoute } from "../domain/view/shell";
@@ -1470,7 +1476,25 @@ export default function App() {
       client={client}
     >
       <PopoverProvider>
-        <PlayerPopoverProvider m={model}>{content}</PlayerPopoverProvider>
+        {previewOn ? (
+          // The preview's single player card replaces the anchored popover and the player page.
+          <PlayerCardProvider
+            m={model}
+            lastTab={readCardTab(w?.state.filters[cardTabKey])}
+            // Remember the last tab against the latest workspace, preserving unrelated filters.
+            saveTab={(tab) => {
+              if (wRef.current)
+                updateState({
+                  filters: { ...wRef.current.state.filters, [cardTabKey]: tab },
+                });
+            }}
+          >
+            <PlayerRouteOpener route={route} ready={!!model} />
+            {content}
+          </PlayerCardProvider>
+        ) : (
+          <PlayerPopoverProvider m={model}>{content}</PlayerPopoverProvider>
+        )}
       </PopoverProvider>
     </NegotiationsProvider>
   );

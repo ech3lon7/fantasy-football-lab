@@ -1,0 +1,406 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { PlayerPopoverContext } from "../../ui/PlayerName";
+import { PlayerStockChart } from "../../ui/PlayerStockChart";
+import { NextRefreshScenarios } from "../../ui/NextRefreshScenarios";
+import { LabelWhy } from "../../ui/LabelWhy";
+import { usePopovers } from "../../ui/popover/PopoverStack";
+import { isEditableTarget } from "../../ui/popover/keys";
+import { playerCard, type Provenance } from "../../domain/view/player-card";
+import type { Model } from "../../domain/valuation";
+import { Chip } from "../../ui/primitives";
+import { Radar } from "./Radar";
+
+export const tabs = ["story", "numbers", "why", "calc"] as const;
+export type CardTab = (typeof tabs)[number];
+const tabLabels: Record<CardTab, string> = {
+  story: "Story",
+  numbers: "Numbers",
+  why: "Why the labels",
+  calc: "Calculation",
+};
+// Remember the last tab in the existing string-valued filter record; unknown values open on Story.
+export const cardTabKey = "cardLastTab";
+export const readCardTab = (raw?: string): CardTab =>
+  tabs.find((t) => t === raw) ?? "story";
+
+// Glyph pairs with colour so provenance never relies on colour alone.
+const glyph: Record<Provenance, string> = { fact: "●", espn: "◆", model: "▲" };
+
+interface Opener {
+  openPlayer: (id: string, list?: string[]) => void;
+}
+
+// Read the ids of the rows around a clicked link, so any marked table lets the card step to the next player.
+export function listFromAnchor(anchor: HTMLElement): string[] | undefined {
+  const row = anchor.closest("[data-player-row]");
+  const siblings = row?.parentElement?.querySelectorAll(
+    ":scope > [data-player-row]",
+  );
+  if (!siblings) return undefined;
+  const ids: string[] = [];
+  siblings.forEach((r) => {
+    const href = r
+      .querySelector<HTMLAnchorElement>('a[href^="#/player/"]')
+      ?.getAttribute("href");
+    const id = href?.split("/")[2];
+    if (id && !ids.includes(id)) ids.push(id);
+  });
+  return ids.length > 1 ? ids : undefined;
+}
+
+// The card itself: coloured header, four tabs, and left and right keys to step through the list it was opened from.
+function CardView({
+  m,
+  start,
+  list,
+  startTab,
+  scrollToChart,
+  saveTab,
+  close,
+}: {
+  m: Model;
+  start: string;
+  list?: string[];
+  startTab: CardTab;
+  scrollToChart: boolean;
+  saveTab: (tab: CardTab) => void;
+  close: () => void;
+}) {
+  const [id, setId] = useState(start),
+    [tab, setTab] = useState<CardTab>(startTab),
+    chart = useRef<HTMLDivElement>(null);
+  const card = useMemo(() => playerCard(m, id), [m, id]),
+    p = m.byId.get(id),
+    at = list ? list.indexOf(id) : -1;
+  const step = useCallback(
+    (by: number) => {
+      if (!list || at < 0) return;
+      const next = list[at + by];
+      if (next) setId(next);
+    },
+    [list, at],
+  );
+  // The chart badge opens the card scrolled to the moving-average chart.
+  useEffect(() => {
+    if (scrollToChart) chart.current?.scrollIntoView({ block: "nearest" });
+  }, [scrollToChart]);
+  if (!card || !p)
+    return (
+      <div className="gd-popover-body">
+        <h2>Player unavailable</h2>
+        <p>This player is not in the current snapshot.</p>
+      </div>
+    );
+  const h = card.header;
+  return (
+    <div
+      className="gd-card-view"
+      onKeyDown={(e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
+        if (isEditableTarget(e.target as HTMLElement)) return;
+        e.preventDefault();
+        step(e.key === "ArrowLeft" ? -1 : 1);
+      }}
+    >
+      <header
+        className="gd-card-head"
+        style={{ background: h.colors.background, color: h.colors.ink }}
+      >
+        <div className="gd-card-id">
+          <span>
+            {h.pos} · {h.nfl} · {h.owner}
+          </span>
+          <h2>{h.name}</h2>
+          <div className="gd-card-labels">
+            {h.labels.map((label) => (
+              <Chip key={label}>{label}</Chip>
+            ))}
+            {h.injury && h.injury !== "Active" && (
+              <Chip tone="warning">{h.injury}</Chip>
+            )}
+          </div>
+        </div>
+        <div className="gd-card-eppg" aria-label="Expected points per game">
+          <small>EXPECTED PPG</small>
+          <strong>{h.eppg ?? "—"}</strong>
+          {h.floor !== null && h.ceiling !== null ? (
+            <small>
+              Floor {h.floor} · ceiling {h.ceiling}
+            </small>
+          ) : (
+            <small title={h.rangeReason}>Range unavailable</small>
+          )}
+          <small>
+            Recent {h.recent ?? "—"} · Surplus {h.surplus ?? "—"}
+          </small>
+        </div>
+        {list && at >= 0 && (
+          <div className="gd-card-step">
+            <button
+              type="button"
+              aria-label="Previous player"
+              disabled={at === 0}
+              onClick={() => step(-1)}
+            >
+              ‹
+            </button>
+            <span aria-live="polite">
+              {at + 1} of {list.length}
+            </span>
+            <button
+              type="button"
+              aria-label="Next player"
+              disabled={at === list.length - 1}
+              onClick={() => step(1)}
+            >
+              ›
+            </button>
+          </div>
+        )}
+      </header>
+      <div className="gd-tabs" role="tablist" aria-label="Player card sections">
+        {tabs.map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            id={`gd-tab-${t}`}
+            aria-selected={tab === t}
+            aria-controls="gd-tabpanel"
+            onClick={() => {
+              setTab(t);
+              saveTab(t);
+            }}
+          >
+            {tabLabels[t]}
+          </button>
+        ))}
+      </div>
+      <div
+        className="gd-tabpanel"
+        id="gd-tabpanel"
+        role="tabpanel"
+        aria-labelledby={`gd-tab-${tab}`}
+      >
+        {tab === "story" && (
+          <>
+            <NextRefreshScenarios m={m} p={p} defaultOpen />
+            {h.blendLine && <small className="gd-blend">{h.blendLine}</small>}
+            <ul className="gd-story">
+              {card.story.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+            <Radar axes={card.radar} />
+            <div
+              ref={chart}
+              role="region"
+              aria-label={`Moving-average chart for ${h.name}`}
+            >
+              <PlayerStockChart
+                trend={card.chart.trend}
+                playerName={h.name}
+                position={h.pos}
+                leagueAvgVolume={card.chart.leagueAvgVolume}
+                height={220}
+              />
+            </div>
+          </>
+        )}
+        {tab === "numbers" && (
+          <>
+            {card.numbers.groups.map((g) => (
+              <section
+                key={g.provenance}
+                className={`gd-numbers gd-${g.provenance}`}
+              >
+                <h3>
+                  <span aria-hidden="true">{glyph[g.provenance]}</span>{" "}
+                  {g.title}
+                </h3>
+                <dl>
+                  {g.items.map((x) => (
+                    <div key={x.label}>
+                      <dt>{x.label}</dt>
+                      <dd>{x.display}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            ))}
+            {card.numbers.unavailable.length > 0 && (
+              <details className="gd-unavailable">
+                <summary>
+                  Unavailable ({card.numbers.unavailable.length})
+                </summary>
+                <dl>
+                  {card.numbers.unavailable.map((x) => (
+                    <div key={x.label}>
+                      <dt>{x.label}</dt>
+                      <dd>— {x.reason}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </details>
+            )}
+          </>
+        )}
+        {tab === "why" && <LabelWhy p={p} m={m} />}
+        {tab === "calc" && (
+          <>
+            <ol className="gd-calc">
+              {card.calculation.map((s) => (
+                <li key={s.label}>
+                  <span>
+                    <b>{s.label}</b>
+                    <small>{s.note}</small>
+                  </span>
+                  <strong>{s.display ?? "—"}</strong>
+                </li>
+              ))}
+            </ol>
+            <p className="gd-status">{card.status}</p>
+          </>
+        )}
+      </div>
+      <button type="button" className="gd-card-done" onClick={close}>
+        Close
+      </button>
+    </div>
+  );
+}
+
+const OpenPlayerContext = createContext<Opener | null>(null);
+
+// Let any screen open the player card by id, optionally with the list it should step through.
+export function useOpenPlayer(): Opener["openPlayer"] {
+  const opener = useContext(OpenPlayerContext);
+  return opener ? opener.openPlayer : () => {};
+}
+
+// Open the one player card from anywhere; replaces the anchored popover while the preview is on.
+export function PlayerCardProvider({
+  m,
+  lastTab,
+  saveTab,
+  children,
+}: {
+  m: Model | null;
+  lastTab: CardTab;
+  saveTab: (tab: CardTab) => void;
+  children: ReactNode;
+}) {
+  const popovers = usePopovers(),
+    [active, setActive] = useState<string | null>(null),
+    keyRef = useRef<number | null>(null),
+    latest = useRef({ m, lastTab, saveTab });
+  latest.current = { m, lastTab, saveTab };
+  const openPlayer = useCallback(
+    (id: string, list?: string[], target?: "chart", trigger?: string) => {
+      const model = latest.current.m;
+      if (!model) return;
+      // Replacing a card must not look like the person closing it, so forget the old key first.
+      if (keyRef.current !== null) {
+        const old = keyRef.current;
+        keyRef.current = null;
+        popovers.close(old);
+      }
+      const name = model.byId.get(id)?.name ?? "Player";
+      let mine = -1;
+      mine = popovers.open({
+        title: name,
+        flush: true,
+        onClose: () => {
+          if (keyRef.current !== mine) return;
+          keyRef.current = null;
+          setActive(null);
+          // A card opened from a #/player/ address returns that address to This week when it closes.
+          if (location.hash.startsWith("#/player/"))
+            location.hash = "#/overview";
+        },
+        render: (close) => (
+          <CardView
+            m={model}
+            start={id}
+            list={list}
+            startTab={target === "chart" ? "story" : latest.current.lastTab}
+            scrollToChart={target === "chart"}
+            saveTab={(t) => latest.current.saveTab(t)}
+            close={close}
+          />
+        ),
+      });
+      keyRef.current = mine;
+      setActive(trigger ?? id);
+    },
+    [popovers],
+  );
+  // Never keep a card from another snapshot open.
+  const seenHash = useRef(m?.dataset.hash);
+  useEffect(() => {
+    // Mounting, or the first model arriving, is not a change; only one snapshot replacing another closes the card.
+    const previous = seenHash.current;
+    if (previous === m?.dataset.hash) return;
+    seenHash.current = m?.dataset.hash;
+    if (previous !== undefined && keyRef.current !== null) {
+      const key = keyRef.current;
+      keyRef.current = null;
+      popovers.close(key);
+      setActive(null);
+    }
+  }, [m?.dataset.hash, popovers]);
+  const opener = useMemo(
+    () => ({
+      openPlayer: (id: string, list?: string[]) => openPlayer(id, list),
+    }),
+    [openPlayer],
+  );
+  const context = useMemo(
+    () => ({
+      activeTrigger: active,
+      open: (
+        id: string,
+        anchor: HTMLElement,
+        trigger: string,
+        target?: "chart",
+      ) => openPlayer(id, listFromAnchor(anchor), target, trigger),
+    }),
+    [active, openPlayer],
+  );
+  return (
+    <OpenPlayerContext.Provider value={opener}>
+      <PlayerPopoverContext.Provider value={context}>
+        {children}
+      </PlayerPopoverContext.Provider>
+    </OpenPlayerContext.Provider>
+  );
+}
+
+// Open the card for the player in a #/player/:id route and send the address back to This week when it closes.
+export function PlayerRouteOpener({
+  route,
+  ready,
+}: {
+  route: string;
+  // The card can open only once the model has loaded, so a fresh page load with a player address still opens it.
+  ready: boolean;
+}) {
+  const [head, id] = route.split("/"),
+    openPlayer = useOpenPlayer();
+  useEffect(() => {
+    if (head !== "player" || !id || !ready) return;
+    openPlayer(id);
+    // Open once per route change, not when the opener function is recreated.
+  }, [head, id, ready]);
+  return null;
+}
