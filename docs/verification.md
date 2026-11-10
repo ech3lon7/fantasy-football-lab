@@ -1,5 +1,10 @@
 # Verification report
 
+## Gameday Plus redesign, Phase 0 November 10 2026
+
+- Recorded the pre-redesign baseline at v0.8.19: `npm run check` passed with 45 test files and 496 unit/database/sync tests, TypeScript, lint and the publication scan. Added the parity checklist (`docs/superpowers/specs/gameday-plus-parity-checklist.md`, 62 rows, five marked "Needs decision") and the opt-in `uiPreview` switch on Data and account, stored in the existing string-valued filter record. With the switch off the current interface is unchanged. Version 0.9.0.
+- After the change: `npm run check` passed with 46 test files and 498 tests; the production Pages-path build passed; the full browser suite passed (112 passed, 1 skipped for the private workbook). A new browser workflow covers the switch defaulting off, toggling on, surviving a reload, toggling off, and an existing player-evaluation workflow working in both states. Excel parity checks were not run for this change because no model code changed. Nothing committed.
+
 ## Active analytical-tag explanations October 23 2026
 
 - Added separate collapsed explanations in the existing shared player-popover/profile evidence component for every active analytical signal: Gem, Watch, Scoring breakout watch, Role-growth watch, Projection-gap watch, Reduced workload, BUY LOW, SELL HIGH and TD caution. Inactive/neutral signals, injury/data statuses and trend arrows have no new explanation sections. Each explanation shows meaning, requirements, observed values, source/window, interpretation and limits without an automatic transaction recommendation.

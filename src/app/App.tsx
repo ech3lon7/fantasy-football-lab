@@ -1,6 +1,7 @@
 import { NegotiationsProvider, TradeJournal } from "../features/Negotiations";
 import { starterLineupsKey } from "../domain/starter-lineups";
 import { lineupBasisKey } from "../domain/trade-impact";
+import { readUiPreview, uiPreviewKey, writeUiPreview } from "../ui/preview";
 import { reconcileSavedTrades, savedTradesKey } from "../domain/saved-trades";
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
@@ -995,6 +996,13 @@ export default function App() {
               </div>
             )}
           </div>
+          {/* Mark the preview so it is never mistaken for the finished interface; new screens mount here from Phase 1. */}
+          {readUiPreview(w?.state.filters[uiPreviewKey]) && (
+            <div className="notice" role="status" data-testid="ui-preview-on">
+              Gameday Plus preview is on. Screens are replaced as each phase is
+              finished; everything else still uses the current interface.
+            </div>
+          )}
           {updateReady && (
             <div className="notice">
               An app update is ready. Your current dataset will be preserved.
@@ -1322,6 +1330,16 @@ export default function App() {
               status={syncStatus}
               notify={setError}
               importClick={() => fileRef.current?.click()}
+              uiPreview={readUiPreview(w?.state.filters[uiPreviewKey])}
+              // Merge only this key against the latest workspace, preserving unrelated filters.
+              setUiPreview={(on) =>
+                updateState({
+                  filters: {
+                    ...wRef.current!.state.filters,
+                    [uiPreviewKey]: writeUiPreview(on),
+                  },
+                })
+              }
               clear={async (cloud) => {
                 if (!w) return;
                 if (

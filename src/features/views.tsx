@@ -3311,7 +3311,11 @@ export function Account({
   notify,
   importClick,
   clear,
+  uiPreview,
+  setUiPreview,
 }: {
+  uiPreview: boolean;
+  setUiPreview: (on: boolean) => void;
   w: Workspace | null;
   config: CloudConfig;
   email: string;
@@ -3411,6 +3415,21 @@ export function Account({
           Older offline devices update when they reconnect. Provider backups
           follow your Supabase plan’s retention.
         </p>
+      </Panel>
+      {/* Opt in to the Gameday Plus redesign while it is built; the current interface stays the default. */}
+      <Panel
+        title="Gameday Plus preview"
+        note="The redesign ships in phases. Turning this on shows new screens as they are finished; the current interface is unchanged until then."
+      >
+        <label className="control">
+          <input
+            type="checkbox"
+            checked={uiPreview}
+            disabled={!w}
+            onChange={(e) => setUiPreview(e.target.checked)}
+          />
+          <span>Use the Gameday Plus preview</span>
+        </label>
       </Panel>
       <Panel
         title="Supabase synchronization"

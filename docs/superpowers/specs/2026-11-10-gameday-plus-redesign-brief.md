@@ -184,6 +184,20 @@ Canvas boards "7 · Phone layouts" (screens 1–9) and "8 · Phone layouts, part
 
 ---
 
+## 11b. Five added features
+
+Chosen by the owner from twenty proposals (canvas boards 9 and 10; the other fifteen are not part of the design). All five are drawn on board 6. They are new functionality, not restyling, and can follow the core redesign.
+
+1. **Start or sit odds** (in the versus comparison). The chance one player outscores the other this week, from each player's EPPG and blended spread, treated as independent. Shown as a percentage with both ranges on one line and a plain reading ("close to a coin flip", "modest edge", "clear edge"). Labelled an estimate from past variability, not a prediction.
+2. **League power ranges** (League screen, under the grade grid). Every team's total starter EPPG for the week as floor, expected and ceiling, ranked, with spreads combined as independent. Beside each opponent: the chance the owner's lineup outscores theirs, by the same method as start or sit odds.
+3. **Waiver add and drop pairs** (Roster screen, above the depth chart). For each available player, the drop that helps the lineup most, with lineup gain ± spread and whether the pickup would start or only add depth. "Try in a simulation" creates a hypothetical roster with the pair applied. Reuses existing drop rules, including undroppable players.
+4. **Since last import** (This week, above the move cards). A digest of labels gained and lost and the largest EPPG movers since the previous import. Requires keeping a small per-player summary of the previous import (labels, EPPG; later grades, owner, injury). It is not the workbook, but the "one current snapshot" wording must be updated to say so.
+5. **Counter-offer builder** (Trade room, fourth tab). Starting from the offer in the Manual analyzer, list the alternatives that differ by one swap or one added player and still help the owner, with both lineups' change. Counters that help both sides come first. "Use this" loads one into the analyzer; each can be logged to the journal as a counteroffer.
+
+Not yet drawn for phones.
+
+---
+
 ## 12. Domain work this design needs
 
 Each item is a domain output with tests; none changes valuation.
@@ -199,6 +213,11 @@ Each item is a domain output with tests; none changes valuation.
 9. Preset rename migration for "Surface-stat opportunities".
 10. Lineup gain spread for a trade: the combined spread of players whose lineup spot changes, with floor and ceiling, for the analyzer and for each search result.
 11. Plain-language grade-goal sentences (current grade and the grade the goal implies).
+12. Outscore probability for two players and for two lineups, from EPPG and spread.
+13. Team lineup totals with combined spread for every team.
+14. Best add and drop pairs for the owner's roster.
+15. Previous-import summary storage and the comparison that produces the digest.
+16. One-step counter-offer generation from a given trade.
 
 ---
 
