@@ -130,6 +130,10 @@ export type GemDraft = Record<Threshold, string> & {
   positiveOnly: boolean;
   goldenCross: boolean;
   deathCross: boolean;
+  // Optional so earlier drafts stay valid: signals are all required unless this is "any".
+  signalMode?: "all" | "any";
+  // Optional regression-label filter used by the Buy low / sell high search.
+  regression?: "" | "BUY LOW" | "SELL HIGH" | "either";
 };
 export type GemQuery = Omit<GemDraft, Threshold> &
   Record<Threshold, number | null>;
@@ -210,9 +214,17 @@ export function validateGemDraft(d: GemDraft, teams: string[]) {
   if (!["Available", "All", "Selected team"].includes(d.pool))
     errors.pool = "Choose a player pool.";
   if (
-    !["RB / WR / TE", "All", "QB", "RB", "WR", "TE", "K", "D/ST"].includes(
-      d.position,
-    )
+    ![
+      "RB / WR / TE",
+      "All",
+      "QB",
+      "RB",
+      "WR",
+      "TE",
+      "K",
+      "D/ST",
+      "K / D/ST",
+    ].includes(d.position)
   )
     errors.position = "Choose a position.";
   if (
@@ -229,6 +241,14 @@ export function validateGemDraft(d: GemDraft, teams: string[]) {
     )
   )
     errors.signals = "Choose recognized gem signals.";
+  if (d.signalMode !== undefined && !["all", "any"].includes(d.signalMode))
+    errors.signalMode =
+      "Choose whether all or any selected signals are required.";
+  if (
+    d.regression !== undefined &&
+    !["", "BUY LOW", "SELL HIGH", "either"].includes(d.regression)
+  )
+    errors.regression = "Choose a recognized regression label.";
   // Keep the opt-in flag boolean rather than interpreting malformed saved values as permission to broaden a search.
   if (typeof d.positiveOnly !== "boolean")
     errors.positiveOnly = "Choose whether to show positive labels only.";
@@ -262,6 +282,10 @@ export function decodeGemFilters(saved: Record<string, string>, team: string) {
     issue =
       "Saved positive-label filter is invalid. Correct the controls and Apply, or Reset screener.";
   draft.classification = saved.gemClass ?? "All classifications";
+  // New optional criteria are read only when saved, so earlier searches keep their exact meaning.
+  if (saved.gemSignalMode === "any") draft.signalMode = "any";
+  if (["BUY LOW", "SELL HIGH", "either"].includes(saved.gemRegression ?? ""))
+    draft.regression = saved.gemRegression as GemDraft["regression"];
   if (saved.gemFilterVersion !== undefined || saved.gemSignals !== undefined) {
     try {
       if (!["1", "2", "3", "4"].includes(saved.gemFilterVersion)) throw Error();
@@ -348,6 +372,9 @@ export function encodeGemFilters(q: GemQuery): Record<string, string> {
     gemPositiveOnly: String(q.positiveOnly),
     gemGoldenCross: String(q.goldenCross),
     gemDeathCross: String(q.deathCross),
+    // Written only when set; callers clear them explicitly when switching back to the defaults.
+    ...(q.signalMode === "any" ? { gemSignalMode: "any" } : {}),
+    ...(q.regression ? { gemRegression: q.regression } : {}),
     ...Object.fromEntries(
       gemThresholds.map((f) => [
         f.stored,
@@ -376,7 +403,16 @@ export function risingGemDraft(team: string): GemDraft {
 export function gemQuerySummary(q: GemQuery): string {
   return [
     // Clearing signal choices means no signal restriction, including for saved searches.
-    q.signals.length ? `(${q.signals.join(" AND ")})` : "Any signal",
+    q.signals.length
+      ? `(${q.signals.join(q.signalMode === "any" ? " OR " : " AND ")})`
+      : "Any signal",
+    ...(q.regression
+      ? [
+          q.regression === "either"
+            ? "BUY LOW or SELL HIGH"
+            : `${q.regression} label`,
+        ]
+      : []),
     `Pool: ${q.pool}${q.pool === "Selected team" ? ` ${q.team}` : ""}`,
     `Position: ${q.position}`,
     ...(q.classification !== "All classifications"
@@ -423,13 +459,22 @@ export function screenGems(players: Player[], q: GemQuery) {
         !["Gem", "Pre-gem", "Watch"].includes(p.gem)) ||
       (q.classification === "Gem + Watch" &&
         !["Gem", "Watch"].includes(p.gem)) ||
-      !q.signals.every((s) => playerSignals(p).includes(s)) ||
+      !(q.signalMode === "any" && q.signals.length
+        ? q.signals.some((s) => playerSignals(p).includes(s))
+        : q.signals.every((s) => playerSignals(p).includes(s))) ||
+      (q.regression === "either" &&
+        !["BUY LOW", "SELL HIGH"].includes(p.regression)) ||
+      (q.regression &&
+        q.regression !== "either" &&
+        p.regression !== q.regression) ||
       (q.pool === "Available" && p.owner !== "0") ||
       (q.pool === "Selected team" && p.owner !== q.team) ||
       (q.position !== "All" &&
         !(q.position === "RB / WR / TE"
           ? ["RB", "WR", "TE"].includes(p.pos)
-          : p.pos === q.position)) ||
+          : q.position === "K / D/ST"
+            ? ["K", "D/ST"].includes(p.pos)
+            : p.pos === q.position)) ||
       (!q.injured && p.uncertain) ||
       (q.goldenCross && !isGoldenCross(p.trend)) ||
       (q.deathCross && !isDeathCross(p.trend))
@@ -442,8 +487,7 @@ export function screenGems(players: Player[], q: GemQuery) {
     if (q.deathCross) {
       evidence.push("Bearish MA crossover (death cross)");
     }
-    const
-      missing: string[] = [];
+    const missing: string[] = [];
     let failed = false;
     const values: Record<Threshold, number | null> = {
       roleMin: p.opportunity.delta,

@@ -18,6 +18,8 @@ import { playerCard, type Provenance } from "../../domain/view/player-card";
 import type { Model } from "../../domain/valuation";
 import { Chip } from "../../ui/primitives";
 import { Radar } from "./Radar";
+import { VersusView } from "./Versus";
+import { addToVersus } from "../../domain/view/versus";
 
 export const tabs = ["story", "numbers", "why", "calc"] as const;
 export type CardTab = (typeof tabs)[number];
@@ -37,6 +39,9 @@ const glyph: Record<Provenance, string> = { fact: "●", espn: "◆", model: "�
 
 interface Opener {
   openPlayer: (id: string, list?: string[]) => void;
+  // Choose a player for the two-player comparison; the comparison opens once two are chosen.
+  addToVersus: (id: string) => void;
+  openVersus: () => void;
 }
 
 // Read the ids of the rows around a clicked link, so any marked table lets the card step to the next player.
@@ -65,6 +70,7 @@ function CardView({
   startTab,
   scrollToChart,
   saveTab,
+  addToVersus,
   close,
 }: {
   m: Model;
@@ -73,6 +79,7 @@ function CardView({
   startTab: CardTab;
   scrollToChart: boolean;
   saveTab: (tab: CardTab) => void;
+  addToVersus: (id: string) => void;
   close: () => void;
 }) {
   const [id, setId] = useState(start),
@@ -144,6 +151,13 @@ function CardView({
             Recent {h.recent ?? "—"} · Surplus {h.surplus ?? "—"}
           </small>
         </div>
+        <button
+          type="button"
+          className="gd-card-versus"
+          onClick={() => addToVersus(id)}
+        >
+          Add to versus
+        </button>
         {list && at >= 0 && (
           <div className="gd-card-step">
             <button
@@ -288,23 +302,62 @@ export function useOpenPlayer(): Opener["openPlayer"] {
   return opener ? opener.openPlayer : () => {};
 }
 
+// Let a screen add a player to the comparison or reopen it.
+export function useVersus(): Pick<Opener, "addToVersus" | "openVersus"> {
+  const opener = useContext(OpenPlayerContext);
+  return {
+    addToVersus: opener ? opener.addToVersus : () => {},
+    openVersus: opener ? opener.openVersus : () => {},
+  };
+}
+
 // Open the one player card from anywhere; replaces the anchored popover while the preview is on.
 export function PlayerCardProvider({
   m,
   lastTab,
   saveTab,
+  versusRaw,
+  saveVersus,
   children,
 }: {
   m: Model | null;
   lastTab: CardTab;
   saveTab: (tab: CardTab) => void;
+  // The saved comparison pair, as "idA,idB".
+  versusRaw: string;
+  saveVersus: (raw: string) => void;
   children: ReactNode;
 }) {
   const popovers = usePopovers(),
     [active, setActive] = useState<string | null>(null),
     keyRef = useRef<number | null>(null),
-    latest = useRef({ m, lastTab, saveTab });
-  latest.current = { m, lastTab, saveTab };
+    latest = useRef({ m, lastTab, saveTab, versusRaw, saveVersus });
+  latest.current = { m, lastTab, saveTab, versusRaw, saveVersus };
+  // Open the comparison for the two saved players; it stacks above any open card.
+  const openVersus = useCallback(
+    (ids?: string[]) => {
+      const model = latest.current.m;
+      const pair = ids ?? latest.current.versusRaw.split(",").filter(Boolean);
+      if (!model || pair.length < 2) return;
+      popovers.open({
+        title: "Versus",
+        width: 760,
+        flush: true,
+        render: (close) => (
+          <VersusView m={model} start={[pair[0], pair[1]]} close={close} />
+        ),
+      });
+    },
+    [popovers],
+  );
+  const addVersus = useCallback(
+    (id: string) => {
+      const next = addToVersus(latest.current.versusRaw, id);
+      latest.current.saveVersus(next.join(","));
+      if (next.length === 2) openVersus(next);
+    },
+    [openVersus],
+  );
   const openPlayer = useCallback(
     (id: string, list?: string[], target?: "chart", trigger?: string) => {
       const model = latest.current.m;
@@ -336,6 +389,7 @@ export function PlayerCardProvider({
             startTab={target === "chart" ? "story" : latest.current.lastTab}
             scrollToChart={target === "chart"}
             saveTab={(t) => latest.current.saveTab(t)}
+            addToVersus={(pid) => addVersus(pid)}
             close={close}
           />
         ),
@@ -362,8 +416,10 @@ export function PlayerCardProvider({
   const opener = useMemo(
     () => ({
       openPlayer: (id: string, list?: string[]) => openPlayer(id, list),
+      addToVersus: addVersus,
+      openVersus: () => openVersus(),
     }),
-    [openPlayer],
+    [openPlayer, addVersus, openVersus],
   );
   const context = useMemo(
     () => ({

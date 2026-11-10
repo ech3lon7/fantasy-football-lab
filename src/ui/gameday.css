@@ -652,3 +652,354 @@
 :root[data-gameday][data-theme="dark"] .label-why-chart rect[fill="#E3E1E8"] {
   fill: var(--gd-line);
 }
+/* Scouting: saved searches, live filter panel and cards or table results. */
+:root[data-gameday] .gd-scout {
+  display: grid;
+  gap: 16px;
+  color: var(--gd-ink);
+}
+:root[data-gameday] .gd-scout-saved {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+:root[data-gameday] .gd-opt {
+  display: inline-flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 12px;
+  border: 2px solid var(--gd-line);
+  border-radius: 999px;
+  background: var(--gd-surface);
+  color: var(--gd-ink);
+  font-weight: 600;
+}
+:root[data-gameday] .gd-opt small {
+  color: var(--gd-muted);
+  font-weight: 700;
+}
+:root[data-gameday] .gd-opt[aria-pressed="true"] {
+  background: var(--gd-selected);
+  color: var(--gd-selected-ink);
+  border-color: var(--gd-selected);
+}
+:root[data-gameday] .gd-opt[aria-pressed="true"] small {
+  color: var(--gd-selected-ink);
+}
+:root[data-gameday] .gd-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+:root[data-gameday] .gd-x {
+  background: transparent;
+  color: var(--gd-muted);
+  font-size: 18px;
+  padding: 0 6px;
+}
+:root[data-gameday] .gd-saveform {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+:root[data-gameday] .gd-saveform input,
+:root[data-gameday] .gd-field input,
+:root[data-gameday] .gd-field select,
+:root[data-gameday] .gd-results-tools input {
+  padding: 7px 10px;
+  border: 2px solid var(--gd-line);
+  border-radius: var(--gd-radius-sm);
+  background: var(--gd-surface);
+  color: var(--gd-ink);
+}
+:root[data-gameday] .gd-field input[aria-invalid="true"] {
+  border-color: var(--gd-negative-ink);
+}
+:root[data-gameday] .gd-scout-body {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+:root[data-gameday] .gd-filters {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-line);
+  border-radius: var(--gd-radius);
+}
+:root[data-gameday] .gd-filters h2,
+:root[data-gameday] .gd-results-head h2 {
+  margin: 0;
+  font-family: var(--gd-font-display);
+  text-transform: uppercase;
+}
+:root[data-gameday] .gd-filters h3 {
+  margin: 0 0 6px;
+  font-family: var(--gd-font-display);
+  font-size: 14px;
+  text-transform: uppercase;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+:root[data-gameday] .gd-row {
+  display: flex;
+  gap: 6px;
+}
+:root[data-gameday] .gd-field {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0;
+}
+:root[data-gameday] .gd-field.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+:root[data-gameday] .gd-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0;
+}
+:root[data-gameday] .gd-check small,
+:root[data-gameday] .gd-muted {
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-error {
+  color: var(--gd-negative-ink);
+  background: var(--gd-negative-bg);
+  padding: 2px 6px;
+  border-radius: var(--gd-radius-sm);
+}
+:root[data-gameday] .gd-results {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+:root[data-gameday] .gd-results-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+:root[data-gameday] .gd-results-head p {
+  margin: 4px 0 0;
+  color: var(--gd-muted);
+  max-width: 70ch;
+}
+:root[data-gameday] .gd-results-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+:root[data-gameday] .gd-empty {
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+:root[data-gameday] .gd-pcard {
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-line);
+  border-radius: var(--gd-radius);
+  overflow: hidden;
+}
+:root[data-gameday] .gd-pcard > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+}
+:root[data-gameday] .gd-pcard-name {
+  display: grid;
+  color: inherit;
+}
+:root[data-gameday] .gd-pcard-name b {
+  font-family: var(--gd-font-display);
+  font-size: 20px;
+  text-transform: uppercase;
+}
+:root[data-gameday] .gd-pcard-eppg {
+  display: grid;
+  text-align: right;
+  font-family: var(--gd-font-display);
+  font-size: 28px;
+  line-height: 1;
+}
+:root[data-gameday] .gd-pcard-eppg small {
+  font-size: 11px;
+}
+:root[data-gameday] .gd-pcard-body {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+:root[data-gameday] .gd-pcard-stats {
+  display: flex;
+  justify-content: space-between;
+  color: var(--gd-muted);
+  font-size: 13px;
+}
+:root[data-gameday] .gd-pcard-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+/* The table view reuses the current evaluation table; map its fixed light colours onto the theme. */
+:root[data-gameday] .gd-results .table-wrap,
+:root[data-gameday] .gd-results table,
+:root[data-gameday] .gd-results th,
+:root[data-gameday] .gd-results td {
+  background: var(--gd-surface);
+  color: var(--gd-ink);
+  border-color: var(--gd-line);
+}
+:root[data-gameday] .gd-results .model {
+  color: var(--gd-model);
+}
+:root[data-gameday] .gd-results .fact {
+  color: var(--gd-fact);
+}
+:root[data-gameday] .gd-results .projection {
+  color: var(--gd-espn);
+}
+:root[data-gameday] .gd-results .muted {
+  color: var(--gd-muted);
+}
+/* The current sidebar styles every nav as a vertical dark list; the header nav resets those rules. */
+:root[data-gameday] .gd-header .gd-nav {
+  flex-direction: row;
+  gap: 4px;
+}
+:root[data-gameday] .gd-header .gd-nav > a {
+  display: inline-flex;
+  gap: 0;
+  padding: 8px 12px;
+  font-size: 16px;
+  color: var(--gd-ink);
+}
+:root[data-gameday] .gd-header .gd-nav > a[aria-current="page"] {
+  background: var(--gd-selected);
+  color: var(--gd-selected-ink);
+}
+:root[data-gameday] .gd-header .gd-nav > a:not([aria-current]):hover {
+  background: var(--gd-surface-2);
+  color: var(--gd-ink);
+}
+/* New screens draw their own headings, so the current page heading and team picker are hidden there. */
+:root[data-gameday] .gd-new-screen .page-heading,
+:root[data-gameday] .gd-new-screen .my-team-toolbar {
+  display: none;
+}
+:root[data-gameday] .gd-card-versus,
+:root[data-gameday] .gd-pcard-vs {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--gd-surface);
+  color: var(--gd-ink);
+  border: 2px solid var(--gd-ink);
+  font-weight: 700;
+}
+:root[data-gameday] .gd-pcard-vs {
+  justify-self: start;
+  font-size: 12px;
+  padding: 3px 10px;
+}
+/* Versus: two coloured sides with mirrored bars between the values. */
+:root[data-gameday] .gd-versus-head {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+:root[data-gameday] .gd-versus-side {
+  padding: 24px 56px 16px 20px;
+}
+:root[data-gameday] .gd-versus-side h2 {
+  margin: 4px 0 0;
+  font-family: var(--gd-font-display);
+  font-size: 32px;
+  text-transform: uppercase;
+  color: inherit;
+}
+:root[data-gameday] .gd-versus-swap {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--gd-selected);
+  color: var(--gd-selected-ink);
+  font-size: 20px;
+}
+:root[data-gameday] .gd-versus-rows {
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+}
+:root[data-gameday] .gd-versus-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 150px 1fr 56px;
+  gap: 8px;
+  align-items: center;
+}
+:root[data-gameday] .gd-versus-row b {
+  text-align: center;
+  font-size: 13px;
+}
+:root[data-gameday] .gd-versus-val {
+  font-weight: 700;
+}
+:root[data-gameday] .gd-versus-val.better {
+  color: var(--gd-model);
+}
+:root[data-gameday] .gd-versus-bar {
+  display: flex;
+  height: 10px;
+  background: var(--gd-surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+:root[data-gameday] .gd-versus-bar.a {
+  justify-content: flex-end;
+}
+:root[data-gameday] .gd-versus-bar i {
+  background: var(--gd-model);
+}
+:root[data-gameday] .gd-versus-pickers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 0 20px;
+}
+:root[data-gameday] .gd-versus-pick {
+  display: grid;
+  gap: 4px;
+}
+:root[data-gameday] .gd-versus-pick input {
+  padding: 7px 10px;
+  border: 2px solid var(--gd-line);
+  border-radius: var(--gd-radius-sm);
+  background: var(--gd-surface);
+  color: var(--gd-ink);
+}
+:root[data-gameday] .gd-versus-note {
+  padding: 0 20px;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-versus .gd-card-done {
+  margin: 0 20px 20px;
+}

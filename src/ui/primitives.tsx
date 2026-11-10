@@ -45,11 +45,14 @@ export function Segmented<T extends string>({
   options,
   value,
   onChange,
+  format,
 }: {
   label: string;
   options: readonly T[];
   value: T;
   onChange: (next: T) => void;
+  // Optional display text per option; defaults to the capitalised option.
+  format?: (option: T) => string;
 }) {
   return (
     <div className="gd-seg" role="group" aria-label={label}>
@@ -60,7 +63,7 @@ export function Segmented<T extends string>({
           aria-pressed={value === option}
           onClick={() => onChange(option)}
         >
-          {option[0].toUpperCase() + option.slice(1)}
+          {format ? format(option) : option[0].toUpperCase() + option.slice(1)}
         </button>
       ))}
     </div>

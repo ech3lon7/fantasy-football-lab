@@ -13,6 +13,7 @@ import {
   useAnimationRoot,
 } from "../ui/feel/settings";
 import { GamedayHeader } from "../features/next/Shell";
+import { Scouting } from "../features/next/Scouting";
 import {
   PlayerCardProvider,
   PlayerRouteOpener,
@@ -872,7 +873,7 @@ export default function App() {
     page = previewOn ? pageForRoute(route) : route.split("/")[0];
   const content = (
     <div
-      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}`}
+      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}${previewOn && ["players", "gems", "weekly"].includes(page) ? " gd-new-screen" : ""}`}
     >
       {previewOn && (
         <GamedayHeader
@@ -1270,7 +1271,26 @@ export default function App() {
                   }
                 />
               )}
-              {page === "players" && (
+              {previewOn && ["players", "gems", "weekly"].includes(page) && (
+                // One explorer replaces Players, the Gem screener and Weekly streamers.
+                <Scouting
+                  key={w.owner}
+                  tracking={
+                    gemTracking.current?.owner === w.owner &&
+                    gemTracking.current.hash === realModel?.dataset.hash
+                      ? gemTracking.current.result
+                      : null
+                  }
+                  m={model}
+                  filters={w.state.filters}
+                  onFilters={(patch) =>
+                    updateState({
+                      filters: { ...wRef.current!.state.filters, ...patch },
+                    })
+                  }
+                />
+              )}
+              {!previewOn && page === "players" && (
                 <PlayerList
                   m={model}
                   filters={w.state.filters}
@@ -1282,7 +1302,7 @@ export default function App() {
               {page === "player" && (
                 <PlayerDetail m={model} id={route.split("/")[1]} />
               )}
-              {page === "gems" && (
+              {!previewOn && page === "gems" && (
                 <GemView
                   // Account changes must also discard another account's draft filters.
                   key={w.owner}
@@ -1293,7 +1313,7 @@ export default function App() {
                   }
                 />
               )}
-              {page === "weekly" && <Weekly m={model} />}
+              {!previewOn && page === "weekly" && <Weekly m={model} />}
               {page === "trades" && (
                 // Account changes reset temporary search results and terminate the previous account's worker.
                 <TradeView
@@ -1481,6 +1501,14 @@ export default function App() {
           <PlayerCardProvider
             m={model}
             lastTab={readCardTab(w?.state.filters[cardTabKey])}
+            versusRaw={w?.state.filters.versusIds ?? ""}
+            // Remember the comparison pair against the latest workspace, preserving unrelated filters.
+            saveVersus={(raw) => {
+              if (wRef.current)
+                updateState({
+                  filters: { ...wRef.current.state.filters, versusIds: raw },
+                });
+            }}
             // Remember the last tab against the latest workspace, preserving unrelated filters.
             saveTab={(tab) => {
               if (wRef.current)

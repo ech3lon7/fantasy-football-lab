@@ -25,13 +25,20 @@ test("six-section header replaces the sidebar and old routes keep working", asyn
     "Trade room",
     "Lab",
   ]);
+  // The tabs sit on one row beside each other, not stacked like the old sidebar.
+  const tops = await nav
+    .getByRole("link")
+    .evaluateAll((els) =>
+      els.map((el) => Math.round(el.getBoundingClientRect().top)),
+    );
+  expect(new Set(tops).size).toBe(1);
   // Data & account sits under Lab.
   await expect(nav.getByRole("link", { name: "Lab" })).toHaveAttribute(
     "aria-current",
     "page",
   );
   for (const [hash, label, heading] of [
-    ["#/gems", "Scouting", "Gem filters"],
+    ["#/gems", "Scouting", "Filters"],
     ["#/teams", "League", "League teams"],
     ["#/trades", "Trade room", "Trade analyzer"],
     ["#/overview", "This week", ""],
@@ -49,7 +56,7 @@ test("six-section header replaces the sidebar and old routes keep working", asyn
   // The new section routes render the screens that exist today.
   await nav.getByRole("link", { name: "Scouting" }).click();
   await expect(
-    page.getByRole("heading", { name: "Players" }).first(),
+    page.getByRole("heading", { name: "Filters" }).first(),
   ).toBeVisible();
   expect(errors).toEqual([]);
 });

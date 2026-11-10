@@ -69,7 +69,7 @@ test("card opened from a list steps with arrow keys and keeps the tab", async ({
   await open(page, "#/scouting");
   const links = page.locator("[data-player-row] a.player-link");
   await expect(links.nth(2)).toBeVisible();
-  const firstName = await links.first().locator("b").innerText();
+  const firstName = (await links.first().locator("b").textContent()) ?? "";
   await links.first().click();
   const card = page.getByRole("dialog");
   await expect(card).toBeVisible();
