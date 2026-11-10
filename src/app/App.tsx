@@ -2,6 +2,21 @@ import { NegotiationsProvider, TradeJournal } from "../features/Negotiations";
 import { starterLineupsKey } from "../domain/starter-lineups";
 import { lineupBasisKey } from "../domain/trade-impact";
 import { readUiPreview, uiPreviewKey, writeUiPreview } from "../ui/preview";
+import {
+  animationKey,
+  feelEntry,
+  hapticsKey,
+  hapticsSupported,
+  readAnimationPref,
+  readFlag,
+  soundKey,
+  useAnimationRoot,
+} from "../ui/feel/settings";
+import { GamedayHeader } from "../features/next/Shell";
+import { PopoverProvider } from "../ui/popover/PopoverStack";
+import { usePlayerRowKeys } from "../ui/popover/rowNavigation";
+import { pageForRoute } from "../domain/view/shell";
+import { readThemePref, themeKey, useGamedayRoot } from "../ui/feel/theme";
 import { reconcileSavedTrades, savedTradesKey } from "../domain/saved-trades";
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
@@ -137,6 +152,18 @@ export default function App() {
     [syncStatus, setSyncStatus] = useState("Local only"),
     [conflict, setConflict] = useState<Workspace | null | undefined>(undefined),
     [updateReady, setUpdateReady] = useState(false);
+  // Apply the preview root and resolved theme only while the preview is on.
+  useGamedayRoot(
+    readUiPreview(w?.state.filters[uiPreviewKey]),
+    readThemePref(w?.state.filters[themeKey]),
+  );
+  // Up and Down move between marked player rows while the preview is on.
+  usePlayerRowKeys(readUiPreview(w?.state.filters[uiPreviewKey]));
+  // Publish the effective animation level so transitions are gated on one root attribute.
+  useAnimationRoot(
+    readUiPreview(w?.state.filters[uiPreviewKey]),
+    readAnimationPref(w?.state.filters[animationKey]),
+  );
   const client = useMemo(() => cloudClient(config), [config.url, config.key]),
     fileRef = useRef<HTMLInputElement>(null),
     importRef = useRef<Worker | null>(null),
@@ -834,75 +861,114 @@ export default function App() {
     ),
     stale =
       !!d && (!d.sourceUTC || Date.now() - Date.parse(d.sourceUTC) > 86400000),
-    page = route.split("/")[0];
+    previewOn = readUiPreview(w?.state.filters[uiPreviewKey]),
+    // The preview shell maps its six section routes to the screens that exist today.
+    page = previewOn ? pageForRoute(route) : route.split("/")[0];
   const content = (
-    <div className={`app-shell${page === "trades" ? " trade-page" : ""}`}>
-      <aside className={`sidebar ${mobile ? "open" : ""}`}>
-        <a className="brand" href="#/overview">
-          <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" />
-          <span>
-            FANTASY<span>FOOTBALL LAB</span>
-          </span>
-        </a>
-        <div className="workspace-tag">
-          <span className="live-dot" /> YOUR LEAGUE WORKSPACE
-        </div>
-        <nav aria-label="Main navigation">
-          {nav.map(([key, label, Icon]) => (
-            <a
-              key={key}
-              className={page === key ? "active" : ""}
-              href={`#/${key}`}
-              onClick={() => setMobile(false)}
-            >
-              <Icon size={18} />
-              {label}
-              {page === key && <ChevronRight size={15} />}
-            </a>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <ShieldCheck size={20} />
-          <p>
-            Your league. Your data.
-            <small>One current snapshot. No Excel archive.</small>
-          </p>
-          <a href="#/data" className="sync-pill">
-            <Cloud size={14} />
-            {syncStatus}
+    <div
+      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}`}
+    >
+      {previewOn && (
+        <GamedayHeader
+          route={route}
+          model={realModel}
+          sourceUTC={d ? (d.sourceUTC ?? null) : undefined}
+          week={d ? num(d.tables.ModelContext[0].CurrentWeek) : null}
+          finalWeek={d ? num(d.tables.ModelContext[0].FinalWeek) : null}
+          syncStatus={syncStatus}
+          hypothetical={model?.simulation?.scenario.name ?? null}
+          busy={busy}
+          onImport={() => fileRef.current?.click()}
+          feel={{
+            theme: readThemePref(w?.state.filters[themeKey]),
+            animation: readAnimationPref(w?.state.filters[animationKey]),
+            sound: readFlag(w?.state.filters[soundKey]),
+            haptics: readFlag(w?.state.filters[hapticsKey]),
+            hapticsSupported: hapticsSupported(),
+          }}
+          // Merge only the changed Feel key against the latest workspace, preserving unrelated filters.
+          changeFeel={(key, value) => {
+            const [filterKey, stored] = feelEntry(key, value);
+            if (w)
+              updateState({
+                filters: {
+                  ...wRef.current!.state.filters,
+                  [filterKey]: stored,
+                },
+              });
+          }}
+        />
+      )}
+      {!previewOn && (
+        <aside className={`sidebar ${mobile ? "open" : ""}`}>
+          <a className="brand" href="#/overview">
+            <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" />
+            <span>
+              FANTASY<span>FOOTBALL LAB</span>
+            </span>
           </a>
-        </div>
-      </aside>
+          <div className="workspace-tag">
+            <span className="live-dot" /> YOUR LEAGUE WORKSPACE
+          </div>
+          <nav aria-label="Main navigation">
+            {nav.map(([key, label, Icon]) => (
+              <a
+                key={key}
+                className={page === key ? "active" : ""}
+                href={`#/${key}`}
+                onClick={() => setMobile(false)}
+              >
+                <Icon size={18} />
+                {label}
+                {page === key && <ChevronRight size={15} />}
+              </a>
+            ))}
+          </nav>
+          <div className="sidebar-bottom">
+            <ShieldCheck size={20} />
+            <p>
+              Your league. Your data.
+              <small>One current snapshot. No Excel archive.</small>
+            </p>
+            <a href="#/data" className="sync-pill">
+              <Cloud size={14} />
+              {syncStatus}
+            </a>
+          </div>
+        </aside>
+      )}
       <main>
-        <header className="topbar">
-          <button
-            className="mobile-menu subtle"
-            aria-label="Toggle navigation"
-            onClick={() => setMobile(!mobile)}
-          >
-            <Menu />
-          </button>
-          <div className="breadcrumb">
-            Workspace <ChevronRight size={14} />{" "}
-            <b>{labels[page] ?? "Player detail"}</b>
-          </div>
-          <div className="top-actions">
-            {d && (
-              <span className="week-label">
-                Week {num(d.tables.ModelContext[0].CurrentWeek)}{" "}
-                <span> / {num(d.tables.ModelContext[0].FinalWeek)}</span>
-              </span>
-            )}
+        {!previewOn && (
+          <header className="topbar">
             <button
-              className="button primary"
-              onClick={() => fileRef.current?.click()}
-              disabled={busy}
+              className="mobile-menu subtle"
+              aria-label="Toggle navigation"
+              onClick={() => setMobile(!mobile)}
             >
-              <Upload size={16} />
-              {busy ? "Reading workbook…" : "Import workbook"}
+              <Menu />
             </button>
-          </div>
-        </header>
+            <div className="breadcrumb">
+              Workspace <ChevronRight size={14} />{" "}
+              <b>{labels[page] ?? "Player detail"}</b>
+            </div>
+            <div className="top-actions">
+              {d && (
+                <span className="week-label">
+                  Week {num(d.tables.ModelContext[0].CurrentWeek)}{" "}
+                  <span> / {num(d.tables.ModelContext[0].FinalWeek)}</span>
+                </span>
+              )}
+              <button
+                className="button primary"
+                onClick={() => fileRef.current?.click()}
+                disabled={busy}
+              >
+                <Upload size={16} />
+                {busy ? "Reading workbook…" : "Import workbook"}
+              </button>
+            </div>
+          </header>
+        )}
         <div className="content">
           {/* Only the team selector joins the desktop trade header; roster status stays in normal content flow. */}
           <div className="toolbar my-team-toolbar">
@@ -998,7 +1064,11 @@ export default function App() {
           </div>
           {/* Mark the preview so it is never mistaken for the finished interface; new screens mount here from Phase 1. */}
           {readUiPreview(w?.state.filters[uiPreviewKey]) && (
-            <div className="notice" role="status" data-testid="ui-preview-on">
+            <div
+              className="gd-banner"
+              role="status"
+              data-testid="ui-preview-on"
+            >
               Gameday Plus preview is on. Screens are replaced as each phase is
               finished; everything else still uses the current interface.
             </div>
@@ -1399,7 +1469,9 @@ export default function App() {
       owner={w?.owner ?? "local"}
       client={client}
     >
-      <PlayerPopoverProvider m={model}>{content}</PlayerPopoverProvider>
+      <PopoverProvider>
+        <PlayerPopoverProvider m={model}>{content}</PlayerPopoverProvider>
+      </PopoverProvider>
     </NegotiationsProvider>
   );
 }

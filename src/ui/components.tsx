@@ -95,6 +95,7 @@ export function DataTable<T>({
   sortState,
   onSort,
   tieBreaker,
+  playerRows,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -104,6 +105,8 @@ export function DataTable<T>({
   onSort?: (s: { key: string; desc: boolean }) => void;
   // Screens may opt into stable ties without changing other tables' ordering.
   tieBreaker?: (a: T, b: T) => number;
+  // Mark rows as player rows so the preview's Up and Down keys can move between them.
+  playerRows?: boolean;
 }) {
   const [localSort, setSort] = useState({
       key: initialSort ?? columns[0]?.key,
@@ -161,7 +164,7 @@ export function DataTable<T>({
           </thead>
           <tbody>
             {ordered.slice(0, limit).map((r) => (
-              <tr key={id(r)}>
+              <tr key={id(r)} data-player-row={playerRows ? "" : undefined}>
                 {columns.map((c) => (
                   <td key={c.key} className={c.kind ?? ""}>
                     {c.render

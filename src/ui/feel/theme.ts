@@ -1,0 +1,46 @@
+import { useEffect } from "react";
+
+// Store the theme choice in the existing string-valued filter record so it syncs with the account.
+export const themeKey = "feelTheme";
+export const themePrefs = ["system", "light", "dark"] as const;
+export type ThemePref = (typeof themePrefs)[number];
+export type ResolvedTheme = "light" | "dark";
+
+// Treat anything unrecognized as System so a bad saved value never locks the interface into one theme.
+export const readThemePref = (raw?: string): ThemePref =>
+  themePrefs.find((x) => x === raw) ?? "system";
+
+// Save System as an empty string so the default leaves no stored value.
+export const writeThemePref = (pref: ThemePref): string =>
+  pref === "system" ? "" : pref;
+
+// System follows the device; an explicit choice always wins.
+export const resolveTheme = (
+  pref: ThemePref,
+  systemDark: boolean,
+): ResolvedTheme =>
+  pref === "system" ? (systemDark ? "dark" : "light") : pref;
+
+// Mark the document root only while the preview is on so the current interface keeps its own styling.
+export function useGamedayRoot(enabled: boolean, pref: ThemePref) {
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!enabled) {
+      delete root.dataset.gameday;
+      delete root.dataset.theme;
+      return;
+    }
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      root.dataset.gameday = "";
+      root.dataset.theme = resolveTheme(pref, query.matches);
+    };
+    apply();
+    query.addEventListener("change", apply);
+    return () => {
+      query.removeEventListener("change", apply);
+      delete root.dataset.gameday;
+      delete root.dataset.theme;
+    };
+  }, [enabled, pref]);
+}

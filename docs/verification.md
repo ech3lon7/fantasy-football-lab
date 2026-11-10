@@ -1,5 +1,11 @@
 # Verification report
 
+## Gameday Plus redesign, Phase 1 November 10 2026
+
+- Added, behind the preview switch only: scoped design tokens with light and dark sets (`src/ui/tokens.css`, `gameday.css`), the theme resolver, Feel settings (animation level on a root attribute, sound and haptics flags, one `feedback` helper), the six-section header with live player search, source freshness and Feel menu, a popover stack (Esc closes the top one, focus returns to each opener, Tab trapped, Up and Down between marked player rows) and shared primitives (card, pill, segmented, chip, folding group, range slider, floor-to-ceiling bar, skeleton). Pure helpers live in `src/domain/view/`. With the switch off the current interface is unchanged.
+- `npm run check` passed with 51 test files and 529 tests. The production Pages-path build passed. The browser suite passed 118 tests with 1 skipped (private workbook) and 1 timeout of an existing trade-search workflow under 8 parallel workers; that workflow passed on its own in 4.2 seconds, so it is treated as load-related and not a regression. New browser workflows cover theme tokens in both themes, System following the device, the six-section header and old-route mapping, player search by keyboard, the animation level, and the popover and row-navigation rules. Excel parity checks were not run because no model code changed.
+- Not done in Phase 1: web fonts (Barlow needs a licence and offline caching decision, so the display font falls back to a system condensed stack), the full Feel menu on phones, and Up/Down wiring for lists other than the League player pool table (Scouting and Roster arrive in Phases 3 and 4). Nothing committed.
+
 ## Gameday Plus redesign, Phase 0 November 10 2026
 
 - Recorded the pre-redesign baseline at v0.8.19: `npm run check` passed with 45 test files and 496 unit/database/sync tests, TypeScript, lint and the publication scan. Added the parity checklist (`docs/superpowers/specs/gameday-plus-parity-checklist.md`, 62 rows, five marked "Needs decision") and the opt-in `uiPreview` switch on Data and account, stored in the existing string-valued filter record. With the switch off the current interface is unchanged. Version 0.9.0.

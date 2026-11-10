@@ -682,6 +682,7 @@ export function PlayerList({
           rows={rows}
           columns={all ? extendedColumns : playerColumns}
           id={(p) => p.id}
+          playerRows
           initialSort="index"
           sortState={{
             key: filters.playerSort ?? "index",

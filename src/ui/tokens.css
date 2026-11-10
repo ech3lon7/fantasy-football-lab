@@ -1,0 +1,75 @@
+/* Gameday Plus design tokens. Scoped to the preview root so the current interface is unaffected.
+   Components use these variables only; no literal colours belong in component rules. */
+:root[data-gameday] {
+  --gd-font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --gd-font-body: "Barlow", system-ui, sans-serif;
+  /* Selected state and primary buttons are yellow with dark text in both themes. */
+  --gd-selected: #ffd60a;
+  --gd-selected-ink: #14171f;
+  --gd-radius: 10px;
+  --gd-radius-sm: 6px;
+  --gd-motion: 160ms;
+  font-family: var(--gd-font-body);
+  background: var(--gd-bg);
+  color: var(--gd-ink);
+}
+:root[data-gameday][data-theme="light"] {
+  color-scheme: light;
+  --gd-bg: #f6f5ef;
+  --gd-surface: #ffffff;
+  --gd-surface-2: #efede4;
+  --gd-ink: #14171f;
+  --gd-muted: #5b6170;
+  --gd-line: #d4d0c0;
+  /* Provenance colours; always paired with a glyph or label. */
+  --gd-fact: #166534;
+  --gd-espn: #1d4ed8;
+  --gd-model: #9d174d;
+  --gd-edit: #6d28d9;
+  --gd-positive-bg: #dcf0e3;
+  --gd-positive-ink: #14532d;
+  --gd-negative-bg: #f7dcdc;
+  --gd-negative-ink: #7f1d1d;
+  --gd-warning-bg: #fbecc4;
+  --gd-warning-ink: #6b4700;
+  /* Six-step grade scale from the lowest (brick red) to the highest (deep green). */
+  --gd-grade-1: #b5483a;
+  --gd-grade-2: #c4724f;
+  --gd-grade-3: #d3a666;
+  --gd-grade-4: #b9bd7c;
+  --gd-grade-5: #7fa97f;
+  --gd-grade-6: #3f7d57;
+  --gd-grade-ink: #14171f;
+}
+:root[data-gameday][data-theme="dark"] {
+  color-scheme: dark;
+  --gd-bg: #12151f;
+  --gd-surface: #1b2030;
+  --gd-surface-2: #252b40;
+  --gd-ink: #f1f2f6;
+  --gd-muted: #a6adc0;
+  --gd-line: #3a4158;
+  --gd-fact: #5fd38a;
+  --gd-espn: #82a8ff;
+  --gd-model: #f477b4;
+  --gd-edit: #b9a2ff;
+  --gd-positive-bg: #17402b;
+  --gd-positive-ink: #a8ecc2;
+  --gd-negative-bg: #4a1f24;
+  --gd-negative-ink: #ffb8b8;
+  --gd-warning-bg: #4a3a12;
+  --gd-warning-ink: #ffd98a;
+  --gd-grade-1: #a8493d;
+  --gd-grade-2: #b5694b;
+  --gd-grade-3: #c29a5e;
+  --gd-grade-4: #a2a672;
+  --gd-grade-5: #6e9a72;
+  --gd-grade-6: #3c7a55;
+  --gd-grade-ink: #f1f2f6;
+}
+:root[data-gameday][data-theme="light"] {
+  --gd-scrim: rgba(20, 23, 31, 0.45);
+}
+:root[data-gameday][data-theme="dark"] {
+  --gd-scrim: rgba(0, 0, 0, 0.6);
+}
