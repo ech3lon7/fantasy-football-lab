@@ -83,19 +83,33 @@ export function searchPlayers(m: Model, query: string, limit = 8): PlayerHit[] {
 export function sourceFreshness(
   sourceUTC: string | null | undefined,
   now: number,
-): { label: string; stale: boolean } {
+): { label: string; short: string; stale: boolean } {
   const at = sourceUTC ? Date.parse(sourceUTC) : NaN;
   if (!Number.isFinite(at))
-    return { label: "Source time unavailable", stale: true };
+    return { label: "Source time unavailable", short: "No time", stale: true };
   const minutes = Math.max(0, Math.floor((now - at) / 60000));
-  const label =
+  // The short form keeps the age visible where the header is narrow.
+  const age =
     minutes < 60
-      ? `Source ${minutes}m ago`
+      ? `${minutes}m`
       : minutes < 1440
-        ? `Source ${Math.floor(minutes / 60)}h ago`
-        : `Source ${Math.floor(minutes / 1440)}d ago`;
-  return { label, stale: now - at > 86400000 };
+        ? `${Math.floor(minutes / 60)}h`
+        : `${Math.floor(minutes / 1440)}d`;
+  return {
+    label: `Source ${age} ago`,
+    short: age,
+    stale: now - at > 86400000,
+  };
 }
+
+// The phone bottom bar: five sections with short labels; Lab, Feel and the journal live in the header menu.
+export const bottomBarItems = [
+  { id: "week", label: "Week" },
+  { id: "roster", label: "Roster" },
+  { id: "scouting", label: "Scout" },
+  { id: "league", label: "League" },
+  { id: "trade", label: "Trades" },
+] as const;
 
 export const labTabs = [
   { id: "settings", label: "Settings" },

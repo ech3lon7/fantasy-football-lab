@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
+  bottomBarItems,
   searchPlayers,
   sectionForRoute,
   sections,
@@ -200,6 +201,91 @@ function FeelMenu({
   );
 }
 
+// The narrow-width menu: import, sync, the Lab, the journal, the keyboard reference and the Feel settings in one place.
+function MoreMenu({
+  syncStatus,
+  busy,
+  onImport,
+  feel,
+  changeFeel,
+}: {
+  syncStatus: string;
+  busy: boolean;
+  onImport: () => void;
+  feel: FeelValues;
+  changeFeel: (
+    key: "theme" | "animation" | "sound" | "haptics",
+    value: string,
+  ) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [open]);
+  return (
+    <div className="gd-feel gd-narrow-only">
+      <button
+        type="button"
+        className="gd-pill"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        Menu
+      </button>
+      {open && (
+        <div
+          className="gd-menu gd-more"
+          role="group"
+          aria-label="Menu"
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest("a")) setOpen(false);
+          }}
+        >
+          <button
+            type="button"
+            className="gd-pill"
+            disabled={busy}
+            onClick={() => {
+              setOpen(false);
+              onImport();
+            }}
+          >
+            {busy ? "Reading…" : "Import workbook"}
+          </button>
+          <a href="#/lab/data">Sync status: {syncStatus}</a>
+          <a href="#/lab">Lab</a>
+          <a href="#/journal">Trade journal</a>
+          <a href="#/lab/keys">Keyboard reference</a>
+          <FeelSettings feel={feel} change={changeFeel} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The phone bottom bar: the five main sections, shown only below 720px.
+export function BottomBar({ route }: { route: string }) {
+  const current = sectionForRoute(route);
+  return (
+    <nav aria-label="Phone navigation" className="gd-bottombar">
+      {bottomBarItems.map((s) => (
+        <a
+          key={s.id}
+          href={`#/${s.id}`}
+          aria-current={current === s.id ? "page" : undefined}
+        >
+          {s.label}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
 // The always-visible bar: wordmark, six sections, search, week and source freshness, hypothetical chip, import, sync and Feel.
 export function GamedayHeader({
   route,
@@ -250,10 +336,18 @@ export function GamedayHeader({
       <PlayerSearch model={model} />
       <span
         className={`gd-fresh${sourceUTC !== undefined && fresh.stale ? " stale" : ""}`}
+        title={sourceUTC === undefined ? "No data imported" : fresh.label}
       >
         {week !== null &&
           `W${week}${finalWeek !== null ? `/${finalWeek}` : ""} · `}
-        {sourceUTC === undefined ? "No data imported" : fresh.label}
+        {sourceUTC === undefined ? (
+          "No data imported"
+        ) : (
+          <>
+            <span className="gd-wide-only">{fresh.label}</span>
+            <span className="gd-narrow-only">{fresh.short}</span>
+          </>
+        )}
       </span>
       {hypothetical && (
         <a className="gd-chip" href="#/overview">
@@ -261,7 +355,7 @@ export function GamedayHeader({
         </a>
       )}
       <a
-        className="gd-pill"
+        className="gd-pill gd-wide-only"
         href="#/data"
         aria-label={`Sync status: ${syncStatus}`}
       >
@@ -269,14 +363,25 @@ export function GamedayHeader({
       </a>
       <button
         type="button"
-        className="gd-pill"
+        className="gd-pill gd-wide-only"
         onClick={onImport}
         disabled={busy}
       >
         {busy ? "Reading…" : "Import"}
       </button>
-      <KeyboardReferenceButton />
-      <FeelMenu feel={feel} change={changeFeel} />
+      <span className="gd-wide-only">
+        <KeyboardReferenceButton />
+      </span>
+      <span className="gd-wide-only">
+        <FeelMenu feel={feel} change={changeFeel} />
+      </span>
+      <MoreMenu
+        syncStatus={syncStatus}
+        busy={busy}
+        onImport={onImport}
+        feel={feel}
+        changeFeel={changeFeel}
+      />
     </header>
   );
 }

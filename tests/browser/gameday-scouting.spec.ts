@@ -165,6 +165,8 @@ test("versus compares two players and swaps sides with the arrow keys", async ({
   page,
 }) => {
   await open(page);
+  // Wait for the cards to render before reading their names.
+  await expect(page.locator(".gd-pcard-name b").nth(1)).toBeVisible();
   const names = await page
     .locator(".gd-pcard-name b")
     .evaluateAll((els) => els.map((el) => el.textContent ?? ""));

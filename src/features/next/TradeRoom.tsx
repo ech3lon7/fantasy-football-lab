@@ -21,6 +21,7 @@ import type { Model, Player } from "../../domain/valuation";
 import { PlayerName } from "../../ui/PlayerName";
 import { Chip, Segmented } from "../../ui/primitives";
 import { TradeStressTest } from "../TradeStressTest";
+import { usePopovers } from "../../ui/popover/PopoverStack";
 import { FoldingGroup, RangeSlider } from "../../ui/primitives";
 import {
   defaultSearchLimits,
@@ -170,6 +171,7 @@ function ManualAnalyzer({
   changeBasis: (basis: LineupBasis) => void;
   forceTrade?: (draft: Draft) => { ok: boolean } | boolean;
 }) {
+  const popovers = usePopovers();
   const [view, setView] = useState<"your" | "their">("your"),
     [phase, setPhase] = useState<"before" | "after">("after"),
     [week, setWeek] = useState<number>(m.weeks[0] ?? m.current),
@@ -280,7 +282,30 @@ function ManualAnalyzer({
           <section className="gd-verdicts" aria-label="Verdicts">
             {verdictRows.map((v) => (
               <details key={v.id} className="gd-verdict" data-tone={v.tone}>
-                <summary>
+                <summary
+                  onClick={(e) => {
+                    // Pinned cells on a phone open their detail as a sheet instead of expanding in place.
+                    if (!matchMedia("(max-width: 719px)").matches) return;
+                    e.preventDefault();
+                    popovers.open({
+                      title: v.label,
+                      width: 520,
+                      render: () => (
+                        <div className="gd-popover-body">
+                          <h2>{v.label}</h2>
+                          <p>
+                            <strong>{v.summary}</strong>
+                          </p>
+                          <ul>
+                            {v.detail.map((line) => (
+                              <li key={line}>{line}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ),
+                    });
+                  }}
+                >
                   <span>{v.label}</span>
                   <strong>{v.summary}</strong>
                 </summary>

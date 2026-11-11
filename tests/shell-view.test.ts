@@ -66,6 +66,7 @@ describe("source freshness", () => {
   it("reports minutes, hours and days and flags only over 24 hours", () => {
     expect(sourceFreshness("2026-11-10T11:30:00Z", now)).toEqual({
       label: "Source 30m ago",
+      short: "30m",
       stale: false,
     });
     expect(sourceFreshness("2026-11-10T10:00:00Z", now).label).toBe(
@@ -73,12 +74,13 @@ describe("source freshness", () => {
     );
     expect(sourceFreshness("2026-11-10T12:00:00Z", now).stale).toBe(false);
     const old = sourceFreshness("2026-11-08T11:00:00Z", now);
-    expect(old).toEqual({ label: "Source 2d ago", stale: true });
+    expect(old).toEqual({ label: "Source 2d ago", short: "2d", stale: true });
   });
   it("treats a missing or invalid time as stale and unavailable", () => {
     for (const v of [null, undefined, "not a date"])
       expect(sourceFreshness(v, now)).toEqual({
         label: "Source time unavailable",
+        short: "No time",
         stale: true,
       });
   });

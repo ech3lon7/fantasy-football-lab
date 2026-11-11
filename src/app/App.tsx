@@ -12,7 +12,7 @@ import {
   soundKey,
   useAnimationRoot,
 } from "../ui/feel/settings";
-import { GamedayHeader } from "../features/next/Shell";
+import { BottomBar, GamedayHeader } from "../features/next/Shell";
 import { Scouting } from "../features/next/Scouting";
 import { Roster } from "../features/next/Roster";
 import { Lab } from "../features/next/Lab";
@@ -1073,7 +1073,8 @@ export default function App() {
           </div>
         </aside>
       )}
-      {/* Active labels sit under the header on every preview screen. */}
+      {/* Active labels sit under the header on every preview screen; phones also get a bottom bar. */}
+      {previewOn && <BottomBar route={route} />}
       {previewOn && (
         <SignalsTicker m={model} team={w?.state.preferredTeam ?? ""} />
       )}

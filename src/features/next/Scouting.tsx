@@ -112,7 +112,9 @@ export function Scouting({
   const versusApi = useVersus();
   const [draft, setDraft] = useState<GemDraft>(restored.draft),
     [limit, setLimit] = useState(48),
-    [naming, setNaming] = useState<string | null>(null);
+    [naming, setNaming] = useState<string | null>(null),
+    // On phones the filters open as a bottom sheet; on wider screens they are always visible.
+    [sheet, setSheet] = useState(false);
   const applied = validateGemDraft(restored.draft, teamIds),
     appliedIssue = restored.issue || Object.values(applied.errors).join(" "),
     query = appliedIssue ? null : applied.query,
@@ -306,7 +308,11 @@ export function Scouting({
       </div>
 
       <div className="gd-scout-body">
-        <aside className="gd-filters" aria-label="Filters">
+        <aside
+          className="gd-filters"
+          aria-label="Filters"
+          data-sheet={sheet ? "open" : undefined}
+        >
           <h2>Filters</h2>
           <section>
             <h3>Player pool</h3>
@@ -498,6 +504,13 @@ export function Scouting({
               </label>
             ))}
           </FoldingGroup>
+          <button
+            type="button"
+            className="gd-cta gd-phone-only gd-sheet-done"
+            onClick={() => setSheet(false)}
+          >
+            Show {shown.length} {shown.length === 1 ? "player" : "players"}
+          </button>
         </aside>
 
         <section className="gd-results" aria-label="Results">
@@ -527,6 +540,14 @@ export function Scouting({
                   <p>{query && gemQuerySummary(query)}</p>
                 </div>
                 <div className="gd-results-tools">
+                  <button
+                    type="button"
+                    className="gd-pill gd-phone-only"
+                    aria-expanded={sheet}
+                    onClick={() => setSheet(true)}
+                  >
+                    Filters
+                  </button>
                   <input
                     type="search"
                     aria-label="Search results by name"

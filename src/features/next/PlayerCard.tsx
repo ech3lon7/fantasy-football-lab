@@ -84,7 +84,8 @@ function CardView({
 }) {
   const [id, setId] = useState(start),
     [tab, setTab] = useState<CardTab>(startTab),
-    chart = useRef<HTMLDivElement>(null);
+    chart = useRef<HTMLDivElement>(null),
+    swipe = useRef<{ x: number; y: number } | null>(null);
   const card = useMemo(() => playerCard(m, id), [m, id]),
     p = m.byId.get(id),
     at = list ? list.indexOf(id) : -1;
@@ -111,6 +112,27 @@ function CardView({
   return (
     <div
       className="gd-card-view"
+      onTouchStart={(e) => {
+        const t = e.touches[0];
+        swipe.current = { x: t.clientX, y: t.clientY };
+      }}
+      onTouchEnd={(e) => {
+        const start = swipe.current,
+          t = e.changedTouches[0];
+        swipe.current = null;
+        if (!start) return;
+        const dx = t.clientX - start.x,
+          dy = t.clientY - start.y;
+        // A mostly sideways swipe steps to the next or previous player; a long downward swipe from the top closes the sheet.
+        if (Math.abs(dx) > 60 && Math.abs(dx) > 2 * Math.abs(dy))
+          step(dx < 0 ? 1 : -1);
+        else if (
+          dy > 110 &&
+          dy > 2 * Math.abs(dx) &&
+          (e.currentTarget.closest(".gd-popover")?.scrollTop ?? 0) === 0
+        )
+          close();
+      }}
       onKeyDown={(e) => {
         if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
         if (e.altKey || e.ctrlKey || e.metaKey) return;

@@ -1780,3 +1780,386 @@
 :root[data-gameday] .gd-legacy details > summary {
   color: var(--gd-ink);
 }
+/* Phones and tablets. Tablets keep the desktop design down to 720px; below that the phone layout applies. */
+:root[data-gameday] .gd-narrow-only,
+:root[data-gameday] .gd-phone-only {
+  display: none;
+}
+/* The bottom bar exists only on phones and resets the old sidebar's vertical dark nav styles. */
+:root[data-gameday] nav.gd-bottombar {
+  display: none;
+}
+
+/* Narrow header: secondary items move into one Menu so the header stays on one row at tablet widths. */
+@media (max-width: 1100px) {
+  :root[data-gameday] .gd-wide-only {
+    display: none !important;
+  }
+  :root[data-gameday] .gd-narrow-only {
+    display: inline-block;
+  }
+  :root[data-gameday] .gd-header {
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  :root[data-gameday] .gd-wordmark {
+    font-size: 20px;
+    white-space: nowrap;
+  }
+  :root[data-gameday] .gd-header .gd-nav {
+    gap: 0;
+  }
+  :root[data-gameday] .gd-header .gd-nav > a {
+    padding: 6px 8px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  :root[data-gameday] .gd-search {
+    flex: 1 1 80px;
+    min-width: 80px;
+  }
+  :root[data-gameday] .gd-fresh {
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  :root[data-gameday] .gd-more {
+    display: grid;
+    gap: 10px;
+    min-width: 280px;
+  }
+  :root[data-gameday] .gd-more a {
+    padding: 6px 0;
+    color: var(--gd-ink);
+    font-weight: 600;
+  }
+}
+
+/* Touch screens of any size, and phones: controls are at least 44px, and hover has a tap equivalent. */
+@media (pointer: coarse), (max-width: 719px) {
+  :root[data-gameday] .gd-pill,
+  :root[data-gameday] .gd-opt,
+  :root[data-gameday] .gd-cta,
+  :root[data-gameday] .gd-seg button,
+  :root[data-gameday] .gd-tabs a,
+  :root[data-gameday] .gd-tabs button,
+  :root[data-gameday] .gd-header .gd-nav > a,
+  :root[data-gameday] .gd-fold-head,
+  :root[data-gameday] .gd-card-step button,
+  :root[data-gameday] .gd-x,
+  :root[data-gameday] .gd-popover-close,
+  :root[data-gameday] .gd-preset,
+  :root[data-gameday] .gd-card-done,
+  :root[data-gameday] .gd-card-versus,
+  :root[data-gameday] .gd-pcard-vs,
+  :root[data-gameday] .gd-teamname,
+  :root[data-gameday] .gd-grade-btn,
+  :root[data-gameday] .gd-verdict summary {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  :root[data-gameday] .gd-verdict summary,
+  :root[data-gameday] .gd-fold-head,
+  :root[data-gameday] .gd-preset {
+    justify-content: flex-start;
+  }
+  :root[data-gameday] .gd-search input,
+  :root[data-gameday] .gd-field input,
+  :root[data-gameday] .gd-field select,
+  :root[data-gameday] .gd-saveform input,
+  :root[data-gameday] .gd-results-tools input,
+  :root[data-gameday] .gd-results-tools select {
+    min-height: 44px;
+  }
+  :root[data-gameday] .gd-check {
+    min-height: 44px;
+  }
+  :root[data-gameday] .gd-check input {
+    width: 22px;
+    height: 22px;
+  }
+  /* Tapping a week on the moving-average chart pins its values under the chart instead of floating over it. */
+  :root[data-gameday] .stock-tooltip-popover {
+    position: static !important;
+    transform: none !important;
+    margin-top: 8px;
+  }
+}
+
+@media (max-width: 719px) {
+  :root[data-gameday] .gd-phone-only {
+    display: inline-flex;
+  }
+  :root[data-gameday] body {
+    padding-bottom: 68px;
+  }
+  :root[data-gameday] .content {
+    padding: 16px 12px 8px;
+  }
+  /* Header: wordmark, freshness and Menu on one row; the player search takes its own row. */
+  :root[data-gameday] .gd-header {
+    flex-wrap: wrap;
+  }
+  :root[data-gameday] .gd-header .gd-nav {
+    display: none;
+  }
+  :root[data-gameday] .gd-search {
+    order: 9;
+    flex: 1 1 100%;
+    max-width: none;
+  }
+  :root[data-gameday] .gd-fresh {
+    margin-left: auto;
+  }
+  :root[data-gameday] .gd-more {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: 56px;
+    max-height: 75vh;
+    overflow: auto;
+  }
+  :root[data-gameday] .gd-ticker {
+    padding: 6px 12px;
+  }
+  /* Bottom bar. */
+  :root[data-gameday] nav.gd-bottombar {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 25;
+    height: 60px;
+    gap: 0;
+    background: var(--gd-surface);
+    border-top: 2px solid var(--gd-line);
+  }
+  :root[data-gameday] nav.gd-bottombar > a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 0;
+    color: var(--gd-ink);
+    font-family: var(--gd-font-display);
+    font-size: 15px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  :root[data-gameday] nav.gd-bottombar > a[aria-current="page"] {
+    background: var(--gd-selected);
+    color: var(--gd-selected-ink);
+  }
+  /* Popovers are bottom sheets; the player card and versus are full-height sheets. */
+  :root[data-gameday] .gd-popover-layer {
+    place-items: end center;
+    padding: 0;
+  }
+  :root[data-gameday] .gd-popover {
+    max-width: 100% !important;
+    width: 100%;
+    max-height: 88vh;
+    padding: 20px 16px;
+    border-width: 2px 0 0;
+    border-radius: 16px 16px 0 0;
+  }
+  :root[data-gameday] .gd-popover.flush {
+    height: 100dvh;
+    max-height: 100dvh;
+    padding: 0;
+    border-radius: 0;
+    border-width: 0;
+  }
+  :root[data-gameday] .gd-card-head {
+    padding: 20px 60px 14px 16px;
+  }
+  :root[data-gameday] .gd-card-id h2 {
+    font-size: 30px;
+  }
+  :root[data-gameday] .gd-card-eppg {
+    text-align: left;
+  }
+  :root[data-gameday] .gd-card-eppg strong {
+    font-size: 48px;
+  }
+  :root[data-gameday] .gd-tabs {
+    padding: 8px 12px 0;
+    overflow-x: auto;
+  }
+  :root[data-gameday] .gd-tabpanel {
+    padding: 16px 12px;
+  }
+  /* Rows instead of tables: cards stack one per row. */
+  :root[data-gameday] .gd-cards {
+    grid-template-columns: 1fr;
+  }
+  :root[data-gameday] .gd-tiles {
+    grid-template-columns: 1fr;
+  }
+  /* Scouting: filters open as a bottom sheet with a main button stating how many players will show. */
+  :root[data-gameday] .gd-scout-body {
+    grid-template-columns: 1fr;
+  }
+  :root[data-gameday] .gd-filters {
+    display: none;
+  }
+  :root[data-gameday] .gd-filters[data-sheet="open"] {
+    display: grid;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    max-height: 85vh;
+    overflow: auto;
+    border-radius: 16px 16px 0 0;
+    border-width: 2px 0 0;
+    padding-bottom: 76px;
+  }
+  :root[data-gameday] .gd-sheet-done {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 41;
+    justify-content: center;
+  }
+  :root[data-gameday] .gd-filters:not([data-sheet="open"]) .gd-sheet-done {
+    display: none;
+  }
+  :root[data-gameday] .gd-scout-saved {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  /* League: seven small squares per team. */
+  :root[data-gameday] .gd-grid {
+    border-spacing: 2px;
+  }
+  :root[data-gameday] .gd-grid th:first-child {
+    max-width: 76px;
+    font-size: 11px;
+  }
+  :root[data-gameday] .gd-grid .gd-grade-btn {
+    min-width: 0;
+    padding: 0;
+    font-size: 11px;
+  }
+  /* Trade room: the two sides stack and the four verdicts pin above the bottom bar as separate cells. */
+  :root[data-gameday] .gd-sides {
+    grid-template-columns: 1fr;
+  }
+  :root[data-gameday] .gd-trade {
+    padding-bottom: 76px;
+  }
+  :root[data-gameday] .gd-verdicts {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 60px;
+    z-index: 24;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    padding: 6px;
+    background: var(--gd-surface);
+    border-top: 2px solid var(--gd-line);
+  }
+  :root[data-gameday] .gd-verdict {
+    padding: 4px 6px;
+    border-left-width: 6px;
+  }
+  :root[data-gameday] .gd-verdict summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0;
+  }
+  :root[data-gameday] .gd-verdict summary span {
+    font-size: 10px;
+  }
+  :root[data-gameday] .gd-verdict summary strong {
+    font-size: 15px;
+  }
+  :root[data-gameday] .gd-verdict ul {
+    display: none;
+  }
+  :root[data-gameday] .gd-slot {
+    grid-template-columns: 52px 1fr 44px;
+  }
+  :root[data-gameday] .gd-slot .gd-chip-tag {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+  /* Presets are a swipe row; the search button stays pinned above the bottom bar. */
+  :root[data-gameday] .gd-presets {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+  }
+  :root[data-gameday] .gd-preset {
+    flex: 0 0 220px;
+    scroll-snap-align: start;
+  }
+  :root[data-gameday] .gd-legacy .trade-finder-main > .button-row {
+    position: sticky;
+    bottom: 64px;
+    z-index: 10;
+    padding: 8px 0;
+    background: var(--gd-bg);
+  }
+  /* Lab and Week. */
+  :root[data-gameday] .gd-outlook-top strong {
+    font-size: 44px;
+  }
+  :root[data-gameday] .gd-score-head,
+  :root[data-gameday] .gd-score-row {
+    grid-template-columns: 44px 1fr 1fr 56px;
+    gap: 8px;
+  }
+  :root[data-gameday] .gd-versus-row {
+    grid-template-columns: 44px 1fr 90px 1fr 44px;
+  }
+  :root[data-gameday] .gd-versus-pickers {
+    grid-template-columns: 1fr;
+  }
+  :root[data-gameday] .gd-versus-side {
+    padding: 20px 12px 12px;
+  }
+  /* Wide legacy tables scroll inside their own container, never the page. */
+  :root[data-gameday] .gd-legacy .table-wrap,
+  :root[data-gameday] .gd-results .table-wrap {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+}
+/* Grid items default to their content's minimum width, which let wide tables stretch whole pages; each screen's column may shrink instead. */
+:root[data-gameday] .gd-week,
+:root[data-gameday] .gd-roster,
+:root[data-gameday] .gd-league,
+:root[data-gameday] .gd-trade,
+:root[data-gameday] .gd-manual,
+:root[data-gameday] .gd-lab,
+:root[data-gameday] .gd-lab-page,
+:root[data-gameday] .gd-scout,
+:root[data-gameday] .gd-results {
+  grid-template-columns: minmax(0, 1fr);
+}
+:root[data-gameday] .gd-week > *,
+:root[data-gameday] .gd-roster > *,
+:root[data-gameday] .gd-league > *,
+:root[data-gameday] .gd-trade > *,
+:root[data-gameday] .gd-manual > *,
+:root[data-gameday] .gd-lab > *,
+:root[data-gameday] .gd-lab-page > *,
+:root[data-gameday] .gd-scout > *,
+:root[data-gameday] .gd-results > * {
+  min-width: 0;
+}
+:root[data-gameday] .gd-grid-wrap,
+:root[data-gameday] .gd-legacy {
+  max-width: 100%;
+  overflow-x: auto;
+}
