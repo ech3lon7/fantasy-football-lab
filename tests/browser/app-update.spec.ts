@@ -167,7 +167,7 @@ test("updates retain legacy-tab assets, fetch fresh HTML, and remain usable offl
 }) => {
   await page.goto(`${origin}${base}`);
   await expect(
-    page.getByRole("heading", { name: "Your roster, in focus." }),
+    page.getByRole("heading", { name: "Turn your workbook into your next move." }),
   ).toBeVisible();
   await page.waitForFunction(() => !!navigator.serviceWorker.controller);
   const oldTab = await context.newPage();
@@ -207,7 +207,7 @@ test("updates retain legacy-tab assets, fetch fresh HTML, and remain usable offl
   // Simulate stale HTTP HTML reaching the new worker: its old entry must still be loadable.
   await oldTab.goto(`${origin}${base}?legacy-html=1`);
   await expect(
-    oldTab.getByRole("heading", { name: "Your roster, in focus." }),
+    oldTab.getByRole("heading", { name: "Turn your workbook into your next move." }),
   ).toBeVisible();
   await page.reload();
   await expect(page.locator('script[type="module"][src]')).toHaveAttribute(
@@ -215,12 +215,12 @@ test("updates retain legacy-tab assets, fetch fresh HTML, and remain usable offl
     entryFor("b"),
   );
   await expect(
-    page.getByRole("heading", { name: "Your roster, in focus." }),
+    page.getByRole("heading", { name: "Turn your workbook into your next move." }),
   ).toBeVisible();
   await context.setOffline(true);
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Your roster, in focus." }),
+    page.getByRole("heading", { name: "Turn your workbook into your next move." }),
   ).toBeVisible();
   await context.setOffline(false);
 });
@@ -249,7 +249,7 @@ test("failed startup recovers without deleting workspace, sign-in storage or oth
   missingEntry = false;
   await page.getByRole("button", { name: "Reload latest app" }).click();
   await expect(
-    page.getByRole("heading", { name: "Gem filters", exact: true }),
+    page.getByRole("heading", { name: "Filters", exact: true }),
   ).toBeVisible();
   expect(new URL(page.url()).searchParams.get("kept")).toBe("yes");
   expect(new URL(page.url()).searchParams.has("__fantasy_recover")).toBe(false);
@@ -302,7 +302,7 @@ test("the update action loads the latest release without hanging on controllerch
     entryFor("b"),
   );
   await expect(
-    page.getByRole("heading", { name: "Your roster, in focus." }),
+    page.getByRole("heading", { name: "Turn your workbook into your next move." }),
   ).toBeVisible();
   // Re-registering the offline worker after recovery is not another app release.
   await page.evaluate(async () => {

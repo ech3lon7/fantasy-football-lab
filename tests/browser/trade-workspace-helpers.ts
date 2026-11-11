@@ -26,3 +26,12 @@ export async function openTradeFilters(page: Page, scope = "Standard") {
       await groups.nth(i).locator(":scope > summary").click();
   }
 }
+
+// The earlier trade finder and chain planner open under their Trade room tabs.
+export async function openLegacyTrades(
+  page: Page,
+  tab: "Find trades" | "Chain planner" = "Find trades",
+) {
+  await page.goto("./#/trades");
+  await page.getByRole("tab", { name: tab }).click();
+}

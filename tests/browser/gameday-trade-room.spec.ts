@@ -128,7 +128,7 @@ test("find trades and chain planner tabs keep the current tools", async ({
   await open(page);
   await page.getByRole("tab", { name: "Find trades" }).click();
   await expect(
-    page.getByText(/opens here with every other control/),
+    page.getByText(/control is below/),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Find matching trades" }),

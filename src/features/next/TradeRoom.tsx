@@ -949,8 +949,7 @@ export function TradeRoom({
                 }
               />
               <p className="gd-muted">
-                The full current {tabLabel[tab].toLowerCase()} opens here with
-                every other control until its redesigned version is ready.
+                Every {tabLabel[tab].toLowerCase()} control is below.
               </p>
               <div className="gd-legacy">{legacy}</div>
             </FoldMemoryContext.Provider>

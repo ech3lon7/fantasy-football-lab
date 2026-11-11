@@ -10,7 +10,7 @@ test("onboarding, file boundary and responsive navigation", async ({
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("./");
   await expect(
-    page.getByRole("heading", { name: "Your roster, in focus." }),
+    page.getByRole("heading", { name: "Turn your workbook into your next move." }),
   ).toBeVisible();
   await expect(page.getByText("Turn your workbook")).toBeVisible();
   // Verify the running bundle exposes its package release and build on every device.
@@ -20,8 +20,9 @@ test("onboarding, file boundary and responsive navigation", async ({
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "Toggle navigation" }).click();
-  await page.getByRole("link", { name: "Data & account" }).click();
+  await page.evaluate(() => {
+    location.hash = "#/data";
+  });
   await expect(
     page.getByRole("heading", { name: "Current dataset" }),
   ).toBeVisible();

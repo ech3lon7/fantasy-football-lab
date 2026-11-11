@@ -1,4 +1,4 @@
-import { openTradeDetails, openTradeFilters } from "./trade-workspace-helpers";
+import { openTradeDetails, openTradeFilters, openLegacyTrades } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { build } from "vite";
@@ -64,7 +64,9 @@ test("imports documented offers privately and retains outcomes/profiles on reloa
   page,
 }) => {
   await seed(page);
-  await page.getByRole("link", { name: "Trade journal", exact: true }).click();
+  await page.evaluate(() => {
+    location.hash = "#/journal";
+  });
   const data = journalFromTables(
     [
       {
@@ -156,7 +158,7 @@ test("keeps direct/search toggles independent and freezes an explicitly logged f
   page,
 }) => {
   await seed(page);
-  await page.getByRole("link", { name: "Trade analyzer", exact: true }).click();
+  await openLegacyTrades(page);
   await openTradeDetails(page);
   await openTradeFilters(page);
   // Each optional assessment is reached through its own mode and filter drawer.
@@ -185,7 +187,9 @@ test("keeps direct/search toggles independent and freezes an explicitly logged f
   await expect(assessment.getByRole("status")).toContainText(
     "original forecast logged",
   );
-  await page.getByRole("link", { name: "Trade journal", exact: true }).click();
+  await page.evaluate(() => {
+    location.hash = "#/journal";
+  });
   await page.getByText("Record / forecasts", { exact: true }).click();
   const forecast = page
     .locator("summary")

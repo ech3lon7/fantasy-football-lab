@@ -1525,7 +1525,7 @@ export default function App() {
       client={client}
     >
       <PopoverProvider>
-        // The single player card replaces the anchored popover and the player page.
+        {/* The single player card replaces the anchored popover and the player page. */}
         <PlayerCardProvider
           m={model}
           lastTab={readCardTab(w?.state.filters[cardTabKey])}

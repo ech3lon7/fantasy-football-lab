@@ -1,4 +1,4 @@
-import { openTradeDetails, openTradeFilters } from "./trade-workspace-helpers";
+import { openTradeDetails, openTradeFilters, openLegacyTrades } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import {
@@ -73,7 +73,7 @@ async function seed(page: Page, missing = false) {
     db.close();
   }, w);
   await page.reload();
-  await page.getByRole("link", { name: "Trade analyzer", exact: true }).click();
+  await openLegacyTrades(page);
   await openTradeDetails(page);
   await openTradeFilters(page);
   const panel = page.locator("section.panel").filter({

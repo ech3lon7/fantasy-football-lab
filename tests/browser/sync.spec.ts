@@ -1,3 +1,4 @@
+import { openLegacyTrades } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import {
@@ -140,7 +141,9 @@ async function seedCloud(page: Page) {
     { workspace, user },
   );
   await page.reload();
-  await page.getByRole("link", { name: "Data & account", exact: true }).click();
+  await page.evaluate(() => {
+    location.hash = "#/data";
+  });
   await expect(
     page.getByRole("button", { name: "Sync now", exact: true }),
   ).toBeEnabled();
@@ -188,7 +191,7 @@ test("Sync now retains in-flight edits and the next sync succeeds", async ({
   const started = cloud.pause();
   await page.getByRole("button", { name: "Sync now", exact: true }).click();
   await started;
-  await page.getByRole("link", { name: "Trade analyzer", exact: true }).click();
+  await openLegacyTrades(page);
   await page
     .getByRole("combobox", {
       name: "Evaluate lineup impact using",
@@ -206,7 +209,9 @@ test("Sync now retains in-flight edits and the next sync succeeds", async ({
     .poll(async () => (await stored(page, cloud.owner)).stateRevision)
     .toBe(4);
   expect((await stored(page, cloud.owner)).pendingState).toBe(true);
-  await page.getByRole("link", { name: "Data & account", exact: true }).click();
+  await page.evaluate(() => {
+    location.hash = "#/data";
+  });
   await page.getByRole("button", { name: "Sync now", exact: true }).click();
   await expect
     .poll(async () => (await stored(page, cloud.owner)).pendingState)

@@ -1,4 +1,4 @@
-import { openTradeDetails, openTradeFilters } from "./trade-workspace-helpers";
+import { openTradeDetails, openTradeFilters, openLegacyTrades } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { starterLineupsKey } from "../../src/domain/starter-lineups";
@@ -54,6 +54,7 @@ async function seed(page: Page) {
     db.close();
   }, w);
   await page.reload();
+  await page.goto("./#/roster");
   await expect(
     page.getByRole("heading", { name: "Manage starters", exact: true }),
   ).toBeVisible();
@@ -199,7 +200,7 @@ test("bench trades keep direct points unchanged while exchange grade and coverag
   page,
 }) => {
   await seed(page);
-  await page.goto("./#/trades");
+  await openLegacyTrades(page);
   await openTradeDetails(page);
   await openTradeFilters(page);
   await page
@@ -245,7 +246,7 @@ test("bench trades keep direct points unchanged while exchange grade and coverag
     fullPage: true,
   });
   // A saved starter switch must invalidate direct trade results without changing the selected package.
-  await page.goto("./#/overview");
+  await page.goto("./#/roster");
   await page
     .getByRole("combobox", { name: "Lineup status: Main QB", exact: true })
     .selectOption("Bench");
@@ -254,7 +255,7 @@ test("bench trades keep direct points unchanged while exchange grade and coverag
     .selectOption("Starter");
   await page.getByRole("button", { name: "Save lineup", exact: true }).click();
   await expect(page.getByText(/Lineup source: Saved app lineup/)).toBeVisible();
-  await page.goto("./#/trades");
+  await openLegacyTrades(page);
   await openTradeDetails(page);
   await openTradeFilters(page);
   await page.getByText("Compare with Marked starters", { exact: true }).click();

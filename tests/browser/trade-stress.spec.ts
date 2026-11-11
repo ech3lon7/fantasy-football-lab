@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { openLegacyTrades } from "./trade-workspace-helpers";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import {
@@ -69,7 +70,7 @@ test("optional stress test stays isolated, validates edits, exports and restores
     db.close();
   }, workspace);
   await page.reload();
-  await page.goto("./#/trades");
+  await openLegacyTrades(page);
   const stress = page.locator(".trade-stress-test");
   await expect(stress).toBeVisible();
   await expect(stress).not.toHaveAttribute("open", "");

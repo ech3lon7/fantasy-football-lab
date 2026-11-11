@@ -6,7 +6,7 @@ import {
   type Dataset,
   type Workspace,
 } from "../../src/domain/contracts";
-import { openTradeDetails, openTradeFilters } from "./trade-workspace-helpers";
+import { openTradeDetails, openTradeFilters, openLegacyTrades } from "./trade-workspace-helpers";
 
 // Capture a screenshot into test-results/ and copy it into the visual artifact directory
 async function captureScreenshot(page: Page, filename: string) {
@@ -91,7 +91,7 @@ async function seedWorkspace(
 
   await page.reload();
   // Navigate to Trade Analyzer and expand base trade filters
-  await page.getByRole("link", { name: "Trade analyzer", exact: true }).click();
+  await openLegacyTrades(page);
   await openTradeDetails(page);
   await openTradeFilters(page);
   return dataset;
