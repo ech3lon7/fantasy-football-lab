@@ -1,3 +1,4 @@
+import { useFoldMemory } from "./next/limitsContext";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, GripVertical } from "lucide-react";
 import type { Position } from "../domain/contracts";
@@ -22,11 +23,18 @@ export function TradeFilterGroup({
   children: ReactNode;
   open?: boolean;
 }) {
+  // Inside the Gameday Plus Trade room, open groups are remembered; elsewhere the group stays uncontrolled as before.
+  const memory = useFoldMemory();
   return (
     <details
       className="trade-filter-category"
       data-category={title}
-      open={open}
+      open={memory ? memory.isOpen(title) || open : open}
+      onToggle={
+        memory
+          ? (e) => memory.set(title, (e.currentTarget as HTMLDetailsElement).open)
+          : undefined
+      }
     >
       <summary>
         <strong>{title}</strong>

@@ -1,5 +1,9 @@
 import type { Draft } from "../contracts";
-import { chainPositionImpact } from "../chain-position-impact";
+import {
+  chainPositionImpact,
+  type PositionalGradeImpactRule,
+} from "../chain-position-impact";
+import { positionGradeScale } from "../trade-safeguards";
 import { nextRefreshDefaults } from "../next-refresh";
 import { readLineupBasis, tradeImpact } from "../trade-impact";
 import type { TradeResult } from "../trades";
@@ -319,4 +323,58 @@ export function taleOfTape(m: Model, draft: Draft): TapeRow[] {
     row("Value PPG (sum)", (p) => p.value),
     row("Surplus (positive VORP)", (p) => p.positive),
   ];
+}
+
+const gradeScale = positionGradeScale;
+
+// A one-line, plain-language reading of a grade goal, for example "Your WR is D+ today. +2 steps means C or better."
+// Only your own team's current grade is known here; goals about their team are described without a grade.
+export function gradeGoalSentence(
+  rule: PositionalGradeImpactRule,
+  ownGrade: string | null,
+): string {
+  const overall = rule.position.toUpperCase() === "OVERALL";
+  const type =
+    rule.type ??
+    (rule.side === "own"
+      ? rule.steps > 0
+        ? "upgrade"
+        : "drop_limit"
+      : rule.steps > 0
+        ? "upgrade"
+        : rule.steps === 0
+          ? "drop_limit"
+          : "deplete");
+  const n = Math.abs(rule.steps);
+  const steps = (k: number) => `${k} step${k === 1 ? "" : "s"}`;
+  if (rule.side === "other") {
+    const who = overall
+      ? "Their overall grade steps"
+      : `Their ${rule.position}`;
+    if (type === "match_net")
+      return "Their overall steps must match your overall steps.";
+    if (type === "upgrade")
+      return `${who} must improve by ${steps(n)} or more.`;
+    if (type === "deplete") return `${who} must drop at least ${steps(n)}.`;
+    return n === 0
+      ? `${who} must not drop.`
+      : `${who} may drop at most ${steps(n)}.`;
+  }
+  if (overall)
+    return type === "upgrade"
+      ? `Your net grade steps across every position must total +${n} or more.`
+      : `Your net grade steps must not fall below −${n}.`;
+  const at = ownGrade ? gradeScale.findIndex((g) => g === ownGrade) : -1;
+  if (at < 0)
+    return `Your ${rule.position} has no grade today, so this goal cannot be met.`;
+  if (type === "upgrade") {
+    const to = at + n;
+    return to > gradeScale.length - 1
+      ? `Your ${rule.position} is ${ownGrade} today. +${n} steps is out of reach: ${gradeScale[gradeScale.length - 1]} is the top grade.`
+      : `Your ${rule.position} is ${ownGrade} today. +${n} step${n === 1 ? "" : "s"} means ${gradeScale[to]} or better.`;
+  }
+  const floor = Math.max(0, at - n);
+  return n === 0
+    ? `Your ${rule.position} is ${ownGrade} today. No drop keeps ${ownGrade} or better.`
+    : `Your ${rule.position} is ${ownGrade} today. Dropping at most ${steps(n)} keeps ${gradeScale[floor]} or better.`;
 }

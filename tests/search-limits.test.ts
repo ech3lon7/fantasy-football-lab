@@ -4,6 +4,7 @@ import { evaluate } from "../src/domain/valuation";
 import {
   applyChainPreset,
   applyChainPresetKeepingLimits,
+  chainPresetDescriptions,
   chainPresets,
   chainSearchRounds,
   currentPresetLabel,
@@ -339,5 +340,18 @@ describe("flip enforcement and migration", () => {
     const migrated = migrateStrictness(saved);
     expect("strictness" in migrated).toBe(false);
     expect(migrated).toEqual({ id: "x", name: "Mine", query: { team: "1" } });
+  });
+});
+
+describe("preset descriptions", () => {
+  it("describe every preset and never promise a change to the shared limits", () => {
+    for (const p of chainPresets) {
+      const text = chainPresetDescriptions[p.id];
+      expect(text.length).toBeGreaterThan(10);
+      expect(text).not.toMatch(/limit|strict|lenient/i);
+    }
+    expect(Object.keys(chainPresetDescriptions).sort()).toEqual(
+      chainPresets.map((p) => p.id).sort(),
+    );
   });
 });

@@ -1,4 +1,5 @@
 import { positions } from "../domain/contracts";
+import { useGradeGoalSentence } from "./next/limitsContext";
 import type { ChainStep } from "../domain/trade-chains";
 import type { ChainPositionImpact } from "../domain/chain-position-impact";
 import { positionGradeScale } from "../domain/trade-search";
@@ -153,6 +154,7 @@ export function ChainGradeLimitControls({
   change: (value: ChainStep) => void;
   positions?: string[];
 }) {
+  const gradeSentence = useGradeGoalSentence();
   return (
     <div className="trade-search-controls">
       <FilterHelp
@@ -232,6 +234,7 @@ export function ChainGradeLimitControls({
           })
         }
         positions={positions}
+        sentence={gradeSentence}
         ariaLabelPrefix={`${label} grade goal`}
       />
     </div>

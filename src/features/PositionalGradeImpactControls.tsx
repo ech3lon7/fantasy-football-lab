@@ -120,7 +120,10 @@ export function PositionalGradeImpactControls({
   onChange,
   positions,
   ariaLabelPrefix = "Positional grade goal",
+  sentence,
 }: {
+  // Inside the Gameday Plus Trade room each goal gets a one-line plain-language reading.
+  sentence?: ((rule: PositionalGradeImpactRule) => string) | null;
   rules: PositionalGradeImpactRule[];
   onChange: (rules: PositionalGradeImpactRule[]) => void;
   positions?: string[];
@@ -283,6 +286,10 @@ export function PositionalGradeImpactControls({
                     </option>
                   ))}
                 </select>
+
+                {sentence && (
+                  <small className="gd-goal-line">{sentence(rule)}</small>
+                )}
 
                 {/* Remove goal button */}
                 <button

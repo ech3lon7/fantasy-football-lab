@@ -35,7 +35,13 @@ import {
   readOpenGroups,
   setGroupOpen,
 } from "../../domain/view/primitives";
-import { SearchLimitsContext } from "./limitsContext";
+import {
+  FoldMemoryContext,
+  GradeGoalContext,
+  SearchLimitsContext,
+} from "./limitsContext";
+import { gradeGoalSentence } from "../../domain/view/trade-room";
+import { teamsAssessment } from "../../domain/lineups";
 
 export const tradeTabs = ["manual", "find", "chains"] as const;
 export type TradeTab = (typeof tradeTabs)[number];
@@ -555,6 +561,47 @@ export function TradeRoom({
 }) {
   const limits = readSearchLimits(filters[searchLimitsKey]),
     open = readOpenGroups(filters[foldedGroupsKey]);
+  // Your current grades, so a goal can say which grade it reaches; goals about their team are described without one.
+  const myGrades = useMemo(
+    () => teamsAssessment(m).get(draft.teamA) ?? [],
+    [m, draft.teamA],
+  );
+  const goalSentence = (rule: Parameters<typeof gradeGoalSentence>[0]) =>
+    gradeGoalSentence(
+      rule,
+      myGrades.find((g) => g.position === rule.position)?.grade ?? null,
+    );
+  // Filter groups remember being open, separately for each tool.
+  const foldMemory = {
+    isOpen: (title: string) => !!open[`trade-${tab}:${title}`],
+    set: (title: string, next: boolean) => {
+      if (!!open[`trade-${tab}:${title}`] === next) return;
+      onFilters({
+        [foldedGroupsKey]: setGroupOpen(
+          filters[foldedGroupsKey],
+          `trade-${tab}:${title}`,
+          next,
+        ),
+      });
+    },
+  };
+  // Saved trades live with Find trades: switch there and open the saved drawer once it has mounted.
+  const openSaved = () => {
+    setTab("find");
+    let tries = 0;
+    const timer = setInterval(() => {
+      const drawer = document.querySelector<HTMLDetailsElement>(
+        ".trade-saved-drawer",
+      );
+      if (drawer || ++tries > 20) {
+        clearInterval(timer);
+        if (drawer) {
+          drawer.open = true;
+          drawer.scrollIntoView({ block: "start" });
+        }
+      }
+    }, 100);
+  };
   return (
     <div className="gd-trade">
       <header className="gd-trade-head">
@@ -572,9 +619,14 @@ export function TradeRoom({
             </button>
           ))}
         </div>
-        <a className="gd-pill" href="#/journal">
-          Journal
-        </a>
+        <div className="gd-row">
+          <button type="button" className="gd-pill" onClick={openSaved}>
+            Saved trades
+          </button>
+          <a className="gd-pill" href="#/journal">
+            Journal
+          </a>
+        </div>
       </header>
       {tab === "manual" ? (
         <ManualAnalyzer
@@ -588,27 +640,31 @@ export function TradeRoom({
         />
       ) : (
         <SearchLimitsContext.Provider value={limits}>
-          <SearchLimitsSection
-            limits={limits}
-            open={!!open.limits}
-            setOpen={(next) =>
-              onFilters({
-                [foldedGroupsKey]: setGroupOpen(
-                  filters[foldedGroupsKey],
-                  "limits",
-                  next,
-                ),
-              })
-            }
-            change={(next) =>
-              onFilters({ [searchLimitsKey]: writeSearchLimits(next) })
-            }
-          />
-          <p className="gd-muted">
-            The full current {tabLabel[tab].toLowerCase()} opens here with every
-            other control until its redesigned version is ready.
-          </p>
-          <div className="gd-legacy">{legacy}</div>
+          <GradeGoalContext.Provider value={goalSentence}>
+            <FoldMemoryContext.Provider value={foldMemory}>
+              <SearchLimitsSection
+                limits={limits}
+                open={!!open.limits}
+                setOpen={(next) =>
+                  onFilters({
+                    [foldedGroupsKey]: setGroupOpen(
+                      filters[foldedGroupsKey],
+                      "limits",
+                      next,
+                    ),
+                  })
+                }
+                change={(next) =>
+                  onFilters({ [searchLimitsKey]: writeSearchLimits(next) })
+                }
+              />
+              <p className="gd-muted">
+                The full current {tabLabel[tab].toLowerCase()} opens here with
+                every other control until its redesigned version is ready.
+              </p>
+              <div className="gd-legacy">{legacy}</div>
+            </FoldMemoryContext.Provider>
+          </GradeGoalContext.Provider>
         </SearchLimitsContext.Provider>
       )}
     </div>

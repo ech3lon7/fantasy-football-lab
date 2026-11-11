@@ -230,3 +230,75 @@ test("no strictness setting or strict-index checkbox, and ten chain presets", as
     await page.getByRole("button", { name: /Search limits/ }).innerText(),
   ).toBe(before);
 });
+
+// Presets are cards with descriptions; choosing one never changes the shared limits.
+test("chain presets show as ten described cards and leave the limits alone", async ({
+  page,
+}) => {
+  await open(page);
+  await page.getByRole("tab", { name: "Chain planner" }).click();
+  await openTradeFilters(page, "Chain");
+  const cards = page
+    .getByRole("group", { name: "Chain presets" })
+    .getByRole("button");
+  await expect(cards).toHaveCount(10);
+  await expect(cards.filter({ hasText: "Surface-stat trading" })).toBeVisible();
+  const before = await page
+    .getByRole("button", { name: /Search limits/ })
+    .innerText();
+  const weakest = cards.filter({ hasText: "Fix my weakest position" });
+  await weakest.click();
+  await expect(weakest).toHaveAttribute("aria-pressed", "true");
+  expect(
+    await page.getByRole("button", { name: /Search limits/ }).innerText(),
+  ).toBe(before);
+});
+
+// A grade goal reads in plain language beneath its controls.
+test("a positional grade goal shows a plain-language line", async ({
+  page,
+}) => {
+  await open(page);
+  await page.getByRole("tab", { name: "Find trades" }).click();
+  await openTradeFilters(page, "Standard");
+  await page
+    .getByRole("button", { name: "+ Add Positional Goal" })
+    .first()
+    .click();
+  const line = page.locator(".gd-goal-line").first();
+  await expect(line).toBeVisible();
+  await expect(line).toContainText(/^Your .+/);
+});
+
+// Filter groups left open stay open, saved trades open from the header, and the journal keeps working in the new look.
+test("open filter groups are remembered; saved trades and journal are reachable", async ({
+  page,
+}) => {
+  await open(page);
+  await page.getByRole("tab", { name: "Find trades" }).click();
+  // Opening every group records each as open.
+  await openTradeFilters(page, "Standard");
+  const group = page.locator(
+    '#standard-trade-filters details[data-category="Players & packages"]',
+  );
+  await expect(group).toHaveAttribute("open", "");
+  await page.reload();
+  // After a reload only the drawer is reopened by hand; the group is open again by itself.
+  await page
+    .getByRole("button", { name: "Standard filters", exact: true })
+    .click();
+  await expect(
+    page.locator(
+      '#standard-trade-filters details[data-category="Players & packages"]',
+    ),
+  ).toHaveAttribute("open", "");
+  await page
+    .locator(".gd-trade-head")
+    .getByRole("button", { name: "Saved trades" })
+    .click();
+  await expect(page.locator(".trade-saved-drawer")).toHaveAttribute("open", "");
+  await page.getByRole("link", { name: "Journal" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Trade journal" }).first(),
+  ).toBeVisible();
+});

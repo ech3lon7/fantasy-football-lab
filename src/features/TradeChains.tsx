@@ -18,6 +18,7 @@ import {
 } from "./Negotiations";
 import { useEffect, useRef, useState } from "react";
 import { useSearchLimits } from "./next/limitsContext";
+import { PresetCards } from "./next/PresetCards";
 import { applyLimitsToChainQuery } from "../domain/search-limits";
 import { applyChainPresetKeepingLimits, presetContext } from "../domain/chain-discovery";
 import { Bookmark, LoaderCircle } from "lucide-react";
@@ -429,6 +430,43 @@ export function TradeChains({
   useEffect(() => {
     onPool?.({ team, pool, basis });
   }, [team, pool.join(","), basis]);
+  // One handler for the preset list and the preset cards.
+  const choosePreset = (id: string) => {
+                      const savedPreset = customPresets.find(
+                        (p) => p.id === id,
+                      );
+                      if (savedPreset) {
+                        setStrictness(savedPreset.strictness ?? "balanced");
+                        applyOptions(
+                          {
+                            ...savedPreset.query,
+                            team,
+                            pool,
+                            first: {
+                              ...savedPreset.query.first,
+                              teams: first.teams,
+                            },
+                            second: {
+                              ...savedPreset.query.second,
+                              teams: second.teams,
+                            },
+                          },
+                          id,
+                        );
+                      } else if (id === "custom") setPreset(id);
+                      else
+                        applyOptions(
+                          limits
+                            ? applyChainPresetKeepingLimits(
+                                query,
+                                id,
+                                limits,
+                                presetContext(m, team),
+                              )
+                            : applyChainPreset(query, id, strictness),
+                          id,
+                        );
+  };
   const queryText = JSON.stringify(query);
   useEffect(() => {
     if (!presetQuery.current || presetQuery.current === "pending")
@@ -1375,6 +1413,18 @@ export function TradeChains({
           />
         )}
         {leg.surface && (
+          <p className="model gd-surface-line">
+            Step {step}: their gain on surface stats{" "}
+            {leg.surface.average.gain == null
+              ? "unavailable"
+              : `${signed(leg.surface.average.gain)} (average)`}
+            {leg.surface.projection.gain == null
+              ? ""
+              : ` · ${signed(leg.surface.projection.gain)} (projection)`}
+            ; your gain {signed(leg.row.own)} EPPG per week.
+          </p>
+        )}
+        {leg.surface && (
           <details>
             <summary>Step {step} surface evidence</summary>
             <SurfaceAppealView value={leg.surface} m={m} />
@@ -1694,6 +1744,9 @@ export function TradeChains({
                   </select>
                 </label>
               </FilterHelp>
+              {limits && (
+                <PresetCards selected={preset} choose={choosePreset} />
+              )}
               <FilterHelp
                 label="Chain preset"
                 help="Provisional trading scenarios with separate strictness. Applying a preset preserves team scopes, protected players, targets and optional fit requirements. Acquire coverage, then upgrade requires a first-step WR and connected trades, defaulting to either connected route; its incoming position can be changed. Subsequent edits become Custom."
@@ -1702,43 +1755,7 @@ export function TradeChains({
                   <span>Chain preset</span>
                   <select
                     value={preset}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      const savedPreset = customPresets.find(
-                        (p) => p.id === id,
-                      );
-                      if (savedPreset) {
-                        setStrictness(savedPreset.strictness ?? "balanced");
-                        applyOptions(
-                          {
-                            ...savedPreset.query,
-                            team,
-                            pool,
-                            first: {
-                              ...savedPreset.query.first,
-                              teams: first.teams,
-                            },
-                            second: {
-                              ...savedPreset.query.second,
-                              teams: second.teams,
-                            },
-                          },
-                          id,
-                        );
-                      } else if (id === "custom") setPreset(id);
-                      else
-                        applyOptions(
-                          limits
-                            ? applyChainPresetKeepingLimits(
-                                query,
-                                id,
-                                limits,
-                                presetContext(m, team),
-                              )
-                            : applyChainPreset(query, id, strictness),
-                          id,
-                        );
-                    }}
+                    onChange={(e) => choosePreset(e.target.value)}
                   >
                     <option value="custom">Custom</option>
                     {chainPresets.map((p) => (

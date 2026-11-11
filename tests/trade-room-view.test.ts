@@ -3,6 +3,7 @@ import { evaluate } from "../src/domain/valuation";
 import { evaluateTrade } from "../src/domain/trades";
 import { tradeImpact } from "../src/domain/trade-impact";
 import {
+  gradeGoalSentence,
   gradeStepChips,
   lineupGainSpread,
   lineupMoves,
@@ -149,5 +150,60 @@ describe("tale of the tape", () => {
     gap.set(sent.id, { ...sent, blendedExpected: null });
     expect(taleOfTape({ ...m, byId: gap }, draft)[0].send).toBeNull();
     expect(taleOfTape(m, { ...draft, give: [] })[0].send).toBeNull();
+  });
+});
+
+describe("grade goal sentences", () => {
+  const rule = (
+    side: "own" | "other",
+    position: string,
+    steps: number,
+    type?: "upgrade" | "drop_limit" | "deplete" | "match_net",
+  ) => ({ id: "r", side, position, steps, type });
+  it("reads an upgrade as the grade it reaches", () => {
+    expect(gradeGoalSentence(rule("own", "WR", 2, "upgrade"), "D+")).toBe(
+      "Your WR is D+ today. +2 steps means C or better.",
+    );
+    expect(gradeGoalSentence(rule("own", "WR", 1, "upgrade"), "B")).toBe(
+      "Your WR is B today. +1 step means B+ or better.",
+    );
+  });
+  it("says when an upgrade is out of reach", () => {
+    expect(gradeGoalSentence(rule("own", "QB", 3, "upgrade"), "A")).toContain(
+      "out of reach",
+    );
+  });
+  it("reads drop limits as the lowest grade allowed", () => {
+    expect(gradeGoalSentence(rule("own", "RB", 0, "drop_limit"), "C")).toBe(
+      "Your RB is C today. No drop keeps C or better.",
+    );
+    expect(gradeGoalSentence(rule("own", "RB", -2, "drop_limit"), "C")).toBe(
+      "Your RB is C today. Dropping at most 2 steps keeps D+ or better.",
+    );
+    expect(
+      gradeGoalSentence(rule("own", "RB", -9, "drop_limit"), "D"),
+    ).toContain("keeps F or better");
+  });
+  it("never claims a grade it does not have", () => {
+    expect(gradeGoalSentence(rule("own", "TE", 2, "upgrade"), null)).toContain(
+      "no grade today",
+    );
+    expect(
+      gradeGoalSentence(rule("own", "TE", 2, "upgrade"), "n.a."),
+    ).toContain("cannot be met");
+  });
+  it("describes their team and overall goals without a grade", () => {
+    expect(gradeGoalSentence(rule("other", "WR", 1, "upgrade"), "B")).toBe(
+      "Their WR must improve by 1 step or more.",
+    );
+    expect(
+      gradeGoalSentence(rule("other", "OVERALL", 0, "match_net"), null),
+    ).toContain("match your overall");
+    expect(gradeGoalSentence(rule("other", "TE", -2, "deplete"), null)).toBe(
+      "Their TE must drop at least 2 steps.",
+    );
+    expect(
+      gradeGoalSentence(rule("own", "OVERALL", 2, "upgrade"), null),
+    ).toContain("total +2 or more");
   });
 });

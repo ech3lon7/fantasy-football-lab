@@ -905,7 +905,7 @@ export default function App() {
     ) : null;
   const content = (
     <div
-      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}${previewOn && ["players", "gems", "weekly", "roster", "teams", "overview", "trades"].includes(page) ? " gd-new-screen" : ""}`}
+      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}${previewOn && ["players", "gems", "weekly", "roster", "teams", "overview", "trades", "journal"].includes(page) ? " gd-new-screen" : ""}`}
     >
       {previewOn && (
         <GamedayHeader
@@ -1491,7 +1491,10 @@ export default function App() {
                   );
                 })()}
               {page === "journal" && (
-                <TradeJournal m={model} ownTeam={w.state.preferredTeam} />
+                // The journal keeps its behaviour; the preview only gives it the new theme and heading.
+                <div className={previewOn ? "gd-legacy" : undefined}>
+                  <TradeJournal m={model} ownTeam={w.state.preferredTeam} />
+                </div>
               )}
               {page === "model" && (
                 <>

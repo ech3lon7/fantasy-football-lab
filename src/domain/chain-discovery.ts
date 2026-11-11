@@ -39,6 +39,25 @@ export const chainPresets = [
   { id: "flip", label: "Buy low, then flip" },
 ] as const;
 
+// Plain descriptions for the preset cards. None of them mentions a limit, because presets never change the shared limits.
+export const chainPresetDescriptions: Record<
+  (typeof chainPresets)[number]["id"],
+  string
+> = {
+  balanced:
+    "Two-trade routes that help you without asking much of the other teams.",
+  mutual: "Routes where both teams in each trade end up better off.",
+  star: "Package depth into one starter-level player.",
+  depth: "Turn one star into several useful starters or reserves.",
+  surface: "Routes ranked by how appealing each step looks on surface stats.",
+  connected: "Second trades that build on what the first trade brings in.",
+  coverage: "Add cover at a position first, then upgrade around it.",
+  speculative:
+    "Allow a first trade that costs points if the second recovers them.",
+  need: "Aim at your lowest-graded position, without letting other positions slip.",
+  flip: "Buy a BUY LOW player first, then sell a SELL HIGH player.",
+};
+
 // Saved presets stored the earlier label text; they load under the current name.
 export const renamedPresetLabels: Record<string, string> = {
   "Surface-stat opportunities": "Surface-stat trading",

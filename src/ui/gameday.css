@@ -1673,3 +1673,43 @@
 :root[data-gameday] .gd-slider input {
   grid-column: 1 / -1;
 }
+/* Chain preset cards, plain-language goal lines and per-result impact under Find trades. */
+:root[data-gameday] .gd-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+:root[data-gameday] .gd-preset {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  text-align: left;
+  background: var(--gd-surface);
+  color: var(--gd-ink);
+  border: 2px solid var(--gd-line);
+  border-radius: var(--gd-radius);
+}
+:root[data-gameday] .gd-preset small {
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-preset[aria-pressed="true"] {
+  background: var(--gd-selected);
+  color: var(--gd-selected-ink);
+  border-color: var(--gd-selected);
+}
+:root[data-gameday] .gd-preset[aria-pressed="true"] small {
+  color: var(--gd-selected-ink);
+}
+:root[data-gameday] .gd-goal-line {
+  flex-basis: 100%;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-row-impact {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+:root[data-gameday] .gd-surface-line {
+  margin: 4px 0;
+}

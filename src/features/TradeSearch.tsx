@@ -40,7 +40,8 @@ import {
   type LineupBasis,
 } from "../domain/trade-impact";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { useSearchLimits } from "./next/limitsContext";
+import { useGradeGoalSentence, useSearchLimits } from "./next/limitsContext";
+import { RowImpact } from "./next/RowImpact";
 import { Bookmark, LoaderCircle } from "lucide-react";
 import { sourceDataset } from "../domain/roster-scenarios";
 import {
@@ -174,6 +175,7 @@ export function TradeSearch({
   // Restore each finder from its own preference record; never store ephemeral results or change the other finder's query.
   // The Gameday Plus Trade room supplies one shared set of limits; without it the current controls apply.
   const limits = useSearchLimits();
+  const gradeSentence = useGradeGoalSentence();
   const [initialSettings] = useState(() => {
     try {
       const value = JSON.parse(settingsRaw ?? "{}");
@@ -1849,6 +1851,7 @@ export function TradeSearch({
               rules={gradeImpacts}
               onChange={setGradeImpacts}
               positions={availablePositions}
+              sentence={gradeSentence}
               ariaLabelPrefix="Standard search grade goal"
             />
             <fieldset className="trade-search-group">
@@ -2578,6 +2581,19 @@ export function TradeSearch({
                               </small>
                             )}
                             <small>{teamBName}</small>
+                            {limits && (
+                              <RowImpact
+                                m={resultModel.current ?? m}
+                                draft={{
+                                  teamA: query.teamA,
+                                  teamB: row.teamB,
+                                  give: row.give ?? query.give,
+                                  get: row.get,
+                                }}
+                                basis={row.lineupBasis}
+                                lineupsRaw={lineupsRaw}
+                              />
+                            )}
                           </td>
                           <td
                             className="model"
