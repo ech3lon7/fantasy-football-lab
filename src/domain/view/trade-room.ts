@@ -147,7 +147,13 @@ export interface GainSpread {
 // The lineup gain with a range, combining each changed player's spread as an independent value.
 export function lineupGainSpread(
   m: Model,
-  side: Impact,
+  side: {
+    weekly: {
+      slots: string[];
+      beforeIds: (string | null)[];
+      ids: (string | null)[];
+    }[];
+  },
   gain: number | null,
 ): GainSpread {
   const changed = new Set<string>();

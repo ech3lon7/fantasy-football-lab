@@ -129,6 +129,24 @@ export function VersusView({
           </div>
         ))}
       </div>
+      {result.odds ? (
+        <section className="gd-odds" aria-label="Start or sit odds">
+          <h3>Start or sit</h3>
+          <p className="gd-odds-line">
+            <b>{a.name}</b> {result.odds.a} · <b>{b.name}</b> {result.odds.b}
+          </p>
+          <p>
+            That is {result.odds.reading} for the chance of outscoring each
+            other this week.
+          </p>
+          <small>{result.odds.ranges}</small>
+          <small>{result.odds.caveat}</small>
+        </section>
+      ) : (
+        <p className="gd-muted">
+          Start or sit odds need an Expected PPG and a spread for both players.
+        </p>
+      )}
       <div className="gd-versus-pickers">
         <Picker
           m={m}

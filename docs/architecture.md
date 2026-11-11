@@ -289,7 +289,7 @@ On conflict, show the source timestamps and revision summaries and let the user 
 Storage policy:
 
 - Cloud: one current extracted dataset and current app state per account. No XLSX bucket, import archive or retained historical dataset table.
-- Device: one current dataset and the latest pending update; old active data is replaced after a successful local commit. Temporary import preview data is discarded after commit/cancel.
+- Device: one current dataset and the latest pending update; old active data is replaced after a successful local commit. Temporary import preview data is discarded after commit/cancel. When an import replaces a dataset, the device also keeps one small per-player summary of the replaced import (names, active labels and Expected PPG, not the workbook) in a separate account-scoped record. It is used only for the "Since last import" digest, is never uploaded, and is cleared with the account's local data.
 - Offline devices may retain their last synchronized dataset until they reconnect or the user clears it. A cloud replacement cannot erase an unreachable browser cache.
 - Database provider backups/WAL retention are separate from application history. Do not promise immediate physical erasure from managed backups; document the selected Supabase plan’s retention at deployment.
 - Logging records sanitized error codes and timings, not file bytes, player payloads, passwords, sessions or query credentials.

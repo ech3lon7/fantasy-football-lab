@@ -38,6 +38,7 @@ test("trade room opens on the manual analyzer with its tabs and journal link", a
     "Manual analyzer",
     "Find trades",
     "Chain planner",
+    "Counter-offers",
   ]);
   await expect(
     page.getByRole("tab", { name: "Manual analyzer" }),

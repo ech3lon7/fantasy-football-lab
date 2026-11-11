@@ -21,11 +21,7 @@ import {
   readTradeTab,
   tradeTabKey,
 } from "../features/next/TradeRoom";
-import {
-  GamedayWelcome,
-  SignalsTicker,
-  Week,
-} from "../features/next/Week";
+import { GamedayWelcome, SignalsTicker, Week } from "../features/next/Week";
 import { League } from "../features/next/League";
 import {
   PlayerCardProvider,
@@ -73,6 +69,7 @@ import {
   activeRosterScenario,
   applyRosterScenario,
   appendScenarioTrade,
+  appendScenarioMove,
   readRosterScenarios,
   writeRosterScenarios,
   rosterScenariosKey,
@@ -84,8 +81,21 @@ import {
   type RosterSaveSlot,
   selectMyTeam,
   type RosterScenario,
+  type ScenarioMove,
 } from "../domain/roster-scenarios";
-import { load, save, remove, observeGemTracking } from "../storage/workspace";
+import {
+  load,
+  save,
+  remove,
+  observeGemTracking,
+  readPreviousSummary,
+  writePreviousSummary,
+} from "../storage/workspace";
+import {
+  importDigest,
+  summarizeImport,
+  type Digest,
+} from "../domain/view/since-import";
 import type { GemTrackingState } from "../domain/gem-tracking";
 import {
   getConfig,
@@ -184,6 +194,20 @@ export default function App() {
     readUiPreview(w?.state.filters[uiPreviewKey]),
     readAnimationPref(w?.state.filters[animationKey]),
   );
+  // Compare the current import with the summary kept from the previous one; nothing is shown without a previous import.
+  useEffect(() => {
+    if (!w || !realModel || realModel.dataset.hash !== w.dataset?.hash) {
+      setDigest(null);
+      return;
+    }
+    let live = true;
+    void readPreviousSummary(w.owner).then((previous) => {
+      if (live) setDigest(importDigest(previous, summarizeImport(realModel)));
+    });
+    return () => {
+      live = false;
+    };
+  }, [w?.owner, realModel?.dataset.hash, w?.dataset?.hash]);
   const client = useMemo(() => cloudClient(config), [config.url, config.key]),
     fileRef = useRef<HTMLInputElement>(null),
     importRef = useRef<Worker | null>(null),
@@ -195,7 +219,9 @@ export default function App() {
       hash: string;
       result: Promise<GemTrackingState>;
     } | null>(null),
-    syncBusy = useRef(false);
+    syncBusy = useRef(false),
+    // What changed since the previous import, read from this device's stored summary.
+    [digest, setDigest] = useState<Digest | null>(null);
   // Scenario edits remain in memory across routes; ordinary workspace/cloud saves never serialize this working draft.
   const [rosterDraft, setRosterDraft] = useState<string | null>(null);
   const rosterDraftRef = useRef<string | null>(null);
@@ -756,6 +782,87 @@ export default function App() {
       return false;
     }
   }
+  // Apply a cut and an add as one pair of undoable moves in the active hypothetical roster, creating one if needed.
+  function trySimulationMoves(team: string, moves: ScenarioMove[]) {
+    const current = wRef.current;
+    if (!current?.dataset || !realModel) return false;
+    try {
+      if (realModel.dataset.hash !== current.dataset.hash)
+        throw Error(
+          "Wait for the current import to finish before applying a hypothetical move.",
+        );
+      const read = readRosterScenarios(
+        rosterDraftRef.current ?? current.state.filters[rosterScenariosKey],
+      );
+      if (read.issue) throw Error(read.issue);
+      const selected = read.collection.scenarios.find(
+        (s) => s.id === read.collection.active,
+      );
+      const scenario: RosterScenario = selected ?? {
+        id: crypto.randomUUID(),
+        name: "Add and drop scenario",
+        team,
+        season: num(current.dataset.tables.ModelContext[0].Season),
+        sourceHash: current.dataset.hash,
+        moves: [],
+        cursor: 0,
+      };
+      const base: RosterScenario = {
+        ...scenario,
+        baseLineups:
+          scenario.baseLineups ??
+          current.state.filters[starterLineupsKey] ??
+          "",
+        baseRoster: scenario.baseRoster ?? scenarioRosterBase(realModel),
+      };
+      const next = moves.reduce<RosterScenario>(
+        (s, move) => appendScenarioMove(s, move),
+        base,
+      );
+      // The simulator reports any ownership problem; refuse to save a pair it cannot apply.
+      const check = applyRosterScenario(
+        realModel,
+        next,
+        current.state.filters[starterLineupsKey],
+      );
+      if (check.simulation?.issues.length)
+        throw Error(check.simulation.issues.join(" "));
+      const targetSlot = (read.collection.activeSlot ?? 1) as RosterSaveSlot;
+      const collection = {
+        ...read.collection,
+        active: next.id,
+        activeSlot: targetSlot,
+        scenarios: selected
+          ? read.collection.scenarios.map((s) => (s.id === next.id ? next : s))
+          : [...read.collection.scenarios, next],
+      };
+      const raw = writeRosterScenarios(current.state, collection);
+      const saved = saveRosterSnapshot(
+        current.state,
+        raw,
+        targetSlot,
+        new Date().toISOString(),
+        scenarioRosterBase(realModel),
+      );
+      updateState({
+        filters: {
+          ...current.state.filters,
+          [rosterScenariosKey]: saved.saved,
+        },
+      });
+      rosterDraftRef.current = saved.working;
+      setRosterDraft(saved.working);
+      setError("");
+      return true;
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not apply the hypothetical move.",
+      );
+      return false;
+    }
+  }
   async function importFile(file: File) {
     setError("");
     if (file.size > 25 * 1024 * 1024) {
@@ -842,10 +949,19 @@ export default function App() {
     const { data } = client
       ? await client.auth.getSession()
       : { data: { session: null } };
+    const owner = data.session?.user.id ?? current?.owner ?? "local";
+    // Keep a small summary of the dataset being replaced so the next screen can show what changed; it is not the workbook.
+    if (
+      realModel &&
+      current?.dataset &&
+      realModel.dataset.hash === current.dataset.hash &&
+      dataset.hash !== current.dataset.hash
+    )
+      await writePreviousSummary(owner, summarizeImport(realModel));
     commit({
       dataset,
       state,
-      owner: data.session?.user.id ?? current?.owner ?? "local",
+      owner,
       datasetRevision: current?.datasetRevision ?? 0,
       stateRevision: current?.stateRevision ?? 0,
       pendingDataset: true,
@@ -886,57 +1002,55 @@ export default function App() {
     page = previewOn ? pageForRoute(route) : route.split("/")[0];
   // The account and import controls, shown on Data & account and on the Lab's Data and account page.
   const accountView = (
-            <Account
-              w={w}
-              config={config}
-              email={email}
-              configure={(c) => {
-                putConfig(c);
-                setConfig(c);
-                setError("");
-              }}
-              client={client}
-              runSync={() => runSync()}
-              signOut={signOut}
-              status={syncStatus}
-              notify={setError}
-              importClick={() => fileRef.current?.click()}
-              uiPreview={readUiPreview(w?.state.filters[uiPreviewKey])}
-              // Merge only this key against the latest workspace, preserving unrelated filters.
-              setUiPreview={(on) =>
-                updateState({
-                  filters: {
-                    ...wRef.current!.state.filters,
-                    [uiPreviewKey]: writeUiPreview(on),
-                  },
-                })
-              }
-              clear={async (cloud) => {
-                if (!w) return;
-                if (
-                  !confirm(
-                    cloud
-                      ? "Delete your current cloud workspace and this local copy?"
-                      : "Remove the current dataset from this device?",
-                  )
-                )
-                  return;
-                if (cloud && client && w.owner !== "local") {
-                  const { error } = await client.rpc(
-                    "delete_fantasy_workspace",
-                  );
-                  if (error) {
-                    setError(error.message);
-                    return;
-                  }
-                }
-                await saveQueue.current;
-                await remove(w.owner);
-                commit(null);
-                setConflict(undefined);
-                setSyncStatus("Local only");
-              }}
-            />
+    <Account
+      w={w}
+      config={config}
+      email={email}
+      configure={(c) => {
+        putConfig(c);
+        setConfig(c);
+        setError("");
+      }}
+      client={client}
+      runSync={() => runSync()}
+      signOut={signOut}
+      status={syncStatus}
+      notify={setError}
+      importClick={() => fileRef.current?.click()}
+      uiPreview={readUiPreview(w?.state.filters[uiPreviewKey])}
+      // Merge only this key against the latest workspace, preserving unrelated filters.
+      setUiPreview={(on) =>
+        updateState({
+          filters: {
+            ...wRef.current!.state.filters,
+            [uiPreviewKey]: writeUiPreview(on),
+          },
+        })
+      }
+      clear={async (cloud) => {
+        if (!w) return;
+        if (
+          !confirm(
+            cloud
+              ? "Delete your current cloud workspace and this local copy?"
+              : "Remove the current dataset from this device?",
+          )
+        )
+          return;
+        if (cloud && client && w.owner !== "local") {
+          const { error } = await client.rpc("delete_fantasy_workspace");
+          if (error) {
+            setError(error.message);
+            return;
+          }
+        }
+        await saveQueue.current;
+        await remove(w.owner);
+        commit(null);
+        setConflict(undefined);
+        setSyncStatus("Local only");
+      }}
+    />
   );
   // The Lab splits Model & audit into pages; each needs an imported dataset and the unsimulated model.
   const labReady = !!(model && w && realModel);
@@ -1064,7 +1178,10 @@ export default function App() {
             <ShieldCheck size={20} />
             <p>
               Your league. Your data.
-              <small>One current snapshot. No Excel archive.</small>
+              <small>
+                One current snapshot and a small summary of the previous import.
+                No Excel archive.
+              </small>
             </p>
             <a href="#/data" className="sync-pill">
               <Cloud size={14} />
@@ -1358,7 +1475,10 @@ export default function App() {
           )}
           {!ready ? (
             <p>Opening your workspace…</p>
-          ) : !d && !preview && page !== "data" && !(previewOn && page === "lab") ? (
+          ) : !d &&
+            !preview &&
+            page !== "data" &&
+            !(previewOn && page === "lab") ? (
             previewOn ? (
               <GamedayWelcome onImport={() => fileRef.current?.click()} />
             ) : (
@@ -1378,6 +1498,9 @@ export default function App() {
                     })
                   }
                   simulator={simulator}
+                  tryPair={(moves) =>
+                    trySimulationMoves(w.state.preferredTeam, moves)
+                  }
                 />
               )}
               {previewOn && page === "teams" && (
@@ -1402,6 +1525,7 @@ export default function App() {
                   grades={analysisGrades.get(w.state.preferredTeam) ?? []}
                   draft={w.state.draft}
                   basis={w.state.filters[lineupBasisKey]}
+                  digest={digest}
                 />
               )}
               {!previewOn && page === "overview" && (
@@ -1479,64 +1603,64 @@ export default function App() {
                 (() => {
                   // The current trade tools; the preview's Trade room shows them under Find trades and Chain planner.
                   const tradeView = (
-                <TradeView
-                  key={`${w.owner}/${previewOn ? w.state.filters[tradeTabKey] : ""}`}
-                  initialMode={
-                    previewOn &&
-                    readTradeTab(w.state.filters[tradeTabKey]) === "chains"
-                      ? "chain"
-                      : "standard"
-                  }
-                  m={model}
-                  draft={w.state.draft}
-                  state={w.state}
-                  restoreScenario={restoreScenario}
-                  forceTrade={forceScenarioTrade}
-                  // Store only the analysis preference against the latest account state, preserving unrelated selections.
-                  changeBasis={(basis) =>
-                    updateState({
-                      filters: {
-                        ...wRef.current!.state.filters,
-                        [lineupBasisKey]: basis,
-                      },
-                    })
-                  }
-                  // Merge only this account-state key against the latest workspace, preserving unrelated filters.
-                  saveManagerSettings={(raw) =>
-                    updateState({
-                      filters: {
-                        ...wRef.current!.state.filters,
-                        managerExpectations: raw,
-                      },
-                    })
-                  }
-                  saveSearchSettings={(raw) =>
-                    updateState({
-                      filters: {
-                        ...wRef.current!.state.filters,
-                        tradeSearchSettings: raw,
-                      },
-                    })
-                  }
-                  saveTrades={(raw) =>
-                    updateState({
-                      filters: {
-                        ...wRef.current!.state.filters,
-                        [savedTradesKey]: raw,
-                      },
-                    })
-                  }
-                  lineupsRaw={
-                    model.simulation?.lineupsRaw ??
-                    w.state.filters[starterLineupsKey]
-                  }
-                  change={(draft) =>
-                    updateState({
-                      ...selectMyTeam(wRef.current!.state, d!, draft.teamA),
-                      draft,
-                    })
-                  }
-                />
+                    <TradeView
+                      key={`${w.owner}/${previewOn ? w.state.filters[tradeTabKey] : ""}`}
+                      initialMode={
+                        previewOn &&
+                        readTradeTab(w.state.filters[tradeTabKey]) === "chains"
+                          ? "chain"
+                          : "standard"
+                      }
+                      m={model}
+                      draft={w.state.draft}
+                      state={w.state}
+                      restoreScenario={restoreScenario}
+                      forceTrade={forceScenarioTrade}
+                      // Store only the analysis preference against the latest account state, preserving unrelated selections.
+                      changeBasis={(basis) =>
+                        updateState({
+                          filters: {
+                            ...wRef.current!.state.filters,
+                            [lineupBasisKey]: basis,
+                          },
+                        })
+                      }
+                      // Merge only this account-state key against the latest workspace, preserving unrelated filters.
+                      saveManagerSettings={(raw) =>
+                        updateState({
+                          filters: {
+                            ...wRef.current!.state.filters,
+                            managerExpectations: raw,
+                          },
+                        })
+                      }
+                      saveSearchSettings={(raw) =>
+                        updateState({
+                          filters: {
+                            ...wRef.current!.state.filters,
+                            tradeSearchSettings: raw,
+                          },
+                        })
+                      }
+                      saveTrades={(raw) =>
+                        updateState({
+                          filters: {
+                            ...wRef.current!.state.filters,
+                            [savedTradesKey]: raw,
+                          },
+                        })
+                      }
+                      lineupsRaw={
+                        model.simulation?.lineupsRaw ??
+                        w.state.filters[starterLineupsKey]
+                      }
+                      change={(draft) =>
+                        updateState({
+                          ...selectMyTeam(wRef.current!.state, d!, draft.teamA),
+                          draft,
+                        })
+                      }
+                    />
                   );
                   return previewOn ? (
                     <TradeRoom

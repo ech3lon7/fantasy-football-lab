@@ -7,6 +7,10 @@ import {
 } from "../domain/gem-tracking";
 import type { Model } from "../domain/valuation";
 import {
+  importSummarySchema,
+  type ImportSummary,
+} from "../domain/view/since-import";
+import {
   datasetSchema,
   stateSchema,
   type Workspace,
@@ -37,6 +41,7 @@ export async function remove(owner: string, eraseNegotiations = true) {
   const tx = d.transaction("current", "readwrite");
   await tx.store.delete(owner);
   await tx.store.delete(`gem-tracking:${owner}`);
+  await tx.store.delete(`previous-import:${owner}`);
   // Explicit deletion includes private journal history; sign-out can retain account-scoped unsynced originals.
   if (eraseNegotiations)
     await tx.store.delete(
@@ -95,4 +100,22 @@ export async function observeGemTracking(
     await tx.store.put(next.data, `gem-tracking:${owner}`);
   await tx.done;
   return result;
+}
+
+// A small per-player summary of the previous import, kept only on this device for this account (it is not synced).
+export async function readPreviousSummary(
+  owner: string,
+): Promise<ImportSummary | null> {
+  const d = await db();
+  const parsed = importSummarySchema.safeParse(
+    await d.get("current", `previous-import:${owner}`),
+  );
+  return parsed.success ? parsed.data : null;
+}
+export async function writePreviousSummary(
+  owner: string,
+  summary: ImportSummary,
+) {
+  const d = await db();
+  await d.put("current", summary, `previous-import:${owner}`);
 }

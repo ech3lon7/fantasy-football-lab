@@ -2163,3 +2163,101 @@
   max-width: 100%;
   overflow-x: auto;
 }
+/* Added features: start or sit odds, power ranges, add and drop pairs, since last import and counter-offers. */
+:root[data-gameday] .gd-odds {
+  display: grid;
+  gap: 4px;
+  margin: 0 20px 16px;
+  padding: 12px 14px;
+  background: var(--gd-surface-2);
+  border-radius: var(--gd-radius);
+}
+:root[data-gameday] .gd-odds h3 {
+  margin: 0;
+  font-family: var(--gd-font-display);
+  text-transform: uppercase;
+}
+:root[data-gameday] .gd-odds p {
+  margin: 0;
+}
+:root[data-gameday] .gd-odds-line {
+  font-size: 22px;
+}
+:root[data-gameday] .gd-odds small {
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-power th,
+:root[data-gameday] .gd-power td {
+  padding: 6px 10px;
+  text-align: left;
+  background: var(--gd-surface);
+  color: var(--gd-ink);
+}
+:root[data-gameday] .gd-power tr[data-mine] th,
+:root[data-gameday] .gd-power tr[data-mine] td {
+  border-bottom: 3px solid var(--gd-selected);
+}
+:root[data-gameday] .gd-pairs {
+  display: grid;
+  gap: 10px;
+}
+:root[data-gameday] .gd-pairs h2,
+:root[data-gameday] .gd-counters h3 {
+  margin: 0;
+  font-family: var(--gd-font-display);
+  text-transform: uppercase;
+}
+:root[data-gameday] .gd-pair-list,
+:root[data-gameday] .gd-counter-list,
+:root[data-gameday] .gd-digest {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+:root[data-gameday] .gd-pair,
+:root[data-gameday] .gd-counter,
+:root[data-gameday] .gd-digest li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-line);
+  border-radius: var(--gd-radius);
+}
+:root[data-gameday] .gd-pair > span:first-child,
+:root[data-gameday] .gd-counter > div:first-child {
+  flex: 1 1 260px;
+}
+:root[data-gameday] .gd-pair-gain {
+  font-family: var(--gd-font-display);
+  font-size: 22px;
+  color: var(--gd-model);
+}
+:root[data-gameday] .gd-counters {
+  display: grid;
+  gap: 12px;
+}
+:root[data-gameday] .gd-digest-kind {
+  padding: 2px 8px;
+  border-radius: var(--gd-radius-sm);
+  background: var(--gd-surface-2);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+:root[data-gameday] .gd-digest-kind[data-kind="new-label"] {
+  background: var(--gd-positive-bg);
+  color: var(--gd-positive-ink);
+}
+:root[data-gameday] .gd-digest-kind[data-kind="lost-label"] {
+  background: var(--gd-negative-bg);
+  color: var(--gd-negative-ink);
+}
+:root[data-gameday] .gd-digest li strong {
+  margin-left: auto;
+  color: var(--gd-model);
+}

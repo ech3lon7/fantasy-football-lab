@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { addDropPairs, pairMoves } from "../../domain/view/add-drop";
+import type { ScenarioMove } from "../../domain/roster-scenarios";
 import { depthChart, type DepthTile } from "../../domain/view/roster";
 import type { PositionGrade } from "../../domain/lineups";
 import type { Model, Player } from "../../domain/valuation";
@@ -97,7 +99,10 @@ export function Roster({
   filters,
   onFilters,
   simulator,
+  tryPair,
 }: {
+  // Applies a cut and an add to a hypothetical roster; returns whether it worked.
+  tryPair: (moves: ScenarioMove[]) => boolean;
   m: Model;
   team: string;
   grades: PositionGrade[];
@@ -105,10 +110,71 @@ export function Roster({
   onFilters: (patch: Record<string, string>) => void;
   simulator: ReactNode;
 }) {
-  const chart = depthChart(m, team, grades);
+  const chart = depthChart(m, team, grades),
+    pairs = useMemo(() => addDropPairs(m, team), [m, team]),
+    [depthOnly, setDepthOnly] = useState(true),
+    [tried, setTried] = useState("");
+  const shownPairs = pairs.filter((p) => depthOnly || p.starts === "starts");
   return (
     <div className="gd-roster">
       {simulator}
+      <section aria-label="Add and drop pairs" className="gd-pairs">
+        <h2>Add and drop pairs</h2>
+        <p className="gd-muted">
+          For each available player, the drop that helps your lineup most, using
+          your existing drop rules. Gains are Expected PPG per week with a
+          spread.
+        </p>
+        <label className="gd-check">
+          <input
+            type="checkbox"
+            checked={depthOnly}
+            onChange={(e) => setDepthOnly(e.target.checked)}
+          />
+          Show depth-only pickups
+        </label>
+        {shownPairs.length === 0 ? (
+          <p className="gd-muted">No pickup would change your lineup.</p>
+        ) : (
+          <ul className="gd-pair-list">
+            {shownPairs.map((p) => (
+              <li key={`${p.addId}-${p.dropId}`} className="gd-pair">
+                <span>
+                  Add <b>{p.addName}</b> ({p.addPos}), drop <b>{p.dropName}</b>{" "}
+                  ({p.dropPos})
+                </span>
+                <span className="gd-pair-gain">
+                  {p.gain.gain === null
+                    ? "—"
+                    : `${p.gain.gain > 0 ? "+" : ""}${p.gain.gain.toFixed(1)}${p.gain.spread === null ? "" : ` ± ${p.gain.spread.toFixed(1)}`}`}
+                </span>
+                <Chip tone={p.starts === "starts" ? "positive" : "neutral"}>
+                  {p.starts === "starts"
+                    ? `Starts at ${p.startsAt}`
+                    : "Depth only"}
+                </Chip>
+                <button
+                  type="button"
+                  className="gd-pill"
+                  onClick={() => {
+                    if (tryPair(pairMoves(team, p)))
+                      setTried(
+                        `Tried ${p.addName} for ${p.dropName} in a simulation.`,
+                      );
+                  }}
+                >
+                  Try in a simulation
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {tried && (
+          <p role="status" className="gd-muted">
+            {tried}
+          </p>
+        )}
+      </section>
       <section aria-label="Depth chart" className="gd-depth">
         <h2>Depth chart</h2>
         {m.simulation && (

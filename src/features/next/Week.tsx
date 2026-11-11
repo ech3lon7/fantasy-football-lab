@@ -9,6 +9,7 @@ import {
   type WeekSummary,
 } from "../../domain/view/week";
 import { GradeBadge } from "./Roster";
+import type { Digest } from "../../domain/view/since-import";
 
 // The outlook line chart: the user's modeled starters against the league median, one point per remaining week.
 function OutlookChart({ summary }: { summary: WeekSummary }) {
@@ -112,7 +113,10 @@ export function Week({
   grades,
   draft,
   basis,
+  digest,
 }: {
+  // What changed since the previous import; null hides the section entirely.
+  digest: Digest | null;
   m: Model;
   team: string;
   teamName: string;
@@ -173,6 +177,53 @@ export function Week({
           <OutlookChart summary={s} />
         </section>
       </section>
+
+      {digest && (
+        <section aria-label="Since last import">
+          <h2 className="gd-h2">Since last import</h2>
+          <ul className="gd-digest">
+            {digest.items.map((i) => (
+              <li key={`${i.kind}-${i.playerId}-${i.label ?? ""}`}>
+                <span className="gd-digest-kind" data-kind={i.kind}>
+                  {i.kind === "new-label"
+                    ? "New label"
+                    : i.kind === "lost-label"
+                      ? "Lost label"
+                      : "EPPG mover"}
+                </span>
+                {i.kind === "eppg-mover" ? (
+                  <>
+                    <b>{i.name}</b>
+                    <span>
+                      {i.from!.toFixed(1)} → {i.to!.toFixed(1)}
+                    </span>
+                    <strong>
+                      {i.delta! > 0 ? "+" : ""}
+                      {i.delta!.toFixed(1)}
+                    </strong>
+                  </>
+                ) : (
+                  <>
+                    <b>{i.name}</b>
+                    <span>
+                      {i.kind === "new-label" ? "earned" : "no longer has"}{" "}
+                      {i.label}
+                    </span>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+          <small className="gd-muted">
+            Compared with the previous import
+            {digest.comparedTo
+              ? ` (source ${new Date(digest.comparedTo).toLocaleString()})`
+              : ""}
+            . The app keeps a small summary of that import on this device, not
+            the workbook.
+          </small>
+        </section>
+      )}
 
       {s.moves.length > 0 && (
         <section aria-label="Moves this week">

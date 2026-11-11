@@ -8,6 +8,7 @@ import {
   positionPlayers,
 } from "../../domain/view/roster";
 import { usePopovers } from "../../ui/popover/PopoverStack";
+import { leaguePower } from "../../domain/view/power";
 import { TeamView } from "../views";
 import { GradeBadge, PlayerTile } from "./Roster";
 
@@ -71,7 +72,8 @@ export function League({
   change: (team: string) => void;
 }) {
   const popovers = usePopovers(),
-    grid = useMemo(() => leagueGrid(m, grades), [m, grades]);
+    grid = useMemo(() => leagueGrid(m, grades), [m, grades]),
+    power = useMemo(() => leaguePower(m, mine), [m, mine]);
   return (
     <div className="gd-league">
       <section aria-label="Grade grid">
@@ -136,6 +138,50 @@ export function League({
                       </button>
                     </td>
                   ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section aria-label="Power ranges">
+        <h2>Power ranges, this week</h2>
+        <p className="gd-muted">
+          Each team's starting lineup total in Expected PPG, with a combined
+          spread. The last column is the chance your lineup outscores theirs, an
+          estimate from past variability and not a prediction.
+        </p>
+        <div className="gd-grid-wrap">
+          <table className="gd-grid gd-power">
+            <thead>
+              <tr>
+                <th scope="col">Rank</th>
+                <th scope="col">Team</th>
+                <th scope="col">Floor</th>
+                <th scope="col">Expected</th>
+                <th scope="col">Ceiling</th>
+                <th scope="col">You outscore</th>
+              </tr>
+            </thead>
+            <tbody>
+              {power.map((r, i) => (
+                <tr key={r.teamId} data-mine={r.mine || undefined}>
+                  <td>{r.expected === null ? "—" : i + 1}</td>
+                  <th scope="row">{r.name}</th>
+                  <td title={r.reason || undefined}>
+                    {r.floor === null ? "—" : r.floor.toFixed(1)}
+                  </td>
+                  <td>{r.expected === null ? "—" : r.expected.toFixed(1)}</td>
+                  <td title={r.reason || undefined}>
+                    {r.ceiling === null ? "—" : r.ceiling.toFixed(1)}
+                  </td>
+                  <td>
+                    {r.mine
+                      ? "you"
+                      : r.chance === null
+                        ? "—"
+                        : `${Math.round(r.chance * 100)}%`}
+                  </td>
                 </tr>
               ))}
             </tbody>

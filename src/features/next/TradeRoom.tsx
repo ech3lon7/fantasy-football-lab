@@ -22,6 +22,9 @@ import { PlayerName } from "../../ui/PlayerName";
 import { Chip, Segmented } from "../../ui/primitives";
 import { TradeStressTest } from "../TradeStressTest";
 import { usePopovers } from "../../ui/popover/PopoverStack";
+import { useNegotiations } from "../Negotiations";
+import { newJournalOffer } from "../../domain/trade-journal";
+import { counterOffers, type CounterResults } from "../../domain/view/counter";
 import { FoldingGroup, RangeSlider } from "../../ui/primitives";
 import {
   defaultSearchLimits,
@@ -44,12 +47,13 @@ import {
 import { gradeGoalSentence } from "../../domain/view/trade-room";
 import { teamsAssessment } from "../../domain/lineups";
 
-export const tradeTabs = ["manual", "find", "chains"] as const;
+export const tradeTabs = ["manual", "find", "chains", "counters"] as const;
 export type TradeTab = (typeof tradeTabs)[number];
 const tabLabel: Record<TradeTab, string> = {
   manual: "Manual analyzer",
   find: "Find trades",
   chains: "Chain planner",
+  counters: "Counter-offers",
 };
 export const tradeTabKey = "tradeRoomTab";
 export const readTradeTab = (raw?: string): TradeTab =>
@@ -554,6 +558,147 @@ function SearchLimitsSection({
   );
 }
 
+// Counter-offers: alternatives one swap or one added player away from the offer that still help you, both lineups' change shown.
+function CounterOffers({
+  m,
+  draft,
+  basis,
+  lineupsRaw,
+  use,
+}: {
+  m: Model;
+  draft: Draft;
+  basis: LineupBasis;
+  lineupsRaw: string | undefined;
+  use: (draft: Draft) => void;
+}) {
+  const journal = useNegotiations();
+  const [results, setResults] = useState<CounterResults | null>(null),
+    [busy, setBusy] = useState(false),
+    [logged, setLogged] = useState("");
+  const ready = draft.give.length > 0 && draft.get.length > 0;
+  // Results belong to one offer; changing the offer clears them.
+  const offerKey = JSON.stringify([draft, basis]);
+  const [forKey, setForKey] = useState("");
+  const current = results && forKey === offerKey ? results : null;
+  const mineName = (id: string) => m.byId.get(id)?.name ?? id;
+  return (
+    <div className="gd-counters">
+      <p className="gd-muted">
+        Starting from the offer in the Manual analyzer:{" "}
+        {ready
+          ? `${draft.give.map(mineName).join(" + ")} for ${draft.get.map(mineName).join(" + ")}`
+          : "build an offer there first"}
+        . Each counter differs by one swap or one added player and still helps
+        your lineup. Counters that help both teams come first.
+      </p>
+      <button
+        type="button"
+        className="gd-cta"
+        disabled={!ready || busy}
+        onClick={() => {
+          setBusy(true);
+          // Yield once so the button state paints before the search runs.
+          setTimeout(() => {
+            setResults(counterOffers(m, draft, basis, lineupsRaw));
+            setForKey(offerKey);
+            setBusy(false);
+          }, 20);
+        }}
+      >
+        {busy ? "Searching…" : "Find counter-offers"}
+      </button>
+      {current && !current.base && (
+        <div className="gd-banner" role="alert">
+          That offer is not a valid trade, so there is nothing to counter.
+        </div>
+      )}
+      {current?.base && (
+        <p>
+          Your offer changes your lineup by{" "}
+          <b>{fmtGain(current.base.ownGain)}</b> and theirs by{" "}
+          <b>{fmtGain(current.base.otherGain)}</b> Expected PPG per week.
+        </p>
+      )}
+      {current?.base && current.counters.length === 0 && (
+        <p className="gd-muted">
+          No single swap or added player keeps this trade helping you.
+        </p>
+      )}
+      <ul className="gd-counter-list">
+        {current?.counters.map((c) => (
+          <li
+            key={`${c.draft.give.join(",")}>${c.draft.get.join(",")}`}
+            className="gd-counter"
+          >
+            <div>
+              <b>{c.description}</b>
+              {c.helpsBoth && <Chip tone="positive">Helps both teams</Chip>}
+            </div>
+            <span>
+              You {fmtGain(c.ownGain)}
+              {c.ownRange.spread === null
+                ? ""
+                : ` ± ${c.ownRange.spread.toFixed(1)}`}{" "}
+              · Them {fmtGain(c.otherGain)}
+            </span>
+            <div className="gd-row">
+              <button
+                type="button"
+                className="gd-pill"
+                onClick={() => use(c.draft)}
+              >
+                Use this
+              </button>
+              <button
+                type="button"
+                className="gd-pill"
+                onClick={async () => {
+                  try {
+                    const offer = newJournalOffer(
+                      m,
+                      c.draft,
+                      c.draft.teamA,
+                      new Date().toISOString(),
+                    );
+                    await journal.put([
+                      {
+                        id: crypto.randomUUID(),
+                        kind: "offer",
+                        payload: {
+                          ...offer,
+                          notes: `Counter-offer: ${c.description}`,
+                        },
+                      },
+                    ]);
+                    setLogged(`Logged to the journal: ${c.description}.`);
+                  } catch (e) {
+                    setLogged(
+                      e instanceof Error
+                        ? e.message
+                        : "Could not log this counter-offer.",
+                    );
+                  }
+                }}
+              >
+                Log as counteroffer
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {logged && (
+        <p role="status" className="gd-muted">
+          {logged} <a href="#/journal">Open the journal</a>
+        </p>
+      )}
+    </div>
+  );
+}
+
+const fmtGain = (x: number | null) =>
+  x === null ? "—" : `${x > 0 ? "+" : ""}${x.toFixed(1)}`;
+
 // The Trade room: tabs for the Manual analyzer, Find trades and the Chain planner, plus the journal.
 export function TradeRoom({
   m,
@@ -653,7 +798,18 @@ export function TradeRoom({
           </a>
         </div>
       </header>
-      {tab === "manual" ? (
+      {tab === "counters" ? (
+        <CounterOffers
+          m={m}
+          draft={draft}
+          basis={readLineupBasis(basisRaw)}
+          lineupsRaw={lineupsRaw}
+          use={(next) => {
+            change(next);
+            setTab("manual");
+          }}
+        />
+      ) : tab === "manual" ? (
         <ManualAnalyzer
           m={m}
           draft={draft}

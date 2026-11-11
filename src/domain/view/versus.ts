@@ -1,6 +1,7 @@
 import { nextRefreshDefaults } from "../next-refresh";
 import type { Model, Player } from "../valuation";
 import { teamColors } from "./nfl-colors";
+import { oddsCaveat, oddsReading, outscoreProbability } from "./odds";
 
 export interface VersusSide {
   id: string;
@@ -20,10 +21,23 @@ export interface VersusRow {
   better: "a" | "b" | "even" | null;
 }
 
+export interface StartOrSit {
+  // Percent chance, rounded, that each side outscores the other this week.
+  a: string;
+  b: string;
+  // For example "close to a coin flip", "a modest edge" or "a clear edge".
+  reading: string;
+  // Both ranges on one line, for example "Isaiah 13.2 ± 3.6 vs Marcus 10.0 ± 3.3".
+  ranges: string;
+  caveat: string;
+}
+
 export interface Versus {
   a: VersusSide;
   b: VersusSide;
   rows: VersusRow[];
+  // Null when either player's EPPG or spread is unavailable; no figure is shown then.
+  odds: StartOrSit | null;
 }
 
 const side = (p: Player): VersusSide => ({
@@ -65,7 +79,21 @@ export function versus(m: Model, aId: string, bId: string): Versus | null {
         x === null || y === null ? null : x === y ? "even" : x > y ? "a" : "b",
     } satisfies VersusRow;
   });
-  return { a: side(a), b: side(b), rows };
+  const pa = outscoreProbability(
+    { mean: ra.base, spread: ra.spread },
+    { mean: rb.base, spread: rb.spread },
+  );
+  const odds: StartOrSit | null =
+    pa === null
+      ? null
+      : {
+          a: `${Math.round(pa * 100)}%`,
+          b: `${Math.round((1 - pa) * 100)}%`,
+          reading: oddsReading(pa),
+          ranges: `${a.name} ${ra.base!.toFixed(1)} ± ${ra.spread!.toFixed(1)} vs ${b.name} ${rb.base!.toFixed(1)} ± ${rb.spread!.toFixed(1)}`,
+          caveat: oddsCaveat,
+        };
+  return { a: side(a), b: side(b), rows, odds };
 }
 
 // Keep the last two chosen players; adding a third replaces the oldest, and the same player is never added twice.
