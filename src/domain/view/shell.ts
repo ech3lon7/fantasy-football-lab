@@ -7,7 +7,7 @@ export const sections = [
   { id: "scouting", label: "Scouting", page: "players" },
   { id: "league", label: "League", page: "teams" },
   { id: "trade", label: "Trade room", page: "trades" },
-  { id: "lab", label: "Lab", page: "model" },
+  { id: "lab", label: "Lab", page: "lab" },
 ] as const;
 export type SectionId = (typeof sections)[number]["id"];
 
@@ -38,6 +38,8 @@ export const sectionForRoute = (route: string): SectionId | null =>
 // Resolve a new section route to the screen that renders it today; other routes pass through unchanged.
 export const pageForRoute = (route: string): string => {
   const head = route.split("/")[0];
+  // The earlier Model & audit and Data & account addresses open the Lab.
+  if (head === "model" || head === "data") return "lab";
   // A player link opens the card over This week instead of a separate page.
   if (head === "player") return "overview";
   return sections.find((s) => s.id === head)?.page ?? head;
@@ -93,4 +95,21 @@ export function sourceFreshness(
         ? `Source ${Math.floor(minutes / 60)}h ago`
         : `Source ${Math.floor(minutes / 1440)}d ago`;
   return { label, stale: now - at > 86400000 };
+}
+
+export const labTabs = [
+  { id: "settings", label: "Settings" },
+  { id: "evidence", label: "Evidence sources" },
+  { id: "audits", label: "Audits" },
+  { id: "data", label: "Data and account" },
+  { id: "keys", label: "Keyboard" },
+  { id: "feel", label: "Feel" },
+] as const;
+export type LabTab = (typeof labTabs)[number]["id"];
+
+// Which Lab page a hash route shows: #/lab/audits, or the earlier #/model (settings) and #/data (data and account).
+export function labTabForRoute(route: string): LabTab {
+  const [head, tab] = route.split("/");
+  if (head === "data") return "data";
+  return labTabs.find((t) => t.id === tab)?.id ?? "settings";
 }

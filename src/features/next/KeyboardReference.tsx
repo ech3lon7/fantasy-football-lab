@@ -1,7 +1,7 @@
 import { usePopovers } from "../../ui/popover/PopoverStack";
 
 // Every keyboard rule in the design, in one place so it can be opened from the header and later from Lab.
-const shortcuts: [string, string][] = [
+export const shortcuts: [string, string][] = [
   ["Esc", "Close the top popover only, then the one beneath."],
   ["Tab", "Stay inside an open popover."],
   ["↑ ↓", "Move between players in lists; Enter opens the card."],
@@ -34,16 +34,7 @@ function KeyboardReference() {
   return (
     <div className="gd-popover-body">
       <h2>Keyboard reference</h2>
-      <dl className="gd-keys">
-        {shortcuts.map(([key, what]) => (
-          <div key={key}>
-            <dt>
-              <kbd>{key}</kbd>
-            </dt>
-            <dd>{what}</dd>
-          </div>
-        ))}
-      </dl>
+      <KeyboardList />
       <button
         type="button"
         className="gd-pill"
@@ -67,5 +58,21 @@ function KeyboardReference() {
         How focus works
       </button>
     </div>
+  );
+}
+
+// The shortcut list, shared by the popover and the Lab page.
+export function KeyboardList() {
+  return (
+    <dl className="gd-keys">
+      {shortcuts.map(([key, what]) => (
+        <div key={key}>
+          <dt>
+            <kbd>{key}</kbd>
+          </dt>
+          <dd>{what}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

@@ -3042,7 +3042,10 @@ export function ModelView({
   m,
   change,
   tracking = null,
+  part,
 }: {
+  // The Gameday Plus Lab shows the settings and the audits on separate pages; omitted shows everything, as before.
+  part?: "settings" | "audits";
   m: Model;
   change: (s: Settings) => void;
   tracking?: Promise<GemTrackingState> | null;
@@ -3066,6 +3069,7 @@ export function ModelView({
   };
   return (
     <>
+      {(!part || part === "settings") && (
       <Panel
         title="Model settings"
         note="Provisional assumptions. Changing these recalculates values; it does not change recorded scoring or ESPN projections."
@@ -3109,8 +3113,11 @@ export function ModelView({
           replacements.
         </p>
       </Panel>
+      )}
       {/* Automatic dated comparisons remain separate from current settings, historical summaries and live labels. */}
-      <GemTracking tracking={tracking} />
+      {!part && <GemTracking tracking={tracking} />}
+      {(!part || part === "audits") && (
+        <>
       {/* Keep research and rule inventories collapsed while preserving the existing settings and baseline workflow. */}
       <Panel title="Player-label evidence" note={labelAudit.version}>
         <p>{labelAudit.status}</p>
@@ -3300,6 +3307,8 @@ export function ModelView({
           </details>
         ))}
       </Panel>
+        </>
+      )}
     </>
   );
 }

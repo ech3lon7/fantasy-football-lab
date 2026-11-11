@@ -15,6 +15,7 @@ import {
 import { GamedayHeader } from "../features/next/Shell";
 import { Scouting } from "../features/next/Scouting";
 import { Roster } from "../features/next/Roster";
+import { Lab } from "../features/next/Lab";
 import {
   TradeRoom,
   readTradeTab,
@@ -34,7 +35,7 @@ import {
 } from "../features/next/PlayerCard";
 import { PopoverLayer, PopoverProvider } from "../ui/popover/PopoverStack";
 import { usePlayerRowKeys } from "../ui/popover/rowNavigation";
-import { pageForRoute } from "../domain/view/shell";
+import { labTabForRoute, pageForRoute } from "../domain/view/shell";
 import { readThemePref, themeKey, useGamedayRoot } from "../ui/feel/theme";
 import { reconcileSavedTrades, savedTradesKey } from "../domain/saved-trades";
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -883,6 +884,102 @@ export default function App() {
     previewOn = readUiPreview(w?.state.filters[uiPreviewKey]),
     // The preview shell maps its six section routes to the screens that exist today.
     page = previewOn ? pageForRoute(route) : route.split("/")[0];
+  // The account and import controls, shown on Data & account and on the Lab's Data and account page.
+  const accountView = (
+            <Account
+              w={w}
+              config={config}
+              email={email}
+              configure={(c) => {
+                putConfig(c);
+                setConfig(c);
+                setError("");
+              }}
+              client={client}
+              runSync={() => runSync()}
+              signOut={signOut}
+              status={syncStatus}
+              notify={setError}
+              importClick={() => fileRef.current?.click()}
+              uiPreview={readUiPreview(w?.state.filters[uiPreviewKey])}
+              // Merge only this key against the latest workspace, preserving unrelated filters.
+              setUiPreview={(on) =>
+                updateState({
+                  filters: {
+                    ...wRef.current!.state.filters,
+                    [uiPreviewKey]: writeUiPreview(on),
+                  },
+                })
+              }
+              clear={async (cloud) => {
+                if (!w) return;
+                if (
+                  !confirm(
+                    cloud
+                      ? "Delete your current cloud workspace and this local copy?"
+                      : "Remove the current dataset from this device?",
+                  )
+                )
+                  return;
+                if (cloud && client && w.owner !== "local") {
+                  const { error } = await client.rpc(
+                    "delete_fantasy_workspace",
+                  );
+                  if (error) {
+                    setError(error.message);
+                    return;
+                  }
+                }
+                await saveQueue.current;
+                await remove(w.owner);
+                commit(null);
+                setConflict(undefined);
+                setSyncStatus("Local only");
+              }}
+            />
+  );
+  // The Lab splits Model & audit into pages; each needs an imported dataset and the unsimulated model.
+  const labReady = !!(model && w && realModel);
+  const labSettings = labReady ? (
+    <>
+      {/* Build details identify the installed app when diagnosing updates across devices. */}
+      <Panel title="App version">
+        <p>
+          Fantasy Football Lab v{appRelease.version} · Build {appRelease.build}{" "}
+          · Commit {appRelease.commit}
+        </p>
+        <p>
+          Built{" "}
+          <time dateTime={appRelease.builtAt}>
+            {new Date(appRelease.builtAt).toLocaleString()}
+          </time>
+          . App version is separate from your imported workbook and model
+          versions.
+        </p>
+      </Panel>
+      <ModelView
+        part="settings"
+        m={realModel!}
+        change={(settings) => updateState({ settings })}
+      />
+    </>
+  ) : null;
+  const labEvidence = labReady ? (
+    <EvidenceSettings
+      m={realModel!}
+      filters={w!.state.filters}
+      change={(patch) =>
+        updateState({ filters: { ...w!.state.filters, ...patch } })
+      }
+    />
+  ) : null;
+  const labAudits = labReady ? (
+    <ModelView
+      part="audits"
+      m={realModel!}
+      change={(settings) => updateState({ settings })}
+    />
+  ) : null;
   // The simulator is shared by This week and Roster so both edit the same saved roster slots.
   const simulator =
     w && realModel && model ? (
@@ -905,7 +1002,7 @@ export default function App() {
     ) : null;
   const content = (
     <div
-      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}${previewOn && ["players", "gems", "weekly", "roster", "teams", "overview", "trades", "journal"].includes(page) ? " gd-new-screen" : ""}`}
+      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}${previewOn && ["players", "gems", "weekly", "roster", "teams", "overview", "trades", "journal", "lab"].includes(page) ? " gd-new-screen" : ""}`}
     >
       {previewOn && (
         <GamedayHeader
@@ -1260,7 +1357,7 @@ export default function App() {
           )}
           {!ready ? (
             <p>Opening your workspace…</p>
-          ) : !d && !preview && page !== "data" ? (
+          ) : !d && !preview && page !== "data" && !(previewOn && page === "lab") ? (
             previewOn ? (
               <GamedayWelcome onImport={() => fileRef.current?.click()} />
             ) : (
@@ -1534,59 +1631,33 @@ export default function App() {
               )}
             </>
           ) : null}
-          {page === "data" && (
-            <Account
-              w={w}
-              config={config}
-              email={email}
-              configure={(c) => {
-                putConfig(c);
-                setConfig(c);
-                setError("");
+          {previewOn && page === "lab" && (
+            <Lab
+              tab={labTabForRoute(route)}
+              settings={labSettings}
+              evidence={labEvidence}
+              audits={labAudits}
+              account={accountView}
+              feel={{
+                theme: readThemePref(w?.state.filters[themeKey]),
+                animation: readAnimationPref(w?.state.filters[animationKey]),
+                sound: readFlag(w?.state.filters[soundKey]),
+                haptics: readFlag(w?.state.filters[hapticsKey]),
+                hapticsSupported: hapticsSupported(),
               }}
-              client={client}
-              runSync={() => runSync()}
-              signOut={signOut}
-              status={syncStatus}
-              notify={setError}
-              importClick={() => fileRef.current?.click()}
-              uiPreview={readUiPreview(w?.state.filters[uiPreviewKey])}
-              // Merge only this key against the latest workspace, preserving unrelated filters.
-              setUiPreview={(on) =>
-                updateState({
-                  filters: {
-                    ...wRef.current!.state.filters,
-                    [uiPreviewKey]: writeUiPreview(on),
-                  },
-                })
-              }
-              clear={async (cloud) => {
-                if (!w) return;
-                if (
-                  !confirm(
-                    cloud
-                      ? "Delete your current cloud workspace and this local copy?"
-                      : "Remove the current dataset from this device?",
-                  )
-                )
-                  return;
-                if (cloud && client && w.owner !== "local") {
-                  const { error } = await client.rpc(
-                    "delete_fantasy_workspace",
-                  );
-                  if (error) {
-                    setError(error.message);
-                    return;
-                  }
-                }
-                await saveQueue.current;
-                await remove(w.owner);
-                commit(null);
-                setConflict(undefined);
-                setSyncStatus("Local only");
+              changeFeel={(key, value) => {
+                const [filterKey, stored] = feelEntry(key, value);
+                if (w)
+                  updateState({
+                    filters: {
+                      ...wRef.current!.state.filters,
+                      [filterKey]: stored,
+                    },
+                  });
               }}
             />
           )}
+          {page === "data" && accountView}
           <Legend />
           <footer className="footer">
             Fantasy Football Lab{" "}

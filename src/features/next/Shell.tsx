@@ -106,6 +106,60 @@ function PlayerSearch({ model }: { model: Model | null }) {
   );
 }
 
+// The four independent Feel settings, shared by the header menu and the Lab page.
+export function FeelSettings({
+  feel,
+  change,
+}: {
+  feel: FeelValues;
+  change: (
+    key: "theme" | "animation" | "sound" | "haptics",
+    value: string,
+  ) => void;
+}) {
+  const settings = { sound: feel.sound, haptics: feel.haptics };
+  return (
+    <>
+      <h2>Theme</h2>
+      <Segmented
+        label="Theme"
+        options={themePrefs}
+        value={feel.theme}
+        onChange={(v) => change("theme", v)}
+      />
+      <h2>Animation</h2>
+      <Segmented
+        label="Animation"
+        options={animationPrefs}
+        value={feel.animation}
+        onChange={(v) => change("animation", v)}
+      />
+      <label className="gd-check">
+        <input
+          type="checkbox"
+          checked={feel.sound}
+          onChange={(e) => {
+            change("sound", e.target.checked ? "on" : "");
+            if (e.target.checked)
+              feedback("success", { ...settings, sound: true });
+          }}
+        />
+        Sound
+      </label>
+      <label className="gd-check">
+        <input
+          type="checkbox"
+          checked={feel.haptics}
+          disabled={!feel.hapticsSupported}
+          onChange={(e) => change("haptics", e.target.checked ? "on" : "")}
+        />
+        Haptics
+        {!feel.hapticsSupported && <small> Not supported on this device</small>}
+      </label>
+    </>
+  );
+}
+
 // The Feel menu holds the four independent settings: theme, animation, sound and haptics.
 function FeelMenu({
   feel,
@@ -127,7 +181,6 @@ function FeelMenu({
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [open]);
-  const settings = { sound: feel.sound, haptics: feel.haptics };
   return (
     <div className="gd-feel" ref={ref}>
       <button
@@ -140,44 +193,7 @@ function FeelMenu({
       </button>
       {open && (
         <div className="gd-menu" role="group" aria-label="Feel settings">
-          <h2>Theme</h2>
-          <Segmented
-            label="Theme"
-            options={themePrefs}
-            value={feel.theme}
-            onChange={(v) => change("theme", v)}
-          />
-          <h2>Animation</h2>
-          <Segmented
-            label="Animation"
-            options={animationPrefs}
-            value={feel.animation}
-            onChange={(v) => change("animation", v)}
-          />
-          <label className="gd-check">
-            <input
-              type="checkbox"
-              checked={feel.sound}
-              onChange={(e) => {
-                change("sound", e.target.checked ? "on" : "");
-                if (e.target.checked)
-                  feedback("success", { ...settings, sound: true });
-              }}
-            />
-            Sound
-          </label>
-          <label className="gd-check">
-            <input
-              type="checkbox"
-              checked={feel.haptics}
-              disabled={!feel.hapticsSupported}
-              onChange={(e) => change("haptics", e.target.checked ? "on" : "")}
-            />
-            Haptics
-            {!feel.hapticsSupported && (
-              <small> Not supported on this device</small>
-            )}
-          </label>
+          <FeelSettings feel={feel} change={change} />
         </div>
       )}
     </div>

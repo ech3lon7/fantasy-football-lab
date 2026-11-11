@@ -1713,3 +1713,70 @@
 :root[data-gameday] .gd-surface-line {
   margin: 4px 0;
 }
+/* Lab: a tab row of links and short pages that reuse the current panels in the new theme. */
+:root[data-gameday] .gd-lab {
+  display: grid;
+  gap: 18px;
+  color: var(--gd-ink);
+}
+:root[data-gameday] .gd-lab-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: flex-end;
+}
+:root[data-gameday] .gd-lab-head h2 {
+  margin: 0;
+  font-family: var(--gd-font-display);
+  font-size: 32px;
+  text-transform: uppercase;
+}
+:root[data-gameday] .gd-lab-head .gd-tabs {
+  padding: 0;
+  border-bottom: 0;
+  flex-wrap: wrap;
+}
+:root[data-gameday] .gd-tabs a {
+  padding: 8px 14px;
+  color: var(--gd-ink);
+  font-family: var(--gd-font-display);
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  border-radius: var(--gd-radius-sm);
+}
+:root[data-gameday] .gd-tabs a[aria-selected="true"] {
+  background: var(--gd-selected);
+  color: var(--gd-selected-ink);
+}
+:root[data-gameday] .gd-lab-page {
+  display: grid;
+  gap: 16px;
+}
+:root[data-gameday] .gd-feel-page {
+  display: grid;
+  gap: 10px;
+  max-width: 420px;
+}
+/* The current sidebar styles every nav as a vertical dark list; the Lab tab row resets those rules. */
+:root[data-gameday] .gd-lab-head .gd-tabs {
+  flex-direction: row;
+  gap: 4px;
+}
+:root[data-gameday] .gd-lab-head .gd-tabs > a {
+  display: inline-flex;
+  gap: 0;
+  font-size: 16px;
+  color: var(--gd-ink);
+}
+:root[data-gameday] .gd-lab-head .gd-tabs > a[aria-selected="true"] {
+  background: var(--gd-selected);
+  color: var(--gd-selected-ink);
+}
+:root[data-gameday] .gd-lab-head .gd-tabs > a:not([aria-selected="true"]):hover {
+  background: var(--gd-surface-2);
+  color: var(--gd-ink);
+}
+:root[data-gameday] .gd-legacy details > summary {
+  color: var(--gd-ink);
+}

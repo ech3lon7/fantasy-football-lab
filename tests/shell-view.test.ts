@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  labTabForRoute,
   pageForRoute,
   searchPlayers,
   sectionForRoute,
@@ -80,5 +81,22 @@ describe("source freshness", () => {
         label: "Source time unavailable",
         stale: true,
       });
+  });
+});
+
+describe("lab routes", () => {
+  it("sends the earlier Model and Data addresses to the Lab", () => {
+    expect(pageForRoute("model")).toBe("lab");
+    expect(pageForRoute("data")).toBe("lab");
+    expect(pageForRoute("lab/audits")).toBe("lab");
+    expect(sectionForRoute("model")).toBe("lab");
+  });
+  it("picks the Lab page from the address", () => {
+    expect(labTabForRoute("lab")).toBe("settings");
+    expect(labTabForRoute("model")).toBe("settings");
+    expect(labTabForRoute("data")).toBe("data");
+    expect(labTabForRoute("lab/audits")).toBe("audits");
+    expect(labTabForRoute("lab/evidence")).toBe("evidence");
+    expect(labTabForRoute("lab/nonsense")).toBe("settings");
   });
 });

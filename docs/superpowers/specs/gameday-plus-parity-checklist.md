@@ -67,14 +67,14 @@ Walked from `src/app/App.tsx`, `src/features/*.tsx`, `docs/feature-parity.md` an
 | 53 | Saved trades | `SavedTrades` | Trade room header | 6.8 | Planned |
 | 54 | Trade journal, imported historical evidence, prospective acceptance tracking | `Negotiations` | Trade room, Journal | 6.8 | Planned |
 | **Model and audit, data and account** | | | | | |
-| 55 | Model settings (weights, pools, premium, grade bands, gem thresholds) | `ModelView` | Lab, Settings | 7.1 | Planned |
-| 56 | Player-label evidence | `ModelView` | Lab, Audits | 7.1 | Planned |
-| 57 | Evidence sources: opportunity and market data | `EvidenceSettings` | Lab, Evidence sources | 7.1 | Planned |
-| 58 | Injury return scenarios; role forecast calibration | `EvidenceSettings` | Lab | 7.1 | Planned |
-| 59 | Replacement baseline audit; source data audit | `ModelView` | Lab, Audits | 7.1 | Planned |
-| 60 | App version and build | App.tsx | Lab | 7.1 | Planned |
-| 61 | Import and replace, remove from this device, delete cloud workspace | `Account` | Lab, Data and account | 7.1 | Planned |
-| 62 | Supabase configuration, sign in, sign up, sign out | `Account` | Lab, Data and account | 7.1 | Planned |
+| 55 | Model settings (weights, pools, premium, grade bands, gem thresholds) | `ModelView` | Lab, Settings | 7.1 | Built in preview; verified at cutover |
+| 56 | Player-label evidence | `ModelView` | Lab, Audits | 7.1 | Built in preview; verified at cutover |
+| 57 | Evidence sources: opportunity and market data | `EvidenceSettings` | Lab, Evidence sources | 7.1 | Built in preview; verified at cutover |
+| 58 | Injury return scenarios; role forecast calibration | `EvidenceSettings` | Lab | 7.1 | Built in preview; verified at cutover |
+| 59 | Replacement baseline audit; source data audit | `ModelView` | Lab, Audits | 7.1 | Built in preview; verified at cutover |
+| 60 | App version and build | App.tsx | Lab | 7.1 | Built in preview; verified at cutover |
+| 61 | Import and replace, remove from this device, delete cloud workspace | `Account` | Lab, Data and account | 7.1 | Built in preview; verified at cutover |
+| 62 | Supabase configuration, sign in, sign up, sign out | `Account` | Lab, Data and account | 7.1 | Built in preview; verified at cutover |
 
 ## Open decisions for the owner
 
