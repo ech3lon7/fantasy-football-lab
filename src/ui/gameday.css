@@ -1661,3 +1661,15 @@
   color: var(--gd-selected-ink);
   border-color: var(--gd-selected);
 }
+/* Shared Search limits inside the Trade room. */
+:root[data-gameday] .gd-limits {
+  display: grid;
+  gap: 14px;
+  max-width: 560px;
+}
+:root[data-gameday] .gd-slider {
+  grid-template-columns: 1fr auto;
+}
+:root[data-gameday] .gd-slider input {
+  grid-column: 1 / -1;
+}

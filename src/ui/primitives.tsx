@@ -137,6 +137,7 @@ export function RangeSlider({
   max,
   step = 1,
   onChange,
+  format,
 }: {
   label: string;
   value: number;
@@ -145,6 +146,8 @@ export function RangeSlider({
   max: number;
   step?: number;
   onChange: (next: number) => void;
+  // Optional display text for the current value, such as "Off" at zero.
+  format?: (value: number) => string;
 }) {
   return (
     <label className="gd-slider">
@@ -162,7 +165,7 @@ export function RangeSlider({
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
       />
-      <output>{value}</output>
+      <output>{format ? format(value) : value}</output>
     </label>
   );
 }

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { seedLabelWhy } from "./label-why-seed";
+import { openTradeFilters } from "./trade-workspace-helpers";
 
 // Turn the preview on and open the Trade room.
 async function open(page: Page) {
@@ -126,7 +127,9 @@ test("find trades and chain planner tabs keep the current tools", async ({
 }) => {
   await open(page);
   await page.getByRole("tab", { name: "Find trades" }).click();
-  await expect(page.getByText(/opens here with every control/)).toBeVisible();
+  await expect(
+    page.getByText(/opens here with every other control/),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Find matching trades" }),
   ).toBeVisible();
@@ -155,4 +158,75 @@ test("manual analyzer has no white fills in dark", async ({ page }) => {
       .map((el) => `${el.tagName}.${el.getAttribute("class")}`),
   );
   expect(white).toEqual([]);
+});
+
+// The shared Search limits are one editable section for Find trades and chains, with Off as the default index window.
+test("shared search limits: Off by default, edited markers, persistence and reset", async ({
+  page,
+}) => {
+  await open(page);
+  await page.getByRole("tab", { name: "Find trades" }).click();
+  const head = page.getByRole("button", { name: /Search limits/ });
+  // Folded, the header summarises the limits in one line.
+  await expect(head).toContainText("window Off");
+  await expect(head).not.toContainText("edited");
+  await head.click();
+  const row = page.locator(".gd-slider").filter({ hasText: "Index window" });
+  const window = page.getByRole("slider", { name: /Index window/ });
+  await expect(window).toHaveValue("0");
+  await expect(row).toContainText("Off");
+  await window.fill("10");
+  await expect(row).toContainText("±10");
+  await expect(row).toContainText("edited");
+  await expect(head).toContainText("edited");
+  // Fold it again: the one-line summary shows the edited value and the marker stays visible.
+  await head.click();
+  await expect(head).toContainText("window ±10");
+  await expect(head).toContainText("edited");
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: /Search limits/ }),
+  ).toContainText("window ±10");
+  await page.getByRole("button", { name: /Search limits/ }).click();
+  await page.getByRole("button", { name: "Reset to defaults" }).click();
+  await expect(page.getByRole("slider", { name: /Index window/ })).toHaveValue(
+    "0",
+  );
+  await expect(
+    page.getByRole("button", { name: /Search limits/ }),
+  ).not.toContainText("edited");
+});
+
+// With shared limits there is no strictness setting and no strict-index checkbox; the chain presets number ten.
+test("no strictness setting or strict-index checkbox, and ten chain presets", async ({
+  page,
+}) => {
+  await open(page);
+  await page.getByRole("tab", { name: "Find trades" }).click();
+  await openTradeFilters(page, "Standard");
+  await expect(page.getByLabel("Use strict index range")).toHaveCount(0);
+  await expect(
+    page.getByText("The index window is set once in the shared Search limits"),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Chain planner" }).click();
+  await openTradeFilters(page, "Chain");
+  await expect(page.getByLabel("Chain strictness")).toHaveCount(0);
+  const preset = page.getByRole("combobox", { name: "Chain preset" });
+  const labels = await preset.locator("option").allTextContents();
+  for (const label of [
+    "Balanced opportunities",
+    "Surface-stat trading",
+    "Fix my weakest position",
+    "Buy low, then flip",
+  ])
+    expect(labels).toContain(label);
+  expect(labels).not.toContain("Surface-stat opportunities");
+  // Presets describe the kind of chain; they never touch the limits.
+  const before = await page
+    .getByRole("button", { name: /Search limits/ })
+    .innerText();
+  await preset.selectOption({ label: "Buy low, then flip" });
+  expect(
+    await page.getByRole("button", { name: /Search limits/ }).innerText(),
+  ).toBe(before);
 });

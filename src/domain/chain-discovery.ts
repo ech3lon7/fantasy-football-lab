@@ -1,5 +1,14 @@
 import type { Position, Draft } from "./contracts";
 import type { ChainQuery, TradeChain } from "./trade-chains";
+import {
+  applyLimitsToChainQuery,
+  widenedLimits,
+  type SearchLimits,
+} from "./search-limits";
+import type { PositionalGradeImpactRule } from "./chain-position-impact";
+import { teamsAssessment } from "./lineups";
+import { positionGradeScale } from "./trade-safeguards";
+import type { Model } from "./valuation";
 
 // Scenario and strictness are separate preferences; none of these provisional limits estimates acceptance accuracy.
 export type ChainStrictness = "conservative" | "balanced" | "negotiable";
@@ -22,11 +31,20 @@ export const chainPresets = [
   { id: "mutual", label: "Mutual benefit" },
   { id: "star", label: "Acquire a star" },
   { id: "depth", label: "Turn a star into depth" },
-  { id: "surface", label: "Surface-stat opportunities" },
+  { id: "surface", label: "Surface-stat trading" },
   { id: "connected", label: "Connected chains" },
   { id: "coverage", label: "Acquire coverage, then upgrade" },
   { id: "speculative", label: "Speculative sequences" },
+  { id: "need", label: "Fix my weakest position" },
+  { id: "flip", label: "Buy low, then flip" },
 ] as const;
+
+// Saved presets stored the earlier label text; they load under the current name.
+export const renamedPresetLabels: Record<string, string> = {
+  "Surface-stat opportunities": "Surface-stat trading",
+};
+export const currentPresetLabel = (label: string) =>
+  renamedPresetLabels[label] ?? label;
 const strictnessLimits = {
   conservative: { gain: 0, value: 0.1, lossCap: 1, valueCap: 0.15, index: 5 },
   balanced: { gain: -1.5, value: 0.2, lossCap: 2.5, valueCap: 0.25, index: 10 },
@@ -72,6 +90,8 @@ export function applyChainPreset(
   q: ChainQuery,
   id: string,
   strictness: ChainStrictness = "balanced",
+  // Needed only by "Fix my weakest position": the team's lowest-graded starting position and the rest.
+  context?: { weakest: string | null; others: string[] },
 ): ChainQuery {
   // Old saved labels remain usable without being advertised as additional scenario presets.
   const legacy: Record<string, [number, number, "required" | "warnings"]> = {
@@ -97,8 +117,49 @@ export function applyChainPreset(
     offer: { minimum: 1, maximum: 3 },
     receive: { minimum: 1, maximum: 3 },
   });
-  const first = step(q.first),
-    second = step(q.second);
+  // Goals and labels a preset adds are removed when another preset is chosen; goals you set yourself stay.
+  const clean = (s: ChainQuery["first"]) => {
+    const {
+      receiveRegression: _r,
+      sendRegression: _s,
+      gradeImpacts,
+      ...rest
+    } = s;
+    void _r;
+    void _s;
+    const kept = (gradeImpacts ?? []).filter(
+      (g) => !g.id.startsWith("preset-need-"),
+    );
+    return kept.length ? { ...rest, gradeImpacts: kept } : rest;
+  };
+  const first = step(clean(q.first)),
+    second = step(clean(q.second));
+  if (id === "need" && context?.weakest) {
+    const rule = (
+      position: string,
+      type: "upgrade" | "drop_limit",
+    ): PositionalGradeImpactRule => ({
+      id: `preset-need-${type}-${position}`,
+      side: "own",
+      position,
+      steps: 2,
+      type,
+    });
+    const keep = context.others
+      .filter((p) => p !== context.weakest)
+      .map((p) => rule(p, "drop_limit"));
+    first.gradeImpacts = [
+      ...(first.gradeImpacts ?? []),
+      rule(context.weakest, "upgrade"),
+      ...keep,
+    ];
+    second.gradeImpacts = [...(second.gradeImpacts ?? []), ...keep];
+  }
+  // Trade one must receive a BUY LOW player and trade two must send a SELL HIGH player.
+  if (id === "flip") {
+    first.receiveRegression = "BUY LOW";
+    second.sendRegression = "SELL HIGH";
+  }
   // The coverage preset requires a first-step WR while allowing either meaningful connected route by default.
   if (id === "coverage") first.receivePosition ??= "WR";
   if (id === "star") {
@@ -155,8 +216,48 @@ export function applyChainPreset(
   };
 }
 
+// The team's lowest-graded starting position and the other graded ones, for "Fix my weakest position".
+export function presetContext(
+  m: Model,
+  team: string,
+): { weakest: string | null; others: string[] } {
+  const graded = (teamsAssessment(m).get(team) ?? [])
+    .filter((g) => ["QB", "RB", "WR", "TE"].includes(g.position))
+    .map((g) => ({
+      position: g.position,
+      rank: positionGradeScale.findIndex((s) => s === g.grade),
+    }))
+    .filter((g) => g.rank >= 0)
+    .sort((a, b) => a.rank - b.rank || a.position.localeCompare(b.position));
+  return {
+    weakest: graded[0]?.position ?? null,
+    others: graded.slice(1).map((g) => g.position),
+  };
+}
+
+// A preset describes the kind of chain only: the shared limits always win over anything the preset sets.
+export function applyChainPresetKeepingLimits(
+  q: ChainQuery,
+  id: string,
+  limits: SearchLimits,
+  context?: { weakest: string | null; others: string[] },
+): ChainQuery {
+  return applyLimitsToChainQuery(
+    applyChainPreset(q, id, "balanced", context),
+    limits,
+  );
+}
+
 // Automatic recovery changes only the three authorized soft limits; every other query field is copied verbatim.
 export function chainSearchRounds(q: ChainQuery) {
+  // The single method widens from the user's own limits, each round saying which limit moved and by how much.
+  if (q.limits) {
+    const { limits, ...rest } = q;
+    return widenedLimits(limits).map((round) => ({
+      query: applyLimitsToChainQuery({ ...rest }, round.limits),
+      changes: round.changes,
+    }));
+  }
   const b = q.discovery?.broaden;
   const base = {
     ...q,

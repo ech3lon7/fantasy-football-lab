@@ -83,7 +83,7 @@ it("permits bounded recipient losses without changing their displayed scoring or
 
 // Scenario choices and strictness preserve hard selections; coverage keeps recipients nonnegative.
 it("applies scenario presets independently of strictness and hard selections", () => {
-  expect(chainPresets).toHaveLength(8);
+  expect(chainPresets).toHaveLength(10);
   const q = query();
   q.discovery!.position = "WR";
   for (const p of chainPresets)

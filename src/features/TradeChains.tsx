@@ -17,6 +17,9 @@ import {
   useNegotiations,
 } from "./Negotiations";
 import { useEffect, useRef, useState } from "react";
+import { useSearchLimits } from "./next/limitsContext";
+import { applyLimitsToChainQuery } from "../domain/search-limits";
+import { applyChainPresetKeepingLimits, presetContext } from "../domain/chain-discovery";
 import { Bookmark, LoaderCircle } from "lucide-react";
 import {
   chainErrors,
@@ -223,6 +226,8 @@ export function TradeChains({
   const [selectedTeams, setSelectedTeams] = useState(
     initial?.selectedTeams ?? initialTeams,
   );
+  // The Gameday Plus Trade room supplies one shared set of limits; without it the current controls apply.
+  const limits = useSearchLimits();
   const [pricePolicy, setPricePolicy] = useState<
     NonNullable<ChainQuery["pricePolicy"]>
   >(initial?.query.pricePolicy ?? "required");
@@ -576,9 +581,8 @@ export function TradeChains({
     if (errors.length) return;
     active.current?.terminate();
     const id = crypto.randomUUID();
-    const executedQuery = deeper
-      ? { ...query, depth: "deeper" as const }
-      : query;
+    const base = deeper ? { ...query, depth: "deeper" as const } : query;
+    const executedQuery = limits ? applyLimitsToChainQuery(base, limits) : base;
     const previous = deeper && !stale ? job?.result : undefined;
     resultContext.current = { model: m, plans: lineupsRaw };
     try {
@@ -1724,7 +1728,14 @@ export function TradeChains({
                       } else if (id === "custom") setPreset(id);
                       else
                         applyOptions(
-                          applyChainPreset(query, id, strictness),
+                          limits
+                            ? applyChainPresetKeepingLimits(
+                                query,
+                                id,
+                                limits,
+                                presetContext(m, team),
+                              )
+                            : applyChainPreset(query, id, strictness),
                           id,
                         );
                     }}
@@ -1746,6 +1757,7 @@ export function TradeChains({
             </div>
             {/* Scenario modifiers and named saves reuse existing controls and leave the standard finder untouched. */}
             <div className="trade-search-controls">
+              {!limits && (
               <label className="control">
                 <span>Chain strictness</span>
                 <select
@@ -1766,6 +1778,7 @@ export function TradeChains({
                   <option value="negotiable">Negotiable</option>
                 </select>
               </label>
+              )}
               <FilterHelp
                 label="Sequence types"
                 help="Connected chains re-trade acquisitions or gain meaningful coverage. Sequential upgrades are independent moves, clearly labeled separately."
@@ -2087,6 +2100,7 @@ export function TradeChains({
                 : "Price tests advisory"
             }
           >
+            {!limits && (
             <FilterHelp
               label="Chain price tests"
               help="Required rejects a candidate unless both existing price tests pass on each step. Warning only keeps the calculated tests visible without excluding a trade. Roster legality, protected players, recipient limits and scoring requirements always apply."
@@ -2104,6 +2118,7 @@ export function TradeChains({
                 </select>
               </label>
             </FilterHelp>
+            )}
             {/* Dependency stays required in every preset; all new controls remain local to this planner. */}
             <details className="trade-search-group">
               <summary>Chain dependency</summary>
@@ -2152,6 +2167,13 @@ export function TradeChains({
             summary={`Final gain ≥ ${gain} EPPG`}
           >
             <div className="trade-search-controls">
+              {limits ? (
+                <p className="gd-muted">
+                  These limits are set once in the shared Search limits section above and apply to Find trades and
+                  chains alike.
+                </p>
+              ) : (
+                <>
               <FilterHelp
                 label="Chain mode"
                 help="Safe refers to your positive first-step scoring gain. Speculative allows your flat or losing first step within the temporary-loss limit. Recipient concession/gain checks apply on both steps; price checks follow Chain price tests. These are modeled preferences, not acceptance guarantees."
@@ -2256,6 +2278,8 @@ export function TradeChains({
                     0,
                   )}
                 </div>
+              )}
+                </>
               )}
               <FilterHelp
                 label="Chain search depth"

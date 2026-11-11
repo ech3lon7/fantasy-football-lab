@@ -24,6 +24,7 @@ import {
   type TradeSearchQuery,
 } from "./trade-search";
 import { readLineupBasis, type LineupBasis } from "./trade-impact";
+import { orderChainsByPrice, type SearchLimits } from "./search-limits";
 import {
   applyRosterScenario,
   scenarioRosterBase,
@@ -87,6 +88,8 @@ export interface ChainQuery {
   recipient?: { maximumValueLossPct: number; minimumGain: number };
   // Missing preferences adopt the reviewed connected-chain defaults without changing other saved selections.
   dependency?: ChainDependencySettings;
+  // The shared single-method limits; when present, widening starts from these values and results are ordered by price status.
+  limits?: SearchLimits;
 }
 // Each step owns independent, optional fit rules; disabled targeting never evaluates or restricts grades.
 export interface ChainFitRule {
@@ -101,6 +104,9 @@ export interface ChainStep {
   requiredGive?: string[];
   requiredGet?: string[];
   receivePosition?: Position;
+  // Optional regression-label requirements used by the "Buy low, then flip" preset.
+  receiveRegression?: "BUY LOW" | "SELL HIGH";
+  sendRegression?: "BUY LOW" | "SELL HIGH";
   gradeLimit?: ChainGradeLimit;
   // Positional grade impact goals evaluate signed grade step changes per position and side.
   gradeImpacts?: PositionalGradeImpactRule[];
@@ -1220,6 +1226,32 @@ export function searchTradeChains(
     plans?: string,
   ) => {
     const config = step === 1 ? q.first : q.second;
+    // A required regression label must appear on an incoming or outgoing player, as the preset describes.
+    const labelFailures = [
+      config.receiveRegression &&
+      !leg.draft.get.some(
+        (id) => model.byId.get(id)?.regression === config.receiveRegression,
+      )
+        ? `No incoming player has the ${config.receiveRegression} label.`
+        : "",
+      config.sendRegression &&
+      !leg.draft.give.some(
+        (id) => model.byId.get(id)?.regression === config.sendRegression,
+      )
+        ? `No outgoing player has the ${config.sendRegression} label.`
+        : "",
+    ].filter(Boolean);
+    if (labelFailures.length) {
+      if (
+        plausibilityRejections.filter((entry) => entry.step === step).length < 5
+      )
+        plausibilityRejections.push({
+          step,
+          draft: leg.draft,
+          failures: labelFailures,
+        });
+      return false;
+    }
     // Grade protection runs only when explicitly enabled, after normal legality/scoring/recipient checks.
     if (config.gradeLimit) {
       const targetPositions =
@@ -2042,6 +2074,8 @@ export function discoverTradeChains(
     if (result.chains.length) break;
   }
   const final = result!;
+  // The single method orders results by price status; price tests never hide a result.
+  if (q.limits) final.chains = orderChainsByPrice(final.chains);
   // Each attempt retains exact coverage and limits; totals never imply that the broader universe was exhausted.
   final.attempts = attempts;
   final.stats = {

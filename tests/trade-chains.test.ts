@@ -736,7 +736,7 @@ it("applies five presets without overwriting mode, sizes, teams, fit, pool or de
       fit: { surplus: defaultChainFit("surplus") },
     },
   });
-  expect(chainPresets).toHaveLength(8);
+  expect(chainPresets).toHaveLength(10);
   for (const preset of chainPresets) {
     const applied = applyChainPreset(original, preset.id, "negotiable");
     expect(applied.first.teams).toBe(original.first.teams);

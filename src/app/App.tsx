@@ -1475,6 +1475,15 @@ export default function App() {
                         })
                       }
                       forceTrade={forceScenarioTrade}
+                      filters={w.state.filters}
+                      onFilters={(patch) =>
+                        updateState({
+                          filters: {
+                            ...wRef.current!.state.filters,
+                            ...patch,
+                          },
+                        })
+                      }
                       legacy={tradeView}
                     />
                   ) : (

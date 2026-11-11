@@ -21,6 +21,21 @@ import type { Model, Player } from "../../domain/valuation";
 import { PlayerName } from "../../ui/PlayerName";
 import { Chip, Segmented } from "../../ui/primitives";
 import { TradeStressTest } from "../TradeStressTest";
+import { FoldingGroup, RangeSlider } from "../../ui/primitives";
+import {
+  defaultSearchLimits,
+  editedLimits,
+  readSearchLimits,
+  searchLimitsKey,
+  writeSearchLimits,
+  type SearchLimits,
+} from "../../domain/search-limits";
+import {
+  foldedGroupsKey,
+  readOpenGroups,
+  setGroupOpen,
+} from "../../domain/view/primitives";
+import { SearchLimitsContext } from "./limitsContext";
 
 export const tradeTabs = ["manual", "find", "chains"] as const;
 export type TradeTab = (typeof tradeTabs)[number];
@@ -423,6 +438,91 @@ function ManualAnalyzer({
   );
 }
 
+// The shared Search limits: one editable section used by Find trades and the Chain planner.
+function SearchLimitsSection({
+  limits,
+  open,
+  setOpen,
+  change,
+}: {
+  limits: SearchLimits;
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  change: (next: SearchLimits) => void;
+}) {
+  const edited = editedLimits(limits);
+  const d = defaultSearchLimits;
+  return (
+    <FoldingGroup
+      title="Search limits · shared with chains"
+      summary={`Final gain ≥ ${limits.minimumFinalGain.toFixed(1)} · temporary loss ≤ ${limits.maximumTemporaryLoss.toFixed(1)} · recipient loss ≤ ${(limits.maximumRecipientValueLoss * 100).toFixed(0)}% · window ${limits.indexWindow === null ? "Off" : `±${limits.indexWindow}`}`}
+      open={open}
+      onToggle={setOpen}
+      edited={edited.length > 0}
+    >
+      <div className="gd-limits">
+        <RangeSlider
+          label="Minimum final gain (EPPG per week)"
+          value={limits.minimumFinalGain}
+          fallback={d.minimumFinalGain}
+          min={0}
+          max={10}
+          step={0.5}
+          onChange={(v) => change({ ...limits, minimumFinalGain: v })}
+        />
+        <RangeSlider
+          label="Maximum temporary loss (EPPG)"
+          value={limits.maximumTemporaryLoss}
+          fallback={d.maximumTemporaryLoss}
+          min={0}
+          max={10}
+          step={0.5}
+          onChange={(v) => change({ ...limits, maximumTemporaryLoss: v })}
+        />
+        <RangeSlider
+          label="Maximum recipient value loss (%)"
+          value={Math.round(limits.maximumRecipientValueLoss * 100)}
+          fallback={Math.round(d.maximumRecipientValueLoss * 100)}
+          min={0}
+          max={50}
+          step={1}
+          format={(v) => `${v}%`}
+          onChange={(v) =>
+            change({ ...limits, maximumRecipientValueLoss: v / 100 })
+          }
+        />
+        <RangeSlider
+          label="Index window (± points)"
+          value={limits.indexWindow ?? 0}
+          fallback={0}
+          min={0}
+          max={30}
+          step={1}
+          format={(v) => (v === 0 ? "Off" : `±${v}`)}
+          onChange={(v) =>
+            change({ ...limits, indexWindow: v === 0 ? null : v })
+          }
+        />
+        <p className="gd-muted">
+          Every search uses these Balanced limits. If a search finds nothing,
+          they loosen step by step from your values, and each widened result
+          says which limit moved. Price tests never hide a result: results that
+          pass every test come first, then price warnings, then widened ones.
+          Presets never change these limits.
+        </p>
+        <button
+          type="button"
+          className="gd-pill"
+          disabled={edited.length === 0}
+          onClick={() => change({ ...d })}
+        >
+          Reset to defaults
+        </button>
+      </div>
+    </FoldingGroup>
+  );
+}
+
 // The Trade room: tabs for the Manual analyzer, Find trades and the Chain planner, plus the journal.
 export function TradeRoom({
   m,
@@ -435,7 +535,12 @@ export function TradeRoom({
   changeBasis,
   forceTrade,
   legacy,
+  filters,
+  onFilters,
 }: {
+  // Saved filter values, for the shared search limits and which groups are open.
+  filters: Record<string, string>;
+  onFilters: (patch: Record<string, string>) => void;
   m: Model;
   draft: Draft;
   lineupsRaw: string | undefined;
@@ -448,6 +553,8 @@ export function TradeRoom({
   // The current trade tools, shown for Find trades and the Chain planner until those tabs are rebuilt.
   legacy: ReactNode;
 }) {
+  const limits = readSearchLimits(filters[searchLimitsKey]),
+    open = readOpenGroups(filters[foldedGroupsKey]);
   return (
     <div className="gd-trade">
       <header className="gd-trade-head">
@@ -480,13 +587,29 @@ export function TradeRoom({
           forceTrade={forceTrade}
         />
       ) : (
-        <>
+        <SearchLimitsContext.Provider value={limits}>
+          <SearchLimitsSection
+            limits={limits}
+            open={!!open.limits}
+            setOpen={(next) =>
+              onFilters({
+                [foldedGroupsKey]: setGroupOpen(
+                  filters[foldedGroupsKey],
+                  "limits",
+                  next,
+                ),
+              })
+            }
+            change={(next) =>
+              onFilters({ [searchLimitsKey]: writeSearchLimits(next) })
+            }
+          />
           <p className="gd-muted">
             The full current {tabLabel[tab].toLowerCase()} opens here with every
-            control until its redesigned version is ready.
+            other control until its redesigned version is ready.
           </p>
           <div className="gd-legacy">{legacy}</div>
-        </>
+        </SearchLimitsContext.Provider>
       )}
     </div>
   );

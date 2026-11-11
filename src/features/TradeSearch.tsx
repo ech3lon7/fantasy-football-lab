@@ -40,6 +40,7 @@ import {
   type LineupBasis,
 } from "../domain/trade-impact";
 import { Fragment, useEffect, useRef, useState } from "react";
+import { useSearchLimits } from "./next/limitsContext";
 import { Bookmark, LoaderCircle } from "lucide-react";
 import { sourceDataset } from "../domain/roster-scenarios";
 import {
@@ -171,6 +172,8 @@ export function TradeSearch({
   restore?: { id: string; query: TradeSearchQuery };
 }) {
   // Restore each finder from its own preference record; never store ephemeral results or change the other finder's query.
+  // The Gameday Plus Trade room supplies one shared set of limits; without it the current controls apply.
+  const limits = useSearchLimits();
   const [initialSettings] = useState(() => {
     try {
       const value = JSON.parse(settingsRaw ?? "{}");
@@ -333,19 +336,26 @@ export function TradeSearch({
     lineupBasis,
     teamA: draft.teamA,
     give: draft.give,
-    indexMode,
+    // The shared Search limits replace the strict-index checkbox: Off is automatic matching, a number is the strict range.
+    indexMode: limits
+      ? limits.indexWindow === null
+        ? "automatic"
+        : "strict"
+      : indexMode,
     goal,
     manager: manager ? { ...manager, profiles: journal.profiles } : undefined,
     count: packages ? count : 1,
     // Disabled strict inputs cannot make an automatic search unsaveable; keep raw edits in the controls/debug report.
-    below:
-      indexMode === "automatic" &&
-      (!Number.isFinite(parseOffset(below)) || parseOffset(below) < 0)
+    below: limits
+      ? (limits.indexWindow ?? 5)
+      : indexMode === "automatic" &&
+          (!Number.isFinite(parseOffset(below)) || parseOffset(below) < 0)
         ? 5
         : parseOffset(below),
-    above:
-      indexMode === "automatic" &&
-      (!Number.isFinite(parseOffset(above)) || parseOffset(above) < 0)
+    above: limits
+      ? (limits.indexWindow ?? 5)
+      : indexMode === "automatic" &&
+          (!Number.isFinite(parseOffset(above)) || parseOffset(above) < 0)
         ? 5
         : parseOffset(above),
     discovery:
@@ -1995,6 +2005,12 @@ export function TradeSearch({
               <legend>Value range</legend>
               <div className="trade-search-controls">
                 {/* A strict price window is opt-in; hiding its fields must not leave a hidden active ±5 limit. */}
+                {limits ? (
+                  <p className="gd-muted">
+                    The index window is set once in the shared Search limits
+                    section above.
+                  </p>
+                ) : (
                 <FilterHelp
                   label="Use strict index range"
                   help="Limit incoming summed indices to your below/above offsets. Automatic matching checks all usable indices and keeps price tests separate from scoring gains."
@@ -2010,9 +2026,12 @@ export function TradeSearch({
                     Use strict index range
                   </label>
                 </FilterHelp>
-                {indexMode === "strict" &&
+                )}
+                {!limits &&
+                  indexMode === "strict" &&
                   offsetControl("Below outgoing total", below, setBelow)}
-                {indexMode === "strict" &&
+                {!limits &&
+                  indexMode === "strict" &&
                   offsetControl("Above outgoing total", above, setAbove)}
               </div>
             </fieldset>
