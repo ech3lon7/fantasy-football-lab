@@ -1803,8 +1803,16 @@
     font-size: 20px;
     white-space: nowrap;
   }
+  /* Wider fonts on other systems must never widen the page: the tabs scroll inside their own row instead. */
   :root[data-gameday] .gd-header .gd-nav {
     gap: 0;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  :root[data-gameday] .gd-header .gd-nav::-webkit-scrollbar {
+    display: none;
   }
   :root[data-gameday] .gd-header .gd-nav > a {
     padding: 6px 8px;
@@ -1818,6 +1826,11 @@
   :root[data-gameday] .gd-fresh {
     font-size: 12px;
     white-space: nowrap;
+    flex-shrink: 0;
+  }
+  :root[data-gameday] .gd-wordmark,
+  :root[data-gameday] .gd-feel {
+    flex-shrink: 0;
   }
   :root[data-gameday] .gd-more {
     display: grid;
