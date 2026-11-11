@@ -16,6 +16,11 @@ import { GamedayHeader } from "../features/next/Shell";
 import { Scouting } from "../features/next/Scouting";
 import { Roster } from "../features/next/Roster";
 import {
+  TradeRoom,
+  readTradeTab,
+  tradeTabKey,
+} from "../features/next/TradeRoom";
+import {
   GamedayWelcome,
   SignalsTicker,
   Week,
@@ -900,7 +905,7 @@ export default function App() {
     ) : null;
   const content = (
     <div
-      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}${previewOn && ["players", "gems", "weekly", "roster", "teams", "overview"].includes(page) ? " gd-new-screen" : ""}`}
+      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}${previewOn && ["players", "gems", "weekly", "roster", "teams", "overview", "trades"].includes(page) ? " gd-new-screen" : ""}`}
     >
       {previewOn && (
         <GamedayHeader
@@ -1372,10 +1377,18 @@ export default function App() {
                 />
               )}
               {!previewOn && page === "weekly" && <Weekly m={model} />}
-              {page === "trades" && (
-                // Account changes reset temporary search results and terminate the previous account's worker.
+              {page === "trades" &&
+                (() => {
+                  // The current trade tools; the preview's Trade room shows them under Find trades and Chain planner.
+                  const tradeView = (
                 <TradeView
-                  key={w.owner}
+                  key={`${w.owner}/${previewOn ? w.state.filters[tradeTabKey] : ""}`}
+                  initialMode={
+                    previewOn &&
+                    readTradeTab(w.state.filters[tradeTabKey]) === "chains"
+                      ? "chain"
+                      : "standard"
+                  }
                   m={model}
                   draft={w.state.draft}
                   state={w.state}
@@ -1426,7 +1439,48 @@ export default function App() {
                     })
                   }
                 />
-              )}
+                  );
+                  return previewOn ? (
+                    <TradeRoom
+                      key={w.owner}
+                      m={model}
+                      draft={w.state.draft}
+                      lineupsRaw={
+                        model.simulation?.lineupsRaw ??
+                        w.state.filters[starterLineupsKey]
+                      }
+                      basisRaw={w.state.filters[lineupBasisKey]}
+                      tab={readTradeTab(w.state.filters[tradeTabKey])}
+                      // Remember the selected tool against the latest workspace, preserving unrelated filters.
+                      setTab={(tab) =>
+                        updateState({
+                          filters: {
+                            ...wRef.current!.state.filters,
+                            [tradeTabKey]: tab,
+                          },
+                        })
+                      }
+                      change={(draft) =>
+                        updateState({
+                          ...selectMyTeam(wRef.current!.state, d!, draft.teamA),
+                          draft,
+                        })
+                      }
+                      changeBasis={(basis) =>
+                        updateState({
+                          filters: {
+                            ...wRef.current!.state.filters,
+                            [lineupBasisKey]: basis,
+                          },
+                        })
+                      }
+                      forceTrade={forceScenarioTrade}
+                      legacy={tradeView}
+                    />
+                  ) : (
+                    tradeView
+                  );
+                })()}
               {page === "journal" && (
                 <TradeJournal m={model} ownTeam={w.state.preferredTeam} />
               )}

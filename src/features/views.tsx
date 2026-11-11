@@ -1814,7 +1814,10 @@ export function TradeView({
   changeBasis,
   saveSearchSettings,
   saveManagerSettings,
+  initialMode = "standard",
 }: {
+  // The tool shown first; the Gameday Plus Trade room chooses it from its own tabs.
+  initialMode?: TradeWorkspaceMode;
   m: Model;
   draft: Draft;
   change: (d: Draft) => void;
@@ -1839,7 +1842,7 @@ export function TradeView({
     draft: Draft;
   }>();
   const [workspaceMode, setWorkspaceMode] =
-    useState<TradeWorkspaceMode>("standard");
+    useState<TradeWorkspaceMode>(initialMode);
   const [manualFilters, setManualFilters] = useState(false),
     [analysisOpen, setAnalysisOpen] = useState(false),
     [savedOpen, setSavedOpen] = useState(false);

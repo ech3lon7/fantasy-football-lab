@@ -1,0 +1,493 @@
+import { useMemo, useState, type ReactNode } from "react";
+import { str, type Draft } from "../../domain/contracts";
+import { evaluateTrade } from "../../domain/trades";
+import {
+  lineupBasisLabel,
+  lineupBases,
+  readLineupBasis,
+  tradeImpact,
+  type LineupBasis,
+} from "../../domain/trade-impact";
+import { scenarioTradeErrors } from "../../domain/roster-scenarios";
+import {
+  gradeStepChips,
+  lineupMoves,
+  taleOfTape,
+  verdicts,
+  type GradeChip,
+  type LineupSlot,
+} from "../../domain/view/trade-room";
+import type { Model, Player } from "../../domain/valuation";
+import { PlayerName } from "../../ui/PlayerName";
+import { Chip, Segmented } from "../../ui/primitives";
+import { TradeStressTest } from "../TradeStressTest";
+
+export const tradeTabs = ["manual", "find", "chains"] as const;
+export type TradeTab = (typeof tradeTabs)[number];
+const tabLabel: Record<TradeTab, string> = {
+  manual: "Manual analyzer",
+  find: "Find trades",
+  chains: "Chain planner",
+};
+export const tradeTabKey = "tradeRoomTab";
+export const readTradeTab = (raw?: string): TradeTab =>
+  tradeTabs.find((t) => t === raw) ?? "manual";
+
+const maxSide = 5;
+
+// Toggle one player in a side's list, keeping at most five.
+const toggle = (ids: string[], id: string) =>
+  ids.includes(id)
+    ? ids.filter((x) => x !== id)
+    : ids.length < maxSide
+      ? [...ids, id]
+      : ids;
+
+// A pick list of one team's players; selected players are marked and the side is capped at five.
+function Picker({
+  label,
+  players,
+  selected,
+  change,
+}: {
+  label: string;
+  players: Player[];
+  selected: string[];
+  change: (ids: string[]) => void;
+}) {
+  return (
+    <div className="gd-picker" role="group" aria-label={label}>
+      {players.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          className="gd-opt"
+          aria-pressed={selected.includes(p.id)}
+          disabled={!selected.includes(p.id) && selected.length >= maxSide}
+          onClick={() => change(toggle(selected, p.id))}
+        >
+          {p.name}
+          <small>
+            {p.pos}{" "}
+            {p.blendedExpected === null ? "—" : p.blendedExpected.toFixed(1)}
+          </small>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Grade-step chips under a side; nothing renders when no position moved.
+function Chips({ chips, label }: { chips: GradeChip[]; label: string }) {
+  if (chips.length === 0) return null;
+  return (
+    <div className="gd-chips" role="list" aria-label={label}>
+      {chips.map((c) => (
+        <span key={c.position} role="listitem">
+          <Chip
+            tone={c.tone}
+            title={`${c.position} grade ${c.before} to ${c.after}`}
+          >
+            {c.text}
+          </Chip>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+const tagText = (slot: LineupSlot) =>
+  slot.tag === null
+    ? null
+    : typeof slot.tag === "string"
+      ? slot.tag
+      : `Shifted from ${slot.tag.shiftedFrom}`;
+
+// One lineup slot: the player (opening the card), Expected PPG and a tag only when the slot changed.
+function SlotRow({ slot, m }: { slot: LineupSlot; m: Model }) {
+  const p = slot.id ? m.byId.get(slot.id) : undefined;
+  const tag = tagText(slot);
+  return (
+    <li className="gd-slot" data-tag={tag ? "yes" : undefined}>
+      <b>{slot.slot}</b>
+      {p ? (
+        <PlayerName p={p} className="player-link" />
+      ) : (
+        <span className="gd-muted">Unfilled</span>
+      )}
+      <span className="gd-slot-eppg">{slot.eppg ?? "—"}</span>
+      {tag && slot.tag !== "Unfilled" && (
+        <Chip
+          tone={
+            slot.tag === "Leaves" || slot.tag === "To bench"
+              ? "negative"
+              : "positive"
+          }
+        >
+          {tag}
+        </Chip>
+      )}
+    </li>
+  );
+}
+
+// The Manual analyzer in the new look: two sides, grade-step chips, the lineup field and four separate verdicts.
+function ManualAnalyzer({
+  m,
+  draft,
+  lineupsRaw,
+  basis,
+  change,
+  changeBasis,
+  forceTrade,
+}: {
+  m: Model;
+  draft: Draft;
+  lineupsRaw: string | undefined;
+  basis: LineupBasis;
+  change: (draft: Draft) => void;
+  changeBasis: (basis: LineupBasis) => void;
+  forceTrade?: (draft: Draft) => { ok: boolean } | boolean;
+}) {
+  const [view, setView] = useState<"your" | "their">("your"),
+    [phase, setPhase] = useState<"before" | "after">("after"),
+    [week, setWeek] = useState<number>(m.weeks[0] ?? m.current),
+    [forced, setForced] = useState("");
+  const result = useMemo(
+    () =>
+      draft.give.length && draft.get.length
+        ? evaluateTrade(m, draft, true, lineupsRaw)
+        : null,
+    [m, draft, lineupsRaw],
+  );
+  const valid = result && result.valid ? result : null;
+  const impact = valid ? tradeImpact(valid, basis) : null;
+  const chips = valid ? gradeStepChips(m, draft, valid) : null;
+  const verdictRows = valid ? verdicts(m, valid, basis) : null;
+  const tape = taleOfTape(m, draft);
+  const mineName = str(
+    m.dataset.tables.ModelTeams.find((t) => str(t.TeamID) === draft.teamA)
+      ?.TeamName,
+  );
+  const otherTeams = m.dataset.tables.ModelTeams.filter(
+    (t) => str(t.TeamID) !== draft.teamA,
+  );
+  const moves =
+    impact && valid
+      ? view === "your"
+        ? lineupMoves(m, impact.own, week, draft.give, draft.get)
+        : lineupMoves(m, impact.other, week, draft.get, draft.give)
+      : null;
+  const slots = moves ? (phase === "before" ? moves.before : moves.after) : [];
+  const forceErrors = scenarioTradeErrors(m, draft);
+  return (
+    <div className="gd-manual">
+      <div className="gd-sides">
+        <section className="gd-side gd-side-send" aria-label="You send">
+          <small>YOU SEND · {mineName}</small>
+          <h2>
+            {draft.give.length
+              ? `${draft.give.length} player${draft.give.length === 1 ? "" : "s"}`
+              : "Choose players"}
+          </h2>
+          <Picker
+            label="Players you send"
+            players={m.players.filter((p) => p.owner === draft.teamA)}
+            selected={draft.give}
+            change={(give) => change({ ...draft, give })}
+          />
+          {chips && <Chips chips={chips.own} label="Your grade steps" />}
+        </section>
+        <section className="gd-tape" aria-label="Tale of the tape">
+          <h3>Tale of the tape</h3>
+          {tape.map((r) => (
+            <div key={r.label}>
+              <span>{r.send ?? "—"}</span>
+              <b>{r.label}</b>
+              <span>{r.receive ?? "—"}</span>
+            </div>
+          ))}
+        </section>
+        <section className="gd-side gd-side-receive" aria-label="You receive">
+          <label className="gd-field">
+            <span>YOU RECEIVE · from</span>
+            <select
+              aria-label="Trade partner"
+              value={draft.teamB}
+              onChange={(e) =>
+                change({ ...draft, teamB: e.target.value, get: [] })
+              }
+            >
+              <option value="">Choose a team</option>
+              {otherTeams.map((t) => (
+                <option key={str(t.TeamID)} value={str(t.TeamID)}>
+                  {str(t.TeamName)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <h2>
+            {draft.get.length
+              ? `${draft.get.length} player${draft.get.length === 1 ? "" : "s"}`
+              : "Choose players"}
+          </h2>
+          <Picker
+            label="Players you receive"
+            players={m.players.filter(
+              (p) => draft.teamB && p.owner === draft.teamB,
+            )}
+            selected={draft.get}
+            change={(get) => change({ ...draft, get })}
+          />
+          {chips && <Chips chips={chips.other} label="Their grade steps" />}
+        </section>
+      </div>
+
+      {!result && (
+        <p className="gd-muted">
+          Choose one to five players on each side to see the verdicts.
+        </p>
+      )}
+      {result && !result.valid && (
+        <div className="gd-banner" role="alert">
+          {result.errors.join(" ")}
+        </div>
+      )}
+
+      {valid && verdictRows && (
+        <>
+          <section className="gd-verdicts" aria-label="Verdicts">
+            {verdictRows.map((v) => (
+              <details key={v.id} className="gd-verdict" data-tone={v.tone}>
+                <summary>
+                  <span>{v.label}</span>
+                  <strong>{v.summary}</strong>
+                </summary>
+                <ul>
+                  {v.detail.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </details>
+            ))}
+          </section>
+
+          <section className="gd-field-view" aria-label="Lineup impact">
+            <header>
+              <h3>Lineup impact</h3>
+              <Segmented
+                label="Team"
+                options={["your", "their"] as const}
+                value={view}
+                format={(v) => (v === "your" ? "Your team" : "Their team")}
+                onChange={setView}
+              />
+              <Segmented
+                label="Phase"
+                options={["before", "after"] as const}
+                value={phase}
+                onChange={setPhase}
+              />
+              <label className="gd-field inline">
+                <span>Week</span>
+                <select
+                  aria-label="Week"
+                  value={week}
+                  onChange={(e) => setWeek(Number(e.target.value))}
+                >
+                  {m.weeks.map((w) => (
+                    <option key={w} value={w}>
+                      W{w}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Segmented
+                label="Lineup basis"
+                options={lineupBases}
+                value={basis}
+                format={(b) => lineupBasisLabel(b)}
+                onChange={changeBasis}
+              />
+            </header>
+            <ul className="gd-slots">
+              {slots.map((s, i) => (
+                <SlotRow key={`${s.slot}-${i}`} slot={s} m={m} />
+              ))}
+            </ul>
+            {moves && moves.notes.length > 0 && (
+              <ul className="gd-notes" aria-label="Who moves">
+                {moves.notes.map((n) => (
+                  <li key={n}>{n}</li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <div className="gd-row">
+            {forceTrade && (
+              <button
+                type="button"
+                className="gd-cta"
+                disabled={forceErrors.length > 0}
+                title={forceErrors[0]}
+                onClick={() => {
+                  if (forceTrade(draft))
+                    setForced(
+                      "Applied to a hypothetical roster. Open Roster to see it.",
+                    );
+                }}
+              >
+                Force this trade into a hypothetical roster
+              </button>
+            )}
+            {forced && (
+              <span role="status" className="gd-muted">
+                {forced} <a href="#/roster">Open Roster</a>
+              </span>
+            )}
+          </div>
+
+          <details className="gd-disclosure">
+            <summary>Requirements and conditions</summary>
+            <ul>
+              <li>
+                Surplus package test: {valid.surplusTest}. Needed{" "}
+                {valid.requiredSurplus.toFixed(1)}, actual{" "}
+                {valid.actualSurplus.toFixed(1)}.
+              </li>
+              <li>
+                Fantasy-points package test: {valid.pointsTest}. Needed{" "}
+                {valid.requiredPoints.toFixed(1)}, actual{" "}
+                {valid.actualPoints.toFixed(1)}
+                {valid.dropCost > 0
+                  ? `, including ${valid.dropCost.toFixed(1)} of required-drop replacement cost`
+                  : ""}
+                .
+              </li>
+            </ul>
+          </details>
+          <details className="gd-disclosure">
+            <summary>Required changes and optional pickups</summary>
+            <ul>
+              <li>
+                Your drops:{" "}
+                {valid.dropsA.map((id) => m.byId.get(id)?.name).join(", ") ||
+                  "none"}
+              </li>
+              <li>
+                Their drops:{" "}
+                {valid.dropsB.map((id) => m.byId.get(id)?.name).join(", ") ||
+                  "none"}
+              </li>
+              <li>
+                Optional waiver pickups for you:{" "}
+                {valid.addsA.map((id) => m.byId.get(id)?.name).join(", ") ||
+                  "none"}
+              </li>
+              <li>
+                Optional waiver pickups for them:{" "}
+                {valid.addsB.map((id) => m.byId.get(id)?.name).join(", ") ||
+                  "none"}
+              </li>
+            </ul>
+            <p className="gd-muted">
+              Pickups depend on successful claims and are separate from the
+              lineup gain above.
+            </p>
+          </details>
+          <details className="gd-disclosure">
+            <summary>Market reference</summary>
+            <p>{valid.market.status}</p>
+            {valid.market.outgoing !== null &&
+              valid.market.incoming !== null && (
+                <p>
+                  {valid.market.source}: sending{" "}
+                  {valid.market.outgoing.toFixed(0)} versus receiving{" "}
+                  {valid.market.incoming.toFixed(0)}.
+                </p>
+              )}
+          </details>
+          <details className="gd-disclosure gd-legacy">
+            <summary>Stress test</summary>
+            <TradeStressTest
+              m={m}
+              draft={draft}
+              plans={lineupsRaw}
+              change={() => {}}
+            />
+          </details>
+        </>
+      )}
+    </div>
+  );
+}
+
+// The Trade room: tabs for the Manual analyzer, Find trades and the Chain planner, plus the journal.
+export function TradeRoom({
+  m,
+  draft,
+  lineupsRaw,
+  basisRaw,
+  tab,
+  setTab,
+  change,
+  changeBasis,
+  forceTrade,
+  legacy,
+}: {
+  m: Model;
+  draft: Draft;
+  lineupsRaw: string | undefined;
+  basisRaw: string | undefined;
+  tab: TradeTab;
+  setTab: (tab: TradeTab) => void;
+  change: (draft: Draft) => void;
+  changeBasis: (basis: LineupBasis) => void;
+  forceTrade?: (draft: Draft) => { ok: boolean } | boolean;
+  // The current trade tools, shown for Find trades and the Chain planner until those tabs are rebuilt.
+  legacy: ReactNode;
+}) {
+  return (
+    <div className="gd-trade">
+      <header className="gd-trade-head">
+        <h2>Trade room</h2>
+        <div className="gd-tabs" role="tablist" aria-label="Trade tools">
+          {tradeTabs.map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => setTab(t)}
+            >
+              {tabLabel[t]}
+            </button>
+          ))}
+        </div>
+        <a className="gd-pill" href="#/journal">
+          Journal
+        </a>
+      </header>
+      {tab === "manual" ? (
+        <ManualAnalyzer
+          m={m}
+          draft={draft}
+          lineupsRaw={lineupsRaw}
+          basis={readLineupBasis(basisRaw)}
+          change={change}
+          changeBasis={changeBasis}
+          forceTrade={forceTrade}
+        />
+      ) : (
+        <>
+          <p className="gd-muted">
+            The full current {tabLabel[tab].toLowerCase()} opens here with every
+            control until its redesigned version is ready.
+          </p>
+          <div className="gd-legacy">{legacy}</div>
+        </>
+      )}
+    </div>
+  );
+}
