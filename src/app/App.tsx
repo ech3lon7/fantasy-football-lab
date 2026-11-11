@@ -15,6 +15,11 @@ import {
 import { GamedayHeader } from "../features/next/Shell";
 import { Scouting } from "../features/next/Scouting";
 import { Roster } from "../features/next/Roster";
+import {
+  GamedayWelcome,
+  SignalsTicker,
+  Week,
+} from "../features/next/Week";
 import { League } from "../features/next/League";
 import {
   PlayerCardProvider,
@@ -895,7 +900,7 @@ export default function App() {
     ) : null;
   const content = (
     <div
-      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}${previewOn && ["players", "gems", "weekly", "roster", "teams"].includes(page) ? " gd-new-screen" : ""}`}
+      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}${previewOn && ["players", "gems", "weekly", "roster", "teams", "overview"].includes(page) ? " gd-new-screen" : ""}`}
     >
       {previewOn && (
         <GamedayHeader
@@ -965,6 +970,10 @@ export default function App() {
             </a>
           </div>
         </aside>
+      )}
+      {/* Active labels sit under the header on every preview screen. */}
+      {previewOn && (
+        <SignalsTicker m={model} team={w?.state.preferredTeam ?? ""} />
       )}
       <main>
         {!previewOn && (
@@ -1247,7 +1256,11 @@ export default function App() {
           {!ready ? (
             <p>Opening your workspace…</p>
           ) : !d && !preview && page !== "data" ? (
-            <Welcome onImport={() => fileRef.current?.click()} />
+            previewOn ? (
+              <GamedayWelcome onImport={() => fileRef.current?.click()} />
+            ) : (
+              <Welcome onImport={() => fileRef.current?.click()} />
+            )
           ) : model && w ? (
             <>
               {previewOn && page === "roster" && (
@@ -1278,7 +1291,17 @@ export default function App() {
                   }
                 />
               )}
-              {page === "overview" && (
+              {previewOn && page === "overview" && (
+                <Week
+                  m={model}
+                  team={w.state.preferredTeam}
+                  teamName={str(currentTeam?.TeamName)}
+                  grades={analysisGrades.get(w.state.preferredTeam) ?? []}
+                  draft={w.state.draft}
+                  basis={w.state.filters[lineupBasisKey]}
+                />
+              )}
+              {!previewOn && page === "overview" && (
                 <>
                   {simulator}
                   <Overview

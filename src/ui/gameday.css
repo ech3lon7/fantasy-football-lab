@@ -1206,3 +1206,248 @@
 :root[data-gameday] .gd-legacy .grade-card > strong {
   color: var(--gd-model);
 }
+/* This week: hero, outlook chart, move cards, scoreboard and the signals ticker. */
+:root[data-gameday] .gd-week {
+  display: grid;
+  gap: 28px;
+  color: var(--gd-ink);
+}
+:root[data-gameday] .gd-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 32px;
+  align-items: center;
+}
+:root[data-gameday] .gd-hero h2 {
+  margin: 8px 0 12px;
+  font-family: var(--gd-font-display);
+  font-size: clamp(40px, 6vw, 64px);
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+:root[data-gameday] .gd-hero p {
+  max-width: 52ch;
+  color: var(--gd-muted);
+  font-size: 18px;
+}
+:root[data-gameday] .gd-eyebrow {
+  color: var(--gd-muted);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+:root[data-gameday] .gd-cta {
+  display: inline-block;
+  padding: 10px 20px;
+  border-radius: 999px;
+  background: var(--gd-selected);
+  color: var(--gd-selected-ink);
+  font-weight: 700;
+}
+:root[data-gameday] .gd-welcome {
+  grid-template-columns: 1fr;
+  padding: 24px 0;
+}
+:root[data-gameday] .gd-outlook {
+  padding: 20px;
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-ink);
+  border-radius: var(--gd-radius);
+}
+:root[data-gameday] .gd-outlook-top {
+  display: flex;
+  gap: 32px;
+  margin: 8px 0;
+}
+:root[data-gameday] .gd-outlook-top strong {
+  display: block;
+  font-family: var(--gd-font-display);
+  font-size: 56px;
+  line-height: 1;
+  color: var(--gd-model);
+}
+:root[data-gameday] .gd-outlook-top strong.above {
+  color: var(--gd-positive-ink);
+}
+:root[data-gameday] .gd-outlook-top strong.below {
+  color: var(--gd-negative-ink);
+}
+:root[data-gameday] .gd-outlook-top small {
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-outlook-svg {
+  width: 100%;
+  height: auto;
+}
+:root[data-gameday] .gd-outlook-mine {
+  fill: none;
+  stroke: var(--gd-model);
+  stroke-width: 3;
+}
+:root[data-gameday] .gd-outlook-median {
+  fill: none;
+  stroke: var(--gd-muted);
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+}
+:root[data-gameday] .gd-outlook-axis {
+  fill: var(--gd-muted);
+  font-size: 11px;
+}
+:root[data-gameday] .gd-outlook-tag {
+  fill: var(--gd-ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+:root[data-gameday] .gd-h2 {
+  margin: 0 0 12px;
+  font-family: var(--gd-font-display);
+  font-size: 26px;
+  text-transform: uppercase;
+}
+:root[data-gameday] .gd-moves {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+:root[data-gameday] .gd-move {
+  display: grid;
+  gap: 4px;
+  padding: 18px;
+  border-radius: var(--gd-radius);
+}
+:root[data-gameday] .gd-move h3 {
+  margin: 0;
+  font-family: var(--gd-font-display);
+  font-size: 26px;
+  text-transform: uppercase;
+}
+:root[data-gameday] .gd-move strong {
+  font-family: var(--gd-font-display);
+  font-size: 44px;
+  line-height: 1;
+}
+:root[data-gameday] .gd-move p {
+  margin: 0;
+}
+:root[data-gameday] .gd-move-trade {
+  background: var(--gd-grade-1);
+  color: var(--gd-grade-ink);
+}
+:root[data-gameday] .gd-move-waiver {
+  background: var(--gd-espn);
+  color: var(--gd-bg);
+}
+:root[data-gameday] .gd-move-lineup {
+  background: var(--gd-fact);
+  color: var(--gd-bg);
+}
+:root[data-gameday] .gd-score-rows {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-ink);
+  border-radius: var(--gd-radius);
+}
+:root[data-gameday] .gd-score-head,
+:root[data-gameday] .gd-score-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 1fr 70px;
+  gap: 14px;
+  align-items: center;
+}
+:root[data-gameday] .gd-score-head {
+  color: var(--gd-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+:root[data-gameday] .gd-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  background: var(--gd-surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+:root[data-gameday] .gd-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--gd-muted);
+  opacity: 0.5;
+  border-radius: 999px;
+}
+:root[data-gameday] .gd-bar i[data-side="above"] {
+  background: var(--gd-positive-ink);
+  opacity: 0.55;
+}
+:root[data-gameday] .gd-bar i[data-side="below"] {
+  background: var(--gd-negative-ink);
+  opacity: 0.55;
+}
+:root[data-gameday] .gd-bar em {
+  position: relative;
+  padding-left: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+/* Signals ticker: a scrollable row, looping only when animation is Full. */
+:root[data-gameday] .gd-ticker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 24px;
+  background: var(--gd-surface-2);
+  border-bottom: 2px solid var(--gd-line);
+  overflow: hidden;
+}
+:root[data-gameday] .gd-ticker > b {
+  flex: none;
+  padding: 2px 10px;
+  background: var(--gd-selected);
+  color: var(--gd-selected-ink);
+  font-family: var(--gd-font-display);
+}
+:root[data-gameday] .gd-ticker-track {
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+:root[data-gameday] .gd-ticker-run {
+  display: inline-flex;
+  gap: 20px;
+  white-space: nowrap;
+}
+:root[data-gameday] .gd-tick {
+  color: var(--gd-ink);
+  font-size: 14px;
+}
+:root[data-gameday] .gd-tick[data-direction="up"] span {
+  color: var(--gd-model);
+}
+:root[data-gameday] .gd-tick[data-direction="down"] span {
+  color: var(--gd-negative-ink);
+}
+/* The looping copy exists only for the scroll, so it is hidden unless animation is Full. */
+:root[data-gameday] .gd-tick[aria-hidden="true"] {
+  display: none;
+}
+:root[data-gameday][data-animation="full"] .gd-ticker-track {
+  overflow: hidden;
+}
+:root[data-gameday][data-animation="full"] .gd-tick[aria-hidden="true"] {
+  display: inline;
+}
+:root[data-gameday][data-animation="full"] .gd-ticker-run {
+  animation: gd-scroll 40s linear infinite;
+}
+@keyframes gd-scroll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (max-width: 860px) {
+  :root[data-gameday] .gd-hero {
+    grid-template-columns: 1fr;
+  }
+}
