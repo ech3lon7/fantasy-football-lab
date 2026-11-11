@@ -2,9 +2,8 @@ import { useEffect } from "react";
 import { isEditableTarget, nextRowIndex } from "./keys";
 
 // Mark a list row with data-player-row; Up and Down then move focus between rows and Enter opens the row's player link.
-export function usePlayerRowKeys(enabled: boolean) {
+export function usePlayerRowKeys() {
   useEffect(() => {
-    if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
@@ -30,5 +29,5 @@ export function usePlayerRowKeys(enabled: boolean) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [enabled]);
+  }, []);
 }

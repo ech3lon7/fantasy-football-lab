@@ -1,11 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import { seedLabelWhy } from "./label-why-seed";
 
-// Turn the preview on and open a route.
+// Open a route.
 async function open(page: Page, hash = "#/week") {
   await seedLabelWhy(page);
   await page.goto("./#/data");
-  await page.getByLabel("Use the Gameday Plus preview").check();
   await page.goto(`./${hash}`);
 }
 

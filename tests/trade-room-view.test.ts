@@ -131,6 +131,29 @@ describe("verdicts", () => {
     expect(v[3].tone).toBe(result.uncertainty.length ? "warn" : "good");
     expect(v[0].summary).toBe(result.grade);
   });
+  it("draws the advantage bar from the deal result, capped at 100%", () => {
+    if (!result.valid) return;
+    const bar = verdicts(m, result)![0].bar!;
+    if (result.advantage === null) expect(bar.percent).toBeNull();
+    else {
+      expect(Math.abs(bar.value!)).toBeLessThanOrEqual(1);
+      expect(bar.value).toBeCloseTo(
+        Math.max(-1, Math.min(1, result.advantage)),
+        9,
+      );
+      expect(bar.tone).toBe(
+        result.advantage > 0
+          ? "good"
+          : result.advantage === 0
+            ? "neutral"
+            : result.advantage > -m.settings.BadLossPct
+              ? "warn"
+              : "bad",
+      );
+    }
+    for (const other of verdicts(m, result)!.slice(1))
+      expect(other.bar).toBeUndefined();
+  });
   it("returns null for an invalid trade", () => {
     expect(verdicts(m, evaluateTrade(m, { ...draft, give: [] }))).toBeNull();
   });

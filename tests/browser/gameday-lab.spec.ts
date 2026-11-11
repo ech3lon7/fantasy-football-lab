@@ -1,11 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import { seedLabelWhy } from "./label-why-seed";
 
-// Turn the preview on and open a route.
+// Open a route.
 async function open(page: Page, hash: string) {
   await seedLabelWhy(page);
   await page.goto("./#/data");
-  await page.getByLabel("Use the Gameday Plus preview").check();
   await page.goto(`./${hash}`);
 }
 
@@ -80,7 +79,6 @@ test("lab pages keep every model, evidence, audit and account function", async (
     "Delete cloud workspace",
   ])
     await expect(page.getByRole("button", { name })).toBeVisible();
-  await expect(page.getByLabel("Use the Gameday Plus preview")).toBeChecked();
   expect(errors).toEqual([]);
 });
 

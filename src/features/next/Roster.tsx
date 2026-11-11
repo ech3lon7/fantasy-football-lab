@@ -84,8 +84,16 @@ export function PlayerTile({
         {tile.eppg ?? "—"}
       </span>
       <Strip tile={tile} max={max} />
-      {tile.injury && tile.injury !== "Active" && (
-        <Chip tone="warning">{tile.injury}</Chip>
+      {(tile.labels.length > 0 ||
+        (tile.injury && tile.injury !== "Active")) && (
+        <span className="gd-tile-badges">
+          {tile.labels.slice(0, 3).map((l) => (
+            <Chip key={l}>{l}</Chip>
+          ))}
+          {tile.injury && tile.injury !== "Active" && (
+            <Chip tone="warning">{tile.injury}</Chip>
+          )}
+        </span>
       )}
     </article>
   );

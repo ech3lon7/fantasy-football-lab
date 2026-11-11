@@ -18,6 +18,7 @@ import { playerCard, type Provenance } from "../../domain/view/player-card";
 import type { Model } from "../../domain/valuation";
 import { Chip } from "../../ui/primitives";
 import { Radar } from "./Radar";
+import { PlayerEvidence } from "./PlayerEvidence";
 import { VersusView } from "./Versus";
 import { addToVersus } from "../../domain/view/versus";
 
@@ -274,6 +275,7 @@ function CardView({
                 </dl>
               </section>
             ))}
+            <PlayerEvidence p={p} m={m} />
             {card.numbers.unavailable.length > 0 && (
               <details className="gd-unavailable">
                 <summary>

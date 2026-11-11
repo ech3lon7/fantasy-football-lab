@@ -7,9 +7,9 @@ A personal fantasy football workspace with roster analysis, player comparisons, 
 1. Refresh All in Excel, wait for refresh to finish, recalculate and save your V5.2 workbook.
 2. Open the app and choose **Import workbook**.
 3. Review the snapshot, validation results and settings, then replace the current dataset.
-4. **My team** opens to Los Chilones when present. **League teams** lets you inspect any team.
-5. Use **Players**, **Gem screener** and **Weekly streamers** to explore options.
-6. Build trades in **Trade analyzer**. Read the surplus grade, then check both lineups, requirements, legality, depth and conditions separately.
+4. **This week** opens to your team (Los Chilones when present) with lineup advice and a summary since the last import. **Roster** edits the lineup; **League** compares every team.
+5. Use **Scouting** to explore players, gems and weekly streamers in one place; click any player for the player card.
+6. Build trades in the **Trade room**. Read the surplus grade, then check both lineups, requirements, legality, depth and conditions separately. **Lab** holds model settings, evidence sources, audits, data and account, and the Feel menu (theme, animation, sound).
 
 Actual PPG is recorded scoring; ESPN PPG is the season projection; Expected PPG is the adaptive forecast; Value PPG subtracts the consistency adjustment. Surplus index measures normalized remaining-season value above available replacements, not a market price. Scoring gain per week is a modeled average across all remaining fantasy scoring periods.
 
@@ -47,7 +47,7 @@ Watch shows its own workload qualification routes, including the early-sample br
 
 Gem, Pre-gem and Watch are exclusive primary labels, in that order. Pre-gem keeps the existing positional Gem scoring/workload floors but needs only one qualifying three-game window, improving actual scoring and stable/rising workload. With exactly three played games, trend compares the latest two with the first; longer histories compare the latest three with all earlier games. Gem and TE Gem requirements stay unchanged. Each stage is supported in player views, the screener and incoming-player trade filters; the Pre-gem chip shows the exact requirements, scores, workload and weeks. Old Any-signal/default screener searches automatically include the new stage; explicit narrow selections stay narrow.
 
-The compact “Evaluated through Week X” beside player signals identifies the newest included game, separately from refresh time. The current adapter still excludes the current NFL scoring week, including already finished individual games; this update does not invent new history or treat live scores as final. Pre-gem follow-up in Model & audit records first observations locally and checks scoring/workload Gem confirmation within the next three played games, alongside actual future PPG. Incomplete follow-ups remain pending. This is a provisional pattern comparison, not a probability or an automatic valuation adjustment.
+The compact “Evaluated through Week X” beside player signals identifies the newest included game, separately from refresh time. The current adapter still excludes the current NFL scoring week, including already finished individual games; this update does not invent new history or treat live scores as final. Pre-gem follow-up in Lab → Audits records first observations locally and checks scoring/workload Gem confirmation within the next three played games, alongside actual future PPG. Incomplete follow-ups remain pending. This is a provisional pattern comparison, not a probability or an automatic valuation adjustment.
 
 ## Development
 
@@ -87,7 +87,7 @@ Local import and analysis work without Supabase. To enable cross-device synchron
 1. Use Trainwise’s existing Supabase project. Retain all Trainwise objects and use the separate fantasy objects supplied here. See [shared-project deployment](docs/shared-supabase.md).
 2. Apply `supabase/migrations/001_workspace.sql` in that project’s SQL editor or controlled migration workflow.
 3. Retain Trainwise’s authentication settings and site URL. Append the Fantasy Pages URL to allowed confirmation/reset redirects.
-4. In **Data & account**, enter the project URL and **publishable** key. Never enter a secret/service-role key.
+4. In **Lab → Data and account**, enter the project URL and **publishable** key. Never enter a secret/service-role key.
 5. Sign in and choose **Sync now**. On first sync, explicitly choose whether to initialize/keep this device’s current dataset or use an existing cloud workspace.
 
 The public project URL/key can alternatively be set using the variables in `.env.example`. Administrative credentials belong only in a secure migration environment.
@@ -100,13 +100,13 @@ Cloud storage holds one row per user. Replacements use revisions and request IDs
 
 Click player names to inspect stats without leaving your current screen. Details open beside the name on desktop and in a bottom sheet on mobile. Key scoring/value metrics appear first; expand the evaluation, workload, history or imported-field sections for more. In Trades, select a player and click the name shown beneath their selector. Escape, Close or an outside click dismisses the panel; **Open full player page** still navigates to the full profile. Ctrl/Cmd-click on a player link retains normal browser behavior.
 
-Use **Gem screener** to combine the new **Role-growth watch** and **Scoring breakout watch** signals with existing labels. Advanced filters include recent carries, recent targets, role increase per game and sourced route participation. Player details and roster tables show independent signals together.
+Use **Scouting** (gem filters) to combine the new **Role-growth watch** and **Scoring breakout watch** signals with existing labels. Advanced filters include recent carries, recent targets, role increase per game and sourced route participation. Player details and roster tables show independent signals together.
 
-In **Model & audit**, inspect exploratory role-model errors, optionally apply a clearly labeled forecast scenario, import source-dated player-week/market CSV evidence, or select an injury return-week scenario. The original forecast remains the default. Advanced xFP, WOPR, routes and market references remain unavailable until valid source data is supplied; CSV columns and units are described in the app. Supplemental evidence is replaced as one current set and follows the existing account sync.
+In **Lab**, inspect exploratory role-model errors, optionally apply a clearly labeled forecast scenario, import source-dated player-week/market CSV evidence, or select an injury return-week scenario. The original forecast remains the default. Advanced xFP, WOPR, routes and market references remain unavailable until valid source data is supplied; CSV columns and units are described in the app. Supplemental evidence is replaced as one current set and follows the existing account sync.
 
 ## Hosting
 
-The footer shows the installed app version and build number; **Model & audit → App version** adds the source commit and build time. The release version comes from `package.json` (currently 0.9.0); each GitHub deployment automatically stamps its workflow build number and commit. Local builds are labeled `Build local`. App versions are independent of workbook and model versions. Versions follow **major.moderate.minor**: first number for major app changes, second for moderate changes, third for minor changes. Player popovers were the minor 0.2.1 change; the stricter Gem classification is the moderate 0.3.0 change; the Why panel redesign is the moderate 0.9.0 change. Use `npm version patch --no-git-tag-version` for minor changes, `npm version minor --no-git-tag-version` for moderate changes, or `npm version major --no-git-tag-version` for major changes.
+The footer shows the installed app version and build number; **Lab → Settings → App version** adds the source commit and build time. The release version comes from `package.json` (currently 1.0.0); each GitHub deployment automatically stamps its workflow build number and commit. Local builds are labeled `Build local`. App versions are independent of workbook and model versions. Versions follow **major.moderate.minor**: first number for major app changes, second for moderate changes, third for minor changes. Player popovers were the minor 0.2.1 change; the stricter Gem classification is the moderate 0.3.0 change; the Why panel redesign is the moderate 0.9.0 change; the Gameday Plus redesign (a new navigation, one player card, a Trade room and a Lab) is the major 1.0.0 change. Use `npm version patch --no-git-tag-version` for minor changes, `npm version minor --no-git-tag-version` for moderate changes, or `npm version major --no-git-tag-version` for major changes.
 
 GitHub Actions verifies the source, builds the static application, runs browser smoke tests and deploys GitHub Pages from `main`. Repository base path is `/fantasy-football-lab/`. The offline shell caches only application assets; datasets use account-scoped IndexedDB. Dataset updates require importing refreshed Excel; the app does not directly query ESPN or execute trades.
 
@@ -120,7 +120,7 @@ See [architecture](docs/architecture.md), [implementation plan](docs/implementat
 
 **Watch** keeps its existing workload-only opportunity tests and earlier-game growth comparison. **Reduced workload**, scoring trends, projection gaps and touchdown cautions remain separate supporting signals. Refreshing the imported data automatically recalculates every player's Gem status; scoring forecasts and trade values receive no label bonus. The thresholds have offline historical screening evidence but remain provisional, not calibrated individual success probabilities or proof that a player is undervalued. TE evidence is weaker.
 
-Open **Gem screener** and use **Breakout classification → Gem only / Gem + Watch / All classifications** alongside the existing combined filters. Classification happens for every player on data load, independently of screen filters. Prior saved filter labels migrate automatically while numeric thresholds are preserved. Click a player and select the **Gem** or **Watch** chip to see each observed workload, requirement and result.
+Open **Scouting** and use **Breakout classification → Gem only / Gem + Watch / All classifications** alongside the existing combined filters. Classification happens for every player on data load, independently of screen filters. Prior saved filter labels migrate automatically while numeric thresholds are preserved. Click a player and select the **Gem** or **Watch** chip to see each observed workload, requirement and result.
 
 Stale snapshots and injured same-team competition produce automatic warnings without a manual-confirmation veto. Labels describe the imported data, not verified permanent roles or guaranteed breakouts. Refreshing the workbook and importing it remains the source-update workflow; the app does not fetch ESPN or news automatically. Existing scoring/role watches, BUY LOW/SELL HIGH, valuations and trade calculations remain separate. Thresholds are provisional, not historically validated probabilities.
 

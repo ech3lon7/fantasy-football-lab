@@ -2,11 +2,10 @@ import { test, expect, type Page } from "@playwright/test";
 import { seedLabelWhy } from "./label-why-seed";
 import { openTradeFilters } from "./trade-workspace-helpers";
 
-// Turn the preview on and open the Trade room.
+// Open the Trade room.
 async function open(page: Page) {
   await seedLabelWhy(page);
   await page.goto("./#/data");
-  await page.getByLabel("Use the Gameday Plus preview").check();
   await page.goto("./#/trade");
 }
 

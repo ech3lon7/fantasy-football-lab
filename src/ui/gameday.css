@@ -899,10 +899,6 @@
   color: var(--gd-ink);
 }
 /* New screens draw their own headings, so the current page heading and team picker are hidden there. */
-:root[data-gameday] .gd-new-screen .page-heading,
-:root[data-gameday] .gd-new-screen .my-team-toolbar {
-  display: none;
-}
 :root[data-gameday] .gd-card-versus,
 :root[data-gameday] .gd-pcard-vs {
   padding: 6px 12px;
@@ -2260,4 +2256,89 @@
 :root[data-gameday] .gd-digest li strong {
   margin-left: auto;
   color: var(--gd-model);
+}
+/* Parity additions: roster tile badges, the card's evidence disclosures and the deal-grade advantage bar. */
+:root[data-gameday] .gd-tile-badges {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+:root[data-gameday] .gd-evidence {
+  display: grid;
+  gap: 8px;
+}
+:root[data-gameday] .gd-evidence details {
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-line);
+  border-radius: var(--gd-radius);
+  padding: 10px 14px;
+}
+:root[data-gameday] .gd-evidence summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+:root[data-gameday] .gd-evidence .definition-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 20px;
+}
+:root[data-gameday] .gd-evidence .definition-grid div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--gd-line);
+}
+:root[data-gameday] .gd-evidence dd {
+  margin: 0;
+  font-weight: 700;
+}
+:root[data-gameday] .gd-advbar {
+  position: relative;
+  height: 14px;
+  margin: 8px 0;
+  background: var(--gd-surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+:root[data-gameday] .gd-advbar::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--gd-muted);
+}
+:root[data-gameday] .gd-advbar i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--gd-muted);
+}
+:root[data-gameday] .gd-advbar[data-tone="good"] i {
+  background: var(--gd-positive-ink);
+}
+:root[data-gameday] .gd-advbar[data-tone="warn"] i {
+  background: var(--gd-warning-ink);
+}
+:root[data-gameday] .gd-advbar[data-tone="bad"] i {
+  background: var(--gd-negative-ink);
+}
+:root[data-gameday] .gd-advbar em {
+  position: absolute;
+  right: 8px;
+  top: -2px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+/* Tables inside the Manual analyzer's disclosures take the theme like the other embedded tables. */
+:root[data-gameday] .gd-manual .table-wrap,
+:root[data-gameday] .gd-manual table,
+:root[data-gameday] .gd-manual th,
+:root[data-gameday] .gd-manual td {
+  background: transparent;
+  color: var(--gd-ink);
+  border-color: var(--gd-line);
 }

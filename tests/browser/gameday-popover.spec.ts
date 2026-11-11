@@ -1,11 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { seedLabelWhy } from "./label-why-seed";
 
-// Turn the preview on, then open the page under test.
+// Open the page under test.
 async function enablePreview(page: import("@playwright/test").Page) {
   await seedLabelWhy(page);
   await page.goto("./#/data");
-  await page.getByLabel("Use the Gameday Plus preview").check();
 }
 
 // Esc closes only the top popover, focus returns to each opener, and Tab never leaves the open popover.

@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { str, type Draft } from "../../domain/contracts";
-import { evaluateTrade } from "../../domain/trades";
+import { evaluateTrade, type TradeResult } from "../../domain/trades";
 import {
   lineupBasisLabel,
   lineupBases,
@@ -313,6 +313,28 @@ function ManualAnalyzer({
                   <span>{v.label}</span>
                   <strong>{v.summary}</strong>
                 </summary>
+                {v.bar && (
+                  <div
+                    className="gd-advbar"
+                    data-tone={v.bar.tone}
+                    role="img"
+                    aria-label={
+                      v.bar.value === null
+                        ? "Advantage unavailable"
+                        : `Advantage ${v.bar.percent ?? "favourable, no percentage"}`
+                    }
+                  >
+                    {v.bar.value !== null && (
+                      <i
+                        style={{
+                          left: `${v.bar.value < 0 ? 50 + v.bar.value * 50 : 50}%`,
+                          width: `${Math.abs(v.bar.value) * 50}%`,
+                        }}
+                      />
+                    )}
+                    <em>{v.bar.percent ?? ""}</em>
+                  </div>
+                )}
                 <ul>
                   {v.detail.map((line) => (
                     <li key={line}>{line}</li>
@@ -398,6 +420,41 @@ function ManualAnalyzer({
             )}
           </div>
 
+          <details className="gd-disclosure">
+            <summary>Weekly lineup gain</summary>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Week</th>
+                    <th>Your before → after</th>
+                    <th>Your gain</th>
+                    <th>Their gain</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {impact?.own.weekly.map((w, i) => (
+                    <tr key={w.week}>
+                      <td>W{w.week}</td>
+                      <td>
+                        {fmtGain(w.beforeExpected).replace("+", "")} →{" "}
+                        {fmtGain(w.afterExpected).replace("+", "")}
+                      </td>
+                      <td>{fmtGain(w.expectedGain)}</td>
+                      <td>
+                        {fmtGain(impact.other.weekly[i]?.expectedGain ?? null)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="gd-muted">
+              Expected PPG for the lineups on the selected basis; weeks that
+              cannot be scored show a dash.
+            </p>
+          </details>
+          <CoverageDetails result={valid} />
           <details className="gd-disclosure">
             <summary>Requirements and conditions</summary>
             <ul>
@@ -693,6 +750,58 @@ function CounterOffers({
         </p>
       )}
     </div>
+  );
+}
+
+// Optimized future lineups and coverage: the legacy per-team totals, computed only when the disclosure is opened.
+function CoverageDetails({
+  result,
+}: {
+  result: Extract<TradeResult, { valid: true }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const row = (label: string, side: typeof result.a) => (
+    <tr key={label}>
+      <th scope="row">{label}</th>
+      <td>{fmtGain(side.expected)}</td>
+      <td>{fmtGain(side.value)}</td>
+      <td>{fmtGain(side.waiverExpected)}</td>
+      <td>{fmtGain(side.downside)}</td>
+    </tr>
+  );
+  return (
+    <details
+      className="gd-disclosure"
+      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+    >
+      <summary>Optimized future lineups and coverage</summary>
+      {open && (
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th />
+                  <th>Expected gain (season)</th>
+                  <th>Value gain (season)</th>
+                  <th>Optional waiver gain</th>
+                  <th>Injury downside</th>
+                </tr>
+              </thead>
+              <tbody>
+                {row("You", result.a)}
+                {row("Them", result.b)}
+              </tbody>
+            </table>
+          </div>
+          <p className="gd-muted">
+            Value-selected future lineups with required drops, reserve depth and
+            injury downside. Waiver fills depend on successful claims and stay
+            separate from the lineup gain above.
+          </p>
+        </>
+      )}
+    </details>
   );
 }
 

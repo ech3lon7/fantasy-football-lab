@@ -102,13 +102,9 @@ export function feedback(
 }
 
 // Expose the effective animation level on the root so every transition can be gated on one attribute.
-export function useAnimationRoot(enabled: boolean, pref: AnimationPref) {
+export function useAnimationRoot(pref: AnimationPref) {
   useEffect(() => {
     const root = document.documentElement;
-    if (!enabled) {
-      delete root.dataset.animation;
-      return;
-    }
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
     const apply = () => {
       root.dataset.animation = resolveAnimation(pref, query.matches);
@@ -119,7 +115,7 @@ export function useAnimationRoot(enabled: boolean, pref: AnimationPref) {
       query.removeEventListener("change", apply);
       delete root.dataset.animation;
     };
-  }, [enabled, pref]);
+  }, [pref]);
 }
 
 // Translate a Feel menu change into the filter key and stored string it saves, so the shell stays free of storage details.

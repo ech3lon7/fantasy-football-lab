@@ -1,7 +1,6 @@
 import { NegotiationsProvider, TradeJournal } from "../features/Negotiations";
 import { starterLineupsKey } from "../domain/starter-lineups";
 import { lineupBasisKey } from "../domain/trade-impact";
-import { readUiPreview, uiPreviewKey, writeUiPreview } from "../ui/preview";
 import {
   animationKey,
   feelEntry,
@@ -35,22 +34,7 @@ import { labTabForRoute, pageForRoute } from "../domain/view/shell";
 import { readThemePref, themeKey, useGamedayRoot } from "../ui/feel/theme";
 import { reconcileSavedTrades, savedTradesKey } from "../domain/saved-trades";
 import { useState, useEffect, useRef, useMemo } from "react";
-import {
-  LayoutDashboard,
-  Users,
-  Search,
-  ArrowLeftRight,
-  Diamond,
-  CalendarDays,
-  SlidersHorizontal,
-  Database,
-  Upload,
-  ShieldCheck,
-  Cloud,
-  ChevronRight,
-  Menu,
-  X,
-} from "lucide-react";
+import { X } from "lucide-react";
 import {
   initialState,
   num,
@@ -111,33 +95,7 @@ import {
 import { Legend } from "../ui/components";
 import { FilterHelp } from "../ui/FilterHelp";
 import { Panel } from "../ui/layout";
-import { PlayerPopoverProvider } from "../ui/PlayerPopover";
-import {
-  Welcome,
-  Overview,
-  TeamView,
-  PlayerList,
-  PlayerDetail,
-  GemView,
-  Weekly,
-  TradeView,
-  ModelView,
-  Account,
-} from "../features/views";
-const nav = [
-  ["overview", "My team", LayoutDashboard],
-  ["teams", "League teams", Users],
-  ["players", "Players", Search],
-  ["trades", "Trade analyzer", ArrowLeftRight],
-  ["journal", "Trade journal", ArrowLeftRight],
-  ["gems", "Gem screener", Diamond],
-  ["weekly", "Weekly streamers", CalendarDays],
-  ["model", "Model & audit", SlidersHorizontal],
-  ["data", "Data & account", Database],
-] as const;
-const labels: Record<string, string> = Object.fromEntries(
-  nav.map(([key, label]) => [key, label]),
-);
+import { TradeView, ModelView, Account } from "../features/views";
 // Report this running bundle's release rather than the workbook or calculation-model version.
 const appRelease = {
   version: import.meta.env.VITE_APP_VERSION,
@@ -176,24 +134,17 @@ export default function App() {
       dataset: Dataset;
       summary: string;
     } | null>(null),
-    [mobile, setMobile] = useState(false),
     [config, setConfig] = useState<CloudConfig>(getConfig),
     [email, setEmail] = useState(""),
     [syncStatus, setSyncStatus] = useState("Local only"),
     [conflict, setConflict] = useState<Workspace | null | undefined>(undefined),
     [updateReady, setUpdateReady] = useState(false);
-  // Apply the preview root and resolved theme only while the preview is on.
-  useGamedayRoot(
-    readUiPreview(w?.state.filters[uiPreviewKey]),
-    readThemePref(w?.state.filters[themeKey]),
-  );
-  // Up and Down move between marked player rows while the preview is on.
-  usePlayerRowKeys(readUiPreview(w?.state.filters[uiPreviewKey]));
+  // Apply the interface root and the resolved theme.
+  useGamedayRoot(readThemePref(w?.state.filters[themeKey]));
+  // Up and Down move between marked player rows.
+  usePlayerRowKeys();
   // Publish the effective animation level so transitions are gated on one root attribute.
-  useAnimationRoot(
-    readUiPreview(w?.state.filters[uiPreviewKey]),
-    readAnimationPref(w?.state.filters[animationKey]),
-  );
+  useAnimationRoot(readAnimationPref(w?.state.filters[animationKey]));
   // Compare the current import with the summary kept from the previous one; nothing is shown without a previous import.
   useEffect(() => {
     if (!w || !realModel || realModel.dataset.hash !== w.dataset?.hash) {
@@ -995,11 +946,8 @@ export default function App() {
     currentTeam = d?.tables.ModelTeams.find(
       (t) => str(t.TeamID) === w?.state.preferredTeam,
     ),
-    stale =
-      !!d && (!d.sourceUTC || Date.now() - Date.parse(d.sourceUTC) > 86400000),
-    previewOn = readUiPreview(w?.state.filters[uiPreviewKey]),
-    // The preview shell maps its six section routes to the screens that exist today.
-    page = previewOn ? pageForRoute(route) : route.split("/")[0];
+    // The six section routes, and the earlier addresses, map to the screens below.
+    page = pageForRoute(route);
   // The account and import controls, shown on Data & account and on the Lab's Data and account page.
   const accountView = (
     <Account
@@ -1017,16 +965,6 @@ export default function App() {
       status={syncStatus}
       notify={setError}
       importClick={() => fileRef.current?.click()}
-      uiPreview={readUiPreview(w?.state.filters[uiPreviewKey])}
-      // Merge only this key against the latest workspace, preserving unrelated filters.
-      setUiPreview={(on) =>
-        updateState({
-          filters: {
-            ...wRef.current!.state.filters,
-            [uiPreviewKey]: writeUiPreview(on),
-          },
-        })
-      }
       clear={async (cloud) => {
         if (!w) return;
         if (
@@ -1056,6 +994,27 @@ export default function App() {
   const labReady = !!(model && w && realModel);
   const labSettings = labReady ? (
     <>
+      {/* This explicit account-synced selector is separate from browsing opponents. */}
+      <Panel title="My team">
+        <label className="control">
+          <span>My team</span>
+          <select
+            aria-label="My team"
+            value={w!.state.preferredTeam}
+            onChange={(event) =>
+              updateState(
+                selectMyTeam(wRef.current!.state, d!, event.target.value),
+              )
+            }
+          >
+            {d!.tables.ModelTeams.map((team) => (
+              <option key={str(team.TeamID)} value={str(team.TeamID)}>
+                {str(team.TeamName)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </Panel>
       {/* Build details identify the installed app when diagnosing updates across devices. */}
       <Panel title="App version">
         <p>
@@ -1116,142 +1075,43 @@ export default function App() {
     ) : null;
   const content = (
     <div
-      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}${previewOn && ["players", "gems", "weekly", "roster", "teams", "overview", "trades", "journal", "lab"].includes(page) ? " gd-new-screen" : ""}`}
+      className={`app-shell gd-shell${page === "trades" ? " trade-page" : ""}${["players", "gems", "weekly", "roster", "teams", "overview", "trades", "journal", "lab"].includes(page) ? " gd-new-screen" : ""}`}
     >
-      {previewOn && (
-        <GamedayHeader
-          route={route}
-          model={realModel}
-          sourceUTC={d ? (d.sourceUTC ?? null) : undefined}
-          week={d ? num(d.tables.ModelContext[0].CurrentWeek) : null}
-          finalWeek={d ? num(d.tables.ModelContext[0].FinalWeek) : null}
-          syncStatus={syncStatus}
-          hypothetical={model?.simulation?.scenario.name ?? null}
-          busy={busy}
-          onImport={() => fileRef.current?.click()}
-          feel={{
-            theme: readThemePref(w?.state.filters[themeKey]),
-            animation: readAnimationPref(w?.state.filters[animationKey]),
-            sound: readFlag(w?.state.filters[soundKey]),
-            haptics: readFlag(w?.state.filters[hapticsKey]),
-            hapticsSupported: hapticsSupported(),
-          }}
-          // Merge only the changed Feel key against the latest workspace, preserving unrelated filters.
-          changeFeel={(key, value) => {
-            const [filterKey, stored] = feelEntry(key, value);
-            if (w)
-              updateState({
-                filters: {
-                  ...wRef.current!.state.filters,
-                  [filterKey]: stored,
-                },
-              });
-          }}
-        />
-      )}
-      {!previewOn && (
-        <aside className={`sidebar ${mobile ? "open" : ""}`}>
-          <a className="brand" href="#/overview">
-            <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" />
-            <span>
-              FANTASY<span>FOOTBALL LAB</span>
-            </span>
-          </a>
-          <div className="workspace-tag">
-            <span className="live-dot" /> YOUR LEAGUE WORKSPACE
-          </div>
-          <nav aria-label="Main navigation">
-            {nav.map(([key, label, Icon]) => (
-              <a
-                key={key}
-                className={page === key ? "active" : ""}
-                href={`#/${key}`}
-                onClick={() => setMobile(false)}
-              >
-                <Icon size={18} />
-                {label}
-                {page === key && <ChevronRight size={15} />}
-              </a>
-            ))}
-          </nav>
-          <div className="sidebar-bottom">
-            <ShieldCheck size={20} />
-            <p>
-              Your league. Your data.
-              <small>
-                One current snapshot and a small summary of the previous import.
-                No Excel archive.
-              </small>
-            </p>
-            <a href="#/data" className="sync-pill">
-              <Cloud size={14} />
-              {syncStatus}
-            </a>
-          </div>
-        </aside>
-      )}
-      {/* Active labels sit under the header on every preview screen; phones also get a bottom bar. */}
-      {previewOn && <BottomBar route={route} />}
-      {previewOn && (
-        <SignalsTicker m={model} team={w?.state.preferredTeam ?? ""} />
-      )}
+      <GamedayHeader
+        route={route}
+        model={realModel}
+        sourceUTC={d ? (d.sourceUTC ?? null) : undefined}
+        week={d ? num(d.tables.ModelContext[0].CurrentWeek) : null}
+        finalWeek={d ? num(d.tables.ModelContext[0].FinalWeek) : null}
+        syncStatus={syncStatus}
+        hypothetical={model?.simulation?.scenario.name ?? null}
+        busy={busy}
+        onImport={() => fileRef.current?.click()}
+        feel={{
+          theme: readThemePref(w?.state.filters[themeKey]),
+          animation: readAnimationPref(w?.state.filters[animationKey]),
+          sound: readFlag(w?.state.filters[soundKey]),
+          haptics: readFlag(w?.state.filters[hapticsKey]),
+          hapticsSupported: hapticsSupported(),
+        }}
+        // Merge only the changed Feel key against the latest workspace, preserving unrelated filters.
+        changeFeel={(key, value) => {
+          const [filterKey, stored] = feelEntry(key, value);
+          if (w)
+            updateState({
+              filters: {
+                ...wRef.current!.state.filters,
+                [filterKey]: stored,
+              },
+            });
+        }}
+      />
+
+      {/* Active labels sit under the header on every screen; phones also get a bottom bar. */}
+      <BottomBar route={route} />
+      <SignalsTicker m={model} team={w?.state.preferredTeam ?? ""} />
       <main>
-        {!previewOn && (
-          <header className="topbar">
-            <button
-              className="mobile-menu subtle"
-              aria-label="Toggle navigation"
-              onClick={() => setMobile(!mobile)}
-            >
-              <Menu />
-            </button>
-            <div className="breadcrumb">
-              Workspace <ChevronRight size={14} />{" "}
-              <b>{labels[page] ?? "Player detail"}</b>
-            </div>
-            <div className="top-actions">
-              {d && (
-                <span className="week-label">
-                  Week {num(d.tables.ModelContext[0].CurrentWeek)}{" "}
-                  <span> / {num(d.tables.ModelContext[0].FinalWeek)}</span>
-                </span>
-              )}
-              <button
-                className="button primary"
-                onClick={() => fileRef.current?.click()}
-                disabled={busy}
-              >
-                <Upload size={16} />
-                {busy ? "Reading workbook…" : "Import workbook"}
-              </button>
-            </div>
-          </header>
-        )}
         <div className="content">
-          {/* Only the team selector joins the desktop trade header; roster status stays in normal content flow. */}
-          <div className="toolbar my-team-toolbar">
-            {/* This explicit account-synced selector is separate from browsing opponents. */}
-            {d && w && (
-              <label className="control">
-                <span>My team</span>
-                <select
-                  aria-label="My team"
-                  value={w.state.preferredTeam}
-                  onChange={(event) =>
-                    updateState(
-                      selectMyTeam(wRef.current!.state, d, event.target.value),
-                    )
-                  }
-                >
-                  {d.tables.ModelTeams.map((team) => (
-                    <option key={str(team.TeamID)} value={str(team.TeamID)}>
-                      {str(team.TeamName)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-          </div>
           {/* Keep the active roster and save action compact; routine refresh explanations belong in hover help, not warning banners. */}
           {model?.simulation && w && (
             <div className="toolbar">
@@ -1268,7 +1128,7 @@ export default function App() {
               ) && (
                 <span>
                   Not saved.{" "}
-                  <a href="#/overview">Save a roster slot on My team.</a>{" "}
+                  <a href="#/roster">Save a roster slot on Roster.</a>{" "}
                 </span>
               )}
               {/* Roster switching stays in My team's simulation selector; never prompt for it globally. */}
@@ -1277,58 +1137,6 @@ export default function App() {
                   {issue} Analysis is conditional until resolved.
                 </p>
               ))}
-            </div>
-          )}
-          <div className="page-heading">
-            <div>
-              <div className="eyebrow">
-                FANTASY FOOTBALL /{" "}
-                {d
-                  ? `${num(d.tables.ModelContext[0].Season)} SEASON`
-                  : "YOUR NEXT ROSTER DECISION"}
-              </div>
-              <h1>
-                {page === "overview"
-                  ? str(currentTeam?.TeamName) || "Your roster, in focus."
-                  : page === "player"
-                    ? "Player evaluation"
-                    : (labels[page] ?? "Fantasy Football Lab")}
-              </h1>
-              <p>
-                {page === "overview"
-                  ? "Understand your strengths. Find your next advantage."
-                  : "Recorded evidence, projections and model estimates, clearly separated."}
-              </p>
-            </div>
-            {d && (
-              <div className="snapshot">
-                <FilterHelp
-                  label="Saved data"
-                  help={
-                    stale
-                      ? "This saved data is over 24 hours old or its date is unavailable. You can keep using it, including hypothetical rosters. To update statistics, refresh and save Excel, then import the workbook."
-                      : "This is the date of the imported player data. You can use either imported or hypothetical rosters."
-                  }
-                >
-                  <span>Saved data</span>
-                </FilterHelp>
-                <small>
-                  {d.sourceUTC
-                    ? new Date(d.sourceUTC).toLocaleString()
-                    : "Refresh time unavailable"}
-                </small>
-              </div>
-            )}
-          </div>
-          {/* Mark the preview so it is never mistaken for the finished interface; new screens mount here from Phase 1. */}
-          {readUiPreview(w?.state.filters[uiPreviewKey]) && (
-            <div
-              className="gd-banner"
-              role="status"
-              data-testid="ui-preview-on"
-            >
-              Gameday Plus preview is on. Screens are replaced as each phase is
-              finished; everything else still uses the current interface.
             </div>
           )}
           {updateReady && (
@@ -1475,18 +1283,11 @@ export default function App() {
           )}
           {!ready ? (
             <p>Opening your workspace…</p>
-          ) : !d &&
-            !preview &&
-            page !== "data" &&
-            !(previewOn && page === "lab") ? (
-            previewOn ? (
-              <GamedayWelcome onImport={() => fileRef.current?.click()} />
-            ) : (
-              <Welcome onImport={() => fileRef.current?.click()} />
-            )
+          ) : !d && !preview && page !== "lab" ? (
+            <GamedayWelcome onImport={() => fileRef.current?.click()} />
           ) : model && w ? (
             <>
-              {previewOn && page === "roster" && (
+              {page === "roster" && (
                 <Roster
                   m={model}
                   team={w.state.preferredTeam}
@@ -1503,7 +1304,7 @@ export default function App() {
                   }
                 />
               )}
-              {previewOn && page === "teams" && (
+              {page === "teams" && (
                 // The grade grid replaces the team page; the full team detail stays below it.
                 <League
                   m={model}
@@ -1517,7 +1318,7 @@ export default function App() {
                   }
                 />
               )}
-              {previewOn && page === "overview" && (
+              {page === "overview" && (
                 <Week
                   m={model}
                   team={w.state.preferredTeam}
@@ -1528,35 +1329,7 @@ export default function App() {
                   digest={digest}
                 />
               )}
-              {!previewOn && page === "overview" && (
-                <>
-                  {simulator}
-                  <Overview
-                    m={model}
-                    grades={analysisGrades.get(w.state.preferredTeam) ?? []}
-                    team={w.state.preferredTeam}
-                    filters={w.state.filters}
-                    onFilters={(patch) =>
-                      updateState({
-                        filters: { ...wRef.current!.state.filters, ...patch },
-                      })
-                    }
-                  />
-                </>
-              )}
-              {!previewOn && page === "teams" && (
-                <TeamView
-                  m={model}
-                  grades={analysisGrades}
-                  team={w.state.filters.browsedTeam || w.state.preferredTeam}
-                  change={(browsedTeam) =>
-                    updateState({
-                      filters: { ...wRef.current!.state.filters, browsedTeam },
-                    })
-                  }
-                />
-              )}
-              {previewOn && ["players", "gems", "weekly"].includes(page) && (
+              {["players", "gems", "weekly"].includes(page) && (
                 // One explorer replaces Players, the Gem screener and Weekly streamers.
                 <Scouting
                   key={w.owner}
@@ -1575,38 +1348,13 @@ export default function App() {
                   }
                 />
               )}
-              {!previewOn && page === "players" && (
-                <PlayerList
-                  m={model}
-                  filters={w.state.filters}
-                  onFilters={(patch) =>
-                    updateState({ filters: { ...w.state.filters, ...patch } })
-                  }
-                />
-              )}
-              {page === "player" && (
-                <PlayerDetail m={model} id={route.split("/")[1]} />
-              )}
-              {!previewOn && page === "gems" && (
-                <GemView
-                  // Account changes must also discard another account's draft filters.
-                  key={w.owner}
-                  m={model}
-                  filters={w.state.filters}
-                  onFilters={(patch) =>
-                    updateState({ filters: { ...w.state.filters, ...patch } })
-                  }
-                />
-              )}
-              {!previewOn && page === "weekly" && <Weekly m={model} />}
               {page === "trades" &&
                 (() => {
-                  // The current trade tools; the preview's Trade room shows them under Find trades and Chain planner.
+                  // The earlier trade tools; the Trade room shows them under Find trades and Chain planner.
                   const tradeView = (
                     <TradeView
-                      key={`${w.owner}/${previewOn ? w.state.filters[tradeTabKey] : ""}`}
+                      key={`${w.owner}/${w.state.filters[tradeTabKey]}`}
                       initialMode={
-                        previewOn &&
                         readTradeTab(w.state.filters[tradeTabKey]) === "chains"
                           ? "chain"
                           : "standard"
@@ -1662,7 +1410,7 @@ export default function App() {
                       }
                     />
                   );
-                  return previewOn ? (
+                  return (
                     <TradeRoom
                       key={w.owner}
                       m={model}
@@ -1708,55 +1456,17 @@ export default function App() {
                       }
                       legacy={tradeView}
                     />
-                  ) : (
-                    tradeView
                   );
                 })()}
               {page === "journal" && (
-                // The journal keeps its behaviour; the preview only gives it the new theme and heading.
-                <div className={previewOn ? "gd-legacy" : undefined}>
+                // The journal keeps its behaviour; the new theme is applied around it.
+                <div className="gd-legacy">
                   <TradeJournal m={model} ownTeam={w.state.preferredTeam} />
                 </div>
               )}
-              {page === "model" && (
-                <>
-                  {/* Build details identify the installed app when diagnosing updates across devices. */}
-                  <Panel title="App version">
-                    <p>
-                      Fantasy Football Lab v{appRelease.version} · Build{" "}
-                      {appRelease.build} · Commit {appRelease.commit}
-                    </p>
-                    <p>
-                      Built{" "}
-                      <time dateTime={appRelease.builtAt}>
-                        {new Date(appRelease.builtAt).toLocaleString()}
-                      </time>
-                      . App version is separate from your imported workbook and
-                      model versions.
-                    </p>
-                  </Panel>
-                  <EvidenceSettings
-                    m={realModel!}
-                    filters={w.state.filters}
-                    change={(patch) =>
-                      updateState({ filters: { ...w.state.filters, ...patch } })
-                    }
-                  />
-                  <ModelView
-                    m={realModel!}
-                    tracking={
-                      gemTracking.current?.owner === w.owner &&
-                      gemTracking.current.hash === realModel?.dataset.hash
-                        ? gemTracking.current.result
-                        : null
-                    }
-                    change={(settings) => updateState({ settings })}
-                  />
-                </>
-              )}
             </>
           ) : null}
-          {previewOn && page === "lab" && (
+          {page === "lab" && (
             <Lab
               tab={labTabForRoute(route)}
               settings={labSettings}
@@ -1782,7 +1492,6 @@ export default function App() {
               }}
             />
           )}
-          {page === "data" && accountView}
           <Legend />
           <footer className="footer">
             Fantasy Football Lab{" "}
@@ -1816,38 +1525,32 @@ export default function App() {
       client={client}
     >
       <PopoverProvider>
-        {previewOn ? (
-          // The preview's single player card replaces the anchored popover and the player page.
-          <PlayerCardProvider
-            m={model}
-            lastTab={readCardTab(w?.state.filters[cardTabKey])}
-            versusRaw={w?.state.filters.versusIds ?? ""}
-            // Remember the comparison pair against the latest workspace, preserving unrelated filters.
-            saveVersus={(raw) => {
-              if (wRef.current)
-                updateState({
-                  filters: { ...wRef.current.state.filters, versusIds: raw },
-                });
-            }}
-            // Remember the last tab against the latest workspace, preserving unrelated filters.
-            saveTab={(tab) => {
-              if (wRef.current)
-                updateState({
-                  filters: { ...wRef.current.state.filters, [cardTabKey]: tab },
-                });
-            }}
-          >
-            <PlayerRouteOpener route={route} ready={!!model} />
-            {content}
-            {/* Popovers render here so player links inside them open the card above them. */}
-            <PopoverLayer />
-          </PlayerCardProvider>
-        ) : (
-          <PlayerPopoverProvider m={model}>
-            {content}
-            <PopoverLayer />
-          </PlayerPopoverProvider>
-        )}
+        // The single player card replaces the anchored popover and the player page.
+        <PlayerCardProvider
+          m={model}
+          lastTab={readCardTab(w?.state.filters[cardTabKey])}
+          versusRaw={w?.state.filters.versusIds ?? ""}
+          // Remember the comparison pair against the latest workspace, preserving unrelated filters.
+          saveVersus={(raw) => {
+            if (wRef.current)
+              updateState({
+                filters: { ...wRef.current.state.filters, versusIds: raw },
+              });
+          }}
+          // Remember the last tab against the latest workspace, preserving unrelated filters.
+          saveTab={(tab) => {
+            if (wRef.current)
+              updateState({
+                filters: { ...wRef.current.state.filters, [cardTabKey]: tab },
+              });
+          }}
+        >
+          <PlayerRouteOpener route={route} ready={!!model} />
+          {content}
+          {/* Popovers render here so player links inside them open the card above them. */}
+          <PopoverLayer />
+        </PlayerCardProvider>
+
       </PopoverProvider>
     </NegotiationsProvider>
   );

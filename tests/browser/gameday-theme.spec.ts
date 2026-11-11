@@ -26,7 +26,6 @@ test("themes follow tokens: no white fills in dark, no ink fills in light, yello
 }) => {
   await seedLabelWhy(page);
   await page.goto("./#/data");
-  await page.getByLabel("Use the Gameday Plus preview").check();
   await page.getByRole("button", { name: "Feel", exact: true }).click();
   const group = page.getByRole("group", { name: "Theme" });
 
@@ -47,18 +46,14 @@ test("themes follow tokens: no white fills in dark, no ink fills in light, yello
   );
 });
 
-// System follows prefers-color-scheme live, and leaving the preview restores the untouched current interface.
-test("System follows the device and preview off removes the theme attributes", async ({
+// System follows prefers-color-scheme live.
+test("System follows the device", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await seedLabelWhy(page);
   await page.goto("./#/data");
-  await page.getByLabel("Use the Gameday Plus preview").check();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.emulateMedia({ colorScheme: "light" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await page.getByLabel("Use the Gameday Plus preview").uncheck();
-  await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.*/);
-  await expect(page.locator("html")).not.toHaveAttribute("data-gameday", /.*/);
 });

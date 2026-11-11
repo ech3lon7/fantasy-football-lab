@@ -41,6 +41,8 @@ import {
   playerColumnName,
   playerColumnProjected,
   playerColumnRecent,
+  playerColumnActual,
+  extendedColumns,
   playerColumnTrend,
   playerColumnValue,
   type Column,
@@ -568,6 +570,18 @@ export function Scouting({
                   >
                     Versus
                   </button>
+                  {view === "table" && (
+                    <label className="gd-check">
+                      <input
+                        type="checkbox"
+                        checked={filters.scoutingAll === "true"}
+                        onChange={(e) =>
+                          onFilters({ scoutingAll: String(e.target.checked) })
+                        }
+                      />
+                      All evaluation fields
+                    </label>
+                  )}
                   <Segmented
                     label="View"
                     options={views}
@@ -713,6 +727,7 @@ export function Scouting({
                 </>
               ) : (
                 <ResultsTable
+                  all={filters.scoutingAll === "true"}
                   m={m}
                   rows={shown}
                   sortKey={sortKey}
@@ -756,7 +771,10 @@ function ResultsTable({
   sortKey,
   desc,
   onSort,
+  all,
 }: {
+  // Show every evaluation field, including ADP comparisons, instead of the compact set.
+  all: boolean;
   m: Model;
   rows: GemResult[];
   sortKey: string;
@@ -770,29 +788,42 @@ function ResultsTable({
     value: (p) => -p.priority,
     render: (p) => <PlayerSignals p={p} />,
   };
-  const base: Column<Player>[] = [
+  const full: Column<Player>[] = [
     playerColumnName,
-    playerColumnTrend,
-    playerColumnExpected,
-    playerColumnIndex,
-    playerColumnRecent,
-    playerColumnProjected,
-    playerColumnValue,
-    signalCol,
-    {
-      key: "opponent",
-      label: `Week ${m.current} opponent`,
-      kind: "fact",
-      value: (p) => p.opponent,
-    },
-    {
-      key: "weekly",
-      label: `ESPN Week ${m.current}`,
-      kind: "projection",
-      value: (p) => p.weekly,
-    },
-    playerColumnInjury,
+    ...extendedColumns.filter((c) => !["name"].includes(c.key)),
   ];
+  const base: Column<Player>[] = all
+    ? full
+    : [
+        playerColumnName,
+        playerColumnTrend,
+        playerColumnExpected,
+        playerColumnIndex,
+        playerColumnRecent,
+        playerColumnProjected,
+        playerColumnValue,
+        signalCol,
+        {
+          key: "opponent",
+          label: `Week ${m.current} opponent`,
+          kind: "fact",
+          value: (p) => p.opponent,
+        },
+        {
+          key: "weekly",
+          label: `ESPN Week ${m.current}`,
+          kind: "projection",
+          value: (p) => p.weekly,
+        },
+        {
+          key: "bye",
+          label: "Bye week",
+          kind: "fact",
+          value: (p) => p.bye,
+        },
+        playerColumnActual,
+        playerColumnInjury,
+      ];
   const columns: Column<GemResult>[] = [
     ...base.map((c) => ({
       ...c,

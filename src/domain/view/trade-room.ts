@@ -219,6 +219,8 @@ export interface Verdict {
   summary: string;
   tone: VerdictTone;
   detail: string[];
+  // The deal-grade advantage on a bar from -1 to 1 (capped at 100%); null when it cannot be computed. Surplus verdict only.
+  bar?: { value: number | null; tone: VerdictTone; percent: string | null };
 }
 
 // The four separate verdicts. None of them feeds another, and there is no combined score.
@@ -243,6 +245,7 @@ export function verdicts(
       label: "Surplus exchange",
       summary: result.grade,
       tone: surplusTone,
+      bar: advantageBar(m, result),
       detail: [
         `Incoming surplus ${result.incoming.toFixed(1)} versus outgoing ${result.outgoing.toFixed(1)}.`,
         `Package test: ${result.surplusTest}${result.surplusTest === "FAIL" ? `, short by ${result.surplusShortfall.toFixed(1)}` : ""}.`,
@@ -383,4 +386,30 @@ export function gradeGoalSentence(
   return n === 0
     ? `Your ${rule.position} is ${ownGrade} today. No drop keeps ${ownGrade} or better.`
     : `Your ${rule.position} is ${ownGrade} today. Dropping at most ${steps(n)} keeps ${gradeScale[floor]} or better.`;
+}
+
+// The centred advantage bar: positive is green, a modest loss orange, a larger loss red, and even or unavailable neutral.
+function advantageBar(m: Model, result: Extract<TradeResult, { valid: true }>) {
+  if (result.grade.startsWith("UNAVAILABLE"))
+    return { value: null, tone: "neutral" as VerdictTone, percent: null };
+  // Zero outgoing surplus with positive incoming has no percentage but is plainly favourable.
+  const raw =
+    result.advantage ?? (result.outgoing === 0 && result.incoming > 0 ? 1 : 0);
+  const value = Math.max(-1, Math.min(1, raw));
+  const tone: VerdictTone =
+    raw > 0
+      ? "good"
+      : raw === 0
+        ? "neutral"
+        : raw > -m.settings.BadLossPct
+          ? "warn"
+          : "bad";
+  return {
+    value,
+    tone,
+    percent:
+      result.advantage === null
+        ? null
+        : `${result.advantage > 0 ? "+" : ""}${(result.advantage * 100).toFixed(0)}%`,
+  };
 }

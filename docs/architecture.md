@@ -61,17 +61,17 @@ Use hash routes, such as `/#/trades`, so GitHub Pages deep links do not depend o
 
 ## 4. Screen and feature inventory
 
+The interface has six sections (Gameday Plus, app 1.0.0): **This week**, **Roster**, **Scouting**, **League**, **Trade** and **Lab**. The earlier addresses (`#/overview`, `#/teams`, `#/players`, `#/gems`, `#/weekly`, `#/trades`, `#/model`, `#/data`, `#/player/<id>`) still open the matching section or the player card. Calculations stay in `src/domain`; the screens in `src/features/next` render read-only view models from `src/domain/view`.
+
 | Screen | Required functionality |
 | --- | --- |
-| My Team | Los Chilones by default; roster, starter strengths, position grades, coverage, useful reserves, injury and data warnings, gems and buy-low/sell-high signals. |
-| Teams | Team dropdown, full roster, every current evaluation statistic, position advice, league-median comparisons and depth. |
-| Players | Search, ownership/position/injury filters, rankings, selectable sorting, player comparisons, ESPN weekly and season projections, ADP comparisons. |
-| Player detail | Actual and recent scores, season projected PPG, Expected PPG, consistency adjustment, Value PPG, replacement candidates, VORP, surplus index, workload, regression signals and source status. |
-| Trades | Up to five players per side, searchable selectors, optional IDs, both teams’ lineups, deal grade/bar, package requirements, legality, drops, waiver proposals, depth and injury scenarios. |
-| Gems | Current Gem_Screener filters, sortable shortlist, evidence explanations, trends, workload support, projection gaps and value versus replacement. |
-| Weekly | Separate K and D/ST view with opponent, bye, actual scoring and current-week ESPN projection. |
-| Model and Audit | Adjustable settings, baseline audit, calculation explanations, history/duplicate issues, import checks and read-only views of supported source tables. |
-| Data and Account | Import/replace, snapshot and import timestamps, sync/conflict status, login/logout, local data removal and deletion of the cloud workspace. |
+| This week | Your team (Los Chilones by default), lineup advice, position grades, the since-last-import digest, signals ticker, injury and data warnings. |
+| Roster | Starters, bench and IR as tiles with labels and injury chips, the roster simulator, save and clear of hypothetical slots, depth and every current evaluation field. |
+| Scouting | One explorer for Players, Gems and Weekly streamers: search, ownership/position/injury filters, signals, sortable table or cards, saved searches, a two-player Versus and an all-fields table. |
+| Player card | One card for every player link: Story, Numbers (actual, ESPN, model, all stats, workload, scores, imported fields), Market and Trend tabs, label explanations, previous and next, and Versus. |
+| League | A grade grid for every team with the full team detail beneath it. |
+| Trade | Manual analyzer (up to five players per side, deal grade and bar, four separate verdicts, weekly gains, coverage), Find trades, Chain planner and Saved trades with the journal; one search method with ten chain presets. |
+| Lab | Settings, Evidence, Audits, Data and account, Keyboard and Feel: model settings, baseline audit, calculation explanations, import checks, source tables, import and sync, local data removal and cloud workspace deletion. |
 
 The dashboard and team roster retain compact gem and trend signals. Player comparisons must distinguish recorded averages, ESPN projections and model forecasts. Current-week ESPN points never substitute for season projected PPG.
 
@@ -310,14 +310,14 @@ Partition local storage by authenticated user ID. On logout, clear account data 
 
 Trend arrows use up/stable/down wording and numeric PPG deltas, with green/red fills. Model outputs retain pink text. The deal-grade/bar exception is documented next to its legend.
 
-Show PPG to two decimals, percentages consistently, and full precision in calculations. Use accessible keyboard selectors, labeled inputs, screen-reader descriptions for bars, focus management for dialogs and text alternatives to every color signal. Desktop tables offer pinned identifying columns; mobile offers cards and expandable details. Target WCAG 2.2 AA contrast and interactions, verified during implementation.
+Show PPG to two decimals, percentages consistently, and full precision in calculations. Use accessible keyboard selectors, labeled inputs, screen-reader descriptions for bars, focus management for dialogs and text alternatives to every color signal. Desktop tables offer pinned identifying columns; mobile offers cards and expandable details. The interface supports light and dark themes (System follows the device), three animation levels (Full, Reduced, Off) and optional sound and haptics, all chosen in Feel and synced with the account. Phones (under 720 px) use a bottom bar, sheets and swipe; targets are 44 px. Target WCAG 2.2 AA contrast and interactions, verified during implementation.
 
 ## 13. Source structure and delivery
 
 ```text
 src/
   app/                 routes and navigation
-  features/            overview teams players trades gems weekly audit account
+  features/            screens; next/ holds the Gameday Plus screens
   domain/              contracts valuation replacements lineups trades grades gems
   import/              V5.2 adapter workbook reader validation
   workers/             import and calculation message protocols

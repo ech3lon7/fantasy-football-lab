@@ -1,14 +1,13 @@
 import { test, expect } from "@playwright/test";
 import { seedLabelWhy } from "./label-why-seed";
 
-// Turn the preview on from Data & account, then return to the page under test.
+// Seed the label explanations and open the app.
 async function enablePreview(page: import("@playwright/test").Page) {
   await seedLabelWhy(page);
   await page.goto("./#/data");
-  await page.getByLabel("Use the Gameday Plus preview").check();
 }
 
-// The preview shell replaces the sidebar with six sections, and old routes light the right tab.
+// The six-section header is the only navigation, and old routes light the right tab.
 test("six-section header replaces the sidebar and old routes keep working", async ({
   page,
 }) => {
@@ -100,9 +99,4 @@ test("Feel menu sets the animation level and closes with Escape", async ({
   await expect(page.getByRole("group", { name: "Feel settings" })).toHaveCount(
     0,
   );
-  // Turning the preview off restores the current sidebar interface.
-  await page.goto("./#/data");
-  await page.getByLabel("Use the Gameday Plus preview").uncheck();
-  await expect(page.locator("aside.sidebar")).toHaveCount(1);
-  await expect(root).not.toHaveAttribute("data-animation", /.*/);
 });

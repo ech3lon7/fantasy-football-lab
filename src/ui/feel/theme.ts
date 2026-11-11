@@ -21,15 +21,10 @@ export const resolveTheme = (
 ): ResolvedTheme =>
   pref === "system" ? (systemDark ? "dark" : "light") : pref;
 
-// Mark the document root only while the preview is on so the current interface keeps its own styling.
-export function useGamedayRoot(enabled: boolean, pref: ThemePref) {
+// Mark the document root with the interface marker and the resolved theme.
+export function useGamedayRoot(pref: ThemePref) {
   useEffect(() => {
     const root = document.documentElement;
-    if (!enabled) {
-      delete root.dataset.gameday;
-      delete root.dataset.theme;
-      return;
-    }
     const query = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
       root.dataset.gameday = "";
@@ -42,5 +37,5 @@ export function useGamedayRoot(enabled: boolean, pref: ThemePref) {
       delete root.dataset.gameday;
       delete root.dataset.theme;
     };
-  }, [enabled, pref]);
+  }, [pref]);
 }
