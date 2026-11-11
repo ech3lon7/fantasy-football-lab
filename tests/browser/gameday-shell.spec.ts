@@ -39,7 +39,7 @@ test("six-section header replaces the sidebar and old routes keep working", asyn
   );
   for (const [hash, label, heading] of [
     ["#/gems", "Scouting", "Filters"],
-    ["#/teams", "League", "League teams"],
+    ["#/teams", "League", "League grades"],
     ["#/trades", "Trade room", "Trade analyzer"],
     ["#/overview", "This week", ""],
   ] as const) {

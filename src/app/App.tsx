@@ -14,13 +14,15 @@ import {
 } from "../ui/feel/settings";
 import { GamedayHeader } from "../features/next/Shell";
 import { Scouting } from "../features/next/Scouting";
+import { Roster } from "../features/next/Roster";
+import { League } from "../features/next/League";
 import {
   PlayerCardProvider,
   PlayerRouteOpener,
   cardTabKey,
   readCardTab,
 } from "../features/next/PlayerCard";
-import { PopoverProvider } from "../ui/popover/PopoverStack";
+import { PopoverLayer, PopoverProvider } from "../ui/popover/PopoverStack";
 import { usePlayerRowKeys } from "../ui/popover/rowNavigation";
 import { pageForRoute } from "../domain/view/shell";
 import { readThemePref, themeKey, useGamedayRoot } from "../ui/feel/theme";
@@ -871,9 +873,29 @@ export default function App() {
     previewOn = readUiPreview(w?.state.filters[uiPreviewKey]),
     // The preview shell maps its six section routes to the screens that exist today.
     page = previewOn ? pageForRoute(route) : route.split("/")[0];
+  // The simulator is shared by This week and Roster so both edit the same saved roster slots.
+  const simulator =
+    w && realModel && model ? (
+      <RosterSimulator
+        real={realModel}
+        model={model}
+        state={{
+          ...w.state,
+          filters: {
+            ...w.state.filters,
+            [rosterScenariosKey]: scenarioRaw ?? "",
+          },
+        }}
+        savedRaw={w.state.filters[rosterScenariosKey]}
+        change={stageRosterScenarios}
+        saveSlot={saveScenarioSlot}
+        clearSlot={clearScenarioSlot}
+        deleteScenario={deleteScenario}
+      />
+    ) : null;
   const content = (
     <div
-      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}${previewOn && ["players", "gems", "weekly"].includes(page) ? " gd-new-screen" : ""}`}
+      className={`app-shell${page === "trades" ? " trade-page" : ""}${previewOn ? " gd-shell" : ""}${previewOn && ["players", "gems", "weekly", "roster", "teams"].includes(page) ? " gd-new-screen" : ""}`}
     >
       {previewOn && (
         <GamedayHeader
@@ -1228,24 +1250,37 @@ export default function App() {
             <Welcome onImport={() => fileRef.current?.click()} />
           ) : model && w ? (
             <>
+              {previewOn && page === "roster" && (
+                <Roster
+                  m={model}
+                  team={w.state.preferredTeam}
+                  grades={analysisGrades.get(w.state.preferredTeam) ?? []}
+                  filters={w.state.filters}
+                  onFilters={(patch) =>
+                    updateState({
+                      filters: { ...wRef.current!.state.filters, ...patch },
+                    })
+                  }
+                  simulator={simulator}
+                />
+              )}
+              {previewOn && page === "teams" && (
+                // The grade grid replaces the team page; the full team detail stays below it.
+                <League
+                  m={model}
+                  grades={analysisGrades}
+                  mine={w.state.preferredTeam}
+                  team={w.state.filters.browsedTeam || w.state.preferredTeam}
+                  change={(browsedTeam) =>
+                    updateState({
+                      filters: { ...wRef.current!.state.filters, browsedTeam },
+                    })
+                  }
+                />
+              )}
               {page === "overview" && (
                 <>
-                  <RosterSimulator
-                    real={realModel!}
-                    model={model}
-                    state={{
-                      ...w.state,
-                      filters: {
-                        ...w.state.filters,
-                        [rosterScenariosKey]: scenarioRaw ?? "",
-                      },
-                    }}
-                    savedRaw={w.state.filters[rosterScenariosKey]}
-                    change={stageRosterScenarios}
-                    saveSlot={saveScenarioSlot}
-                    clearSlot={clearScenarioSlot}
-                    deleteScenario={deleteScenario}
-                  />
+                  {simulator}
                   <Overview
                     m={model}
                     grades={analysisGrades.get(w.state.preferredTeam) ?? []}
@@ -1259,7 +1294,7 @@ export default function App() {
                   />
                 </>
               )}
-              {page === "teams" && (
+              {!previewOn && page === "teams" && (
                 <TeamView
                   m={model}
                   grades={analysisGrades}
@@ -1519,9 +1554,14 @@ export default function App() {
           >
             <PlayerRouteOpener route={route} ready={!!model} />
             {content}
+            {/* Popovers render here so player links inside them open the card above them. */}
+            <PopoverLayer />
           </PlayerCardProvider>
         ) : (
-          <PlayerPopoverProvider m={model}>{content}</PlayerPopoverProvider>
+          <PlayerPopoverProvider m={model}>
+            {content}
+            <PopoverLayer />
+          </PlayerPopoverProvider>
         )}
       </PopoverProvider>
     </NegotiationsProvider>

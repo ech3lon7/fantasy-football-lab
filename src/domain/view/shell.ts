@@ -3,7 +3,7 @@ import type { Model, Player } from "../valuation";
 // The six Gameday Plus sections. Until each new screen exists, a section shows the current screen listed in `page`.
 export const sections = [
   { id: "week", label: "This week", page: "overview" },
-  { id: "roster", label: "Roster", page: "overview" },
+  { id: "roster", label: "Roster", page: "roster" },
   { id: "scouting", label: "Scouting", page: "players" },
   { id: "league", label: "League", page: "teams" },
   { id: "trade", label: "Trade room", page: "trades" },

@@ -1003,3 +1003,206 @@
 :root[data-gameday] .gd-versus .gd-card-done {
   margin: 0 20px 20px;
 }
+/* Roster and League: depth chart tiles, grade badges and the team-by-position grid. */
+:root[data-gameday] .gd-grade {
+  display: inline-block;
+  min-width: 36px;
+  padding: 3px 8px;
+  border-radius: var(--gd-radius-sm);
+  background: var(--gd-surface-2);
+  color: var(--gd-ink);
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  text-align: center;
+}
+:root[data-gameday] .gd-grade[data-tone="1"] {
+  background: var(--gd-grade-1);
+}
+:root[data-gameday] .gd-grade[data-tone="2"] {
+  background: var(--gd-grade-2);
+}
+:root[data-gameday] .gd-grade[data-tone="3"] {
+  background: var(--gd-grade-3);
+}
+:root[data-gameday] .gd-grade[data-tone="4"] {
+  background: var(--gd-grade-4);
+}
+:root[data-gameday] .gd-grade[data-tone="5"] {
+  background: var(--gd-grade-5);
+}
+:root[data-gameday] .gd-grade[data-tone="6"] {
+  background: var(--gd-grade-6);
+}
+:root[data-gameday] .gd-grade:not([data-tone="na"]) {
+  color: var(--gd-grade-ink);
+}
+:root[data-gameday] .gd-grade-btn {
+  width: 100%;
+  border: 2px solid transparent;
+}
+:root[data-gameday] .gd-grade-btn:hover {
+  border-color: var(--gd-ink);
+}
+:root[data-gameday] .gd-roster,
+:root[data-gameday] .gd-league {
+  display: grid;
+  gap: 24px;
+  color: var(--gd-ink);
+}
+:root[data-gameday] .gd-depth h2,
+:root[data-gameday] .gd-league h2 {
+  margin: 0 0 8px;
+  font-family: var(--gd-font-display);
+  text-transform: uppercase;
+}
+:root[data-gameday] .gd-depth-group h3 {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 16px 0 8px;
+  font-family: var(--gd-font-display);
+  font-size: 22px;
+}
+:root[data-gameday] .gd-muted {
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+:root[data-gameday] .gd-tile {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 10px;
+  padding: 10px 12px;
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-line);
+  border-radius: var(--gd-radius);
+}
+:root[data-gameday] .gd-tile[data-role="Starter"] {
+  border-color: var(--gd-ink);
+  border-left: 8px solid var(--gd-selected);
+}
+:root[data-gameday] .gd-tile[data-role="Bench"] {
+  border-color: var(--gd-line);
+}
+:root[data-gameday] .gd-tile[data-role="IR"] {
+  border-style: dashed;
+}
+:root[data-gameday] .gd-tile-name {
+  display: grid;
+  color: inherit;
+}
+:root[data-gameday] .gd-tile-name small {
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-tile-eppg {
+  display: grid;
+  text-align: right;
+  font-family: var(--gd-font-display);
+  font-size: 26px;
+  line-height: 1;
+}
+:root[data-gameday] .gd-tile-eppg small {
+  font-size: 11px;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-strip {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 28px;
+}
+:root[data-gameday] .gd-strip i {
+  flex: 1;
+  background: var(--gd-model);
+  border-radius: 2px 2px 0 0;
+}
+:root[data-gameday] .gd-strip i[data-gap] {
+  background: var(--gd-line);
+}
+:root[data-gameday] .gd-strip-na {
+  grid-column: 1 / -1;
+  color: var(--gd-muted);
+  font-size: 13px;
+}
+:root[data-gameday] .gd-grid-wrap {
+  overflow-x: auto;
+}
+:root[data-gameday] .gd-grid {
+  border-collapse: separate;
+  border-spacing: 4px;
+  width: 100%;
+}
+:root[data-gameday] .gd-grid th {
+  text-align: left;
+  font-family: var(--gd-font-display);
+  text-transform: uppercase;
+  color: var(--gd-muted);
+  background: transparent;
+}
+:root[data-gameday] .gd-grid td {
+  background: transparent;
+  padding: 0;
+}
+:root[data-gameday] .gd-grid tr[data-mine] th button {
+  font-weight: 800;
+  border-bottom: 3px solid var(--gd-selected);
+}
+:root[data-gameday] .gd-teamname {
+  background: transparent;
+  color: var(--gd-ink);
+  font-weight: 600;
+  text-align: left;
+}
+:root[data-gameday] .gd-teamname[aria-pressed="true"] {
+  text-decoration: underline;
+}
+/* Current screens embedded in the new ones follow the theme instead of their fixed light colours. */
+:root[data-gameday] .gd-legacy {
+  color: var(--gd-ink);
+  --ink: var(--gd-ink);
+  --line: var(--gd-line);
+  --muted: var(--gd-muted);
+}
+:root[data-gameday] .gd-legacy .panel,
+:root[data-gameday] .gd-legacy .table-wrap,
+:root[data-gameday] .gd-legacy table,
+:root[data-gameday] .gd-legacy th,
+:root[data-gameday] .gd-legacy td {
+  background: var(--gd-surface);
+  color: var(--gd-ink);
+  border-color: var(--gd-line);
+}
+:root[data-gameday] .gd-legacy select,
+:root[data-gameday] .gd-legacy input {
+  background: var(--gd-surface-2);
+  color: var(--gd-ink);
+  border-color: var(--gd-line);
+}
+:root[data-gameday] .gd-legacy .model {
+  color: var(--gd-model);
+}
+:root[data-gameday] .gd-legacy .fact {
+  color: var(--gd-fact);
+}
+:root[data-gameday] .gd-legacy .projection {
+  color: var(--gd-espn);
+}
+:root[data-gameday] .gd-legacy .muted {
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-legacy .grade-card {
+  background: var(--gd-surface-2);
+  color: var(--gd-ink);
+  border-color: var(--gd-line);
+}
+:root[data-gameday] .gd-legacy .grade-card > span,
+:root[data-gameday] .gd-legacy .grade-card > small {
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-legacy .grade-card > strong {
+  color: var(--gd-model);
+}

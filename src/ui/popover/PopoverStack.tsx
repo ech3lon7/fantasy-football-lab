@@ -34,6 +34,11 @@ interface Api {
 }
 
 const PopoverContext = createContext<Api | null>(null);
+// The open entries, read by PopoverLayer so dialogs can render inside whatever context providers wrap the layer.
+const StackContext = createContext<{
+  stack: Entry[];
+  close: (key?: number) => void;
+} | null>(null);
 
 // Give any component the stack's open and close functions.
 export function usePopovers(): Api {
@@ -162,7 +167,21 @@ export function PopoverProvider({ children }: { children: ReactNode }) {
   }, [stack.length, close]);
   return (
     <PopoverContext.Provider value={api}>
-      {children}
+      <StackContext.Provider value={{ stack, close }}>
+        {children}
+      </StackContext.Provider>
+    </PopoverContext.Provider>
+  );
+}
+
+// Renders the open popovers. Place it inside any providers popover content needs (such as the player card opener),
+// because dialogs inherit the context of where this layer sits, not of the PopoverProvider.
+export function PopoverLayer() {
+  const state = useContext(StackContext);
+  if (!state) return null;
+  const { stack, close } = state;
+  return (
+    <>
       {stack.map((entry, i) => (
         <Dialog
           key={entry.key}
@@ -171,6 +190,6 @@ export function PopoverProvider({ children }: { children: ReactNode }) {
           close={() => close(entry.key)}
         />
       ))}
-    </PopoverContext.Provider>
+    </>
   );
 }
