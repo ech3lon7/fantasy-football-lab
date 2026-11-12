@@ -54,24 +54,24 @@ Also seen:
 
 ## Section B · Player card
 
-- [ ] **B1 Fix the moving-average chart.** Restore the plot styles for `PlayerStockChart` on tokens, matching design lines 198–204 and 252: fast MA solid line, slow MA dashed, points dotted in the facts colour, translucent area under the fast line, hollow volume bars, player and league volume averages dashed, axis and week labels in the muted token. No element of the chart may have a black fill. Add a spec that fails if any `path` or `rect` inside the chart has a computed fill of `rgb(0, 0, 0)`.
-- [ ] **B2 Story layout.** Two columns at 1040px (design `.grid2`): left, a compact scenarios panel (the table and the one-line blend note; the long explanatory paragraphs move under a "How this works" disclosure) and the numbered story bullets; right, the radar and the moving-average chart. Nothing important below the fold at 1040×800. One column under 720px.
-- [ ] **B3 Hero.** Team-coloured gradient header (design `.hero`), photo, name in large condensed type, labels coloured by state, **three big numbers: Expected PPG (largest), Recent, Surplus**, floor and ceiling under EPPG, and a huge faded code behind (design `.hero .big`, line 101; use the NFL team code, as the owner prefers "HAR" for Harbor City Gulls).
-- [ ] **B4 Tabs** styled as the design's `.ptab` (condensed, uppercase, selected filled), lines 103–105.
+- [x] **B1 Fix the moving-average chart.** Restore the plot styles for `PlayerStockChart` on tokens, matching design lines 198–204 and 252: fast MA solid line, slow MA dashed, points dotted in the facts colour, translucent area under the fast line, hollow volume bars, player and league volume averages dashed, axis and week labels in the muted token. No element of the chart may have a black fill. Add a spec that fails if any `path` or `rect` inside the chart has a computed fill of `rgb(0, 0, 0)`.
+- [x] **B2 Story layout.** Two columns at 1040px (design `.grid2`): left, a compact scenarios panel (the table and the one-line blend note; the long explanatory paragraphs move under a "How this works" disclosure) and the numbered story bullets; right, the radar and the moving-average chart. Nothing important below the fold at 1040×800. One column under 720px.
+- [x] **B3 Hero.** Team-coloured gradient header (design `.hero`), photo, name in large condensed type, labels coloured by state, **three big numbers: Expected PPG (largest), Recent, Surplus**, floor and ceiling under EPPG, and a huge faded code behind (design `.hero .big`, line 101; use the NFL team code, as the owner prefers "HAR" for Harbor City Gulls).
+- [x] **B4 Tabs** styled as the design's `.ptab` (condensed, uppercase, selected filled), lines 103–105.
 
 ## Section C · Labels and the Why panel
 
-- [ ] **C1 One label chip component** with two tones: positive (green) and warning (amber), from tokens, everywhere a label appears: scouting cards and rows, player card header, roster tiles, League popover, ticker arrows, digest. Status text such as "Insufficient data" is not a label and stays quiet text.
-- [ ] **C2 Label tabs in the Why panel** are pills: earned = green with ✓, near miss = amber with ◌ and "· near miss". Selecting one shows its view. Order: earned first, then near misses.
-- [ ] **C3 Margin chips** coloured by tone (spare green, at the line amber, short red) and **meters** as a filled track with the player's dot and a threshold mark (design `.gm`).
-- [ ] **C4 Flip or undo card** at the end of every label view, dashed border (design `.flip`): "What could undo it" for earned labels (from the tightest passing check), "What would flip it" for near misses (domain flip hint). Where the domain has no hint for a label (per the Why-panel plan, Gem and warning labels in v1), show "What could undo it" only for earned labels and nothing for near misses rather than an empty card.
-- [ ] Specs: label chips have the right tone per label; the Why panel shows a flip or undo card for each label that has one.
+- [x] **C1 One label chip component** with two tones: positive (green) and warning (amber), from tokens, everywhere a label appears: scouting cards and rows, player card header, roster tiles, League popover, ticker arrows, digest. Status text such as "Insufficient data" is not a label and stays quiet text.
+- [x] **C2 Label tabs in the Why panel** are pills: earned = green with ✓, near miss = amber with ◌ and "· near miss". Selecting one shows its view. Order: earned first, then near misses.
+- [x] **C3 Margin chips** coloured by tone (spare green, at the line amber, short red) and **meters** as a filled track with the player's dot and a threshold mark (design `.gm`).
+- [x] **C4 Flip or undo card** at the end of every label view, dashed border (design `.flip`): "What could undo it" for earned labels (from the tightest passing check), "What would flip it" for near misses (domain flip hint). Where the domain has no hint for a label (per the Why-panel plan, Gem and warning labels in v1), show "What could undo it" only for earned labels and nothing for near misses rather than an empty card.
+- [x] Specs: label chips have the right tone per label; the Why panel shows a flip or undo card for each label that has one.
 
 ## Section D · Scouting cards and tables
 
-- [ ] **D1** Card as designed (`.pc`, lines 80–96): team-coloured top band with the **large faded team code** watermark, name in condensed type, position · team; body with **▲ Expected PPG large and ● Recent 3** side by side, the floor-to-ceiling bar, the 9-week **sparkline**, label chips (coloured), and **Surplus index with its pink meter**; owner and versus button at the foot.
-- [ ] **D2** Hover lift on cards; `cardin` entrance (Section A).
-- [ ] **D3** Table view rows keep the same coloured labels and moving-average badge.
+- [x] **D1** Card as designed (`.pc`, lines 80–96): team-coloured top band with the **large faded team code** watermark, name in condensed type, position · team; body with **▲ Expected PPG large and ● Recent 3** side by side, the floor-to-ceiling bar, the 9-week **sparkline**, label chips (coloured), and **Surplus index with its pink meter**; owner and versus button at the foot.
+- [x] **D2** Hover lift on cards; `cardin` entrance (Section A).
+- [x] **D3** Table view rows keep the same coloured labels and moving-average badge.
 
 ## Section E · Every other screen, item by item
 
