@@ -12,19 +12,17 @@ import {
 import { scenarioTradeErrors, type RosterScenario } from "../../domain/roster-scenarios";
 import {
   gradeStepChips,
+  lineupGainSpread,
   lineupMoves,
   taleOfTape,
-  verdicts,
-  type GradeChip,
   type LineupSlot,
 } from "../../domain/view/trade-room";
 import type { Model, Player } from "../../domain/valuation";
-import { PlayerName } from "../../ui/PlayerName";
 import { PlayerPhoto } from "../../ui/PlayerPhoto";
+import { useOpenPlayer } from "./PlayerCard";
 import { teamColors } from "../../domain/view/nfl-colors";
-import { Chip, Segmented } from "../../ui/primitives";
+import { Chip } from "../../ui/primitives";
 import { TradeStressTest } from "../TradeStressTest";
-import { usePopovers } from "../../ui/popover/PopoverStack";
 import { useNegotiations, DirectManagerAssessment } from "../Negotiations";
 import { newJournalOffer } from "../../domain/trade-journal";
 import { counterOffers, type CounterResults } from "../../domain/view/counter";
@@ -63,8 +61,6 @@ import { SurfaceAppealView } from "../SurfaceAppeal";
 import { TradeSearch } from "../TradeSearch";
 import { SavedTrades } from "../SavedTrades";
 import {
-  TradeFiltersButton,
-  TradeFiltersDrawer,
   tradeTeamName,
 } from "../TradeWorkspace";
 import { fmt, signed } from "../../ui/components";
@@ -132,65 +128,12 @@ function Picker({
   );
 }
 
-// Grade-step chips under a side; nothing renders when no position moved.
-function Chips({ chips, label }: { chips: GradeChip[]; label: string }) {
-  if (chips.length === 0) return null;
-  return (
-    <div className="gd-chips" role="list" aria-label={label}>
-      {chips.map((c) => (
-        <span key={c.position} role="listitem">
-          <Chip
-            tone={c.tone}
-            title={`${c.position} grade ${c.before} to ${c.after}`}
-          >
-            {c.text}
-          </Chip>
-        </span>
-      ))}
-    </div>
-  );
-}
-
 const tagText = (slot: LineupSlot) =>
   slot.tag === null
     ? null
     : typeof slot.tag === "string"
       ? slot.tag
       : `Shifted from ${slot.tag.shiftedFrom}`;
-
-// One lineup slot: the player (opening the card), Expected PPG and a tag only when the slot changed.
-function SlotRow({ slot, m }: { slot: LineupSlot; m: Model }) {
-  const p = slot.id ? m.byId.get(slot.id) : undefined;
-  const tag = tagText(slot);
-  return (
-    <li
-      className="gd-slot"
-      data-tag={tag && slot.tag !== "Unfilled" ? "yes" : undefined}
-    >
-      <b>{slot.slot}</b>
-      {p ? (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-          <PlayerPhoto player={p} size={24} />
-          <PlayerName p={p} className="player-link" />
-        </span>
-      ) : (
-        <span className="gd-muted">Unfilled</span>
-      )}
-      <span className="gd-slot-eppg">{slot.eppg ?? "—"}</span>
-      {tag && slot.tag !== "Unfilled" && (
-        <Chip
-          tone={
-            slot.tag === "Leaves" || slot.tag === "To bench"
-              ? "negative"
-              : "positive"
-          }
-        >
-          {tag}
-        </Chip>
-      )}
-    </li>
-  );
-}
 
 // The Manual analyzer in the new look: two sides, grade-step chips, the lineup field and four separate verdicts.
 function ManualAnalyzer({
@@ -199,7 +142,7 @@ function ManualAnalyzer({
   lineupsRaw,
   basis,
   change,
-  changeBasis,
+  changeBasis: _changeBasis,
   forceTrade,
   onApplyDrop,
   onSwitchToLive,
@@ -208,8 +151,8 @@ function ManualAnalyzer({
   onSaveTrade,
   initialStress,
   stressRestoreKey,
-  manualFiltersOpen,
-  setManualFiltersOpen,
+  manualFiltersOpen: _manualFiltersOpen,
+  setManualFiltersOpen: _setManualFiltersOpen,
 }: {
   m: Model;
   draft: Draft;
@@ -233,7 +176,6 @@ function ManualAnalyzer({
   setManualFiltersOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
 }) {
   const notify = useFeedback();
-  const popovers = usePopovers();
   const [view, setView] = useState<"your" | "their">("your"),
     [phase, setPhase] = useState<"before" | "after">("after"),
     [week, setWeek] = useState<number>(m.weeks[0] ?? m.current),
@@ -259,7 +201,6 @@ function ManualAnalyzer({
   const valid = result && result.valid ? result : null;
   const impact = valid ? tradeImpact(valid, basis) : null;
   const chips = valid ? gradeStepChips(m, draft, valid) : null;
-  const verdictRows = valid ? verdicts(m, valid, basis) : null;
   const surface = useMemo(
     () =>
       valid
@@ -274,7 +215,8 @@ function ManualAnalyzer({
         : undefined,
     [m, draft, valid, basis, lineupsRaw],
   );
-  const tape = taleOfTape(m, draft);
+  const openPlayer = useOpenPlayer();
+  const tape = taleOfTape(m, draft, true);
   const mineName = str(
     m.dataset.tables.ModelTeams.find((t) => str(t.TeamID) === draft.teamA)
       ?.TeamName,
@@ -294,6 +236,53 @@ function ManualAnalyzer({
   const receivePlayer = draft.get[0] ? m.byId.get(draft.get[0]) : undefined;
   const sendColors = sendPlayer ? teamColors(sendPlayer.nfl) : undefined;
   const receiveColors = receivePlayer ? teamColors(receivePlayer.nfl) : undefined;
+
+  const giveAdd = useMemo(
+    () =>
+      m.players
+        .filter(
+          (p) =>
+            p.owner === draft.teamA &&
+            !draft.give.includes(p.id) &&
+            p.pos !== "K" &&
+            p.pos !== "D/ST",
+        )
+        .slice(0, 5),
+    [m.players, draft.teamA, draft.give],
+  );
+
+  const getAdd = useMemo(
+    () =>
+      m.players
+        .filter(
+          (p) =>
+            draft.teamB &&
+            p.owner === draft.teamB &&
+            !draft.get.includes(p.id) &&
+            p.pos !== "K" &&
+            p.pos !== "D/ST",
+        )
+        .slice(0, 5),
+    [m.players, draft.teamB, draft.get],
+  );
+
+  const gainSpread = useMemo(
+    () =>
+      impact
+        ? lineupGainSpread(m, impact.own, impact.own.expectedPerWeek)
+        : null,
+    [m, impact],
+  );
+  const ownGain = impact?.own.expectedPerWeek ?? 0;
+  const sp = gainSpread?.spread ?? 0;
+  const floor = gainSpread?.floor ?? (ownGain - sp);
+  const ceil = gainSpread?.ceiling ?? (ownGain + sp);
+  const pc = (v: number) => Math.max(0, Math.min(100, ((v + 15) / 30) * 100));
+  const barLeft = pc(floor);
+  const barWidth = Math.max(4, pc(ceil) - pc(floor));
+  const dotPos = pc(ownGain);
+  const zeroPos = pc(0);
+
   return (
     <div className="gd-manual">
       <SimulationNote
@@ -302,459 +291,650 @@ function ManualAnalyzer({
         onApplyDrop={onApplyDrop}
         onSwitchToLive={onSwitchToLive}
       />
-      <div className="gd-sides">
-        <section
-          className="gd-side gd-side-send"
-          aria-label="You send"
-          style={
-            sendColors
-              ? { borderTop: `4px solid ${sendColors.background}` }
-              : undefined
-          }
-        >
-          <small>YOU SEND · {mineName}</small>
-          <h2>
-            {draft.give.length
-              ? `${draft.give.length} player${draft.give.length === 1 ? "" : "s"}`
-              : "Choose players"}
-          </h2>
-          {draft.give.length > 0 && (
-            <div
-              className="gd-side-selected-photos"
-              style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "4px" }}
-            >
-              {draft.give.map((id) => {
-                const p = m.byId.get(id);
-                return p ? <PlayerPhoto key={id} player={p} size={32} /> : null;
-              })}
+
+      {/* 1. Sides and Tale of the tape */}
+      <div className="vs gd-sides">
+        {/* Left Side: You Send */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: 0 }}>
+          <section
+            className="side gd-side gd-side-send"
+            role="group"
+            aria-label="Players you send"
+            style={{ background: sendColors?.background ?? "#3B2F8F" }}
+          >
+            <span className="kick" style={{ color: "rgba(255, 255, 255, 0.8)", fontSize: "13px", fontWeight: 700, textTransform: "uppercase" }}>
+              YOU SEND
+            </span>
+            <h3>{mineName}</h3>
+            {draft.give.map((id) => {
+              const p = m.byId.get(id);
+              if (!p) return null;
+              const pColors = teamColors(p.nfl);
+              return (
+                <div key={id} className="tp">
+                  <span className="lab" style={{ background: pColors.background, color: "#fff", padding: "2px 8px", borderRadius: "6px", fontWeight: 700, fontSize: "12px" }}>
+                    {p.nfl}
+                  </span>
+                  <button type="button" className="nm" onClick={() => openPlayer(p.id)}>
+                    {p.name}
+                  </button>
+                  <button
+                    type="button"
+                    className="x"
+                    onClick={() => {
+                      notify("tap");
+                      change({ ...draft, give: draft.give.filter((x) => x !== id) });
+                    }}
+                    aria-label={`Remove ${p.name}`}
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "2px" }}>
+              {giveAdd.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="addc"
+                  onClick={() => {
+                    notify("select");
+                    change({ ...draft, give: toggle(draft.give, p.id) });
+                  }}
+                >
+                  + {p.name.split(" ").slice(-1)[0]}
+                </button>
+              ))}
+            </div>
+            <details style={{ marginTop: "4px" }}>
+              <summary style={{ color: "rgba(255, 255, 255, 0.7)", fontSize: "12px", cursor: "pointer" }}>
+                All players ({m.players.filter((p) => p.owner === draft.teamA).length})
+              </summary>
+              <div style={{ marginTop: "8px" }}>
+                <Picker
+                  label="Players you send"
+                  players={m.players.filter((p) => p.owner === draft.teamA)}
+                  selected={draft.give}
+                  change={(give) => change({ ...draft, give })}
+                />
+              </div>
+            </details>
+          </section>
+          {chips && chips.own.length > 0 && (
+            <div className="gsm">
+              {chips.own.map((c) => (
+                <span
+                  key={c.position}
+                  style={{
+                    background: c.tone === "positive" ? "var(--gd-positive-bg)" : "var(--gd-negative-bg)",
+                    color: c.tone === "positive" ? "var(--gd-positive-ink)" : "var(--gd-negative-ink)",
+                  }}
+                >
+                  {c.text}
+                </span>
+              ))}
             </div>
           )}
-          <Picker
-            label="Players you send"
-            players={m.players.filter((p) => p.owner === draft.teamA)}
-            selected={draft.give}
-            change={(give) => change({ ...draft, give })}
-          />
-          {chips && <Chips chips={chips.own} label="Your grade steps" />}
-        </section>
-        <section className="gd-tape" aria-label="Tale of the tape">
-          <h3>Tale of the tape</h3>
+        </div>
+
+        {/* Center: Tale of the Tape */}
+        <section className="tape card gd-tape" aria-label="Tale of the tape">
+          <h4>Tale of the tape</h4>
           {tape.map((r) => (
-            <div key={r.label}>
-              <span>{r.send ?? "—"}</span>
-              <b>{r.label}</b>
-              <span>{r.receive ?? "—"}</span>
+            <div key={r.label} className="tr">
+              <span className="lb">{r.label}</span>
+              <div className="bf">
+                <div className="l">
+                  <i
+                    style={{
+                      width: `${r.sendPct ?? 0}%`,
+                      background: sendColors?.background ?? "#3B2F8F",
+                    }}
+                  />
+                </div>
+                <div>
+                  <i
+                    style={{
+                      width: `${r.receivePct ?? 0}%`,
+                      background: receiveColors?.background ?? "#8C2F39",
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="bf">
+                <span className="num" style={{ textAlign: "right" }}>
+                  {r.send ?? "—"}
+                </span>
+                <span className="num">{r.receive ?? "—"}</span>
+              </div>
             </div>
           ))}
         </section>
-        <section
-          className="gd-side gd-side-receive"
-          aria-label="You receive"
-          style={
-            receiveColors
-              ? { borderTop: `4px solid ${receiveColors.background}` }
-              : undefined
-          }
-        >
-          <label className="gd-field">
-            <span>YOU RECEIVE · from</span>
+
+        {/* Right Side: You Receive */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: 0 }}>
+          <section
+            className="side gd-side gd-side-receive"
+            style={{ background: receiveColors?.background ?? "#8C2F39" }}
+          >
             <select
+              className="visually-hidden"
               aria-label="Trade partner"
               value={draft.teamB}
-              onChange={(e) =>
-                change({ ...draft, teamB: e.target.value, get: [] })
-              }
+              onChange={(e) => change({ ...draft, teamB: e.target.value, get: [] })}
             >
-              <option value="">Choose a team</option>
               {otherTeams.map((t) => (
                 <option key={str(t.TeamID)} value={str(t.TeamID)}>
                   {str(t.TeamName)}
                 </option>
               ))}
             </select>
-          </label>
-          <h2>
-            {draft.get.length
-              ? `${draft.get.length} player${draft.get.length === 1 ? "" : "s"}`
-              : "Choose players"}
-          </h2>
-          {draft.get.length > 0 && (
-            <div
-              className="gd-side-selected-photos"
-              style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "4px" }}
-            >
-              {draft.get.map((id) => {
-                const p = m.byId.get(id);
-                return p ? <PlayerPhoto key={id} player={p} size={32} /> : null;
+            <span className="kick" style={{ color: "rgba(255, 255, 255, 0.8)", fontSize: "13px", fontWeight: 700, textTransform: "uppercase" }}>
+              YOU RECEIVE
+            </span>
+            <div role="group" aria-label="Opponent teams" style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "4px" }}>
+              {otherTeams.map((t) => {
+                const tid = str(t.TeamID);
+                const isSelected = tid === draft.teamB;
+                return (
+                  <button
+                    key={tid}
+                    type="button"
+                    className="addc"
+                    style={{
+                      borderStyle: "solid",
+                      background: isSelected ? "rgba(255, 255, 255, 0.25)" : "transparent",
+                    }}
+                    aria-pressed={isSelected}
+                    onClick={() => {
+                      notify("select");
+                      change({ ...draft, teamB: tid, get: [] });
+                    }}
+                  >
+                    {str(t.TeamName)}
+                  </button>
+                );
               })}
             </div>
-          )}
-          <Picker
-            label="Players you receive"
-            players={m.players.filter(
-              (p) => draft.teamB && p.owner === draft.teamB,
+            <div role="group" aria-label="Players you receive">
+            {draft.get.map((id) => {
+              const p = m.byId.get(id);
+              if (!p) return null;
+              const pColors = teamColors(p.nfl);
+              return (
+                <div key={id} className="tp">
+                  <span className="lab" style={{ background: pColors.background, color: "#fff", padding: "2px 8px", borderRadius: "6px", fontWeight: 700, fontSize: "12px" }}>
+                    {p.nfl}
+                  </span>
+                  <button type="button" className="nm" onClick={() => openPlayer(p.id)}>
+                    {p.name}
+                  </button>
+                  <button
+                    type="button"
+                    className="x"
+                    onClick={() => {
+                      notify("tap");
+                      change({ ...draft, get: draft.get.filter((x) => x !== id) });
+                    }}
+                    aria-label={`Remove ${p.name}`}
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "2px" }}>
+              {getAdd.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="addc"
+                  onClick={() => {
+                    notify("select");
+                    change({ ...draft, get: toggle(draft.get, p.id) });
+                  }}
+                >
+                  + {p.name.split(" ").slice(-1)[0]}
+                </button>
+              ))}
+            </div>
+            {draft.teamB && (
+              <details style={{ marginTop: "4px" }}>
+                <summary style={{ color: "rgba(255, 255, 255, 0.7)", fontSize: "12px", cursor: "pointer" }}>
+                  All opponent players ({m.players.filter((p) => p.owner === draft.teamB).length})
+                </summary>
+                <div style={{ marginTop: "8px" }}>
+                  <Picker
+                    label="Players you receive"
+                    players={m.players.filter((p) => p.owner === draft.teamB)}
+                    selected={draft.get}
+                    change={(get) => change({ ...draft, get })}
+                  />
+                </div>
+              </details>
             )}
-            selected={draft.get}
-            change={(get) => change({ ...draft, get })}
-          />
-          {chips && <Chips chips={chips.other} label="Their grade steps" />}
-        </section>
+            </div>
+          </section>
+          {chips && chips.other.length > 0 && (
+            <div className="gsm">
+              {chips.other.map((c) => (
+                <span
+                  key={c.position}
+                  style={{
+                    background: c.tone === "positive" ? "var(--gd-positive-bg)" : "var(--gd-negative-bg)",
+                    color: c.tone === "positive" ? "var(--gd-positive-ink)" : "var(--gd-negative-ink)",
+                  }}
+                >
+                  {c.text}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Forcing a trade clears the offer, so the confirmation lives outside the offer block until a new offer starts. */}
+      {/* Force trade button */}
+      {forceTrade && (
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center", margin: "16px 0" }}>
+          <button
+            type="button"
+            className="ibtn"
+            style={{ borderColor: "var(--gd-edit)", color: "var(--gd-edit)", fontWeight: 700, padding: "8px 14px", borderRadius: "10px" }}
+            disabled={forceErrors.length > 0}
+            title={forceErrors[0]}
+            onClick={() => {
+              const res = forceTrade(draft);
+              const ok = typeof res === "object" ? res.ok : !!res;
+              notify(actionCue(ok));
+              const slot = typeof res === "object" ? res.slot : undefined;
+              if (ok) {
+                setForced(
+                  `Applied to a hypothetical roster.${slot ? ` Saved to Slot ${slot}.` : ""} Open Roster to see it.`,
+                );
+              }
+            }}
+          >
+            ■ Force this trade into a hypothetical roster
+          </button>
+          <span className="quiet" style={{ fontSize: "13.5px" }}>
+            Creates a simulation with these players moved, whatever the verdict says. Manage it under Roster.
+          </span>
+        </div>
+      )}
+
       {forced && (
-        <p role="status" className="notice trade-toast gd-muted">
+        <p role="status" className="notice trade-toast gd-muted" style={{ margin: "8px 0" }}>
           {forced} <a href="#/roster">Open Roster</a>
         </p>
       )}
       {!result && (
-        <p className="gd-muted">
+        <p className="gd-muted" style={{ margin: "12px 0" }}>
           Choose one to five players on each side to see the verdicts.
         </p>
       )}
       {result && !result.valid && (
-        <div className="gd-banner" role="alert">
+        <div className="gd-banner" role="alert" style={{ margin: "12px 0" }}>
           {result.errors.join(" ")}
         </div>
       )}
 
-      {valid && (
-        <section
-          className="trade-score-strip gd-scoring-summary"
-          aria-label="Trade scoring summary"
+      {/* 2. Lineup impact football field */}
+      <section role="region" aria-label="Lineup impact">
+        <h2
+          className="sec"
+          style={{
+            fontFamily: "var(--gd-font-display)",
+            fontWeight: 800,
+            fontSize: "24px",
+            textTransform: "uppercase",
+            margin: "20px 0 10px",
+          }}
         >
-          <div className="trade-score-team">
-            <div>
-              <strong>{mineName}</strong>
-              <small>Your average Expected PPG</small>
-            </div>
-            <div className="trade-score-values model">
-              <span>{fmt(impact?.own.beforePerWeek ?? null)}</span>
-              <ArrowRight size={17} aria-hidden="true" />
-              <strong>{fmt(impact?.own.afterPerWeek ?? null)}</strong>
-              <b>{signed(impact?.own.expectedPerWeek ?? null)}</b>
-            </div>
-          </div>
-          <div className="trade-score-team">
-            <div>
-              <strong>{tradeTeamName(m, draft.teamB)}</strong>
-              <small>Their average Expected PPG</small>
-            </div>
-            <div className="trade-score-values model">
-              <span>{fmt(impact?.other.beforePerWeek ?? null)}</span>
-              <ArrowRight size={17} aria-hidden="true" />
-              <strong>{fmt(impact?.other.afterPerWeek ?? null)}</strong>
-              <b>{signed(impact?.other.expectedPerWeek ?? null)}</b>
-            </div>
-          </div>
-          <div className="trade-score-context-row">
-            <small className="trade-score-context">
-              Average across Weeks {m.current}–{m.final}; model scoring, not ESPN's weekly projection.
-            </small>
-            {valid.grade && (
-              <span
-                className="trade-deal-pill neutral"
-                role="status"
-                aria-label={`Surplus deal grade: ${valid.grade}`}
-              >
-                Surplus: <strong>{valid.grade}</strong>
-              </span>
-            )}
-          </div>
-        </section>
-      )}
-
-      <div className={`trade-manual-filters${manualFiltersOpen ? " filters-open" : ""}`}>
-        <TradeFiltersButton
-          scope="Manual"
-          open={manualFiltersOpen}
-          toggle={() => setManualFiltersOpen((o) => !o)}
-        />
-        <TradeFiltersDrawer
-          scope="Manual"
-          open={manualFiltersOpen}
-          close={() => setManualFiltersOpen(false)}
-        >
-          <DirectManagerAssessment
-            m={m}
-            draft={draft}
-            result={valid}
-            raw={state?.filters.managerExpectations}
-            change={(raw) => onFilters?.({ managerExpectations: raw })}
-            basis={basis}
-            lineupsRaw={lineupsRaw}
-          />
-        </TradeFiltersDrawer>
+          / Lineup impact · who starts, who shifts, who sits
+        </h2>
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center", marginBottom: "12px" }}>
+        <div className="seg" role="group" aria-label="Team">
+          <button type="button" aria-pressed={view === "your"} onClick={() => setView("your")}>
+            Your team
+          </button>
+          <button type="button" aria-pressed={view === "their"} onClick={() => setView("their")}>
+            Their team
+          </button>
+        </div>
+        <div className="seg" role="group" aria-label="Phase">
+          <button type="button" aria-pressed={phase === "before"} onClick={() => setPhase("before")}>
+            Before
+          </button>
+          <button type="button" aria-pressed={phase === "after"} onClick={() => setPhase("after")}>
+            After
+          </button>
+        </div>
+        <label style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <span className="quiet">Week</span>
+          <select
+            className="sel"
+            aria-label="Week"
+            value={week}
+            onChange={(e) => setWeek(Number(e.target.value))}
+          >
+            {m.weeks.map((w) => (
+              <option key={w} value={w}>
+                {w}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="quiet" style={{ marginLeft: "auto", fontSize: "13px" }}>
+          Circles stand in for the player card pictures used today.
+        </span>
       </div>
 
-      {valid && verdictRows && (
-        <>
-          <section className="gd-verdicts" aria-label="Verdicts">
-            {verdictRows.map((v) => (
-              <details
-                key={v.id}
-                className="gd-verdict"
-                data-tone={v.tone}
-                data-verdict={v.id}
-              >
-                <summary
-                  onClick={(e) => {
-                    // Pinned cells on a phone open their detail as a sheet instead of expanding in place.
-                    if (!matchMedia("(max-width: 719px)").matches) return;
-                    e.preventDefault();
-                    popovers.open({
-                      title: v.label,
-                      width: 520,
-                      render: () => (
-                        <div className="gd-popover-body">
-                          <h2>{v.label}</h2>
-                          <p>
-                            <strong>{v.summary}</strong>
-                          </p>
-                          <ul>
-                            {v.detail.map((line) => (
-                              <li key={line}>{line}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      ),
-                    });
-                  }}
-                >
-                  <span>{v.label}</span>
-                  <strong>{v.summary}</strong>
-                </summary>
-                {v.bar && (
-                  <div
-                    className="gd-advbar"
-                    data-tone={v.bar.tone}
-                    role="img"
-                    aria-label={
-                      v.bar.value === null
-                        ? "Advantage unavailable"
-                        : `Advantage ${v.bar.percent ?? "favourable, no percentage"}`
-                    }
-                  >
-                    {v.bar.value !== null && (
-                      <i
-                        style={{
-                          left: `${v.bar.value < 0 ? 50 + v.bar.value * 50 : 50}%`,
-                          width: `${Math.abs(v.bar.value) * 50}%`,
-                        }}
-                      />
-                    )}
-                    <em>{v.bar.percent ?? ""}</em>
-                  </div>
-                )}
-                <ul>
-                  {v.detail.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-              </details>
-            ))}
-          </section>
-
-          <section className="gd-field-view" aria-label="Lineup impact">
-            <header>
-              <h3>Lineup impact</h3>
-              <Segmented
-                label="Team"
-                options={["your", "their"] as const}
-                value={view}
-                format={(v) => (v === "your" ? "Your team" : "Their team")}
-                onChange={setView}
-              />
-              <Segmented
-                label="Phase"
-                options={["before", "after"] as const}
-                value={phase}
-                onChange={setPhase}
-              />
-              <label className="gd-field inline">
-                <span>Week</span>
-                <select
-                  aria-label="Week"
-                  value={week}
-                  onChange={(e) => setWeek(Number(e.target.value))}
-                >
-                  {m.weeks.map((w) => (
-                    <option key={w} value={w}>
-                      W{w}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <Segmented
-                label="Lineup basis"
-                options={lineupBases}
-                value={basis}
-                format={(b) => lineupBasisLabel(b)}
-                onChange={changeBasis}
-              />
-            </header>
-            <ul className="gd-slots">
-              {slots.map((s, i) => (
-                <SlotRow key={`${s.slot}-${i}`} slot={s} m={m} />
-              ))}
-            </ul>
-            {moves && moves.notes.length > 0 && (
-              <ul className="gd-notes" aria-label="Who moves">
-                {moves.notes.map((n) => (
-                  <li key={n}>{n}</li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <div className="gd-row">
-            {forceTrade && (
+      <div className="field" aria-label="Lineup slots">
+        {slots
+          .filter((s) => s.slot !== "K" && s.slot !== "D/ST")
+          .map((sl, i) => {
+            const p = sl.id ? m.byId.get(sl.id) : undefined;
+            const pColors = p ? teamColors(p.nfl) : undefined;
+            const initials = p ? p.name.split(" ").map((w) => w[0]).join("") : "—";
+            const tag = tagText(sl);
+            const tagCls =
+              tag === "New"
+                ? "t-new"
+                : tag?.startsWith("Shifted")
+                  ? "t-shift"
+                  : tag === "Up from bench"
+                    ? "t-up"
+                    : "t-out";
+            return (
               <button
+                key={`${sl.slot}-${i}`}
                 type="button"
-                className="gd-cta"
-                disabled={forceErrors.length > 0}
-                title={forceErrors[0]}
+                className={`slot ${sl.id ? "" : "empty"} gd-slot`}
                 onClick={() => {
-                  const res = forceTrade(draft);
-                  const ok = typeof res === "object" ? res.ok : !!res;
-                  notify(actionCue(ok));
-                  // Say which save slot received the trade, so the auto-save is never a surprise.
-                  const slot = typeof res === "object" ? res.slot : undefined;
-                  if (ok)
-                    setForced(
-                      `Applied to a hypothetical roster.${slot ? ` Saved to Slot ${slot}.` : ""} Open Roster to see it.`,
-                    );
-                }}
-              >
-                Force this trade into a hypothetical roster
-              </button>
-            )}
-            {onSaveTrade && (
-              <button
-                type="button"
-                className="gd-cta"
-                aria-label="Save current trade"
-                disabled={!valid}
-                onClick={() => {
-                  if (valid) {
-                    const summary = summaryFromTrade(valid, basis);
-                    const ok = onSaveTrade(draft, summary, stressRecipe);
-                    notify(actionCue(ok));
-                    if (ok) {
-                      setSaveMessage(
-                        "Trade saved. Duplicate packages update the existing entry while preserving its name, notes and original summary.",
-                      );
-                    }
+                  if (p) {
+                    notify("select");
+                    openPlayer(p.id);
                   }
                 }}
               >
-                Save current trade
+                <span className="sn">{sl.slot}</span>
+                <span
+                  className="av"
+                  style={{ background: pColors?.background ?? "#2A7449" }}
+                >
+                  {initials}
+                </span>
+                <span className="pn">{sl.name || "Unfilled"}</span>
+                <span className="num" style={{ color: "var(--gd-model)", fontWeight: 700 }}>
+                  {sl.eppg ?? "0.0"}
+                </span>
+                {tag && sl.tag !== "Unfilled" && (
+                  <span className={`stag ${tagCls}`}>{tag.toUpperCase()}</span>
+                )}
               </button>
-            )}
-            {saveMessage && (
-              <span role="status" className="notice trade-toast gd-muted">
-                {saveMessage}
-              </span>
-            )}
-          </div>
+            );
+          })}
+      </div>
 
-          <details className="gd-disclosure">
-            <summary>Weekly lineup gain</summary>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Week</th>
-                    <th>Your before → after</th>
-                    <th>Your gain</th>
-                    <th>Their gain</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {impact?.own.weekly.map((w, i) => (
-                    <tr key={w.week}>
-                      <td>W{w.week}</td>
-                      <td>
-                        {fmtGain(w.beforeExpected).replace("+", "")} →{" "}
-                        {fmtGain(w.afterExpected).replace("+", "")}
-                      </td>
-                      <td>{fmtGain(w.expectedGain)}</td>
-                      <td>
-                        {fmtGain(impact.other.weekly[i]?.expectedGain ?? null)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {moves && moves.notes.length > 0 && (
+        <div
+          className="card"
+          style={{
+            marginTop: "12px",
+            padding: "14px 18px",
+            border: "2px solid var(--gd-line)",
+            borderRadius: "14px",
+            background: "var(--gd-surface)",
+          }}
+        >
+          <span
+            className="kick"
+            style={{
+              color: "var(--gd-muted)",
+              fontSize: "12px",
+              fontWeight: 700,
+              textTransform: "uppercase",
+            }}
+          >
+            What changes in the lineup
+          </span>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px" }}>
+            {moves.notes.map((note, i) => {
+              let badge = "INFO";
+              let badgeCls = "t-shift";
+              if (note.includes("comes off the bench") || note.includes("moves up")) {
+                badge = "UP";
+                badgeCls = "t-up";
+              } else if (
+                note.includes("starts at") ||
+                note.includes("joins") ||
+                note.includes("replaces")
+              ) {
+                badge = "NEW";
+                badgeCls = "t-new";
+              } else if (note.includes("shifts")) {
+                badge = "SHIFT";
+                badgeCls = "t-shift";
+              } else if (note.includes("leaves in the trade")) {
+                badge = "OUT";
+                badgeCls = "t-out";
+              } else if (note.includes("replaced") || note.includes("moves to the bench")) {
+                badge = "SITS";
+                badgeCls = "t-out";
+              }
+              return (
+                <div key={i} style={{ display: "flex", gap: "10px", alignItems: "baseline", fontSize: "14px" }}>
+                  <span className={`stag ${badgeCls}`}>{badge}</span>
+                  <span>{note}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      </section>
+
+      {/* 3. The verdict four calls scoreboard */}
+      {valid && (
+        <section className="score" role="region" aria-label="Verdicts">
+          <h2
+            className="sec"
+            style={{
+              fontFamily: "var(--gd-font-display)",
+              fontWeight: 800,
+              fontSize: "24px",
+              textTransform: "uppercase",
+              margin: "24px 0 10px",
+            }}
+          >
+            / The verdict · four separate calls
+          </h2>
+          <div className="srow">
+            <span className="n">▲ Surplus exchange</span>
+          <span
+            className="v"
+            style={{
+              color: valid
+                ? valid.surplusTest === "PASS"
+                  ? "var(--gd-positive-ink)"
+                  : valid.surplusTest === "FAIL"
+                    ? "var(--gd-negative-ink)"
+                    : "inherit"
+                : "inherit",
+            }}
+          >
+            {valid ? valid.grade || (valid.surplusTest === "PASS" ? "Gain" : "Overpay") : "—"}
+          </span>
+          <div className="d">
+            {valid
+              ? `Positive VORP in ${valid.incoming.toFixed(1)} vs out ${valid.outgoing.toFixed(1)} (${valid.incoming >= valid.outgoing ? "+" : ""}${(valid.incoming - valid.outgoing).toFixed(1)}). Premium only applies to unequal packages.`
+              : "Choose players on both sides to evaluate surplus."}
+          </div>
+        </div>
+        <div className="srow">
+          <span className="n">▲ Lineup impact</span>
+          <span
+            className="v num"
+            style={{
+              color:
+                ownGain > 0
+                  ? "var(--gd-positive-ink)"
+                  : ownGain < 0
+                    ? "var(--gd-negative-ink)"
+                    : "inherit",
+            }}
+          >
+            {impact?.own.expectedPerWeek !== null && impact?.own.expectedPerWeek !== undefined
+              ? `${impact.own.expectedPerWeek >= 0 ? "+" : ""}${impact.own.expectedPerWeek.toFixed(1)}`
+              : "—"}
+          </span>
+          <div className="d">
+            Expected PPG gain for the Value PPG-selected lineup, per remaining week. Not a weekly guarantee.
+            {gainSpread && (
+              <div style={{ margin: "8px 0 4px", maxWidth: "520px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "13.5px" }}>
+                  <span>Lineup gain ± spread</span>
+                  <span className="num">
+                    {ownGain >= 0 ? "+" : ""}{ownGain.toFixed(1)} {gainSpread.spread !== null ? `± ${gainSpread.spread.toFixed(1)}` : ""}
+                  </span>
+                </div>
+                <div className="whisk" style={{ height: "12px", marginTop: "4px" }}>
+                  <i style={{ left: `${barLeft}%`, width: `${barWidth}%` }} />
+                  <b style={{ left: `${dotPos}%` }} />
+                  <b style={{ left: `${zeroPos}%`, background: "var(--gd-muted)", width: "2px" }} />
+                </div>
+                <div className="quiet" style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px" }}>
+                  <span>Floor {gainSpread.floor !== null ? (gainSpread.floor >= 0 ? `+${gainSpread.floor.toFixed(1)}` : gainSpread.floor.toFixed(1)) : "—"}</span>
+                  <span>grey line = 0</span>
+                  <span>Ceiling {gainSpread.ceiling !== null ? (gainSpread.ceiling >= 0 ? `+${gainSpread.ceiling.toFixed(1)}` : gainSpread.ceiling.toFixed(1)) : "—"}</span>
+                </div>
+                <div style={{ fontSize: "11.5px", color: "var(--gd-muted)" }}>
+                  {gainSpread.players.length} lineup spots change. Spreads are combined as independent (root of summed squares), which slightly understates the range when two of those players share an NFL team.
+                </div>
+              </div>
+            )}
+            <div className="wks">
+              {impact?.own.weekly.map((w) => {
+                const g =
+                  w.afterExpected !== null && w.beforeExpected !== null
+                    ? w.afterExpected - w.beforeExpected
+                    : null;
+                const bg =
+                  g === null
+                    ? "var(--gd-surface-2)"
+                    : g >= 0
+                      ? "rgba(17,128,91,0.2)"
+                      : "rgba(217,83,79,0.2)";
+                const fg =
+                  g === null
+                    ? "var(--gd-muted)"
+                    : g >= 0
+                      ? "var(--gd-positive-ink)"
+                      : "var(--gd-negative-ink)";
+                return (
+                  <span key={w.week} style={{ background: bg, color: fg }}>
+                    W {w.week} {g !== null ? (g >= 0 ? `+${g.toFixed(1)}` : g.toFixed(1)) : "—"}
+                  </span>
+                );
+              })}
             </div>
-            <p className="gd-muted">
-              Expected PPG for the lineups on the selected basis; weeks that
-              cannot be scored show a dash.
-            </p>
-          </details>
-          <CoverageDetails result={valid} />
+          </div>
+        </div>
+        <div className="srow">
+          <span className="n">■ Legality</span>
+          <span
+            className="v"
+            style={{
+              color: valid?.legality ? "var(--gd-positive-ink)" : "var(--gd-negative-ink)",
+            }}
+          >
+            {valid ? (valid.legality ? "Legal" : "Needs changes") : "—"}
+          </span>
+          <div className="d">
+            {valid
+              ? valid.legality
+                ? "Ownership, duplicates, roster capacity, position limits and IR all hold for both teams."
+                : valid.errors.join(" ")
+              : "Evaluates roster size, duplicate players and position constraints."}
+          </div>
+        </div>
+        <div className="srow">
+          <span className="n">● Uncertainty</span>
+          <span
+            className="v"
+            style={{
+              color: valid?.uncertainty.length ? "var(--gd-warning-ink)" : "var(--gd-ink)",
+            }}
+          >
+            {valid ? (valid.uncertainty.length ? "Review" : "Low") : "—"}
+          </span>
+          <div className="d">
+            {valid
+              ? valid.uncertainty.length
+                ? valid.uncertainty.join(" ")
+                : "No injury, sample or baseline concerns."
+              : "Identifies injury, small sample or baseline estimation concerns."}
+          </div>
+        </div>
+      </section>
+      )}
+
+      {/* 4. Detail disclosures */}
+      <div style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "10px" }}>
+        {valid && (
           <details className="gd-disclosure">
-            <summary>Requirements and conditions</summary>
-            <ul>
-              <li>
-                Surplus package test: {valid.surplusTest}. Needed{" "}
-                {valid.requiredSurplus.toFixed(1)}, actual{" "}
-                {valid.actualSurplus.toFixed(1)}.
-              </li>
-              <li>
-                Fantasy-points package test: {valid.pointsTest}. Needed{" "}
-                {valid.requiredPoints.toFixed(1)}, actual{" "}
-                {valid.actualPoints.toFixed(1)}
-                {valid.dropCost > 0
-                  ? `, including ${valid.dropCost.toFixed(1)} of required-drop replacement cost`
-                  : ""}
-                .
-              </li>
-            </ul>
+            <summary>Trade scoring summary</summary>
+            <section
+              className="trade-score-strip gd-scoring-summary"
+              aria-label="Trade scoring summary"
+              style={{ marginTop: "10px" }}
+            >
+              <div className="trade-score-team">
+                <div>
+                  <strong>{mineName}</strong>
+                  <small>Your average Expected PPG</small>
+                </div>
+                <div className="trade-score-values model">
+                  <span>{fmt(impact?.own.beforePerWeek ?? null)}</span>
+                  <ArrowRight size={17} aria-hidden="true" />
+                  <strong>{fmt(impact?.own.afterPerWeek ?? null)}</strong>
+                  <b>{signed(impact?.own.expectedPerWeek ?? null)}</b>
+                </div>
+              </div>
+              <div className="trade-score-team">
+                <div>
+                  <strong>{tradeTeamName(m, draft.teamB)}</strong>
+                  <small>Their average Expected PPG</small>
+                </div>
+                <div className="trade-score-values model">
+                  <span>{fmt(impact?.other.beforePerWeek ?? null)}</span>
+                  <ArrowRight size={17} aria-hidden="true" />
+                  <strong>{fmt(impact?.other.afterPerWeek ?? null)}</strong>
+                  <b>{signed(impact?.other.expectedPerWeek ?? null)}</b>
+                </div>
+              </div>
+              <div className="trade-score-context-row">
+                <small className="trade-score-context">
+                  Average across Weeks {m.current}–{m.final}; model scoring, not ESPN's weekly projection.
+                </small>
+                {valid.grade && (
+                  <span
+                    className="trade-deal-pill neutral"
+                    role="status"
+                    aria-label={`Surplus deal grade: ${valid.grade}`}
+                  >
+                    Surplus: <strong>{valid.grade}</strong>
+                  </span>
+                )}
+              </div>
+            </section>
           </details>
-          <details className="gd-disclosure">
-            <summary>Required changes and optional pickups</summary>
-            <ul>
-              <li>
-                Your drops:{" "}
-                {valid.dropsA.map((id) => m.byId.get(id)?.name).join(", ") ||
-                  "none"}
-              </li>
-              <li>
-                Their drops:{" "}
-                {valid.dropsB.map((id) => m.byId.get(id)?.name).join(", ") ||
-                  "none"}
-              </li>
-              <li>
-                Optional waiver pickups for you:{" "}
-                {valid.addsA.map((id) => m.byId.get(id)?.name).join(", ") ||
-                  "none"}
-              </li>
-              <li>
-                Optional waiver pickups for them:{" "}
-                {valid.addsB.map((id) => m.byId.get(id)?.name).join(", ") ||
-                  "none"}
-              </li>
-            </ul>
-            <p className="gd-muted">
-              Pickups depend on successful claims and are separate from the
-              lineup gain above.
-            </p>
-          </details>
-          <details className="gd-disclosure">
-            <summary>Market reference</summary>
-            <p>{valid.market.status}</p>
-            {valid.market.outgoing !== null &&
-              valid.market.incoming !== null && (
-                <p>
-                  {valid.market.source}: sending{" "}
-                  {valid.market.outgoing.toFixed(0)} versus receiving{" "}
-                  {valid.market.incoming.toFixed(0)}.
-                </p>
-              )}
-          </details>
-          <details className="gd-disclosure">
-            <summary>Surface assessment</summary>
+        )}
+
+        <details className="gd-disclosure">
+          <summary>Surface assessment & manager expectations</summary>
+          <div style={{ marginTop: "10px" }}>
             {surface ? (
               <SurfaceAppealView value={surface} m={m} />
             ) : (
@@ -762,17 +942,151 @@ function ManualAnalyzer({
                 Surface assessment requires both teams to have valid modeled rosters.
               </p>
             )}
-          </details>
-          <TradeStressTest
-            key={`${draft.give.join(",")}:${draft.get.join(",")}:${stressRestoreKey ?? 0}`}
-            m={m}
-            draft={draft}
-            plans={lineupsRaw}
-            initial={stressRecipe}
-            change={setStressRecipe}
-          />
-        </>
-      )}
+            <div style={{ marginTop: "14px" }}>
+              <DirectManagerAssessment
+                m={m}
+                draft={draft}
+                result={valid}
+                raw={state?.filters.managerExpectations}
+                change={(raw) => onFilters?.({ managerExpectations: raw })}
+                basis={basis}
+                lineupsRaw={lineupsRaw}
+              />
+            </div>
+          </div>
+        </details>
+
+        {valid && (
+          <>
+            <details className="gd-disclosure">
+              <summary>Weekly lineup gain table</summary>
+              <div className="table-wrap" style={{ marginTop: "10px" }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Week</th>
+                      <th>Your before → after</th>
+                      <th>Your gain</th>
+                      <th>Their gain</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {impact?.own.weekly.map((w, i) => {
+                      const gOwn =
+                        w.afterExpected !== null && w.beforeExpected !== null
+                          ? w.afterExpected - w.beforeExpected
+                          : null;
+                      const otherW = impact.other.weekly[i];
+                      const gOther =
+                        otherW && otherW.afterExpected !== null && otherW.beforeExpected !== null
+                          ? otherW.afterExpected - otherW.beforeExpected
+                          : null;
+                      return (
+                        <tr key={w.week}>
+                          <td>W{w.week}</td>
+                          <td>
+                            {w.beforeExpected !== null ? w.beforeExpected.toFixed(1) : "—"} →{" "}
+                            {w.afterExpected !== null ? w.afterExpected.toFixed(1) : "—"}
+                          </td>
+                          <td>{gOwn !== null ? `${gOwn >= 0 ? "+" : ""}${gOwn.toFixed(1)}` : "—"}</td>
+                          <td>{gOther !== null ? `${gOther >= 0 ? "+" : ""}${gOther.toFixed(1)}` : "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+
+            <CoverageDetails result={valid} />
+
+            <details className="gd-disclosure">
+              <summary>Requirements and conditions</summary>
+              <ul style={{ marginTop: "8px" }}>
+                <li>
+                  Surplus package test: {valid.surplusTest}. Needed{" "}
+                  {valid.requiredSurplus.toFixed(1)}, actual{" "}
+                  {valid.actualSurplus.toFixed(1)}.
+                </li>
+                <li>
+                  Fantasy-points package test: {valid.pointsTest}. Needed{" "}
+                  {valid.requiredPoints.toFixed(1)}, actual{" "}
+                  {valid.actualPoints.toFixed(1)}
+                  {valid.dropCost > 0
+                    ? `, including ${valid.dropCost.toFixed(1)} of required-drop replacement cost`
+                    : ""}
+                  .
+                </li>
+              </ul>
+            </details>
+
+            <details className="gd-disclosure">
+              <summary>Required changes and optional pickups</summary>
+              <ul style={{ marginTop: "8px" }}>
+                <li>
+                  Your drops:{" "}
+                  {valid.dropsA.map((id) => m.byId.get(id)?.name).join(", ") || "none"}
+                </li>
+                <li>
+                  Their drops:{" "}
+                  {valid.dropsB.map((id) => m.byId.get(id)?.name).join(", ") || "none"}
+                </li>
+                <li>
+                  Optional waiver pickups for you:{" "}
+                  {valid.addsA.map((id) => m.byId.get(id)?.name).join(", ") || "none"}
+                </li>
+                <li>
+                  Optional waiver pickups for them:{" "}
+                  {valid.addsB.map((id) => m.byId.get(id)?.name).join(", ") || "none"}
+                </li>
+              </ul>
+            </details>
+
+            <details className="gd-disclosure">
+              <summary>Stress test & save trade</summary>
+              <div style={{ marginTop: "10px" }}>
+                <div className="gd-row" style={{ marginBottom: "12px" }}>
+                  {onSaveTrade && (
+                    <button
+                      type="button"
+                      className="gd-cta"
+                      aria-label="Save current trade"
+                      disabled={!valid}
+                      onClick={() => {
+                        if (valid) {
+                          const summary = summaryFromTrade(valid, basis);
+                          const ok = onSaveTrade(draft, summary, stressRecipe);
+                          notify(actionCue(ok));
+                          if (ok) {
+                            setSaveMessage(
+                              "Trade saved. Duplicate packages update the existing entry while preserving its name, notes and original summary.",
+                            );
+                          }
+                        }
+                      }}
+                    >
+                      Save current trade
+                    </button>
+                  )}
+                  {saveMessage && (
+                    <span role="status" className="notice trade-toast gd-muted">
+                      {saveMessage}
+                    </span>
+                  )}
+                </div>
+                <TradeStressTest
+                  key={`${draft.give.join(",")}:${draft.get.join(",")}:${stressRestoreKey ?? 0}`}
+                  m={m}
+                  draft={draft}
+                  plans={lineupsRaw}
+                  initial={stressRecipe}
+                  change={setStressRecipe}
+                />
+              </div>
+            </details>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1097,7 +1411,6 @@ export function TradeRoom({
   onSwitchToLive?: () => void;
 }) {
   const notify = useFeedback();
-  const [savedOpen, setSavedOpen] = useState(false);
   const [manualFiltersOpen, setManualFiltersOpen] = useState(false);
   const [restoredStress, setRestoredStress] = useState<StressRecipe | undefined>(undefined);
   const [stressRestoreKey, setStressRestoreKey] = useState(0);
@@ -1152,19 +1465,29 @@ export function TradeRoom({
     }
   };
 
+  const [savedOpen, setSavedOpen] = useState(false);
   const openSaved = () => {
     setSavedOpen((o) => !o);
   };
 
   return (
     <div className="gd-trade">
-      <header className="gd-trade-head">
-        <h2>Trade room</h2>
-        <div className="gd-tabs" role="tablist" aria-label="Trade tools">
+      <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }} className="slide">
+        <span className="kick" style={{ color: "var(--gd-muted)", fontSize: "14px", fontWeight: 700, textTransform: "uppercase" }}>
+          Analyze · find · chain
+        </span>
+        <h1 className="h-hero" style={{ fontSize: "54px", margin: 0 }}>
+          Trade room
+        </h1>
+      </div>
+
+      <header className="gd-trade-head" style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center", marginBottom: "16px" }}>
+        <div className="ptabs gd-tabs" role="tablist" aria-label="Trade tools" style={{ flex: "1 1 420px" }}>
           {tradeTabs.map((t) => (
             <button
               key={t}
               type="button"
+              className="ptab"
               role="tab"
               aria-selected={tab === t}
               onClick={() => {
@@ -1176,11 +1499,26 @@ export function TradeRoom({
             </button>
           ))}
         </div>
-        <div className="gd-row">
-          <button type="button" className="gd-pill" onClick={openSaved}>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", marginLeft: "auto", flexWrap: "wrap" }}>
+          <label style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <span className="quiet" style={{ fontSize: "13.5px" }}>Evaluate lineup impact using</span>
+            <select
+              className="sel"
+              aria-label="Lineup basis"
+              value={basisRaw}
+              onChange={(e) => changeBasis(e.target.value as LineupBasis)}
+            >
+              {lineupBases.map((b) => (
+                <option key={b} value={b}>
+                  {lineupBasisLabel(b)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="pill cbtn gd-pill" onClick={openSaved}>
             Saved trades
           </button>
-          <a className="gd-pill" href="#/journal">
+          <a className="pill cbtn gd-pill" href="#/journal">
             Journal
           </a>
         </div>
@@ -1190,8 +1528,16 @@ export function TradeRoom({
         className="trade-saved-drawer gd-disclosure"
         open={savedOpen}
         onToggle={(e) => setSavedOpen(e.currentTarget.open)}
+        style={{
+          display: savedOpen ? "block" : "none",
+          marginBottom: "16px",
+          background: "var(--gd-surface)",
+          border: "2px solid var(--gd-line)",
+          borderRadius: "14px",
+          padding: "16px",
+        }}
       >
-        <summary>Browse saved trades</summary>
+        <summary style={{ display: "none" }}>Browse saved trades</summary>
         <SavedTrades
           m={m}
           state={state ?? ({ filters } as unknown as AppState)}
@@ -1205,6 +1551,7 @@ export function TradeRoom({
             setRestoredStress(trade.stressTest ?? undefined);
             setStressRestoreKey((k) => k + 1);
             setTab(trade.query ? "find" : "manual");
+            setSavedOpen(false);
           }}
         />
       </details>
@@ -1259,9 +1606,6 @@ export function TradeRoom({
                   onFilters({ [searchLimitsKey]: writeSearchLimits(next) })
                 }
               />
-              <p className="gd-muted">
-                Every {tabLabel[tab].toLowerCase()} control is below.
-              </p>
               <div className="trade-workspace">
                 <TradeSearch
                   key={`${m.dataset.hash}/${tab}`}

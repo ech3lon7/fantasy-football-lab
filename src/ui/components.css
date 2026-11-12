@@ -907,33 +907,65 @@
   position: relative;
   width: 100%;
 }
+:root[data-gameday] .stock-chart-svg-wrap svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* Plot styles ported from the design's momentum chart: neutral fast and slow averages,
+   fact-coloured weekly points, a translucent area and hollow volume bars. */
+:root[data-gameday] .stock-fast-ma-line {
+  fill: none;
+  stroke: var(--gd-ink);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+:root[data-gameday] .stock-slow-ma-line {
+  fill: none;
+  stroke: var(--gd-ink);
+  stroke-width: 2;
+  stroke-dasharray: 8 6;
+  stroke-linejoin: round;
+  opacity: 0.6;
+}
+:root[data-gameday] .stock-points-line {
+  fill: none;
+  stroke: var(--gd-fact);
+  stroke-width: 1.8;
+  stroke-dasharray: 2 5;
+  stroke-linecap: round;
+}
+:root[data-gameday] .stock-volume-bar {
+  fill: color-mix(in srgb, var(--gd-muted) 12%, transparent);
+  stroke: var(--gd-muted);
+  stroke-width: 1.5;
+}
 :root[data-gameday] .stock-grid-line {
   stroke: var(--gd-line);
-  stroke-dasharray: 4 4;
   stroke-width: 1;
 }
 :root[data-gameday] .stock-axis-label {
   font-size: 9px;
-  fill: var(--gd-line);
+  fill: var(--gd-muted);
   font-family: monospace;
 }
 :root[data-gameday] .stock-week-label {
-  font-size: 10px;
-  fill: var(--gd-surface-2);
+  font-size: 11px;
+  fill: var(--gd-muted);
   font-weight: 600;
 }
 :root[data-gameday] .stock-league-avg-line {
-  stroke: var(--gd-selected);
-  stroke-dasharray: 4 3;
-  stroke-width: 1.2;
-  opacity: 0.42;
+  stroke: var(--gd-warning-ink);
+  stroke-dasharray: 6 5;
+  stroke-width: 1.5;
+  opacity: 0.75;
   pointer-events: none;
 }
 :root[data-gameday] .stock-league-avg-label {
-  fill: var(--gd-selected);
-  font-size: 9px;
+  fill: var(--gd-warning-ink);
+  font-size: 10px;
   font-weight: 600;
-  opacity: 0.6;
   pointer-events: none;
 }
 :root[data-gameday] .legend-swatch.dashed-gold {
@@ -947,16 +979,16 @@
 }
 :root[data-gameday] .stock-target-vol-line {
   stroke: var(--gd-espn);
-  stroke-dasharray: 4 3;
-  stroke-width: 1.2;
-  opacity: 0.65;
+  stroke-dasharray: 6 5;
+  stroke-width: 1.5;
+  opacity: 0.8;
   pointer-events: none;
 }
 :root[data-gameday] .stock-target-vol-label {
-  fill: var(--gd-surface-2);
-  font-size: 9px;
+  fill: var(--gd-espn);
+  font-size: 10px;
   font-weight: 600;
-  opacity: 0.85;
+  opacity: 0.9;
   pointer-events: none;
 }
 :root[data-gameday] .legend-swatch.dashed-blue {
@@ -969,27 +1001,29 @@
   color: var(--gd-espn);
 }
 :root[data-gameday] .stock-point-node {
-  fill: var(--gd-line);
-  stroke: var(--gd-line);
+  fill: var(--gd-fact);
+  stroke: var(--gd-surface);
   stroke-width: 1.5;
   transition: r 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  animation: stockFadeIn 2.0s ease-out forwards;
+  animation: stockFadeIn 2s ease-out forwards;
 }
 :root[data-gameday] .stock-point-node:hover {
   r: 5;
 }
 :root[data-gameday] .stock-crosshair-line {
-  stroke: var(--gd-line);
+  stroke: var(--gd-muted);
   stroke-dasharray: 3 3;
   stroke-width: 1;
+  opacity: 0.7;
 }
 :root[data-gameday] .stock-focus-node.fast {
-  stroke: var(--gd-line);
+  fill: var(--gd-ink);
+  stroke: var(--gd-surface);
   stroke-width: 2;
 }
 :root[data-gameday] .stock-focus-node.slow {
-  fill: var(--gd-line);
-  stroke: var(--gd-line);
+  fill: var(--gd-surface);
+  stroke: var(--gd-muted);
   stroke-width: 1.5;
 }
 :root[data-gameday] .stock-hit-area {
@@ -1016,12 +1050,24 @@
   filter: brightness(0.92);
   transform: translateY(-1px);
 }
+:root[data-gameday] .stock-tooltip-popover {
+  position: absolute;
+  z-index: 5;
+  min-width: 150px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--gd-ink);
+  color: var(--gd-bg);
+  font-size: 12.5px;
+  pointer-events: none;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
+}
 :root[data-gameday] .tooltip-week-title {
   font-weight: 700;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid color-mix(in srgb, var(--gd-bg) 25%, transparent);
   padding-bottom: 3px;
   margin-bottom: 3px;
-  color: var(--gd-muted);
+  color: var(--gd-bg);
 }
 :root[data-gameday] .tooltip-stat-row {
   display: flex;
@@ -1058,7 +1104,59 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+}
+
+:root[data-gameday] .label-why-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 12px;
+  border: 1px solid var(--gd-line);
+  border-radius: 999px;
+  background: var(--gd-surface);
+  color: var(--gd-ink);
+  font-family: var(--gd-font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+:root[data-gameday] .label-why-chip:hover:not([aria-pressed="true"]) {
+  background: var(--gd-surface-2);
+}
+
+:root[data-gameday] .label-why-chip--earned.label-why-chip--positive {
+  border-color: var(--gd-positive-bg);
+  background: var(--gd-positive-bg);
+  color: var(--gd-positive-ink);
+}
+
+:root[data-gameday] .label-why-chip--earned.label-why-chip--warning {
+  border-color: var(--gd-warning-bg);
+  background: var(--gd-warning-bg);
+  color: var(--gd-warning-ink);
+}
+
+/* Near misses are dashed pills */
+:root[data-gameday] .label-why-chip--near {
+  border: 2px dashed var(--gd-warning-ink);
+  background: transparent;
+  color: var(--gd-warning-ink);
+}
+
+:root[data-gameday] .label-why-chip--near[aria-pressed="true"] {
+  border: 2px dashed var(--gd-warning-ink);
+  background: var(--gd-warning-bg);
+  box-shadow: 0 0 0 1px var(--gd-warning-ink);
+}
+
+:root[data-gameday] .label-why-chip[aria-pressed="true"]:not(.label-why-chip--near) {
+  box-shadow: 0 0 0 2px var(--gd-ink);
 }
 
 :root[data-gameday] .label-why-hint {
@@ -1189,34 +1287,85 @@
   position: relative;
   display: block;
   width: 96px;
-  height: 14px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--gd-surface-2);
+  overflow: visible;
+}
+
+:root[data-gameday] .label-why-mini-track {
+  display: none;
+}
+
+:root[data-gameday] .label-why-mini-favorable {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--gd-positive-bg) 70%, transparent);
 }
 
 :root[data-gameday] .label-why-mini-threshold {
   position: absolute;
-  top: 1px;
-  bottom: 1px;
-  border-left: 2px solid var(--gd-muted);
-  transform: translateX(-1px);
+  top: -5px;
+  bottom: -5px;
+  width: 3px;
+  border-left: 0;
+  background: var(--gd-warning-ink);
+  transform: translateX(-50%);
+  z-index: 2;
 }
 
 :root[data-gameday] .label-why-mini-dot {
   position: absolute;
   top: 50%;
-  width: 9px;
-  height: 9px;
-  border: 1px solid var(--gd-line);
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--gd-surface);
   border-radius: 50%;
+  background: var(--gd-ink);
   transform: translate(-50%, -50%);
+  z-index: 3;
+}
+
+:root[data-gameday] .label-why-mini-dot--miss {
+  background: var(--gd-negative-ink);
+}
+
+:root[data-gameday] .label-why-mini-dot--met {
+  background: var(--gd-positive-ink);
 }
 
 :root[data-gameday] .label-why-pill {
   justify-self: end;
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 999px;
   font-size: 11px;
+  font-weight: 700;
   line-height: 1.35;
   text-align: right;
+  white-space: nowrap;
+}
+
+:root[data-gameday] .label-why-pill--spare {
+  background: var(--gd-positive-bg);
+  color: var(--gd-positive-ink);
+}
+
+:root[data-gameday] .label-why-pill--close,
+:root[data-gameday] .label-why-pill--at-line {
+  background: var(--gd-warning-bg);
+  color: var(--gd-warning-ink);
+}
+
+:root[data-gameday] .label-why-pill--short {
+  background: var(--gd-negative-bg);
+  color: var(--gd-negative-ink);
+}
+
+:root[data-gameday] .label-why-pill--none {
+  background: var(--gd-surface-2);
+  color: var(--gd-muted);
 }
 
 :root[data-gameday] .label-why-collapsed {

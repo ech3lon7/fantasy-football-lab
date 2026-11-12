@@ -120,16 +120,6 @@ export function PlayerStockChart({
   // Fast MA area fill path closed along the bottom baseline
   const areaFillPath = `${fastMaPath} L ${getX(series.length - 1)} ${padTop + plotHeight} L ${getX(0)} ${padTop + plotHeight} Z`;
 
-  // Color selection based on trend momentum status
-  const strokeColor =
-    latest?.tone === "good"
-      ? "var(--good, #22c55e)"
-      : latest?.tone === "orange"
-        ? "var(--orange, #f59e0b)"
-        : latest?.tone === "bad"
-          ? "var(--bad, #ef4444)"
-          : "var(--neutral-line, #94a3b8)";
-
   // Y-axis grid tick marks (4 intervals)
   const yTicks = [0, yMax * 0.33, yMax * 0.66, yMax];
 
@@ -138,8 +128,8 @@ export function PlayerStockChart({
       {/* Legend and active status strip */}
       <div className="stock-chart-header">
         <div className="stock-chart-legend">
-          <span className="legend-item fast-ma" style={{ color: strokeColor }}>
-            <span className="legend-swatch solid" style={{ backgroundColor: strokeColor }} />
+          <span className="legend-item fast-ma">
+            <span className="legend-swatch solid" />
             Fast MA (2-game)
           </span>
           <span className="legend-item slow-ma">
@@ -185,8 +175,8 @@ export function PlayerStockChart({
           <defs>
             {/* Linear gradient fill under the Fast MA line */}
             <linearGradient id={`gradient-${chartId}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={strokeColor} stopOpacity="0.22" />
-              <stop offset="100%" stopColor={strokeColor} stopOpacity="0.0" />
+              <stop offset="0%" stopColor="var(--gd-ink)" stopOpacity="0.14" />
+              <stop offset="100%" stopColor="var(--gd-ink)" stopOpacity="0.0" />
             </linearGradient>
           </defs>
 
@@ -291,11 +281,7 @@ export function PlayerStockChart({
           <path d={slowMaPath} className="stock-slow-ma-line" />
 
           {/* Fast MA primary responsive momentum curve */}
-          <path
-            d={fastMaPath}
-            className="stock-fast-ma-line"
-            style={{ stroke: strokeColor }}
-          />
+          <path d={fastMaPath} className="stock-fast-ma-line" />
 
           {/* X-axis week indicators along bottom baseline */}
           {series.map((s, i) => (
@@ -331,7 +317,6 @@ export function PlayerStockChart({
                       cy={getY(activePoint.fastMA)}
                       r={5}
                       className="stock-focus-node fast"
-                      style={{ fill: strokeColor }}
                     />
                     <circle
                       cx={x}
@@ -395,7 +380,7 @@ export function PlayerStockChart({
               </div>
               <div className="tooltip-stat-row">
                 <span className="tooltip-label">Fast MA (2G):</span>
-                <span style={{ color: strokeColor }}>{activePoint.fastMA.toFixed(1)}</span>
+                <span>{activePoint.fastMA.toFixed(1)}</span>
               </div>
               <div className="tooltip-stat-row">
                 <span className="tooltip-label">Slow MA (5G):</span>

@@ -15,6 +15,7 @@ import { LabelWhy } from "../../ui/LabelWhy";
 import { usePopovers } from "../../ui/popover/PopoverStack";
 import { isEditableTarget } from "../../ui/popover/keys";
 import { playerCard, type Provenance } from "../../domain/view/player-card";
+import { labelTone } from "../../domain/view/labels";
 import type { Model } from "../../domain/valuation";
 import { Chip } from "../../ui/primitives";
 import { Radar } from "./Radar";
@@ -150,74 +151,95 @@ function CardView({
     >
       <header
         className="gd-card-head"
-        style={{ background: h.colors.background, color: h.colors.ink }}
+        style={{ backgroundColor: h.colors.background, color: h.colors.ink }}
       >
+        <span className="gd-card-big" aria-hidden="true">
+          {h.nfl}
+        </span>
         <div className="gd-card-id">
           <PlayerPhoto player={p} size={72} className="gd-card-photo" />
           <div className="gd-card-id-text">
-            <span>
+            <span className="gd-card-kicker">
               {h.pos} · {h.nfl} · {h.owner}
             </span>
             <h2>{h.name}</h2>
             <div className="gd-card-labels">
-              {h.labels.map((label) => (
-                <Chip key={label}>{label}</Chip>
-              ))}
-              {h.injury && h.injury !== "Active" && (
+              {h.injury && h.injury.toUpperCase() !== "ACTIVE" && (
                 <Chip tone="warning">{h.injury}</Chip>
               )}
+              {h.labels.map((label) => (
+                <Chip key={label} tone={labelTone(label)}>
+                  {label}
+                </Chip>
+              ))}
             </div>
           </div>
         </div>
-        <div className="gd-card-eppg" aria-label="Expected points per game">
-          <small>EXPECTED PPG</small>
-          <strong>{h.eppg ?? "—"}</strong>
-          {h.floor !== null && h.ceiling !== null ? (
-            <small>
-              Floor {h.floor} · ceiling {h.ceiling}
-            </small>
-          ) : (
-            <small title={h.rangeReason}>Range unavailable</small>
-          )}
-          <small>
-            Recent {h.recent ?? "—"} · Surplus {h.surplus ?? "—"}
-          </small>
-        </div>
-        <button
-          type="button"
-          className="gd-card-versus"
-          onClick={() => {
-            notify("select");
-            addToVersus(id);
-          }}
-        >
-          Add to versus
-        </button>
-        {list && at >= 0 && (
-          <div className="gd-card-step">
-            <button
-              type="button"
-              aria-label="Previous player"
-              disabled={at === 0}
-              onClick={() => step(-1)}
-            >
-              ‹
-            </button>
-            <span aria-live="polite">
-              {at + 1} of {list.length}
-            </span>
-            <button
-              type="button"
-              aria-label="Next player"
-              disabled={at === list.length - 1}
-              onClick={() => step(1)}
-            >
-              ›
-            </button>
+        <div className="gd-card-nums">
+          <div
+            className="gd-card-stat gd-card-eppg"
+            aria-label="Expected points per game"
+          >
+            <small>▲ EXPECTED PPG</small>
+            <strong>{h.eppg ?? "—"}</strong>
+            {h.floor !== null && h.ceiling !== null ? (
+              <small>
+                Floor {h.floor} · ceiling {h.ceiling}
+              </small>
+            ) : (
+              <small title={h.rangeReason}>Range unavailable</small>
+            )}
           </div>
-        )}
+          <div className="gd-card-stat">
+            <small>● RECENT 3</small>
+            <strong>{h.recent ?? "—"}</strong>
+          </div>
+          <div className="gd-card-stat">
+            <small>▲ SURPLUS</small>
+            <strong>{h.surplus ?? "—"}</strong>
+          </div>
+        </div>
+        <div className="gd-card-actions">
+          <button
+            type="button"
+            className="gd-card-versus"
+            onClick={() => {
+              notify("select");
+              addToVersus(id);
+            }}
+          >
+            Add to versus
+          </button>
+          {list && at >= 0 && (
+            <div className="gd-card-step">
+              <button
+                type="button"
+                aria-label="Previous player"
+                disabled={at === 0}
+                onClick={() => step(-1)}
+              >
+                ‹
+              </button>
+              <span aria-live="polite">
+                {at + 1} of {list.length}
+              </span>
+              <button
+                type="button"
+                aria-label="Next player"
+                disabled={at === list.length - 1}
+                onClick={() => step(1)}
+              >
+                ›
+              </button>
+            </div>
+          )}
+        </div>
       </header>
-      <div className="gd-tabs" role="tablist" aria-label="Player card sections">
+      <div
+        className="gd-tabs gd-ptabs"
+        role="tablist"
+        aria-label="Player card sections"
+      >
         {tabs.map((t) => (
           <button
             key={t}
@@ -243,29 +265,40 @@ function CardView({
         aria-labelledby={`gd-tab-${tab}`}
       >
         {tab === "story" && (
-          <>
-            <NextRefreshScenarios m={m} p={p} defaultOpen />
-            {h.blendLine && <small className="gd-blend">{h.blendLine}</small>}
-            <ul className="gd-story">
-              {card.story.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-            <Radar axes={card.radar} />
-            <div
-              ref={chart}
-              role="region"
-              aria-label={`Moving-average chart for ${h.name}`}
-            >
-              <PlayerStockChart
-                trend={card.chart.trend}
-                playerName={h.name}
-                position={h.pos}
-                leagueAvgVolume={card.chart.leagueAvgVolume}
-                height={220}
-              />
+          <div className="gd-story-grid">
+            <div className="gd-story-left">
+              <NextRefreshScenarios m={m} p={p} defaultOpen />
+              {h.blendLine && <small className="gd-blend">{h.blendLine}</small>}
+              <ul className="gd-story">
+                {card.story.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
             </div>
-          </>
+            <div className="gd-story-right">
+              <div
+                ref={chart}
+                className="gd-story-panel"
+                role="region"
+                aria-label={`Moving-average chart for ${h.name}`}
+              >
+                <span className="gd-kick">
+                  Performance momentum &amp; moving averages
+                </span>
+                <PlayerStockChart
+                  trend={card.chart.trend}
+                  playerName={h.name}
+                  position={h.pos}
+                  leagueAvgVolume={card.chart.leagueAvgVolume}
+                  height={200}
+                />
+              </div>
+              <div className="gd-story-panel">
+                <span className="gd-kick">Profile vs average {h.pos}</span>
+                <Radar axes={card.radar} />
+              </div>
+            </div>
+          </div>
         )}
         {tab === "numbers" && (
           <>

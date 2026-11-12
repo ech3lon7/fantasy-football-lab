@@ -12,6 +12,8 @@ import {
 import { nextRefreshDefaults } from "../next-refresh";
 import { playerSignals, type Model, type Player } from "../valuation";
 import { teamColors } from "./nfl-colors";
+import { playedHistory } from "../opportunity";
+import { n, num } from "../contracts";
 
 export const poolOptions = ["Available", "All", "Selected team"] as const;
 export const positionOptions = [
@@ -237,7 +239,9 @@ export interface ScoutCard {
   eppg: string | null;
   recent: string | null;
   surplus: string | null;
+  surplusNumber: number;
   labels: string[];
+  sparkline: string;
   // Floor, expected and ceiling stay null when the next-game range is unavailable, never zero.
   range: {
     floor: number | null;
@@ -248,6 +252,28 @@ export interface ScoutCard {
   missing: string[];
 }
 
+export function buildSparkline(scores: (number | null)[], width = 100, height = 30): string {
+  const valid = scores.filter((v): v is number => v !== null && Number.isFinite(v));
+  if (valid.length < 2) return "";
+  let hi = Math.max(...valid);
+  const lo = Math.min(...valid);
+  if (hi === lo) hi = lo + 1;
+  const n = scores.length;
+  let d = "";
+  let pen = false;
+  scores.forEach((v, i) => {
+    if (v === null || !Number.isFinite(v)) {
+      pen = false;
+      return;
+    }
+    const x = 2 + (i * (width - 4)) / Math.max(1, n - 1);
+    const y = height - 3 - ((v - lo) / (hi - lo)) * (height - 6);
+    d += (pen ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1) + " ";
+    pen = true;
+  });
+  return d.trim();
+}
+
 const one = (x: number | null, digits = 1) =>
   x === null || !Number.isFinite(x) ? null : x.toFixed(digits);
 
@@ -256,8 +282,19 @@ export function scoutCards(
   m: Model,
   rows: GemResult[],
 ): { cards: ScoutCard[]; scale: { min: number; max: number } } {
+  const historyMap = playedHistory(m.dataset);
   const cards = rows.map(({ player: p, missing }) => {
     const defaults = nextRefreshDefaults(m, p);
+    const playerRows = historyMap.get(p.id) ?? [];
+    // Up to last 9 completed weeks for the sparkline
+    const weeklyScores: (number | null)[] = [];
+    const maxWeek = Math.max(0, ...playerRows.map((r) => num(r.Week)));
+    const startWeek = Math.max(1, maxWeek - 8);
+    for (let w = startWeek; w <= maxWeek; w++) {
+      const match = playerRows.find((r) => num(r.Week) === w);
+      weeklyScores.push(match ? n(match.Points) : null);
+    }
+
     return {
       id: p.id,
       name: p.name,
@@ -267,7 +304,9 @@ export function scoutCards(
       eppg: one(p.blendedExpected),
       recent: one(p.recent),
       surplus: one(p.index, 0),
+      surplusNumber: Math.max(0, Math.min(100, p.index ?? 0)),
       labels: playerSignals(p).filter((x) => x && !/^(none|no )/i.test(x)),
+      sparkline: buildSparkline(weeklyScores),
       range: {
         floor: defaults.lower,
         expected: p.blendedExpected,

@@ -59,6 +59,7 @@ import {
   FoldingGroup,
   Segmented,
 } from "../../ui/primitives";
+import { labelTone } from "../../domain/view/labels";
 
 const views = ["cards", "table"] as const;
 const sorts: [string, string][] = [
@@ -678,6 +679,9 @@ export function Scouting({
                               color: c.colors.ink,
                             }}
                           >
+                            <span className="gd-pcard-wm" aria-hidden="true">
+                              {c.nfl}
+                            </span>
                             <div className="gd-pcard-ident">
                               <PlayerPhoto player={p} size={36} />
                               <PlayerName
@@ -697,14 +701,20 @@ export function Scouting({
                             </span>
                           </header>
                           <div className="gd-pcard-body">
+                            <div className="gd-pcard-statrow">
+                              <div>
+                                <small>▲ Expected PPG</small>
+                                <b>{c.eppg ?? "—"}</b>
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <small>● Recent 3</small>
+                                <b>{c.recent ?? "—"}</b>
+                              </div>
+                            </div>
                             <div className="gd-pcard-range-wrap">
                               <div className="gd-pcard-range-label">
-                                <small>Next-game range</small>
-                                {c.range.floor !== null && c.range.ceiling !== null && (
-                                  <span>
-                                    {c.range.floor.toFixed(1)} – {c.range.ceiling.toFixed(1)}
-                                  </span>
-                                )}
+                                <small>Floor {c.range.floor !== null ? c.range.floor.toFixed(1) : "—"}</small>
+                                <small>Ceiling {c.range.ceiling !== null ? c.range.ceiling.toFixed(1) : "—"}</small>
                               </div>
                               <FloorCeilingBar
                                 range={c.range}
@@ -712,22 +722,46 @@ export function Scouting({
                                 unavailableReason="Next-game range needs a usable EPPG and scoring variability."
                               />
                             </div>
-                            <div className="gd-pcard-stats">
-                              <span>Recent {c.recent ?? "—"}</span>
-                              <span>Surplus {c.surplus ?? "—"}</span>
-                            </div>
-                            <button
-                              type="button"
-                              className="gd-pcard-vs"
-                              aria-label={`Add ${c.name} to versus`}
-                              onClick={() => versusApi.addToVersus(c.id)}
-                            >
-                              + Versus
-                            </button>
+                            {c.sparkline && (
+                              <svg
+                                className="gd-pcard-spark"
+                                viewBox="0 0 100 30"
+                                preserveAspectRatio="none"
+                                aria-hidden="true"
+                              >
+                                <path d={c.sparkline} />
+                              </svg>
+                            )}
                             <div className="gd-pcard-labels">
                               {c.labels.slice(0, 4).map((l) => (
-                                <Chip key={l}>{l}</Chip>
+                                <Chip key={l} tone={labelTone(l)}>
+                                  {l}
+                                </Chip>
                               ))}
+                            </div>
+                            <div className="gd-pcard-meter-wrap">
+                              <div className="gd-pcard-meter-label">
+                                <span>Surplus index</span>
+                                <b>{c.surplus ?? "—"}</b>
+                              </div>
+                              <div className="gd-pcard-meter">
+                                <i style={{ width: `${c.surplusNumber}%` }} />
+                              </div>
+                            </div>
+                            <div className="gd-pcard-foot">
+                              <span className="gd-muted">
+                                {p.owner && p.owner !== "0"
+                                  ? (m.dataset.tables.ModelRosters.find((r) => r.TeamID === p.owner)?.TeamName ?? p.owner)
+                                  : "Available"}
+                              </span>
+                              <button
+                                type="button"
+                                className="gd-pcard-vs"
+                                aria-label={`Add ${c.name} to versus`}
+                                onClick={() => versusApi.addToVersus(c.id)}
+                              >
+                                + VS
+                              </button>
                             </div>
                             {c.missing.length > 0 && (
                               <small className="gd-muted">

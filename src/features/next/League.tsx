@@ -276,12 +276,28 @@ export function League({
 
   return (
     <div className="gd-league">
+      <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "16px" }} className="slide">
+        <span className="kick" style={{ color: "var(--gd-muted)", fontSize: "14px", fontWeight: 700, textTransform: "uppercase" }}>
+          Every team · every position
+        </span>
+        <h1 className="h-hero" style={{ fontSize: "54px", margin: 0 }}>
+          League
+        </h1>
+      </div>
       <section aria-label="Grade grid">
-        <h2>League grades</h2>
-        <p className="gd-muted">
-          Modeled starter Value PPG per slot versus the league median. Select a
-          grade to see the players behind it, or select a team to view their full roster.
-        </p>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "center", marginBottom: "8px" }}>
+          <span className="kick" style={{ color: "var(--gd-model)", margin: 0 }}>
+            ▲ Positional grades · tap a grade to see that position group
+          </span>
+          <span className="scale gd-scale" aria-label="Grade colour scale" style={{ display: "inline-flex", gap: "4px", fontSize: "12px", fontWeight: 700 }}>
+            <i style={{ background: "#96524A", color: "#fff", padding: "2px 6px", borderRadius: "4px" }}>F</i>
+            <i style={{ background: "#C39B80", color: "#35200F", padding: "2px 6px", borderRadius: "4px" }}>D</i>
+            <i style={{ background: "#D9CBA3", color: "#3A3219", padding: "2px 6px", borderRadius: "4px" }}>C</i>
+            <i style={{ background: "#A9C0B2", color: "#1B2A24", padding: "2px 6px", borderRadius: "4px" }}>C+ B−</i>
+            <i style={{ background: "#5B8A78", color: "#fff", padding: "2px 6px", borderRadius: "4px" }}>B B+</i>
+            <i style={{ background: "#2E5E4E", color: "#fff", padding: "2px 6px", borderRadius: "4px" }}>A</i>
+          </span>
+        </div>
         <div className="gd-grid-wrap">
           <table className="gd-grid">
             <thead>

@@ -309,28 +309,46 @@ export interface TapeRow {
   label: string;
   send: string | null;
   receive: string | null;
+  sendPct?: number;
+  receivePct?: number;
 }
 
 // Side-by-side totals for the players being sent and received; a total is null when any player's value is missing.
-export function taleOfTape(m: Model, draft: Draft): TapeRow[] {
-  const side = (ids: string[], read: (p: Player) => number | null) => {
+export function taleOfTape(m: Model, draft: Draft, full = false): TapeRow[] {
+  const sideNum = (ids: string[], read: (p: Player) => number | null): number | null => {
     const players = ids
       .map((id) => m.byId.get(id))
       .filter((p): p is Player => !!p);
     const values = players.map(read);
     return players.length === 0 || values.some((v) => v === null)
       ? null
-      : (values as number[]).reduce((a, b) => a + b, 0).toFixed(1);
+      : (values as number[]).reduce((a, b) => a + b, 0);
   };
-  const row = (label: string, read: (p: Player) => number | null): TapeRow => ({
-    label,
-    send: side(draft.give, read),
-    receive: side(draft.get, read),
-  });
+  const row = (label: string, read: (p: Player) => number | null): TapeRow => {
+    const l = sideNum(draft.give, read);
+    const r = sideNum(draft.get, read);
+    const maxVal = Math.max(l ?? 0, r ?? 0, 1);
+    return {
+      label,
+      send: l === null ? null : l.toFixed(1),
+      receive: r === null ? null : r.toFixed(1),
+      sendPct: l !== null ? Math.max(4, Math.round((l / maxVal) * 100)) : 0,
+      receivePct: r !== null ? Math.max(4, Math.round((r / maxVal) * 100)) : 0,
+    };
+  };
+  if (!full) {
+    return [
+      row("Expected PPG (sum)", (p) => p.blendedExpected),
+      row("Value PPG (sum)", (p) => p.value),
+      row("Surplus (positive VORP)", (p) => p.positive),
+    ];
+  }
   return [
-    row("Expected PPG (sum)", (p) => p.blendedExpected),
-    row("Value PPG (sum)", (p) => p.value),
-    row("Surplus (positive VORP)", (p) => p.positive),
+    row("Expected PPG", (p) => p.blendedExpected),
+    row("Value PPG", (p) => p.value),
+    row("Recent PPG", (p) => p.recent ?? p.actual),
+    row("ESPN season PPG", (p) => p.projected ?? p.actual),
+    row("Surplus index", (p) => p.positive),
   ];
 }
 

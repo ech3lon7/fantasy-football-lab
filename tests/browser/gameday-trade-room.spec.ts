@@ -57,12 +57,12 @@ test("an offer shows four separate verdicts, grade steps and the lineup field", 
   await open(page);
   await offer(page);
   const verdicts = page.getByRole("region", { name: "Verdicts" });
-  await expect(verdicts.locator("details")).toHaveCount(4);
-  await expect(verdicts.locator("summary span")).toHaveText([
-    "Surplus exchange",
-    "Lineup impact (EPPG)",
-    "Legality",
-    "Uncertainty",
+  await expect(verdicts.locator(".srow")).toHaveCount(4);
+  await expect(verdicts.locator(".srow .n")).toHaveText([
+    "▲ Surplus exchange",
+    "▲ Lineup impact",
+    "■ Legality",
+    "● Uncertainty",
   ]);
   await expect(
     page.getByRole("region", { name: "Tale of the tape" }),
@@ -70,7 +70,7 @@ test("an offer shows four separate verdicts, grade steps and the lineup field", 
   // Unaffected positions never show "no change".
   await expect(page.getByText(/no change/i)).toHaveCount(0);
   const field = page.getByRole("region", { name: "Lineup impact" });
-  await expect(field.locator(".gd-slot").first()).toBeVisible();
+  await expect(field.locator(".slot, .gd-slot").first()).toBeVisible();
   await field
     .getByRole("group", { name: "Phase" })
     .getByRole("button", { name: "Before" })
@@ -79,7 +79,7 @@ test("an offer shows four separate verdicts, grade steps and the lineup field", 
     .getByRole("group", { name: "Team" })
     .getByRole("button", { name: "Their team" })
     .click();
-  await expect(field.locator(".gd-slot").first()).toBeVisible();
+  await expect(field.locator(".slot, .gd-slot").first()).toBeVisible();
   await page.screenshot({
     path: "test-results/trade-room.png",
     fullPage: true,
@@ -92,16 +92,12 @@ test("verdicts open separately and the lineup verdict reads gain with a spread",
 }) => {
   await open(page);
   await offer(page);
-  const lineup = page.locator(".gd-verdict").nth(1);
-  await expect(lineup.locator("summary strong")).toHaveText(
+  const verdicts = page.getByRole("region", { name: "Verdicts" });
+  const lineup = verdicts.locator(".srow").nth(1);
+  await expect(lineup.locator(".v")).toHaveText(
     /^(Unavailable|[+-]?\d+\.\d( ± \d+\.\d)?)$/,
   );
-  await lineup.locator("summary").click();
   await expect(lineup).toContainText("Lineup gain ± spread");
-  await expect(page.locator(".gd-verdict").nth(0)).not.toHaveAttribute(
-    "open",
-    "",
-  );
 });
 
 // Forcing a trade creates a hypothetical roster, which the shell announces.
@@ -121,15 +117,12 @@ test("force this trade creates a hypothetical roster", async ({ page }) => {
   }
 });
 
-// Find trades and Chain planner keep every current control until their rebuilt versions land.
+// Find trades and Chain planner keep every current tools.
 test("find trades and chain planner tabs keep the current tools", async ({
   page,
 }) => {
   await open(page);
   await page.getByRole("tab", { name: "Find trades" }).click();
-  await expect(
-    page.getByText(/control is below/),
-  ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Find matching trades" }),
   ).toBeVisible();

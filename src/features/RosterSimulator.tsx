@@ -233,6 +233,30 @@ export function RosterSimulator({
   const selected = model.byId.get(player);
   // Show the consequence of cuts/pickups themselves, independently of a subsequent trade draft.
   const impact = current ? scenarioTeamImpact(real, model, team) : null;
+
+  const simAdds: string[] = [];
+  const simDrops: string[] = [];
+  if (current) {
+    for (let i = 0; i < current.cursor; i++) {
+      const action = current.moves[i];
+      if (action.kind === "move") {
+        const pName = model.byId.get(action.player)?.name ?? action.player;
+        if (action.to === team || action.to === state.preferredTeam) simAdds.push(pName);
+        else if (action.from === team || action.from === state.preferredTeam) simDrops.push(pName);
+      } else if (action.kind === "trade") {
+        const isTeamA = action.teamA === team || action.teamA === state.preferredTeam;
+        const isTeamB = action.teamB === team || action.teamB === state.preferredTeam;
+        if (isTeamA) {
+          action.get.forEach((id) => simAdds.push(model.byId.get(id)?.name ?? id));
+          action.give.forEach((id) => simDrops.push(model.byId.get(id)?.name ?? id));
+        } else if (isTeamB) {
+          action.give.forEach((id) => simAdds.push(model.byId.get(id)?.name ?? id));
+          action.get.forEach((id) => simDrops.push(model.byId.get(id)?.name ?? id));
+        }
+      }
+    }
+  }
+
   return (
     <section className="gd-sim" aria-label="Hypothetical roster simulator">
       <h2>Hypothetical roster simulator</h2>
@@ -254,138 +278,240 @@ export function RosterSimulator({
         </p>
       )}
 
-      {/* Segmented simulation chips: Live roster and each saved scenario */}
+      {/* Compact simulator card matching D_GamedayPlus.dc.html */}
       <div
-        className="gd-sim-chips"
-        aria-label="Roster simulations"
+        className="card gd-sim-card"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+          padding: "16px",
+          borderRadius: "16px",
+          background: "var(--gd-surface)",
+          border: "2px solid var(--gd-line)",
+          marginBottom: "16px",
+        }}
       >
-        <button
-          type="button"
-          aria-pressed={!collection.active}
-          className={`gd-sim-chip ${!collection.active ? "active" : ""}`}
-          onClick={() => {
-            setName("");
-            persist({ ...collection, active: "" });
-          }}
-        >
-          Live roster
-        </button>
-        {collection.scenarios.map((s) => {
-          const isCurrent = collection.active === s.id;
-          const isDirty = rosterScenarioDirty(
-            savedRaw,
-            state.filters[rosterScenariosKey],
-            s.id,
-          );
-          return (
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+          <span className="kick" style={{ margin: 0, color: "var(--gd-muted)", fontSize: "13px", fontWeight: 700, textTransform: "uppercase" }}>
+            Simulation
+          </span>
+          <div className="pills gd-pills" role="group" aria-label="Roster in use" style={{ display: "inline-flex", gap: "6px" }}>
             <button
-              key={s.id}
               type="button"
-              aria-pressed={isCurrent}
-              className={`gd-sim-chip ${isCurrent ? "active" : ""}`}
+              className="pill gd-pill"
+              aria-pressed={!collection.active}
+              style={{
+                background: !collection.active ? "var(--gd-selected)" : "transparent",
+                color: !collection.active ? "var(--gd-selected-ink)" : "inherit",
+              }}
               onClick={() => {
-                setName(s.name);
-                persist({ ...collection, active: s.id });
+                setName("");
+                persist({ ...collection, active: "" });
               }}
             >
-              <span>{s.name}</span>
-              {isDirty && (
-                <span className="gd-sim-dirty-star" title="Unsaved changes">
-                  *
-                </span>
-              )}
+              Live roster
             </button>
-          );
-        })}
-      </div>
-
-      <div className="toolbar gd-sim-toolbar">
-        <label className="control">
-          <span>Simulation</span>
-          <select
-            aria-label="Roster simulation"
-            value={collection.active}
-            onChange={(e) => {
-              setName("");
-              persist({ ...collection, active: e.target.value });
-            }}
-          >
-            <option value="">Live roster</option>
-            {collection.scenarios.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="control">
-          <span>Simulation name</span>
-          <input
-            aria-label="Simulation name"
-            value={name}
-            onChange={(e) => {
-              const val = e.target.value;
-              setName(val);
-              if (isReservedSimulationName(val)) {
-                setMessage(
-                  "‘Live’ and ‘Live roster’ are reserved for the real roster. Choose another name for your simulation.",
-                );
-                return;
-              }
-              setMessage("");
-              if (current && val.trim())
-                update({ ...current, name: val });
-            }}
-            maxLength={120}
-            placeholder={current?.name ?? "Name your next moves"}
-          />
-        </label>
-        <button
-          className="button primary"
-          disabled={!!read.issue}
-          onClick={() => {
-            if (isReservedSimulationName(name)) {
-              setMessage(
-                "‘Live’ and ‘Live roster’ are reserved for the real roster. Choose another name for your simulation.",
+            {collection.scenarios.map((s) => {
+              const isActive = collection.active === s.id;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  className="pill gd-pill"
+                  aria-pressed={isActive}
+                  style={{
+                    background: isActive ? "var(--gd-selected)" : "transparent",
+                    color: isActive ? "var(--gd-selected-ink)" : "inherit",
+                  }}
+                  onClick={() => {
+                    setName(s.name);
+                    persist({ ...collection, active: s.id });
+                  }}
+                >
+                  {s.name}
+                </button>
               );
-              return;
-            }
-            const scenario: RosterScenario = {
-              id: crypto.randomUUID(),
-              name: name.trim() || "New roster scenario",
-              team: state.preferredTeam,
-              season: num(real.dataset.tables.ModelContext[0].Season),
-              sourceHash: real.dataset.hash,
-              baseLineups: state.filters[starterLineupsKey] ?? "",
-              baseRoster: scenarioRosterBase(real),
-              moves: [],
-              cursor: 0,
-            };
-            persist({
-              ...collection,
-              active: scenario.id,
-              scenarios: [...collection.scenarios, scenario],
-            });
-            setName("");
-            setMessage("");
-            setViewTeam(state.preferredTeam);
-          }}
-        >
-          New simulation
-        </button>
-        {current && (
+            })}
+          </div>
           <button
-            className="subtle"
-            onClick={() => deleteScenario(current.id)}
+            type="button"
+            className="pill gd-pill"
+            disabled={!!read.issue}
+            onClick={() => {
+              const scenario: RosterScenario = {
+                id: crypto.randomUUID(),
+                name: name.trim() || `Simulation ${collection.scenarios.length + 1}`,
+                team: state.preferredTeam,
+                season: num(real.dataset.tables.ModelContext[0].Season),
+                sourceHash: real.dataset.hash,
+                baseLineups: state.filters[starterLineupsKey] ?? "",
+                baseRoster: scenarioRosterBase(real),
+                moves: [],
+                cursor: 0,
+              };
+              persist({
+                ...collection,
+                active: scenario.id,
+                scenarios: [...collection.scenarios, scenario],
+              });
+              setName("");
+              setMessage("");
+              setViewTeam(state.preferredTeam);
+            }}
           >
-            Delete simulation
+            + New
           </button>
+          <button
+            type="button"
+            className="pill gd-pill"
+            disabled={!current}
+            onClick={() => {
+              if (current && saveSlot(selectedSlot)) {
+                setToastMessage(`Saved to Slot ${selectedSlot}.`);
+              }
+            }}
+          >
+            Save slot
+          </button>
+          {current && (
+            <button
+              type="button"
+              className="pill gd-pill"
+              onClick={() => deleteScenario(current.id)}
+            >
+              Delete
+            </button>
+          )}
+        </div>
+
+        {current && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "13.5px", flexWrap: "wrap" }}>
+              <span className="quiet" style={{ color: "var(--gd-muted)", minWidth: "48px" }}>
+                Added
+              </span>
+              {simAdds.length === 0 ? (
+                <span className="quiet" style={{ color: "var(--gd-muted)" }}>None</span>
+              ) : (
+                simAdds.map((pName, i) => (
+                  <span
+                    key={i}
+                    className="lab-pos"
+                    style={{
+                      background: "rgba(17,128,91,0.2)",
+                      color: "var(--gd-positive-ink)",
+                      padding: "2px 8px",
+                      borderRadius: "6px",
+                      fontWeight: 700,
+                      fontSize: "12px",
+                    }}
+                  >
+                    <b>+</b> {pName}
+                  </span>
+                ))
+              )}
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "13.5px", flexWrap: "wrap" }}>
+              <span className="quiet" style={{ color: "var(--gd-muted)", minWidth: "48px" }}>
+                Cut or sent away
+              </span>
+              {simDrops.length === 0 ? (
+                <span className="quiet" style={{ color: "var(--gd-muted)" }}>None</span>
+              ) : (
+                simDrops.map((pName, i) => (
+                  <span
+                    key={i}
+                    className="lab-warn"
+                    style={{
+                      background: "rgba(217,83,79,0.2)",
+                      color: "var(--gd-negative-ink)",
+                      padding: "2px 8px",
+                      borderRadius: "6px",
+                      fontWeight: 700,
+                      fontSize: "12px",
+                    }}
+                  >
+                    <b>✕</b> {pName}
+                  </span>
+                ))
+              )}
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginTop: "4px" }}>
+              <span className="quiet" style={{ color: "var(--gd-muted)" }}>
+                Add a league player
+              </span>
+              <input
+                className="inp"
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--gd-line)",
+                  background: "var(--gd-surface-2)",
+                  color: "var(--gd-ink)",
+                }}
+                placeholder="Type a name to add…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search.trim().length > 1 && (
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {real.players
+                    .filter((p) => p.name.toLowerCase().includes(search.toLowerCase()) && p.owner !== team)
+                    .slice(0, 5)
+                    .map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="pill gd-pill"
+                        style={{ fontSize: "12px" }}
+                        onClick={() => {
+                          move({ kind: "move", player: p.id, from: p.owner ?? "0", to: team });
+                          setSearch("");
+                        }}
+                      >
+                        + {p.name} ({p.pos})
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
+
       {current && (
-        <>
-          {/* Three explicit save slots preserve independent recipe checkpoints; ordinary roster edits never overwrite them. */}
-          <section aria-label="Roster save slots">
+        <details className="gd-disclosure gd-sim-details" style={{ marginTop: "12px", marginBottom: "16px" }}>
+          <summary style={{ fontWeight: 700, cursor: "pointer", fontSize: "14px" }}>
+            More simulation tools
+          </summary>
+          <div style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "14px" }}>
+            <div className="toolbar gd-sim-toolbar">
+              <label className="control">
+                <span>Simulation name</span>
+                <input
+                  aria-label="Simulation name"
+                  value={name}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setName(val);
+                    if (isReservedSimulationName(val)) {
+                      setMessage(
+                        "‘Live’ and ‘Live roster’ are reserved for the real roster. Choose another name for your simulation.",
+                      );
+                      return;
+                    }
+                    setMessage("");
+                    if (current && val.trim())
+                      update({ ...current, name: val });
+                  }}
+                  maxLength={120}
+                  placeholder={current?.name ?? "Name your next moves"}
+                />
+              </label>
+            </div>
+            {/* Three explicit save slots preserve independent recipe checkpoints; ordinary roster edits never overwrite them. */}
+            <section aria-label="Roster save slots">
             <div className="roster-slots-header">
               <h3>Roster save slots</h3>
               {/* Transient toast feedback for auto-saves and slot actions */}
@@ -830,30 +956,31 @@ export function RosterSimulator({
             injury absences ignored; IR players remain excluded. The starter
             editor below controls the separate marked-starter comparison.
           </p>
-          <details className="sim-advanced">
-            <summary>Detailed starter controls</summary>
-            <StarterLineupEditor
-              key={`${current.id}/${current.cursor}/${team}/${model.dataset.hash}`}
-              m={model}
-              team={team}
-              filters={{
-                ...state.filters,
-                [starterLineupsKey]: model.simulation?.lineupsRaw ?? "",
-              }}
-              change={(patch) => {
-                const raw = patch[starterLineupsKey];
-                // Reset removes this team's saved entry; restore its projected imported starters rather than saving an empty lineup.
-                const plan = raw ? JSON.parse(raw).teams[team] : undefined;
-                move({
-                  kind: "lineup",
-                  team,
-                  ids: plan?.starters ?? readStarterLineup(model, team).ids,
-                  assignments: plan?.assignments,
-                });
-              }}
-            />
-          </details>
-        </>
+            <details className="sim-advanced">
+              <summary>Detailed starter controls</summary>
+              <StarterLineupEditor
+                key={`${current.id}/${current.cursor}/${team}/${model.dataset.hash}`}
+                m={model}
+                team={team}
+                filters={{
+                  ...state.filters,
+                  [starterLineupsKey]: model.simulation?.lineupsRaw ?? "",
+                }}
+                change={(patch) => {
+                  const raw = patch[starterLineupsKey];
+                  // Reset removes this team's saved entry; restore its projected imported starters rather than saving an empty lineup.
+                  const plan = raw ? JSON.parse(raw).teams[team] : undefined;
+                  move({
+                    kind: "lineup",
+                    team,
+                    ids: plan?.starters ?? readStarterLineup(model, team).ids,
+                    assignments: plan?.assignments,
+                  });
+                }}
+              />
+            </details>
+          </div>
+        </details>
       )}
     </section>
   );

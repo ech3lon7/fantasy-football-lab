@@ -58,9 +58,20 @@ function OutlookChart({ summary }: { summary: WeekSummary }) {
         ? null
         : { x: x(i), y: y(points[i].mine!) };
   };
-  // Labels near an edge grow inward instead of being clipped.
-  const anchor = (at: number) =>
-    at < width * 0.18 ? "start" : at > width * 0.82 ? "end" : "middle";
+  // Area fill under your line down to chart bottom
+  const areaPath = () => {
+    const valid = points.filter((p) => p.mine !== null);
+    if (valid.length < 2) return "";
+    let d = "";
+    valid.forEach((p, i) => {
+      const idx = points.indexOf(p);
+      d += `${i === 0 ? "M" : "L"}${x(idx).toFixed(1)},${y(p.mine!).toFixed(1)} `;
+    });
+    const lastIdx = points.indexOf(valid.at(-1)!);
+    const firstIdx = points.indexOf(valid[0]);
+    d += `L${x(lastIdx).toFixed(1)},${height - pad.bottom} L${x(firstIdx).toFixed(1)},${height - pad.bottom} Z`;
+    return d.trim();
+  };
   const peakAt = label(peak?.week),
     dipAt = label(dip?.week);
   return (
@@ -75,83 +86,71 @@ function OutlookChart({ summary }: { summary: WeekSummary }) {
           <span>League median</span>
         </span>
       </div>
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="gd-outlook-svg"
-        role="img"
-        aria-label={`Modeled starting score by week. Average ${summary.outlook.average ?? "unavailable"}; league median average ${summary.outlook.medianAverage ?? "unavailable"}.`}
-      >
-        <path className="gd-outlook-median" d={path((p) => p.median)} />
-        <path className="gd-outlook-mine" d={path((p) => p.mine)} />
-        {points.map((p, i) => (
-          <g key={`dots-${p.week}`}>
-            {p.median !== null && (
-              <circle
-                className="gd-outlook-dot-median"
-                cx={x(i)}
-                cy={y(p.median)}
-                r={3}
-              />
-            )}
-            {p.mine !== null && (
-              <circle
-                className="gd-outlook-dot-mine"
-                cx={x(i)}
-                cy={y(p.mine)}
-                r={4.5}
-              />
-            )}
-          </g>
-        ))}
-        {points.map((p, i) => {
-          if (p.mine === null) return null;
-          const isPeak = peak && peak.week === p.week;
-          const isDip = dip && dip.week === p.week;
-          if (isPeak || isDip) return null;
-          return (
+      <div className="gd-outlook-chart-box">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="gd-outlook-svg"
+          role="img"
+          aria-label={`Modeled starting score by week. Average ${summary.outlook.average ?? "unavailable"}; league median average ${summary.outlook.medianAverage ?? "unavailable"}.`}
+        >
+          <path className="gd-outlook-area" d={areaPath()} />
+          <path className="gd-outlook-median" d={path((p) => p.median)} />
+          <path className="gd-outlook-mine" d={path((p) => p.mine)} />
+          {points.map((p, i) => (
+            <g key={`dots-${p.week}`}>
+              {p.median !== null && (
+                <circle
+                  className="gd-outlook-dot-median"
+                  cx={x(i)}
+                  cy={y(p.median)}
+                  r={3}
+                />
+              )}
+              {p.mine !== null && (
+                <circle
+                  className="gd-outlook-dot-mine"
+                  cx={x(i)}
+                  cy={y(p.mine)}
+                  r={4.5}
+                />
+              )}
+            </g>
+          ))}
+          {points.map((p, i) => (
             <text
-              key={`val-${p.week}`}
+              key={p.week}
               x={x(i)}
-              y={y(p.mine) - 8}
-              textAnchor={anchor(x(i))}
-              className="gd-outlook-val"
+              y={height - 6}
+              textAnchor="middle"
+              className="gd-outlook-axis"
             >
-              {p.mine.toFixed(1)}
+              W{p.week}
             </text>
-          );
-        })}
+          ))}
+        </svg>
         {peakAt && peak && (
-          <text
-            x={peakAt.x}
-            y={peakAt.y - 8}
-            textAnchor={anchor(peakAt.x)}
-            className="gd-outlook-tag"
+          <div
+            className="gd-outlook-bubble popin"
+            style={{
+              left: `${(peakAt.x / width) * 100}%`,
+              top: `${(peakAt.y / height) * 100}%`,
+            }}
           >
             Peak {peak.value}
-          </text>
+          </div>
         )}
         {dipAt && dip && (
-          <text
-            x={dipAt.x}
-            y={dipAt.y + 16}
-            textAnchor={anchor(dipAt.x)}
-            className="gd-outlook-tag"
+          <div
+            className="gd-outlook-bubble popin"
+            style={{
+              left: `${(dipAt.x / width) * 100}%`,
+              top: `${(dipAt.y / height) * 100}%`,
+            }}
           >
             {dip.note}
-          </text>
+          </div>
         )}
-        {points.map((p, i) => (
-          <text
-            key={p.week}
-            x={x(i)}
-            y={height - 6}
-            textAnchor="middle"
-            className="gd-outlook-axis"
-          >
-            W{p.week}
-          </text>
-        ))}
-      </svg>
+      </div>
     </div>
   );
 }
@@ -302,11 +301,16 @@ export function Week({
           <div className="gd-moves">
             {s.moves.map((move) => {
               const p = move.playerId ? m.byId.get(move.playerId) : undefined;
+              const buttonLabel =
+                move.kind === "trade"
+                  ? "Review the deal"
+                  : move.kind === "waiver"
+                    ? "Scout him"
+                    : "Open depth chart";
               return (
-                <a
+                <div
                   key={move.kind}
                   className={`gd-move gd-move-${move.kind}`}
-                  href={move.href}
                 >
                   <div
                     style={{
@@ -333,7 +337,10 @@ export function Week({
                     </strong>
                   )}
                   <p>{move.line}</p>
-                </a>
+                  <a className="gd-move-btn" href={move.href}>
+                    {buttonLabel}
+                  </a>
+                </div>
               );
             })}
           </div>

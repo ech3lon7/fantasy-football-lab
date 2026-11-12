@@ -1629,6 +1629,7 @@ export function TradeChains({
       <div
         className={`trade-finder-layout${filtersOpen ? " filters-open" : ""}`}
       >
+        <PresetCards selected={preset} choose={choosePreset} />
         <div
           className="active-filter-chips"
           aria-label="Active chain-search filters"
@@ -1764,9 +1765,6 @@ export function TradeChains({
                   </select>
                 </label>
               </FilterHelp>
-              {limits && (
-                <PresetCards selected={preset} choose={choosePreset} />
-              )}
               <FilterHelp
                 label="Chain preset"
                 help="Provisional trading scenarios with separate strictness. Applying a preset preserves team scopes, protected players, targets and optional fit requirements. Acquire coverage, then upgrade requires a first-step WR and connected trades, defaulting to either connected route; its incoming position can be changed. Subsequent edits become Custom."

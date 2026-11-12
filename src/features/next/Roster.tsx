@@ -8,6 +8,7 @@ import { starterLineupsKey } from "../../domain/starter-lineups";
 import { PlayerName } from "../../ui/PlayerName";
 import { PlayerPhoto } from "../../ui/PlayerPhoto";
 import { Chip } from "../../ui/primitives";
+import { labelTone } from "../../domain/view/labels";
 import { StarterLineupEditor } from "../StarterLineupEditor";
 import { SimulationNote } from "./SimulationIssuePopover";
 
@@ -120,12 +121,14 @@ export function PlayerTile({
       </div>
       <Strip tile={tile} max={max} />
       {(tile.labels.length > 0 ||
-        (tile.injury && tile.injury !== "Active")) && (
+        (tile.injury && tile.injury.toUpperCase() !== "ACTIVE")) && (
         <span className="gd-tile-badges">
           {tile.labels.slice(0, 3).map((l) => (
-            <Chip key={l}>{l}</Chip>
+            <Chip key={l} tone={labelTone(l)}>
+              {l}
+            </Chip>
           ))}
-          {tile.injury && tile.injury !== "Active" && (
+          {tile.injury && tile.injury.toUpperCase() !== "ACTIVE" && (
             <Chip tone="warning">{tile.injury}</Chip>
           )}
         </span>
@@ -243,29 +246,31 @@ export function Roster({
               Grades and lineups use it everywhere in the app.
             </p>
           )}
-        {chart.map((group) => (
-          <section key={group.position} className="gd-depth-group">
-            <h3>
-              {group.position}
-              <GradeBadge grade={group.grade} tone={group.tone} />
-            </h3>
-            {group.tiles.length === 0 ? (
-              <p className="gd-muted">No players</p>
-            ) : (
-              <div className="gd-tiles">
-                {group.tiles.map((tile) => (
-                  <PlayerTile
-                    key={tile.id}
-                    tile={tile}
-                    player={m.byId.get(tile.id)!}
-                    max={group.scaleMax}
-                    onCut={m.simulation ? handleCut : undefined}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
-        ))}
+        <div className="gd-depth-grid">
+          {chart.map((group) => (
+            <section key={group.position} className="gd-depth-group">
+              <h3>
+                {group.position}
+                <GradeBadge grade={group.grade} tone={group.tone} />
+              </h3>
+              {group.tiles.length === 0 ? (
+                <p className="gd-muted">No players</p>
+              ) : (
+                <div className="gd-tiles">
+                  {group.tiles.map((tile) => (
+                    <PlayerTile
+                      key={tile.id}
+                      tile={tile}
+                      player={m.byId.get(tile.id)!}
+                      max={group.scaleMax}
+                      onCut={m.simulation ? handleCut : undefined}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          ))}
+        </div>
         {chart.length === 0 && <p>No players on this roster.</p>}
       </section>
       {/* Starter choices keep their own saved setting; the editor is hidden while a simulation is active, as before. */}

@@ -2211,30 +2211,36 @@ export function TradeSearch({
             >
               Download search debug
             </button>
-            <button
-              className="button"
-              onClick={() => {
-                const result = diagnoseTradeCandidate(
-                  m,
-                  query,
-                  draft,
-                  lineupsRaw,
-                );
-                // Explain one exact candidate on both bases while preserving every active filter.
-                const scoring =
-                  result.beforeAfter && result.alternative
-                    ? `${result.basisLabel}: your Before ${fmt(result.beforeAfter.ownBefore)} → After ${fmt(result.beforeAfter.ownAfter)} (${signed(result.ownGainPerWeek ?? null)} points/week); their Before ${fmt(result.beforeAfter.otherBefore)} → After ${fmt(result.beforeAfter.otherAfter)} (${signed(result.otherGainPerWeek ?? null)} points/week). Alternative ${lineupBasisLabel(result.alternative.basis)}: your Before ${fmt(result.alternative.ownBefore)} → After ${fmt(result.alternative.ownAfter)} (${signed(result.alternative.own)}); their Before ${fmt(result.alternative.otherBefore)} → After ${fmt(result.alternative.otherAfter)} (${signed(result.alternative.other)}). `
-                    : "";
-                setDiagnostic(
-                  scoring +
-                    (result.reasons.length
-                      ? result.reasons.join(" ")
-                      : "This candidate passes the current search filters. Check the applied-versus-current settings, completed-search status and later ranked result pages in the debug export."),
-                );
-              }}
-            >
-              Why wasn’t this trade found?
-            </button>
+            <details className="gd-disclosure" style={{ display: "inline-block", margin: "0 6px" }}>
+              <summary style={{ cursor: "pointer", fontSize: "13px", fontWeight: 700 }}>Diagnostics</summary>
+              <div style={{ marginTop: "8px" }}>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => {
+                    const result = diagnoseTradeCandidate(
+                      m,
+                      query,
+                      draft,
+                      lineupsRaw,
+                    );
+                    // Explain one exact candidate on both bases while preserving every active filter.
+                    const scoring =
+                      result.beforeAfter && result.alternative
+                        ? `${result.basisLabel}: your Before ${fmt(result.beforeAfter.ownBefore)} → After ${fmt(result.beforeAfter.ownAfter)} (${signed(result.ownGainPerWeek ?? null)} points/week); their Before ${fmt(result.beforeAfter.otherBefore)} → After ${fmt(result.beforeAfter.otherAfter)} (${signed(result.otherGainPerWeek ?? null)} points/week). Alternative ${lineupBasisLabel(result.alternative.basis)}: your Before ${fmt(result.alternative.ownBefore)} → After ${fmt(result.alternative.ownAfter)} (${signed(result.alternative.own)}); their Before ${fmt(result.alternative.otherBefore)} → After ${fmt(result.alternative.otherAfter)} (${signed(result.alternative.other)}). `
+                        : "";
+                    setDiagnostic(
+                      scoring +
+                        (result.reasons.length
+                          ? result.reasons.join(" ")
+                          : "This candidate passes the current search filters. Check the applied-versus-current settings, completed-search status and later ranked result pages in the debug export."),
+                    );
+                  }}
+                >
+                  Why wasn’t this trade found?
+                </button>
+              </div>
+            </details>
             <button
               className="button primary"
               disabled={bounds.errors.length > 0}

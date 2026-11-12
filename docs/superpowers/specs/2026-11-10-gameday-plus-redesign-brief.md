@@ -198,6 +198,15 @@ Not yet drawn for phones.
 
 ---
 
+## 11c. Matchup views (added 2026-11-12)
+
+Context only; no existing number changes. Plan: `docs/superpowers/plans/2026-11-12-matchup-views.md`.
+
+- **Defence versus position:** points each defence allows per game to each position, versus the league average, ranked, from the imported schedule and history. Shown as a coloured matchup chip ("W10 vs PHI · soft") and as a rest-of-season strip on the player card's Story tab.
+- **Two lineup views on This week:** the usual season view (Expected PPG) beside a matchup view ranked by ESPN's current-week projection, with differing slots highlighted. Current week only.
+
+---
+
 ## 12. Domain work this design needs
 
 Each item is a domain output with tests; none changes valuation.

@@ -51,76 +51,18 @@ function ScenarioInputs({
   return (
     <details className="next-refresh-scenarios" open={defaultOpen || undefined}>
       <summary>Next-refresh EPPG scenarios</summary>
-      <p>
-        Assume a score in the next game played to see how EPPG would update.
-        These are your assumptions, not predicted scores or probability ranges.
-        Byes and games not played do not count.
-      </p>
-      <p>
+      <p className="gd-scenario-blend">
         Current scoring blend:{" "}
-        <strong className="model">{fmt(p.blendedExpected)} EPPG</strong>. ESPN
+        <strong className="model">{fmt(p.blendedExpected)} EPPG</strong> · ESPN
         season PPG held fixed:{" "}
         <span className={p.projected === null ? "muted" : "projection"}>
           {fmt(p.projected)}
         </span>
-        . A future ESPN update could change the result.
       </p>
-      {m.roleScenarioWeight > 0 && (
-        <p className="muted">
-          This tool uses the original scoring blend, excluding your optional
-          workload-only blend.
-        </p>
-      )}
       {context.issue ? (
         <p className="muted">{context.issue}</p>
       ) : (
         <>
-          {/* Show the exact sources and spread used for initial scores without presenting historical variability as calibrated bounds. */}
-          <p>
-            Automatic base:{" "}
-            <span className={automatic.useWeekly ? "projection" : "model"}>
-              {automatic.source}
-            </span>
-            . Lower = base − scenario spread; higher = base + scenario spread.
-            Scoring SD:{" "}
-            <span className={automatic.personalSD === null ? "muted" : "fact"}>
-              {fmt(automatic.personalSD)}
-            </span>{" "}
-            points, using variation around the actual season average across all
-            verified played games.
-            {automatic.personalSD === null &&
-              " At least two played games are needed to measure the player's own SD."}{" "}
-          </p>
-          {/* Separate the blended scenario assumption from factual SD and explain its historical weight without claiming prediction accuracy. */}
-          <p>
-            Scenario spread:{" "}
-            <span className={automatic.spread === null ? "muted" : "model"}>
-              {fmt(automatic.spread)}
-            </span>{" "}
-            points.
-            {automatic.reference ? (
-              <>
-                {" "}
-                Blends recorded variance with a historical {p.pos} SD of{" "}
-                <span className="fact">{fmt(automatic.reference.sd)}</span>{" "}
-                (2023–2025; {automatic.reference.games.toLocaleString()} games).
-                Historical variance weight:{" "}
-                {Math.round((1 - automatic.personalWeight) * 100)}%. More played
-                games give your player's variance more weight. The
-                four-observation historical weight is provisional.
-              </>
-            ) : (
-              <>
-                {" "}
-                Historical positional spread is unavailable for this scoring
-                setup; only the player's recorded SD is used.
-              </>
-            )}{" "}
-            {automatic.spread === null &&
-              " Enter lower/higher scores manually until usable variability is available. "}
-            Edit scores independently; Reset restores these automatic
-            assumptions.
-          </p>
           {/* Numeric results are recalculated from domain logic; zero and negative assumptions remain valid. */}
           <div className="table-wrap">
             <table>
@@ -173,15 +115,83 @@ function ScenarioInputs({
               </tbody>
             </table>
           </div>
-          <p className="muted">
-            Adds one game to the season average and latest-three average, then
-            updates the actual-results weight. With no season projection, at
-            least four played games are required. Normal valuations and trades
-            stay unchanged.
-          </p>
-          <button className="subtle" onClick={() => setValues(defaults)}>
-            Reset score assumptions
-          </button>
+          <div className="gd-scenario-foot">
+            <span className="muted">
+              What his EPPG becomes after the next import if he scores at the
+              floor, on expectation or at the ceiling.
+            </span>
+            <button className="subtle" onClick={() => setValues(defaults)}>
+              Reset score assumptions
+            </button>
+          </div>
+          {/* The method stays one click away so the panel leads with the numbers the owner changes. */}
+          <details className="gd-how">
+            <summary>How this works</summary>
+            <p>
+              Assume a score in the next game played to see how EPPG would
+              update. These are your assumptions, not predicted scores or
+              probability ranges. Byes and games not played do not count. A
+              future ESPN update could change the result.
+            </p>
+            {/* Show the exact sources and spread used for initial scores without presenting historical variability as calibrated bounds. */}
+            <p>
+              Automatic base:{" "}
+              <span className={automatic.useWeekly ? "projection" : "model"}>
+                {automatic.source}
+              </span>
+              . Lower = base − scenario spread; higher = base + scenario spread.
+              Scoring SD:{" "}
+              <span className={automatic.personalSD === null ? "muted" : "fact"}>
+                {fmt(automatic.personalSD)}
+              </span>{" "}
+              points, using variation around the actual season average across
+              all verified played games.
+              {automatic.personalSD === null &&
+                " At least two played games are needed to measure the player's own SD."}{" "}
+            </p>
+            {/* Separate the blended scenario assumption from factual SD and explain its historical weight without claiming prediction accuracy. */}
+            <p>
+              Scenario spread:{" "}
+              <span className={automatic.spread === null ? "muted" : "model"}>
+                {fmt(automatic.spread)}
+              </span>{" "}
+              points.
+              {automatic.reference ? (
+                <>
+                  {" "}
+                  Blends recorded variance with a historical {p.pos} SD of{" "}
+                  <span className="fact">{fmt(automatic.reference.sd)}</span>{" "}
+                  (2023–2025; {automatic.reference.games.toLocaleString()}{" "}
+                  games). Historical variance weight:{" "}
+                  {Math.round((1 - automatic.personalWeight) * 100)}%. More
+                  played games give your player's variance more weight. The
+                  four-observation historical weight is provisional.
+                </>
+              ) : (
+                <>
+                  {" "}
+                  Historical positional spread is unavailable for this scoring
+                  setup; only the player's recorded SD is used.
+                </>
+              )}{" "}
+              {automatic.spread === null &&
+                " Enter lower/higher scores manually until usable variability is available. "}
+              Edit scores independently; Reset restores these automatic
+              assumptions.
+            </p>
+            {m.roleScenarioWeight > 0 && (
+              <p className="muted">
+                This tool uses the original scoring blend, excluding your
+                optional workload-only blend.
+              </p>
+            )}
+            <p className="muted">
+              Adds one game to the season average and latest-three average, then
+              updates the actual-results weight. With no season projection, at
+              least four played games are required. Normal valuations and trades
+              stay unchanged.
+            </p>
+          </details>
         </>
       )}
     </details>

@@ -362,6 +362,7 @@
   position: absolute;
   top: 8px;
   right: 8px;
+  z-index: 2;
   width: 36px;
   height: 36px;
   border-radius: 999px;
@@ -505,33 +506,67 @@
     opacity: 0.5;
   }
 }
-/* Player card: team-coloured header, four tabs and tokens-only panels. */
+/* Player card: team-coloured hero, four tabs and tokens-only panels. */
 :root[data-gameday] .gd-popover.flush {
   padding: 0;
 }
 :root[data-gameday] .gd-card-head {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-wrap: wrap;
-  gap: 16px 32px;
+  gap: 18px 32px;
   align-items: flex-end;
   justify-content: space-between;
   padding: 28px 64px 20px 24px;
+  border-radius: var(--gd-radius) var(--gd-radius) 0 0;
+  /* A diagonal tint gives the team colour the design's gradient without a second brand colour. */
+  background-image: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0) 58%,
+    rgba(255, 255, 255, 0.3) 170%
+  );
+}
+/* The huge faded team code behind the hero, as in the design's .hero .big. */
+:root[data-gameday] .gd-card-big {
+  position: absolute;
+  right: 12px;
+  top: -30px;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 230px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  opacity: 0.14;
+  pointer-events: none;
+  user-select: none;
 }
 :root[data-gameday] .gd-card-id {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 18px;
 }
 :root[data-gameday] .gd-card-id-text {
   display: grid;
-  gap: 2px;
+  gap: 4px;
+}
+:root[data-gameday] .gd-card-kicker {
+  font-family: var(--gd-font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.85;
 }
 :root[data-gameday] .gd-card-id h2 {
-  margin: 4px 0 8px;
+  margin: 0;
   font-family: var(--gd-font-display);
-  font-size: 40px;
+  font-size: 64px;
+  font-weight: 800;
   text-transform: uppercase;
-  line-height: 1;
+  line-height: 0.9;
   color: inherit;
 }
 :root[data-gameday] .gd-card-labels {
@@ -539,15 +574,47 @@
   flex-wrap: wrap;
   gap: 6px;
 }
-:root[data-gameday] .gd-card-eppg {
+:root[data-gameday] .gd-card-nums {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 22px;
+}
+:root[data-gameday] .gd-card-stat {
   display: grid;
   gap: 2px;
-  text-align: right;
+}
+:root[data-gameday] .gd-card-stat small {
+  font-family: var(--gd-font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+:root[data-gameday] .gd-card-stat strong {
+  font-family: var(--gd-font-display);
+  font-size: 54px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
 }
 :root[data-gameday] .gd-card-eppg strong {
-  font-family: var(--gd-font-display);
-  font-size: 64px;
-  line-height: 1;
+  font-size: 72px;
+  line-height: 0.9;
+}
+:root[data-gameday] .gd-card-actions {
+  position: relative;
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+:root[data-gameday] .gd-card-actions .gd-card-step {
+  margin-left: auto;
 }
 :root[data-gameday] .gd-card-step {
   display: flex;
@@ -582,6 +649,34 @@
   background: var(--gd-selected);
   color: var(--gd-selected-ink);
 }
+:root[data-gameday] .gd-ptabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 14px 24px 0;
+  border-bottom: 3px solid var(--gd-ink);
+}
+:root[data-gameday] .gd-ptabs button {
+  height: 44px;
+  padding: 0 16px;
+  background: transparent;
+  color: var(--gd-muted);
+  font-family: var(--gd-font-display);
+  font-size: 19px;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border: 0;
+  border-radius: 10px 10px 0 0;
+}
+:root[data-gameday] .gd-ptabs button:hover:not([aria-selected="true"]) {
+  background: var(--gd-surface-2);
+  color: var(--gd-ink);
+}
+:root[data-gameday] .gd-ptabs button[aria-selected="true"] {
+  background: var(--gd-ink);
+  color: var(--gd-bg);
+}
 :root[data-gameday] .gd-tabpanel {
   padding: 20px 24px;
   display: grid;
@@ -590,11 +685,121 @@
 :root[data-gameday] .gd-blend {
   color: var(--gd-muted);
 }
-:root[data-gameday] .gd-story {
-  margin: 0;
-  padding-left: 20px;
+/* Story reads as the design's two-column body: scenarios and story on the left, radar and chart on the right. */
+:root[data-gameday] .gd-story-grid {
   display: grid;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+:root[data-gameday] .gd-story-left,
+:root[data-gameday] .gd-story-right {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+:root[data-gameday] .gd-kick {
+  font-family: var(--gd-font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-story-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+  border: 2px solid var(--gd-ink);
+  border-radius: var(--gd-radius);
+  background: var(--gd-surface);
+}
+:root[data-gameday] .gd-story-panel .gd-radar {
+  max-width: 300px;
+  margin-inline: auto;
+}
+@media (min-width: 1040px) {
+  :root[data-gameday] .gd-story-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 28px;
+  }
+}
+:root[data-gameday] .gd-story-left .next-refresh-scenarios {
+  margin: 0;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  border: 2px solid var(--gd-model);
+  border-radius: var(--gd-radius);
+  background: var(--gd-surface);
+}
+:root[data-gameday] .gd-story-left .next-refresh-scenarios > summary {
+  cursor: pointer;
+  font-family: var(--gd-font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gd-model);
+}
+:root[data-gameday] .gd-story-left .next-refresh-scenarios > summary::-webkit-details-marker {
+  display: none;
+}
+:root[data-gameday] .gd-story-left .next-refresh-scenarios .table-wrap {
+  margin: 0;
+}
+:root[data-gameday] .gd-story-left .next-refresh-scenarios th,
+:root[data-gameday] .gd-story-left .next-refresh-scenarios td {
+  padding: 6px 4px;
+  font-size: 13px;
+}
+:root[data-gameday] .gd-scenario-blend {
+  margin: 0;
+  color: var(--gd-muted);
+  font-size: 13.5px;
+}
+:root[data-gameday] .gd-scenario-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  font-size: 12.5px;
+}
+:root[data-gameday] .gd-how {
+  font-size: 13px;
+}
+:root[data-gameday] .gd-how summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+:root[data-gameday] .gd-how p {
+  margin: 6px 0 0;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-story {
+  counter-reset: gd-story;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+:root[data-gameday] .gd-story li {
+  display: flex;
+  gap: 12px;
+  font-size: 17px;
+  line-height: 1.5;
+}
+:root[data-gameday] .gd-story li::before {
+  counter-increment: gd-story;
+  content: counter(gd-story);
+  font-family: var(--gd-font-display);
+  font-size: 20px;
+  font-weight: 800;
+  min-width: 28px;
+  color: var(--gd-model);
 }
 :root[data-gameday] .gd-radar {
   margin: 0;
@@ -603,6 +808,8 @@
 :root[data-gameday] .gd-radar svg {
   width: 100%;
   height: auto;
+  /* Axis names sit on an outer ring and may run past the viewBox; never clip them. */
+  overflow: visible;
 }
 :root[data-gameday] .gd-radar-grid {
   fill: none;
@@ -762,9 +969,35 @@
 }
 :root[data-gameday] .gd-tabpanel .label-why-flip,
 :root[data-gameday] .gd-tabpanel .label-why-closest {
+  border: 2px dashed var(--gd-ink);
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 15px;
+  line-height: 1.5;
   background: var(--gd-warning-bg);
-  color: var(--gd-warning-ink);
-  border-color: var(--gd-line);
+  color: var(--gd-ink);
+}
+
+:root[data-gameday] .gd-tabpanel .label-why-flip strong,
+:root[data-gameday] .gd-tabpanel .label-why-closest strong {
+  display: block;
+  font-family: var(--gd-font-display);
+  font-size: 18px;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+:root[data-gameday] .gd-tabpanel .label-why-flip p,
+:root[data-gameday] .gd-tabpanel .label-why-closest p {
+  margin: 4px 0;
+}
+
+:root[data-gameday] .gd-tabpanel .label-why-flip small {
+  display: block;
+  margin-top: 6px;
+  color: var(--gd-muted);
+  font-size: 12px;
 }
 :root[data-gameday] .gd-tabpanel .label-why-mini-track {
   background: var(--gd-surface-2);
@@ -955,15 +1188,41 @@
 }
 :root[data-gameday] .gd-pcard {
   background: var(--gd-surface);
-  border: 2px solid var(--gd-line);
-  border-radius: var(--gd-radius);
+  border: 2px solid var(--gd-ink);
+  border-radius: 18px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.18s, box-shadow 0.18s;
+}
+:root[data-gameday] .gd-pcard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 30px rgba(15, 17, 21, 0.14);
+}
+:root[data-gameday][data-theme="dark"] .gd-pcard:hover {
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5);
 }
 :root[data-gameday] .gd-pcard > header {
+  position: relative;
+  overflow: hidden;
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 12px 14px;
+  height: 96px;
+  color: #fff;
+}
+:root[data-gameday] .gd-pcard-wm {
+  position: absolute;
+  right: -6px;
+  bottom: -22px;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 92px;
+  opacity: 0.18;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
 }
 :root[data-gameday] .gd-pcard > header * {
   color: inherit !important;
@@ -972,6 +1231,8 @@
   opacity: 0.9;
 }
 :root[data-gameday] .gd-pcard-ident {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -993,10 +1254,13 @@
 }
 :root[data-gameday] .gd-pcard-name b {
   font-family: var(--gd-font-display);
-  font-size: 20px;
+  font-size: 24px;
+  line-height: 1;
   text-transform: uppercase;
 }
 :root[data-gameday] .gd-pcard-eppg {
+  position: relative;
+  z-index: 1;
   display: grid;
   text-align: right;
   font-family: var(--gd-font-display);
@@ -1007,9 +1271,81 @@
   font-size: 11px;
 }
 :root[data-gameday] .gd-pcard-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+}
+:root[data-gameday] .gd-pcard-statrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+:root[data-gameday] .gd-pcard-statrow b {
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 1;
+}
+:root[data-gameday] .gd-pcard-statrow div:first-child b {
+  color: var(--gd-model);
+}
+:root[data-gameday] .gd-pcard-statrow div:last-child b {
+  color: var(--gd-fact);
+  font-size: 26px;
+}
+:root[data-gameday] .gd-pcard-statrow small {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-pcard-spark {
+  width: 100%;
+  height: 34px;
+}
+:root[data-gameday] .gd-pcard-spark path {
+  fill: none;
+  stroke: var(--gd-fact);
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+}
+:root[data-gameday] .gd-pcard-meter-wrap {
   display: grid;
+  gap: 4px;
+}
+:root[data-gameday] .gd-pcard-meter-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-pcard-meter-label b {
+  color: var(--gd-model);
+  font-family: var(--gd-font-display);
+  font-size: 14px;
+}
+:root[data-gameday] .gd-pcard-meter {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--gd-surface-2);
+  overflow: hidden;
+}
+:root[data-gameday] .gd-pcard-meter i {
+  display: block;
+  height: 100%;
+  background: var(--gd-model);
+  border-radius: 4px;
+}
+:root[data-gameday] .gd-pcard-foot {
+  display: flex;
   gap: 8px;
-  padding: 12px;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
 }
 :root[data-gameday] .gd-pcard-range-wrap {
   display: flex;
@@ -1028,20 +1364,11 @@
   font-weight: 600;
   letter-spacing: 0.04em;
 }
-:root[data-gameday] .gd-pcard-range-label span {
-  font-variant-numeric: tabular-nums;
-  color: var(--gd-ink);
-}
-:root[data-gameday] .gd-pcard-stats {
-  display: flex;
-  justify-content: space-between;
-  color: var(--gd-muted);
-  font-size: 13px;
-}
 :root[data-gameday] .gd-pcard-labels {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
+  min-height: 24px;
 }
 /* The table view reuses the current evaluation table; map its fixed light colours onto the theme. */
 :root[data-gameday] .gd-results .table-wrap,
@@ -1288,29 +1615,31 @@
 :root[data-gameday] .gd-grade[data-tone="6"] {
   color: #ffffff;
 }
-:root[data-gameday] .gd-grade-btn {
-  width: 44px;
-  height: 44px;
-  aspect-ratio: 1;
+:root[data-gameday] .gd-grade-btn,
+:root[data-gameday] .lgc {
+  width: 100%;
+  height: 54px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  font-family: var(--gd-font-display);
+  font-size: 24px;
+  font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto;
-  border: 2px solid transparent;
-  border-radius: var(--gd-radius-sm);
-  font-family: var(--gd-font-display);
-  font-size: 15px;
-  font-weight: 800;
   cursor: pointer;
-  transition: transform 0.1s ease, border-color 0.15s ease;
+  transition: transform 0.15s ease, border-color 0.15s ease;
 }
-:root[data-gameday] .gd-grade-btn:hover {
+:root[data-gameday] .gd-grade-btn:hover,
+:root[data-gameday] .lgc:hover {
   border-color: var(--gd-ink);
-  transform: scale(1.05);
+  transform: scale(1.06);
 }
-:root[data-gameday] .gd-grade-btn[data-tone="na"] {
+:root[data-gameday] .gd-grade-btn[data-tone="na"],
+:root[data-gameday] .lgc.na {
   background: var(--gd-surface-2);
   color: var(--gd-muted);
+  font-size: 15px;
   border: 1px dashed var(--gd-line);
 }
 :root[data-gameday] .gd-roster,
@@ -1325,13 +1654,48 @@
   font-family: var(--gd-font-display);
   text-transform: uppercase;
 }
+:root[data-gameday] .gd-depth-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+:root[data-gameday] .gd-depth-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 :root[data-gameday] .gd-depth-group h3 {
   display: flex;
-  gap: 10px;
+  justify-content: space-between;
   align-items: center;
-  margin: 16px 0 8px;
+  margin: 0;
+  padding-bottom: 6px;
   font-family: var(--gd-font-display);
   font-size: 22px;
+  font-weight: 800;
+  border-bottom: 3px solid var(--gd-ink);
+}
+:root[data-gameday] .gd-depth-group .gd-tiles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  grid-template-columns: none;
+}
+@media (max-width: 1040px) {
+  :root[data-gameday] .gd-depth-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  :root[data-gameday] .gd-depth-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  :root[data-gameday] .gd-depth-grid {
+    grid-template-columns: 1fr;
+  }
 }
 :root[data-gameday] .gd-muted {
   color: var(--gd-muted);
@@ -1443,9 +1807,11 @@
 :root[data-gameday] .gd-teamname {
   background: transparent;
   color: var(--gd-ink);
-  font-family: var(--gd-font-sans);
-  font-size: 14px;
-  font-weight: 700;
+  font-family: var(--gd-font-display);
+  font-size: 20px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
   text-align: left;
   padding: 8px 12px;
   border-radius: var(--gd-radius-sm);
@@ -1848,10 +2214,37 @@
 :root[data-gameday] .gd-outlook-top small {
   color: var(--gd-muted);
 }
-:root[data-gameday] .gd-outlook-chart-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+:root[data-gameday] .gd-outlook-chart-box {
+  position: relative;
+  width: 100%;
+}
+:root[data-gameday] .gd-outlook-area {
+  fill: color-mix(in srgb, var(--gd-model) 12%, transparent);
+}
+:root[data-gameday] .gd-outlook-bubble {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  margin-top: -8px;
+  background: var(--gd-ink);
+  color: var(--gd-bg);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+:root[data-gameday] .gd-outlook-bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-bottom: 0;
+  border-top-color: var(--gd-ink);
 }
 :root[data-gameday] .gd-outlook-legend {
   display: flex;
@@ -1930,36 +2323,87 @@
   gap: 14px;
 }
 :root[data-gameday] .gd-move {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   padding: 18px;
-  border-radius: var(--gd-radius);
+  border-radius: 18px;
+  min-height: 210px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+:root[data-gameday] .gd-move small {
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  background: rgba(255, 255, 255, 0.18);
+  align-self: flex-start;
+  padding: 3px 9px;
+  border-radius: 6px;
+  text-transform: uppercase;
 }
 :root[data-gameday] .gd-move h3 {
   margin: 0;
   font-family: var(--gd-font-display);
-  font-size: 26px;
+  font-weight: 800;
+  font-size: 28px;
+  line-height: 1;
   text-transform: uppercase;
+  color: #fff;
 }
 :root[data-gameday] .gd-move strong {
   font-family: var(--gd-font-display);
+  font-weight: 800;
   font-size: 44px;
   line-height: 1;
+  color: #fff;
+}
+:root[data-gameday] .gd-move strong small {
+  font-size: 20px;
+  background: transparent;
+  padding: 0;
+  letter-spacing: normal;
 }
 :root[data-gameday] .gd-move p {
   margin: 0;
+  font-size: 14px;
+  opacity: 0.92;
+  color: rgba(255, 255, 255, 0.95);
+}
+:root[data-gameday] .gd-move-btn {
+  margin-top: auto;
+  align-self: flex-start;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 20px;
+  border: 0;
+  background: #fff;
+  color: #0f1115;
+  font-weight: 700;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+:root[data-gameday] .gd-move-btn:hover {
+  background: var(--gd-selected, #ffd60a);
 }
 :root[data-gameday] .gd-move-trade {
-  background: var(--gd-grade-1);
-  color: var(--gd-grade-ink);
+  background: #8c2f39;
+  color: #fff;
 }
 :root[data-gameday] .gd-move-waiver {
-  background: var(--gd-espn);
-  color: var(--gd-bg);
+  background: #4a4e73;
+  color: #fff;
 }
 :root[data-gameday] .gd-move-lineup {
-  background: var(--gd-fact);
-  color: var(--gd-bg);
+  background: #1f7a6d;
+  color: #fff;
 }
 :root[data-gameday] .gd-score-rows {
   display: grid;
@@ -2043,10 +2487,10 @@
   font-size: 14px;
 }
 :root[data-gameday] .gd-tick[data-direction="up"] span {
-  color: var(--gd-model);
+  color: var(--gd-positive-ink);
 }
 :root[data-gameday] .gd-tick[data-direction="down"] span {
-  color: var(--gd-negative-ink);
+  color: var(--gd-warning-ink);
 }
 /* The looping copy exists only for the scroll, so it is hidden unless animation is Full. */
 :root[data-gameday] .gd-tick[aria-hidden="true"] {
@@ -2093,33 +2537,322 @@
   padding: 0;
   border-bottom: 0;
 }
+:root[data-gameday] .vs,
 :root[data-gameday] .gd-sides {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 220px minmax(0, 1fr);
-  gap: 14px;
-  align-items: stretch;
+  gap: 18px;
+  align-items: start;
 }
+:root[data-gameday] .side,
 :root[data-gameday] .gd-side {
-  display: grid;
-  align-content: start;
+  border-radius: 20px;
+  padding: 18px;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 260px;
+}
+:root[data-gameday] .side h3,
+:root[data-gameday] .gd-side h3,
+:root[data-gameday] .gd-side h2 {
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 30px;
+  text-transform: uppercase;
+  margin: 0;
+  color: #fff;
+}
+:root[data-gameday] .tp {
+  display: flex;
+  align-items: center;
   gap: 10px;
-  padding: 16px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 6px 10px;
+}
+:root[data-gameday] .tp .nm {
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 21px;
+  text-transform: uppercase;
+  flex: 1;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+:root[data-gameday] .tp .x {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+:root[data-gameday] .tp .x:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+:root[data-gameday] .addc {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+  border: 2px dashed rgba(255, 255, 255, 0.7);
+  background: transparent;
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: background 0.15s;
+}
+:root[data-gameday] .addc:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+:root[data-gameday] .addc[aria-pressed="true"] {
+  border-style: solid;
+  background: rgba(255, 255, 255, 0.25);
+}
+:root[data-gameday] .gsm {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+:root[data-gameday] .gsm span {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+:root[data-gameday] .tape,
+:root[data-gameday] .gd-tape {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 14px;
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-line);
   border-radius: var(--gd-radius);
+}
+:root[data-gameday] .tape h4,
+:root[data-gameday] .gd-tape h3,
+:root[data-gameday] .gd-tape h4 {
+  margin: 0;
+  text-align: center;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 22px;
+  text-transform: uppercase;
+  color: var(--gd-ink);
+}
+:root[data-gameday] .tr {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+:root[data-gameday] .tr .lb {
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .bf {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+:root[data-gameday] .bf .l {
+  display: flex;
+  justify-content: flex-end;
+}
+:root[data-gameday] .bf i {
+  display: block;
+  height: 16px;
+  border-radius: 4px;
+}
+:root[data-gameday] .bf span {
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 17px;
+}
+:root[data-gameday] .field {
+  background: repeating-linear-gradient(
+    90deg,
+    #2E7D4F 0 90px,
+    #2A7449 90px 180px
+  );
+  border-radius: 18px;
+  padding: 18px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+:root[data-gameday] .slot {
+  background: var(--gd-surface);
+  border-radius: 14px;
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  text-align: center;
+  border: 2px solid var(--gd-ink);
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+:root[data-gameday] .slot:hover {
+  transform: translateY(-2px);
+}
+:root[data-gameday] .slot.empty {
+  background: rgba(255, 255, 255, 0.7);
+  border-style: dashed;
+}
+:root[data-gameday][data-theme="dark"] .slot.empty {
+  background: rgba(24, 28, 36, 0.7);
+}
+:root[data-gameday] .slot .sn {
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .slot .pn {
+  font-weight: 700;
+  font-size: 13.5px;
+  line-height: 1.15;
+}
+:root[data-gameday] .av {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  color: #fff;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 19px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px var(--gd-ink);
+  flex: none;
+}
+:root[data-gameday] .stag {
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 5px;
+  letter-spacing: 0.03em;
+  display: inline-block;
+}
+:root[data-gameday] .stag.t-new {
+  background: #F7D046;
+  color: #181C24;
+}
+:root[data-gameday] .stag.t-up {
+  background: rgba(17, 128, 91, 0.2);
+  color: #11805B;
+}
+:root[data-gameday] .stag.t-shift {
+  background: rgba(79, 111, 217, 0.2);
+  color: #4F6FD9;
+}
+:root[data-gameday] .stag.t-out {
+  background: rgba(217, 83, 79, 0.2);
+  color: #D9534F;
+}
+:root[data-gameday] .score {
+  border: 3px solid var(--gd-ink);
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--gd-surface);
+}
+:root[data-gameday] .srow {
+  display: grid;
+  grid-template-columns: 200px 150px minmax(0, 1fr);
+  align-items: center;
+  border-bottom: 2px solid var(--gd-ink);
+}
+:root[data-gameday] .srow:last-child {
+  border-bottom: 0;
+}
+:root[data-gameday] .srow .n {
+  background: var(--gd-ink);
+  color: var(--gd-bg);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 19px;
+  text-transform: uppercase;
+}
+:root[data-gameday][data-theme="dark"] .srow .n {
   background: var(--gd-surface-2);
   color: var(--gd-ink);
-  border: 1px solid var(--gd-line);
+}
+:root[data-gameday] .srow .v {
+  padding: 14px 16px;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 28px;
+  text-align: center;
+}
+:root[data-gameday] .srow .d {
+  padding: 12px 16px;
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+:root[data-gameday] .wks {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+:root[data-gameday] .wks span {
+  min-width: 54px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  text-align: center;
+}
+:root[data-gameday][data-animation="full"] .srow {
+  animation: gd-slidein 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+:root[data-gameday][data-animation="full"] .srow:nth-child(2) {
+  animation-delay: 0.08s;
+}
+:root[data-gameday][data-animation="full"] .srow:nth-child(3) {
+  animation-delay: 0.16s;
+}
+:root[data-gameday][data-animation="full"] .srow:nth-child(4) {
+  animation-delay: 0.24s;
+}
+:root[data-gameday][data-animation="full"] .slot {
+  animation: gd-cardin 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 :root[data-gameday] .gd-side-send,
 :root[data-gameday] .gd-side-receive {
   background: var(--gd-surface-2);
   color: var(--gd-ink);
-}
-:root[data-gameday] .gd-side h2 {
-  margin: 0;
-  font-family: var(--gd-font-display);
-  font-size: 30px;
-  text-transform: uppercase;
-  color: inherit;
 }
 :root[data-gameday] .gd-side .gd-field span {
   color: inherit;
@@ -2136,32 +2869,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-:root[data-gameday] .gd-tape {
-  display: grid;
-  align-content: center;
-  gap: 8px;
-  padding: 12px;
-  background: var(--gd-surface);
-  border: 2px solid var(--gd-line);
-  border-radius: var(--gd-radius);
-  text-align: center;
-}
-:root[data-gameday] .gd-tape h3 {
-  margin: 0;
-  font-family: var(--gd-font-display);
-  text-transform: uppercase;
-}
-:root[data-gameday] .gd-tape > div {
-  display: grid;
-  grid-template-columns: 1fr 1.4fr 1fr;
-  gap: 6px;
-  align-items: center;
-  font-size: 13px;
-}
-:root[data-gameday] .gd-tape b {
-  color: var(--gd-muted);
-  font-weight: 600;
 }
 :root[data-gameday] .gd-verdicts {
   display: grid;
@@ -3314,21 +4021,36 @@
   :root[data-gameday] .gd-card-head {
     padding: 20px 60px 14px 16px;
   }
-  :root[data-gameday] .gd-card-id h2 {
-    font-size: 30px;
+  :root[data-gameday] .gd-card-big {
+    top: -18px;
+    font-size: 150px;
   }
-  :root[data-gameday] .gd-card-eppg {
-    text-align: left;
+  :root[data-gameday] .gd-card-id h2 {
+    font-size: 40px;
+  }
+  :root[data-gameday] .gd-card-nums {
+    gap: 8px 16px;
+  }
+  :root[data-gameday] .gd-card-stat strong {
+    font-size: 36px;
   }
   :root[data-gameday] .gd-card-eppg strong {
     font-size: 48px;
   }
-  :root[data-gameday] .gd-tabs {
+  :root[data-gameday] .gd-ptabs {
     padding: 8px 12px 0;
     overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+  :root[data-gameday] .gd-ptabs button {
+    padding: 0 12px;
+    font-size: 16px;
   }
   :root[data-gameday] .gd-tabpanel {
     padding: 16px 12px;
+  }
+  :root[data-gameday] .gd-story li {
+    font-size: 15px;
   }
   /* Rows instead of tables: cards stack one per row. */
   :root[data-gameday] .gd-cards {

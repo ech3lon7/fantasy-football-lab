@@ -482,13 +482,18 @@ export function LabelWhy({ p, m }: { p: Player; m: Model }) {
               setShowGames(false);
             }}
           >
-            {label.state === "earned" &&
-              (label.tone === "warning" ? (
+            {label.state === "earned" ? (
+              label.tone === "warning" ? (
                 <TriangleAlert size={13} aria-hidden="true" />
               ) : (
                 <Check size={13} aria-hidden="true" />
-              ))}
-            {label.chip}
+              )
+            ) : (
+              <span aria-hidden="true">◌</span>
+            )}
+            {label.state === "earned"
+              ? label.tag
+              : `${label.tag} · near miss`}
           </button>
         ))}
       </div>
@@ -549,14 +554,6 @@ export function LabelWhy({ p, m }: { p: Player; m: Model }) {
                       gates={section.gates}
                     />
                   ))}
-                {active.flip && (
-                  <div className="label-why-flip">
-                    <p className="label-why-card-eyebrow">WHAT WOULD FLIP IT</p>
-                    <strong>{active.flip.headline}</strong>
-                    <p>{active.flip.detail}</p>
-                    <small>{active.flip.caveat}</small>
-                  </div>
-                )}
                 {nearSections
                   .filter((section) => section.id === "already-met")
                   .map((section) => (
@@ -568,27 +565,39 @@ export function LabelWhy({ p, m }: { p: Player; m: Model }) {
                       gates={section.gates}
                     />
                   ))}
+                {active.flip && (
+                  <div className="label-why-flip">
+                    <p className="label-why-card-eyebrow">WHAT WOULD FLIP IT</p>
+                    <strong>{active.flip.headline}</strong>
+                    <p>{active.flip.detail}</p>
+                    <small>{active.flip.caveat}</small>
+                  </div>
+                )}
               </>
             ) : (
-              active.groups.map((group) => (
-                <CheckGroup
-                  key={group.id}
-                  title={group.title}
-                  met={group.met}
-                  total={group.total}
-                  gates={group.gates}
-                />
-              ))
+              <>
+                {active.groups.map((group) => (
+                  <CheckGroup
+                    key={group.id}
+                    title={group.title}
+                    met={group.met}
+                    total={group.total}
+                    gates={group.gates}
+                  />
+                ))}
+                {active.closest && (
+                  <div className="label-why-closest">
+                    <p className="label-why-card-eyebrow">
+                      {active.closest.headline.toUpperCase()}
+                    </p>
+                    <p>{active.closest.detail}</p>
+                  </div>
+                )}
+              </>
             )}
           </div>
           <div className="label-why-side">
             {active.chart && <Chart chart={active.chart} />}
-            {active.closest && (
-              <div className="label-why-closest">
-                <p className="label-why-card-eyebrow">{active.closest.headline}</p>
-                <p>{active.closest.detail}</p>
-              </div>
-            )}
             {historical.length > 0 && (
               <div className="label-why-historical">
                 <h4>Historical reference</h4>

@@ -1,0 +1,311 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: zz-big.spec.ts >> big find
+- Location: tests\browser\zz-big.spec.ts:28:1
+
+# Error details
+
+```
+Test timeout of 120000ms exceeded.
+```
+
+# Page snapshot
+
+```yaml
+- generic [ref=f1e3]:
+  - banner [ref=f1e4]:
+    - link "FFL GAMEDAY" [ref=f1e5] [cursor=pointer]:
+      - /url: "#/overview"
+    - navigation "Main navigation" [ref=f1e6]:
+      - link "This week" [ref=f1e7] [cursor=pointer]:
+        - /url: "#/week"
+      - link "Roster" [ref=f1e8] [cursor=pointer]:
+        - /url: "#/roster"
+      - link "Scouting" [ref=f1e9] [cursor=pointer]:
+        - /url: "#/scouting"
+      - link "League" [ref=f1e10] [cursor=pointer]:
+        - /url: "#/league"
+      - link "Trade room" [ref=f1e11] [cursor=pointer]:
+        - /url: "#/trade"
+      - link "Lab" [ref=f1e12] [cursor=pointer]:
+        - /url: "#/lab"
+    - combobox "Search any player" [ref=f1e14]
+    - generic "Source 0m ago" [ref=f1e15]: W6/17 · Source 0m ago
+    - 'link "Sync status: Local only" [ref=f1e16] [cursor=pointer]':
+      - /url: "#/lab/data"
+      - text: Local
+    - button "Import" [ref=f1e17]
+    - button "Switch to light theme" [ref=f1e18]:
+      - generic [ref=f1e25]: Light
+    - button "Feel" [ref=f1e28]
+  - region "Signals" [ref=f1e29]:
+    - generic [ref=f1e30]: SIGNALS
+    - link "Synthetic 1 · Projection-gap watch" [ref=f1e33] [cursor=pointer]:
+      - /url: "#/player/1"
+      - text: ▲ Synthetic 1 · Projection-gap watch
+  - main [ref=f1e34]:
+    - generic [ref=f1e35]:
+      - generic [ref=f1e36]:
+        - generic [ref=f1e37]:
+          - heading "Trade room" [level=2] [ref=f1e38]
+          - tablist "Trade tools" [ref=f1e39]:
+            - tab "Manual analyzer" [ref=f1e40]
+            - tab "Find trades" [selected] [ref=f1e41]
+            - tab "Chain planner" [ref=f1e42]
+            - tab "Counter-offers" [ref=f1e43]
+          - generic [ref=f1e44]:
+            - button "Saved trades" [ref=f1e45]
+            - link "Journal" [ref=f1e46] [cursor=pointer]:
+              - /url: "#/journal"
+        - group [ref=f1e47]:
+          - generic "Browse saved trades" [ref=f1e48] [cursor=pointer]
+        - heading [level=3] [ref=f1e50]:
+          - button "Search limits · shared with chains Final gain ≥ 2.0 · temporary loss ≤ 0.0 · recipient loss ≤ 20% · window Off" [ref=f1e51]:
+            - generic [ref=f1e52]: Search limits · shared with chains
+            - generic [ref=f1e53]: Final gain ≥ 2.0 · temporary loss ≤ 0.0 · recipient loss ≤ 20% · window Off
+        - paragraph [ref=f1e54]: Every find trades control is below.
+        - generic [ref=f1e56]:
+          - generic [ref=f1e57]:
+            - generic [ref=f1e58]:
+              - heading "Find matching trades" [level=2] [ref=f1e59]
+              - paragraph [ref=f1e60]: "Independent standard-search controls · Scoring basis: Best available lineup"
+            - generic [ref=f1e61]:
+              - button "Run standard trade search" [disabled] [ref=f1e62] [cursor=pointer]: Search trades
+              - button "Standard filters" [expanded] [ref=f1e63] [cursor=pointer]: Filters
+          - generic [ref=f1e68]:
+            - generic "Active trade-search filters" [ref=f1e69]:
+              - button "Remove Receive 1–3 players" [ref=f1e70] [cursor=pointer]: Receive 1–3 players ×
+              - button "Clear all active standard filters" [ref=f1e71] [cursor=pointer]: Clear all
+            - complementary "Standard filters" [ref=f1e72]:
+              - generic [ref=f1e73]:
+                - group [ref=f1e74]:
+                  - generic [ref=f1e75]:
+                    - strong [ref=f1e76]: Players & packages
+                    - text: Offer 0 · Receive 1–3
+                  - generic [ref=f1e79]:
+                    - generic [ref=f1e82]:
+                      - generic [ref=f1e83]: Standard search team
+                      - combobox "Standard search team" [ref=f1e84]:
+                        - option "Test A" [selected]
+                        - option "Test B"
+                    - group [ref=f1e85]:
+                      - generic "Standard fixed outgoing players (0/5)" [ref=f1e86]
+                    - generic [ref=f1e89]:
+                      - generic [ref=f1e90]: Search goal
+                      - combobox "Search goal" [ref=f1e91]:
+                        - option "Trade away these players" [selected]
+                        - option "Improve my weekly scoring"
+                        - option "Find a position upgrade"
+                        - option "Custom search"
+                    - group "Search approach" [ref=f1e92]:
+                      - generic [ref=f1e94]:
+                        - generic [ref=f1e96]:
+                          - checkbox "Find outgoing combinations" [ref=f1e97]
+                          - text: Find outgoing combinations
+                        - generic [ref=f1e99]:
+                          - generic [ref=f1e100]: Rank trades by
+                          - combobox "Rank trades by" [ref=f1e101]:
+                            - option "Your weekly gain" [selected]
+                            - option "Their weekly gain"
+                            - option "Benefit to both teams"
+                            - option "Estimated acceptance (when enabled)"
+                        - generic [ref=f1e103]:
+                          - checkbox "Show near misses and adjustments" [ref=f1e104]
+                          - text: Show near misses and adjustments
+                      - generic [ref=f1e105]:
+                        - generic [ref=f1e107]:
+                          - generic [ref=f1e108]: Find a target player
+                          - textbox "Find a target player" [ref=f1e109]
+                        - generic [ref=f1e111]:
+                          - generic [ref=f1e112]: Required incoming player
+                          - combobox "Required incoming player" [ref=f1e113]:
+                            - option "Any player" [selected]
+                            - option "Incoming QB · QB"
+                            - option "Search WR 0 · WR"
+                            - option "Search WR 1 · WR"
+                            - option "Search WR 2 · WR"
+                            - option "Search WR 3 · WR"
+                            - option "Search WR 4 · WR"
+                            - option "Search WR 5 · WR"
+                            - option "Search WR 6 · WR"
+                            - option "Search WR 7 · WR"
+                            - option "Search WR 8 · WR"
+                            - option "Search WR 9 · WR"
+                            - option "Synthetic 2 · WR"
+                    - paragraph [ref=f1e114]:
+                      - text: "Fixed outgoing: None · Combined index:"
+                      - strong [ref=f1e115]: Unavailable
+                    - generic [ref=f1e116]:
+                      - generic [ref=f1e118]:
+                        - generic [ref=f1e119]: Create package
+                        - checkbox "Create package" [checked] [ref=f1e120]
+                      - generic [ref=f1e122]:
+                        - generic [ref=f1e123]: Maximum players to receive
+                        - combobox "Maximum players to receive" [ref=f1e124]:
+                          - option "1"
+                          - option "2"
+                          - option "3" [selected]
+                          - option "4"
+                          - option "5"
+                    - group "Incoming players" [ref=f1e125]:
+                      - generic [ref=f1e127]:
+                        - generic [ref=f1e129]:
+                          - checkbox "Gem" [ref=f1e130]
+                          - text: Gem
+                        - generic [ref=f1e132]:
+                          - checkbox "Pre-gem" [ref=f1e133]
+                          - text: Pre-gem
+                        - generic [ref=f1e135]:
+                          - checkbox "Watch" [ref=f1e136]
+                          - text: Watch
+                      - group "Standard incoming position choices" [ref=f1e137]:
+                        - generic [ref=f1e139]:
+                          - checkbox "Receive QB" [ref=f1e140]
+                          - text: QB
+                        - generic [ref=f1e142]:
+                          - checkbox "Receive RB" [ref=f1e143]
+                          - text: RB
+                        - generic [ref=f1e145]:
+                          - checkbox "Receive WR" [ref=f1e146]
+                          - text: WR
+                        - generic [ref=f1e148]:
+                          - checkbox "Receive TE" [ref=f1e149]
+                          - text: TE
+                        - generic [ref=f1e151]:
+                          - checkbox "Receive K" [ref=f1e152]
+                          - text: K
+                        - generic [ref=f1e154]:
+                          - checkbox "Receive D/ST" [ref=f1e155]
+                          - text: D/ST
+                    - paragraph [ref=f1e156]: Receive 1–3 players. Automatic index matching; value differences stay visible.
+                    - paragraph [ref=f1e157]: "Offering: None"
+                - group [ref=f1e158]:
+                  - generic [ref=f1e159]:
+                    - strong [ref=f1e160]: Team needs
+                    - text: Target deficits · protect weak positions
+                  - generic [ref=f1e163]:
+                    - group [ref=f1e164]:
+                      - 'generic "Teams to search: All other teams" [ref=f1e165]'
+                    - generic [ref=f1e168]:
+                      - generic [ref=f1e169]:
+                        - generic [ref=f1e170]: Preview team
+                        - combobox "Standard preview team" [ref=f1e171]:
+                          - option "Test B" [selected]
+                      - generic [ref=f1e172]:
+                        - button [ref=f1e174]:
+                          - text: QB
+                          - strong [ref=f1e175]: F
+                        - button [ref=f1e177]:
+                          - text: RB
+                          - strong [ref=f1e178]: F
+                        - button [ref=f1e180]:
+                          - text: WR
+                          - strong [ref=f1e181]: A+
+                        - button [ref=f1e183]:
+                          - text: TE
+                          - strong [ref=f1e184]: n.a.
+                        - button [ref=f1e186]:
+                          - text: FLEX
+                          - strong [ref=f1e187]: A+
+                        - button [ref=f1e189]:
+                          - text: K
+                          - strong [ref=f1e190]: n.a.
+                        - button [ref=f1e192]:
+                          - text: D/ST
+                          - strong [ref=f1e193]: n.a.
+                      - generic "Standard current roster preview" [ref=f1e194]:
+                        - article [ref=f1e195]:
+                          - generic [ref=f1e196]: QB · starter
+                          - generic [ref=f1e198]: IQ
+                          - link "Incoming QB" [ref=f1e199] [cursor=pointer]:
+                            - /url: "#/player/200"
+                          - strong [ref=f1e200]: 10.00 EPPG
+                        - article [ref=f1e201]:
+                          - generic [ref=f1e202]: WR · starter
+                          - generic [ref=f1e204]: S2
+                          - link "Synthetic 2" [ref=f1e205] [cursor=pointer]:
+                            - /url: "#/player/2"
+                          - strong [ref=f1e206]: 15.00 EPPG
+                        - article [ref=f1e207]:
+                          - generic [ref=f1e208]: FLEX · starter
+                          - generic [ref=f1e210]: S0
+                          - link "Search WR 0" [ref=f1e211] [cursor=pointer]:
+                            - /url: "#/player/300"
+                          - strong [ref=f1e212]: 15.00 EPPG
+                        - article [ref=f1e213]:
+                          - generic [ref=f1e214]: WR · reserve
+                          - generic [ref=f1e216]: S1
+                          - link "Search WR 1" [ref=f1e217] [cursor=pointer]:
+                            - /url: "#/player/301"
+                          - strong [ref=f1e218]: 15.00 EPPG
+                        - article [ref=f1e219]:
+                          - generic [ref=f1e220]: WR · reserve
+                          - generic [ref=f1e222]: S2
+                          - link "Search WR 2" [ref=f1e223] [cursor=pointer]:
+                            - /url: "#/player/302"
+                          - strong [ref=f1e224]: 15.00 EPPG
+                      - generic [ref=f1e225]: Current roster preview · best available · Week 6. Trade impact appears in results.
+                    - generic [ref=f1e228]:
+                      - generic [ref=f1e229]: Only teams with a positional deficit
+                      - checkbox "Only teams with a positional deficit" [ref=f1e230]
+                    - generic [ref=f1e233]:
+                      - 'checkbox "Standard search: Protect their weak positions" [disabled] [ref=f1e234]'
+                      - text: Protect their weak positions
+                    - generic [ref=f1e235]:
+                      - generic [ref=f1e236]: Positional Grade Goals
+                      - paragraph [ref=f1e239]: No positional grade goals configured.
+                      - button "+ Add Positional Goal" [ref=f1e240] [cursor=pointer]
+                    - group "Roster fit" [ref=f1e241]:
+                      - generic [ref=f1e245]:
+                        - generic [ref=f1e246]: Every offered player must be useful
+                        - checkbox "Every offered player must be useful to the other team" [ref=f1e247]
+                      - generic [ref=f1e250]:
+                        - generic [ref=f1e251]: Require positional upgrades
+                        - checkbox "Only show positional upgrades for the other team" [ref=f1e252]
+                - group [ref=f1e253]:
+                  - generic [ref=f1e254]:
+                    - strong [ref=f1e255]: Value & acceptance
+                    - text: Automatic index matching
+                  - generic [ref=f1e258]:
+                    - group "Surface Trading" [ref=f1e259]:
+                      - generic [ref=f1e262]:
+                        - checkbox "Enable Surface Trading" [ref=f1e263]
+                        - text: Enable Surface Trading
+                    - group "Value range" [ref=f1e264]:
+                      - paragraph [ref=f1e267]: The index window is set once in the shared Search limits section above.
+                - group [ref=f1e268]:
+                  - generic [active] [ref=f1e269]:
+                    - strong [ref=f1e270]: Scoring impact
+                    - text: No weekly gain limits
+                  - group "Scoring impact" [ref=f1e274]:
+                    - generic [ref=f1e278]:
+                      - generic [ref=f1e279]: Filter your weekly gain
+                      - checkbox "Filter your weekly gain" [ref=f1e280]
+                    - generic [ref=f1e283]:
+                      - generic [ref=f1e284]: Filter their weekly gain
+                      - checkbox "Filter their weekly gain" [ref=f1e285]
+                - paragraph [ref=f1e286]: Select one to five distinct outgoing players.
+                - paragraph [ref=f1e287]:
+                  - generic [ref=f1e288]: "Lineup source: Imported ESPN lineup · Weeks 6–17 · Source refreshed: 11/11/2026, 11:21:13 PM."
+            - generic [ref=f1e290]:
+              - button "Download search debug" [ref=f1e291] [cursor=pointer]
+              - button "Why wasn’t this trade found?" [ref=f1e292] [cursor=pointer]
+              - button "Search" [disabled] [ref=f1e293] [cursor=pointer]
+              - button "Clear filters" [ref=f1e295] [cursor=pointer]
+      - generic [ref=f1e296]:
+        - generic [ref=f1e297]: ● Recorded facts
+        - generic [ref=f1e298]: ● ESPN projections
+        - generic [ref=f1e299]: ● Blends / model
+        - generic [ref=f1e300]: ● Editable
+        - generic [ref=f1e301]: Shading identifies warnings or inputs.
+      - generic [ref=f1e302]:
+        - text: Fantasy Football Lab
+        - generic [ref=f1e303]: Adaptive model · provisional assumptions · v1.0.8 · Build local
+  - button "Import Excel workbook" [ref=f1e304]
+```

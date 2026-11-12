@@ -30,8 +30,15 @@ export function Lab({
   );
   return (
     <div className="gd-lab">
+      <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "16px" }} className="slide">
+        <span className="kick" style={{ color: "var(--gd-muted)", fontSize: "14px", fontWeight: 700, textTransform: "uppercase" }}>
+          Settings · audits · data
+        </span>
+        <h1 className="h-hero" style={{ fontSize: "54px", margin: 0 }}>
+          The lab
+        </h1>
+      </div>
       <header className="gd-lab-head">
-        <h2>Lab</h2>
         <nav aria-label="Lab pages" className="gd-tabs">
           {labTabs.map((t) => (
             <a

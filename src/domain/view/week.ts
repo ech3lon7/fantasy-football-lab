@@ -158,8 +158,9 @@ export function weekSummary(
         : "",
   }));
   const missing = rows.filter((r) => r.reason);
+  const uniqueReasons = Array.from(new Set(missing.map((r) => r.reason.replace(/\.$/, ""))));
   const note = missing.length
-    ? `Starter Value PPG per slot. ${missing.map((r) => `${r.position} is unavailable: ${r.reason.replace(/\.$/, "")}`).join("; ")}.`
+    ? `Starter Value PPG per slot. Unavailable positions (${missing.map((r) => r.position).join(", ")}): ${uniqueReasons.join("; ")}.`
     : "Starter Value PPG per slot against the league median.";
 
   // Weakest starting position by distance below the league median.

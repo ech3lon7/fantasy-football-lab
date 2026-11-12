@@ -3,6 +3,7 @@ import { evaluate } from "../src/domain/valuation";
 import { nextRefreshDefaults } from "../src/domain/next-refresh";
 import { playerCard } from "../src/domain/view/player-card";
 import { readableInk, teamColors } from "../src/domain/view/nfl-colors";
+import { labelTone } from "../src/domain/view/labels";
 import { fixture } from "./fixtures";
 
 // Build a model from the synthetic fixture with a known scoring pattern.
@@ -92,6 +93,18 @@ describe("radar and calculation", () => {
     expect(
       empty.calculation.find((s) => s.label === "Actual PPG")?.display,
     ).toBeNull();
+  });
+});
+
+describe("label tones", () => {
+  it("marks the four caution labels amber and every other label positive", () => {
+    for (const label of ["Reduced workload", "BUY LOW", "SELL HIGH", "TD caution"])
+      expect(labelTone(label)).toBe("warning");
+    for (const label of ["Gem", "Pre-gem", "Watch", "Role-growth watch"])
+      expect(labelTone(label)).toBe("positive");
+  });
+  it("keeps status chips distinguished from labels", () => {
+    expect(labelTone("Active")).toBe("positive");
   });
 });
 

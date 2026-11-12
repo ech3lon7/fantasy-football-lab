@@ -93,7 +93,92 @@ test("card opened from a list steps with arrow keys and keeps the tab", async ({
   await expect(links.first()).toBeFocused();
 });
 
-// The dark theme keeps the card on theme tokens: no white fills anywhere on the card surface.
+// The moving-average chart paints on theme tokens: every path and rect must have a real fill,
+// never the SVG default black that appeared when the old stylesheet was removed.
+test("moving-average chart never falls back to black", async ({ page }) => {
+  await open(page, "#/player/2");
+  const card = page.getByRole("dialog");
+  const chart = card.locator(".player-stock-chart-container");
+  await expect(chart).toBeVisible();
+  const black = await chart.evaluate((root) =>
+    [...root.querySelectorAll<SVGElement>("path, rect")]
+      .filter((el) => getComputedStyle(el).fill === "rgb(0, 0, 0)")
+      .map((el) => `${el.tagName}.${el.getAttribute("class") ?? ""}`),
+  );
+  expect(black).toEqual([]);
+  // The weekly points use the recorded-facts token rather than a neutral line colour.
+  const points = await chart
+    .locator(".stock-points-line")
+    .evaluate((el) => getComputedStyle(el).stroke);
+  const fact = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--gd-fact)";
+    document.body.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return colour;
+  });
+  expect(points).toBe(fact);
+});
+
+// At the design's card width the story body is two columns; on a phone it folds to one.
+test("story body is two columns at 1040 and one on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await open(page, "#/player/2");
+  const grid = page
+    .getByRole("dialog")
+    .locator(".gd-story-grid");
+  await expect(grid).toBeVisible();
+  const columns = async () =>
+    grid.evaluate(
+      (el) => getComputedStyle(el).gridTemplateColumns.split(" ").length,
+    );
+  expect(await columns()).toBe(2);
+  await expect(grid.locator(".gd-story-left")).toContainText(
+    "Next-refresh EPPG scenarios",
+  );
+  await expect(grid.locator(".gd-story-right .gd-radar")).toBeVisible();
+  await expect(grid.locator(".gd-story-right .player-stock-chart-container")).toBeVisible();
+  await page.setViewportSize({ width: 640, height: 900 });
+  expect(await columns()).toBe(1);
+});
+
+// The hero carries the large team-code watermark and three big numbers, EPPG largest.
+test("hero shows the team code watermark and the three lead numbers", async ({
+  page,
+}) => {
+  await open(page, "#/player/2");
+  const card = page.getByRole("dialog");
+  const big = card.locator(".gd-card-big");
+  await expect(big).toBeVisible();
+  await expect(big).toHaveAttribute("aria-hidden", "true");
+  expect(await big.textContent()).toMatch(/^[A-Z]{2,4}$/);
+  const stats = card.locator(".gd-card-stat");
+  await expect(stats).toHaveCount(3);
+  await expect(stats.nth(0)).toContainText("EXPECTED PPG");
+  await expect(stats.nth(1)).toContainText("RECENT 3");
+  await expect(stats.nth(2)).toContainText("SURPLUS");
+  const sizes = await card
+    .locator(".gd-card-stat strong")
+    .evaluateAll((els) =>
+      els.map((el) => parseFloat(getComputedStyle(el).fontSize)),
+    );
+  expect(sizes[0]).toBeGreaterThan(sizes[1] ?? 0);
+  expect(sizes[1]).toBe(sizes[2]);
+  // Every label carries a state tone instead of the old neutral chip.
+  const labelClasses = await card
+    .locator(".gd-card-labels .gd-chip-tag")
+    .evaluateAll((els) => els.map((el) => el.className));
+  expect(labelClasses.length).toBeGreaterThan(0);
+  for (const cls of labelClasses) {
+    expect(cls).toMatch(/gd-chip-(positive|warning)/);
+  }
+  // The tabs follow the design: condensed uppercase, 44px, selected filled with ink.
+  const selected = card.getByRole("tab", { name: "Story" });
+  await expect(selected).toHaveAttribute("aria-selected", "true");
+  await expect(selected).toHaveCSS("height", "44px");
+  await expect(selected).toHaveCSS("text-transform", "uppercase");
+});
 test("card has no white fills in dark and team colours stay the same", async ({
   page,
 }) => {
