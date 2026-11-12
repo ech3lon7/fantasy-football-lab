@@ -2871,9 +2871,7 @@
   gap: 6px;
 }
 :root[data-gameday] .gd-verdicts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px;
+  display: none;
 }
 :root[data-gameday] .gd-verdict {
   background: var(--gd-surface);
@@ -4145,6 +4143,7 @@
     padding-bottom: 76px;
   }
   :root[data-gameday] .gd-verdicts {
+    display: grid;
     position: fixed;
     left: 0;
     right: 0;
@@ -4155,6 +4154,9 @@
     padding: 6px;
     background: var(--gd-surface);
     border-top: 2px solid var(--gd-line);
+  }
+  :root[data-gameday] .score {
+    display: none;
   }
   :root[data-gameday] .gd-verdict {
     padding: 4px 6px;
@@ -4173,6 +4175,49 @@
   }
   :root[data-gameday] .gd-verdict ul {
     display: none;
+  }
+  :root[data-gameday] .field {
+    background: transparent;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  :root[data-gameday] .slot {
+    display: grid;
+    grid-template-columns: 44px 40px minmax(0, 1fr) auto;
+    align-items: center;
+    text-align: left;
+    padding: 8px 12px;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  :root[data-gameday] .slot .sn {
+    font-size: 14px;
+    font-weight: 800;
+  }
+  :root[data-gameday] .slot .av {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+  }
+  :root[data-gameday] .slot .pn {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :root[data-gameday] .slot .num {
+    font-size: 15px;
+    text-align: right;
+  }
+  :root[data-gameday] .slot .stag {
+    grid-column: 3 / -1;
+    justify-self: start;
+    margin-top: 2px;
   }
   :root[data-gameday] .gd-slot {
     grid-template-columns: 52px 1fr 44px;

@@ -15,11 +15,13 @@ import {
   lineupGainSpread,
   lineupMoves,
   taleOfTape,
+  verdicts,
   type LineupSlot,
 } from "../../domain/view/trade-room";
 import type { Model, Player } from "../../domain/valuation";
 import { PlayerPhoto } from "../../ui/PlayerPhoto";
 import { useOpenPlayer } from "./PlayerCard";
+import { usePopovers } from "../../ui/popover/PopoverStack";
 import { teamColors } from "../../domain/view/nfl-colors";
 import { Chip } from "../../ui/primitives";
 import { TradeStressTest } from "../TradeStressTest";
@@ -201,6 +203,8 @@ function ManualAnalyzer({
   const valid = result && result.valid ? result : null;
   const impact = valid ? tradeImpact(valid, basis) : null;
   const chips = valid ? gradeStepChips(m, draft, valid) : null;
+  const verdictRows = valid ? verdicts(m, valid, basis) : null;
+  const popovers = usePopovers();
   const surface = useMemo(
     () =>
       valid
@@ -878,6 +882,52 @@ function ManualAnalyzer({
           </div>
         </div>
       </section>
+      )}
+
+      {/* Pinned four verdict cells for phone width */}
+      {valid && verdictRows && (
+        <section className="gd-verdicts gd-phone-only" aria-label="Verdicts">
+          {verdictRows.map((v) => (
+            <details
+              key={v.id}
+              className="gd-verdict"
+              data-tone={v.tone}
+              data-verdict={v.id}
+            >
+              <summary
+                onClick={(e) => {
+                  if (!matchMedia("(max-width: 719px)").matches) return;
+                  e.preventDefault();
+                  popovers.open({
+                    title: v.label,
+                    width: 520,
+                    render: () => (
+                      <div className="gd-popover-body">
+                        <h2>{v.label}</h2>
+                        <p>
+                          <strong>{v.summary}</strong>
+                        </p>
+                        <ul>
+                          {v.detail.map((line) => (
+                            <li key={line}>{line}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ),
+                  });
+                }}
+              >
+                <span>{v.label}</span>
+                <strong>{v.summary}</strong>
+              </summary>
+              <ul>
+                {v.detail.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </details>
+          ))}
+        </section>
       )}
 
       {/* 4. Detail disclosures */}

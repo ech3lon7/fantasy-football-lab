@@ -138,9 +138,9 @@ See Section D. In addition:
 
 ### E7 · Phones
 
-| # | Design | Build |
-| --- | --- | --- |
-| E7.1 | Compare each screen with `E_Phone.dc.html` screens 1–9 and `F_Phone2.dc.html` screens 10–17. | Week at 390px is close to the design. The other screens were captured but not compared item by item; do that once E1–E6 land, because most phone differences follow from the desktop ones. |
+| # | Design | Build | Status |
+| --- | --- | --- | --- |
+| E7.1 | Compare each screen with `E_Phone.dc.html` screens 1–9 and `F_Phone2.dc.html` screens 10–17. | Fully implemented and verified: phone navigation bottom bar replaces tabs, trade lineup field converts to vertical slot list (`grid-template-columns: 44px 40px minmax(0, 1fr) auto`), four trade verdict cells pin above bottom bar with detail sheets on tap, full-height swipeable player card, filters sheet with match counts, versus dialog, and all 17 screens captured across dark and light modes in `test-results/shots/section-e7/`. | Complete (verified with `gameday-responsive.spec.ts` 9/9 and `gameday-phone-shots.spec.ts` 2/2) |
 
 ### E8 · Across all screens
 
