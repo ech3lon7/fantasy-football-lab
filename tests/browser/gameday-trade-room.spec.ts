@@ -310,10 +310,22 @@ test("manual analyzer displays player photo, metrics, and opens card with arrow 
   await expect(sendGroup).toHaveCSS("background-color", "rgb(59, 47, 143)");
   await expect(receiveGroup).toHaveCSS("background-color", "rgb(140, 47, 57)");
 
-  // Verify metric text format (e.g. eppg / surplus)
+  // Verify metric text format (e.g. eppg / surplus) on a single horizontal row with diagonal slash
   const sendMetric = sendGroup.locator(".tp .metric").first();
   await expect(sendMetric).toBeVisible();
   await expect(sendMetric).toContainText("/");
+  await expect(sendMetric).toHaveCSS("flex-direction", "row");
+  await expect(sendMetric).toHaveCSS("white-space", "nowrap");
+
+  // Verify trade score strip with EPPG gain/loss from analyzed trade
+  const scoreStrip = page.locator(".trade-score-strip");
+  await expect(scoreStrip).toBeVisible();
+  await expect(scoreStrip).toContainText(/Expected PPG/);
+
+  // Verify tale of the tape displays lineup EPPG gain/loss
+  const tapeGain = page.locator(".gd-tape-gain");
+  await expect(tapeGain).toBeVisible();
+  await expect(tapeGain).toContainText(/EPPG Gain \/ Loss/i);
 
   // Click player photo to open card popover
   const photoBtn = sendGroup.locator(".tp button[aria-label*='card']").first();

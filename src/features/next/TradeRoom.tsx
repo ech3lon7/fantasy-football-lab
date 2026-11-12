@@ -63,10 +63,8 @@ import { SurfaceAppealView } from "../SurfaceAppeal";
 import { TradeSearch } from "../TradeSearch";
 import { SavedTrades } from "../SavedTrades";
 import {
-  tradeTeamName,
+  TradeScoreStrip,
 } from "../TradeWorkspace";
-import { fmt, signed } from "../../ui/components";
-import { ArrowRight } from "lucide-react";
 
 export const tradeTabs = ["manual", "find", "chains", "counters"] as const;
 export type TradeTab = (typeof tradeTabs)[number];
@@ -296,6 +294,22 @@ function ManualAnalyzer({
         onSwitchToLive={onSwitchToLive}
       />
 
+      {/* Trade score strip: authoritative before/after Expected PPG and trade gain/loss */}
+      <TradeScoreStrip
+        m={m}
+        draft={draft}
+        impact={impact}
+        pending={false}
+        dealGrade={valid?.grade}
+        dealTone={
+          valid?.surplusTest === "PASS"
+            ? "good"
+            : valid?.surplusTest === "FAIL"
+              ? "bad"
+              : "neutral"
+        }
+      />
+
       {/* 1. Sides and Tale of the tape */}
       <div className="vs gd-sides">
         {/* Left Side: You Send */}
@@ -356,22 +370,24 @@ function ManualAnalyzer({
                     {p.name}
                   </button>
                   <span
-                    className="metric"
+                    className="metric tp-metric"
                     style={{
                       marginLeft: "auto",
                       fontWeight: 700,
                       fontSize: "15px",
                       color: "#fff",
                       display: "inline-flex",
+                      flexDirection: "row",
                       alignItems: "baseline",
-                      gap: "2px",
+                      gap: "3px",
                       flexShrink: 0,
+                      whiteSpace: "nowrap",
                     }}
                     title={`Expected PPG ${eppgText} / Surplus index ${surplusText}`}
                   >
                     <span>{eppgText}</span>
-                    <span style={{ opacity: 0.6 }}>/</span>
-                    <span style={{ color: "#FFD60A" }}>{surplusText}</span>
+                    <span className="tp-metric-slash" style={{ opacity: 0.6, margin: "0 1px" }}>/</span>
+                    <span className="tp-metric-surplus" style={{ color: "#FFD60A" }}>{surplusText}</span>
                   </span>
                   <button
                     type="button"
@@ -465,6 +481,58 @@ function ManualAnalyzer({
               </div>
             </div>
           ))}
+          {impact && (
+            <div
+              className="gd-tape-gain"
+              style={{
+                marginTop: "10px",
+                paddingTop: "8px",
+                borderTop: "1px solid var(--gd-line)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "2px",
+                alignItems: "center",
+                textAlign: "center",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  color: "var(--gd-muted)",
+                  letterSpacing: "0.5px",
+                }}
+              >
+                Lineup EPPG Gain / Loss
+              </span>
+              <span
+                className="num"
+                style={{
+                  fontSize: "18px",
+                  fontWeight: 800,
+                  fontFamily: "var(--gd-font-mono, monospace)",
+                  color:
+                    (impact.own.expectedPerWeek ?? 0) > 0
+                      ? "var(--gd-positive-ink)"
+                      : (impact.own.expectedPerWeek ?? 0) < 0
+                        ? "var(--gd-negative-ink)"
+                        : "inherit",
+                }}
+              >
+                {impact.own.expectedPerWeek !== null &&
+                impact.own.expectedPerWeek !== undefined
+                  ? `${impact.own.expectedPerWeek >= 0 ? "+" : ""}${impact.own.expectedPerWeek.toFixed(1)}/wk`
+                  : "—"}
+              </span>
+              <span style={{ fontSize: "11px", color: "var(--gd-muted)" }}>
+                {impact.own.beforePerWeek !== null &&
+                impact.own.afterPerWeek !== null
+                  ? `${impact.own.beforePerWeek.toFixed(1)} → ${impact.own.afterPerWeek.toFixed(1)} Expected PPG`
+                  : ""}
+              </span>
+            </div>
+          )}
         </section>
 
         {/* Right Side: You Receive */}
@@ -559,22 +627,24 @@ function ManualAnalyzer({
                     {p.name}
                   </button>
                   <span
-                    className="metric"
+                    className="metric tp-metric"
                     style={{
                       marginLeft: "auto",
                       fontWeight: 700,
                       fontSize: "15px",
                       color: "#fff",
                       display: "inline-flex",
+                      flexDirection: "row",
                       alignItems: "baseline",
-                      gap: "2px",
+                      gap: "3px",
                       flexShrink: 0,
+                      whiteSpace: "nowrap",
                     }}
                     title={`Expected PPG ${eppgText} / Surplus index ${surplusText}`}
                   >
                     <span>{eppgText}</span>
-                    <span style={{ opacity: 0.6 }}>/</span>
-                    <span style={{ color: "#FFD60A" }}>{surplusText}</span>
+                    <span className="tp-metric-slash" style={{ opacity: 0.6, margin: "0 1px" }}>/</span>
+                    <span className="tp-metric-surplus" style={{ color: "#FFD60A" }}>{surplusText}</span>
                   </span>
                   <button
                     type="button"
@@ -1046,56 +1116,6 @@ function ManualAnalyzer({
 
       {/* 4. Detail disclosures */}
       <div style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "10px" }}>
-        {valid && (
-          <details className="gd-disclosure">
-            <summary>Trade scoring summary</summary>
-            <section
-              className="trade-score-strip gd-scoring-summary"
-              aria-label="Trade scoring summary"
-              style={{ marginTop: "10px" }}
-            >
-              <div className="trade-score-team">
-                <div>
-                  <strong>{mineName}</strong>
-                  <small>Your average Expected PPG</small>
-                </div>
-                <div className="trade-score-values model">
-                  <span>{fmt(impact?.own.beforePerWeek ?? null)}</span>
-                  <ArrowRight size={17} aria-hidden="true" />
-                  <strong>{fmt(impact?.own.afterPerWeek ?? null)}</strong>
-                  <b>{signed(impact?.own.expectedPerWeek ?? null)}</b>
-                </div>
-              </div>
-              <div className="trade-score-team">
-                <div>
-                  <strong>{tradeTeamName(m, draft.teamB)}</strong>
-                  <small>Their average Expected PPG</small>
-                </div>
-                <div className="trade-score-values model">
-                  <span>{fmt(impact?.other.beforePerWeek ?? null)}</span>
-                  <ArrowRight size={17} aria-hidden="true" />
-                  <strong>{fmt(impact?.other.afterPerWeek ?? null)}</strong>
-                  <b>{signed(impact?.other.expectedPerWeek ?? null)}</b>
-                </div>
-              </div>
-              <div className="trade-score-context-row">
-                <small className="trade-score-context">
-                  Average across Weeks {m.current}–{m.final}; model scoring, not ESPN's weekly projection.
-                </small>
-                {valid.grade && (
-                  <span
-                    className="trade-deal-pill neutral"
-                    role="status"
-                    aria-label={`Surplus deal grade: ${valid.grade}`}
-                  >
-                    Surplus: <strong>{valid.grade}</strong>
-                  </span>
-                )}
-              </div>
-            </section>
-          </details>
-        )}
-
         <details className="gd-disclosure">
           <summary>Surface assessment & manager expectations</summary>
           <div style={{ marginTop: "10px" }}>

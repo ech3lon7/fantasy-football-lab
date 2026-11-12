@@ -2590,12 +2590,35 @@
   white-space: nowrap;
   min-width: 0;
 }
-:root[data-gameday] .tp .metric {
-  font-family: var(--gd-font-mono, monospace);
-  font-weight: 700;
-  font-size: 14.5px;
+:root[data-gameday] .tp .metric,
+:root[data-gameday] .tp .tp-metric {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: baseline !important;
+  gap: 3px !important;
+  font-family: var(--gd-font-mono, monospace) !important;
+  font-weight: 700 !important;
+  font-size: 15px !important;
+  color: #fff !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  margin-left: auto !important;
+  line-height: 1 !important;
+}
+:root[data-gameday] .tp .metric > span,
+:root[data-gameday] .tp .tp-metric > span {
+  display: inline !important;
   color: #fff;
-  white-space: nowrap;
+}
+:root[data-gameday] .tp .metric .tp-metric-slash,
+:root[data-gameday] .tp .tp-metric .tp-metric-slash {
+  opacity: 0.6;
+  font-weight: 400;
+  margin: 0 1px;
+}
+:root[data-gameday] .tp .metric .tp-metric-surplus,
+:root[data-gameday] .tp .tp-metric .tp-metric-surplus {
+  color: #FFD60A;
 }
 :root[data-gameday] .tp .x {
   width: 30px;
@@ -2986,7 +3009,8 @@
   :root[data-gameday] .tp .nm {
     font-size: 16px;
   }
-  :root[data-gameday] .tp .metric {
+  :root[data-gameday] .tp .metric,
+  :root[data-gameday] .tp .tp-metric {
     font-size: 13px;
   }
 }
@@ -4160,7 +4184,8 @@
   :root[data-gameday] .tp .nm {
     font-size: 16px;
   }
-  :root[data-gameday] .tp .metric {
+  :root[data-gameday] .tp .metric,
+  :root[data-gameday] .tp .tp-metric {
     font-size: 13px;
   }
   :root[data-gameday] .gd-trade {
@@ -5559,7 +5584,7 @@
   font-weight: 700;
   cursor: pointer;
 }
-:root[data-gameday] main .metric {
+:root[data-gameday] main .metric:not(.tp-metric) {
   display: flex;
   flex-direction: column;
   gap: 4px;
