@@ -295,3 +295,34 @@ test("open filter groups are remembered; saved trades and journal are reachable"
     page.getByRole("heading", { name: "Trade journal" }).first(),
   ).toBeVisible();
 });
+
+// Manual analyzer displays player photo, name, EPPG / surplus metrics, and opens card on photo click with arrow navigation.
+test("manual analyzer displays player photo, metrics, and opens card with arrow navigation", async ({
+  page,
+}) => {
+  await open(page);
+  await offer(page);
+
+  const sendGroup = page.locator(".gd-side-send");
+  const receiveGroup = page.locator(".gd-side-receive");
+
+  // Verify static background colors
+  await expect(sendGroup).toHaveCSS("background-color", "rgb(59, 47, 143)");
+  await expect(receiveGroup).toHaveCSS("background-color", "rgb(140, 47, 57)");
+
+  // Verify metric text format (e.g. eppg / surplus)
+  const sendMetric = sendGroup.locator(".tp .metric").first();
+  await expect(sendMetric).toBeVisible();
+  await expect(sendMetric).toContainText("/");
+
+  // Click player photo to open card popover
+  const photoBtn = sendGroup.locator(".tp button[aria-label*='card']").first();
+  await photoBtn.click();
+  const card = page.locator(".gd-card-view");
+  await expect(card).toBeVisible();
+
+  // Press ArrowRight to step to next player in analyzed list
+  await page.keyboard.press("ArrowRight");
+  await expect(card).toBeVisible();
+});
+

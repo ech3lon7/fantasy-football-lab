@@ -2585,6 +2585,17 @@
   color: #fff;
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+:root[data-gameday] .tp .metric {
+  font-family: var(--gd-font-mono, monospace);
+  font-weight: 700;
+  font-size: 14.5px;
+  color: #fff;
+  white-space: nowrap;
 }
 :root[data-gameday] .tp .x {
   width: 30px;
@@ -2971,6 +2982,12 @@
 @media (max-width: 900px) {
   :root[data-gameday] .gd-sides {
     grid-template-columns: 1fr;
+  }
+  :root[data-gameday] .tp .nm {
+    font-size: 16px;
+  }
+  :root[data-gameday] .tp .metric {
+    font-size: 13px;
   }
 }
 /* Buttons and disclosures from the current tools take the theme inside embedded screens. */
@@ -4139,6 +4156,12 @@
   /* Trade room: the two sides stack and the four verdicts pin above the bottom bar as separate cells. */
   :root[data-gameday] .gd-sides {
     grid-template-columns: 1fr;
+  }
+  :root[data-gameday] .tp .nm {
+    font-size: 16px;
+  }
+  :root[data-gameday] .tp .metric {
+    font-size: 13px;
   }
   :root[data-gameday] .gd-trade {
     padding-bottom: 76px;

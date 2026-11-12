@@ -75,7 +75,8 @@ test("header shows source freshness and searches players with the keyboard", asy
   await expect(options.first()).toBeVisible();
   await search.press("ArrowDown");
   await search.press("Enter");
-  await expect(page).toHaveURL(/#\/player\/\d+/);
+  await expect(page.locator(".gd-card-view")).toBeVisible();
+  await expect(page).toHaveURL(/#\/overview/);
 });
 
 // Feel settings are independent and animation publishes one effective level on the root.

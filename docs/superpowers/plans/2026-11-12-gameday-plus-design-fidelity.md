@@ -149,6 +149,18 @@ See Section D. In addition:
 - The provenance legend at the foot of every page is tiny and low-contrast; match the design's legend size and place it once in the Feel menu or footer.
 - No filler copy ("Every … control is below.").
 
+### E9 · Roster: Best pickups (added 2026-11-12, owner: "WAY more compact and neat")
+
+Today `src/features/next/Roster.tsx` ("Add and drop pairs") renders one full-width row per available player. The drop name repeats on every row ("drop Van Jefferson"), a large empty gap separates the text from the numbers, every row has a large "Try in a simulation" pill, and depth-only rows are shown by default. Rebuild it to match the design's "Best pickups" card (`docs/design/gameday-plus/D_GamedayPlus.dc.html`, classes `.pk*`). This is display only: `addDropPairs` and `pairMoves` stay unchanged.
+
+- [ ] **E9.1 Verdict line** beside the title: "Nothing on waivers moves your lineup much. Best: X +0.2 a week, well inside the ±9.6 weekly swing." when the best gain is under 0.5; otherwise "Best: add X for Y, +1.4 a week." If no player would start: "No available player would start for you this week."
+- [ ] **E9.2 Group by the drop.** One small card per drop player (at most 4), headed "Drop **Van Jefferson** WR · best adds". The cards sit in a grid, `repeat(auto-fill, minmax(300px, 1fr))`, so they form two or three columns on desktop and one on phone.
+- [ ] **E9.3 Compact rows** (38px): a 26px photo or initials, the name as a player-card popover button, "WR · starts FLEX" in small text below it, the gain on the right (with "± 9.6" small and muted), and a small "Try" button. The button's accessible name is "Try adding X for Y in a simulation". Colour the gain green only at +0.5 or more; smaller gains are muted.
+- [ ] **E9.4 Three per card**, with a "Show N more" / "Show fewer" link.
+- [ ] **E9.5 Depth-only adds hidden by default.** Change the current default from `true` to off. Show them as a "Show N depth-only adds" link that reveals a single line ("No lineup change: Aaron Rodgers (QB), Geno Smith (QB) …"), not rows.
+- [ ] **E9.6 One footnote line:** "Gain is the weekly change in your starters' Expected PPG; ± is its weekly spread." Remove the separate explanatory paragraph and the checkbox.
+- **Test (write first; it must fail today):** on `tradeSearchFixture`, the Best pickups section's height is at most 420px at 1440px width. No add/drop row repeats the word "drop". Depth-only names are not visible until the link is clicked. Every row has a "Try" button whose accessible name includes both players.
+
 ## Definition of done
 
 - For every screen and the player card, a side-by-side screenshot (design reference, build) in light and dark, approved by the owner.

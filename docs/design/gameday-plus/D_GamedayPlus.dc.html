@@ -216,6 +216,23 @@ a{color:var(--es)}a:hover{color:var(--infofg)}
 .slot.empty{background:rgba(255,255,255,.7);border-style:dashed}
 .slot .sn{font-family:'Barlow Condensed';font-weight:800;font-size:13px;letter-spacing:.08em;color:var(--mu)}
 .slot .pn{font-weight:700;font-size:13.5px;line-height:1.15}
+.pk{display:flex;flex-direction:column;gap:10px}
+.pkh{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.pkg{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.pkc{border:1px solid var(--ln);border-radius:10px;padding:6px 10px 8px;display:flex;flex-direction:column}
+.pkd{font-size:12.5px;padding:2px 0 6px;border-bottom:1px solid var(--ln);margin-bottom:2px}
+.pkr{display:grid;grid-template-columns:26px minmax(0,1fr) auto 44px;gap:8px;align-items:center;min-height:38px;font-size:14px}
+.pkr+.pkr{border-top:1px solid var(--ln)}
+.pka{width:26px;height:26px;font-size:11px;border-width:2px;box-shadow:none}
+.pkn{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+.pkn .nmb{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pkn small{font-size:11.5px}
+.pkgn{font-size:15px;white-space:nowrap}
+.pkgn small{font-size:11px;font-weight:600}
+.pkt{height:26px;border-radius:13px;border:1.5px solid var(--ln);background:transparent;color:var(--ink);font-weight:700;font-size:12px}
+.pkt:hover{border-color:var(--ink)}
+.pkm{border:0;background:none;color:var(--mo);font-weight:700;font-size:12.5px;padding:4px 0 0;text-align:left;cursor:pointer}
+.pkf{display:flex;gap:12px;flex-wrap:wrap;align-items:baseline;font-size:12.5px}
 .stag{font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:5px;letter-spacing:.03em}
 .t-new{background:#FFD60A;color:#0F1115}.t-shift{background:var(--infobg);color:var(--infofg)}.t-up{background:var(--okbg);color:var(--okfg)}.t-out{background:var(--badbg);color:var(--badfg)}
 .gs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
@@ -485,19 +502,20 @@ a{color:var(--es)}a:hover{color:var(--infofg)}
             <span class="quiet">In the app this row is the existing “Search league players” picker. Forced trades from the Trade room also land here.</span>
           </sc-if>
         </div>
-        <div class="card">
-          <div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline"><span class="kick" style="color: var(--mo)">▲ Best pickups · add and drop pairs</span><span class="quiet">For each available player, the drop that helps your lineup most</span></div>
-          <div class="trw h" style="grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.3fr) 150px minmax(0, 1fr) 170px; min-width: 760px"><span>Add</span><span>Drop</span><span>Lineup gain ± spread</span><span>Effect</span><span></span></div>
-          <sc-for list="{{pickups}}" as="r" hint-placeholder-count="5">
-            <div class="trw" style="grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.3fr) 150px minmax(0, 1fr) 170px; min-width: 760px">
-              <span><button class="nmb" onClick="{{r.openAdd}}">{{r.add}}</button> <span class="quiet">{{r.addPos}}</span></span>
-              <span><button class="nmb" onClick="{{r.openDrop}}">{{r.drop}}</button> <span class="quiet">{{r.dropPos}}</span></span>
-              <b class="num" style="color: {{r.c}}">{{r.gain}} <span class="quiet">{{r.sp}}</span></b>
-              <span class="quiet">{{r.effect}}</span>
-              <button class="cbtn" onClick="{{r.tryIt}}">Try in a simulation</button>
-            </div>
-          </sc-for>
-          <span class="quiet" style="font-size: 13px">Gain is the change in your starters' total Expected PPG. Claims are not guaranteed.</span>
+        <div class="card pk">
+          <div class="pkh"><span class="kick" style="color: var(--mo)">▲ Best pickups</span><span class="quiet">{{pk.verdict}}</span></div>
+          <div class="pkg">
+            <sc-for list="{{pk.groups}}" as="g" hint-placeholder-count="2">
+              <div class="pkc">
+                <div class="pkd"><span class="quiet">Drop</span> <button class="nmb" onClick="{{g.open}}">{{g.drop}}</button> <span class="quiet">{{g.pos}} · best adds</span></div>
+                <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="3">
+                  <div class="pkr"><span class="av pka" style="background: {{r.tc}}">{{r.ini}}</span><span class="pkn"><button class="nmb" onClick="{{r.open}}">{{r.name}}</button><small class="quiet">{{r.pos}} · {{r.effect}}</small></span><b class="num pkgn" style="color: {{r.c}}">{{r.gain}}<small class="quiet"> {{r.sp}}</small></b><button class="pkt" onClick="{{r.tryIt}}" title="Try in a simulation" aria-label="{{r.tryLabel}}">Try</button></div>
+                </sc-for>
+                <sc-if value="{{g.hasMore}}" hint-placeholder-val="{{ false }}"><button class="pkm" onClick="{{g.more}}">{{g.moreText}}</button></sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div class="pkf"><sc-if value="{{pk.hasDepth}}" hint-placeholder-val="{{ true }}"><button class="pkm" onClick="{{pk.toggleDepth}}">{{pk.depthLabel}}</button></sc-if><sc-if value="{{pk.depthOn}}" hint-placeholder-val="{{ false }}"><span class="quiet">{{pk.depthText}}</span></sc-if><span class="quiet">Gain is the weekly change in your starters' Expected PPG; ± is its weekly spread. Claims are not guaranteed.</span></div>
         </div>
         <div class="depth">
           <sc-for list="{{depth}}" as="c" hint-placeholder-count="6">
@@ -1569,7 +1587,19 @@ class Component extends DCLogic {
       myIds2.forEach(function (did) { var lu2 = self.lineupOf(myIds2.filter(function (x) { return x !== did; }).concat([fa.id])), t2 = luTotal(lu2), gain = t2.tot - baseT.tot; if (!best || gain > best.gain) best = { did: did, gain: gain, lu: lu2, t: t2 }; });
       var moved = best.t.ids.filter(function (id) { return baseT.ids.indexOf(id) < 0; }).concat(baseT.ids.filter(function (id) { return best.t.ids.indexOf(id) < 0; })), sp2 = Math.sqrt(moved.reduce(function (a, id) { return a + P[id].nr.sp * P[id].nr.sp; }, 0)), sk = slotKey(best.lu, fa.id);
       return { fa: fa, best: best, sp2: sp2, sk: sk };
-    }).sort(function (a, b) { return b.best.gain - a.best.gain; }).slice(0, 5).map(function (x) { var d0 = P[x.best.did]; return { add: x.fa.name, addPos: x.fa.pos, drop: d0.name, dropPos: d0.pos, gain: (x.best.gain >= 0 ? '+' : '−') + Math.abs(x.best.gain).toFixed(1), sp: x.sp2 ? '± ' + x.sp2.toFixed(1) : '', c: x.best.gain > 0.05 ? 'var(--fa)' : x.best.gain < -0.05 ? 'var(--bad)' : 'var(--mu)', effect: x.sk ? 'Starts at ' + x.sk : 'Bench depth only', openAdd: openP(x.fa.id), openDrop: openP(d0.id), tryIt: function () { newSim({ name: 'Add ' + x.fa.name.split(' ').slice(-1)[0], add: [x.fa.id], drop: [d0.id], sent: {} }); self.say('Simulation created with this pickup', 'success'); } }; });
+    }).sort(function (a, b) { return b.best.gain - a.best.gain; });
+    var pkRow = function (x) { var g0 = x.best.gain, d0 = P[x.best.did]; return { name: x.fa.name, pos: x.fa.pos, tc: x.fa.tc, ini: self.ini(x.fa.name), open: openP(x.fa.id), gain: (g0 >= 0 ? '+' : '−') + Math.abs(g0).toFixed(1), sp: x.sp2 ? '± ' + x.sp2.toFixed(1) : '', c: g0 >= 0.5 ? 'var(--fa)' : g0 <= -0.05 ? 'var(--bad)' : 'var(--mu)', effect: x.sk ? 'starts ' + x.sk : 'bench', tryLabel: 'Try adding ' + x.fa.name + ' for ' + d0.name + ' in a simulation', tryIt: function () { newSim({ name: 'Add ' + x.fa.name.split(' ').slice(-1)[0], add: [x.fa.id], drop: [d0.id], sent: {} }); self.say('Simulation created with this pickup', 'success'); } }; };
+    var pkStart = pickups.filter(function (x) { return x.sk && x.best.gain > 0.05; }), pkDepth = pickups.filter(function (x) { return !(x.sk && x.best.gain > 0.05); }), pkBy = {}, pkOrder = [];
+    pkStart.forEach(function (x) { var k = x.best.did; if (!pkBy[k]) { pkBy[k] = []; pkOrder.push(k); } pkBy[k].push(x); });
+    var pkTop = pkStart[0];
+    var pk = {
+      verdict: !pkTop ? 'No available player would start for you this week.' : pkTop.best.gain < 0.5 ? 'Nothing on waivers moves your lineup much. Best: ' + pkTop.fa.name + ' +' + pkTop.best.gain.toFixed(1) + ' a week, well inside the ±' + pkTop.sp2.toFixed(1) + ' weekly swing.' : 'Best: add ' + pkTop.fa.name + ' for ' + P[pkTop.best.did].name + ', +' + pkTop.best.gain.toFixed(1) + ' a week.',
+      groups: pkOrder.slice(0, 4).map(function (k) { var all = pkBy[k], open = s.pkMore === k, d0 = P[k]; return { drop: d0.name, pos: d0.pos, open: openP(k), rows: (open ? all : all.slice(0, 3)).map(pkRow), hasMore: all.length > 3, moreText: open ? 'Show fewer' : 'Show ' + (all.length - 3) + ' more', more: function () { self.fb('tap'); self.setState({ pkMore: open ? null : k }); } }; }),
+      hasDepth: pkDepth.length > 0, depthOn: !!s.pkDepth,
+      depthLabel: (s.pkDepth ? 'Hide ' : 'Show ') + pkDepth.length + ' depth-only ' + (pkDepth.length === 1 ? 'add' : 'adds'),
+      depthText: 'No lineup change: ' + pkDepth.slice(0, 8).map(function (x) { return x.fa.name + ' (' + x.fa.pos + ')'; }).join(', ') + (pkDepth.length > 8 ? ' and ' + (pkDepth.length - 8) + ' more' : '') + '.',
+      toggleDepth: function () { self.fb('tap'); self.setState({ pkDepth: !self.state.pkDepth }); }
+    };
     var prevOf = function (p0) {
       var last = -1; p0.wk.forEach(function (v, i) { if (v != null) last = i; });
       var wk2 = p0.wk.map(function (v, i) { return i === last ? null : v; }), opp2 = p0.opp.map(function (v, i) { return i === last ? null : v; }), pts = wk2.filter(function (v) { return v != null; }), g = pts.length, act = self.mean(pts), rec = self.mean(pts.slice(-3)), ear = self.mean(pts.slice(0, -3)), w = g / (g + 4), op = opp2.filter(function (v) { return v != null; });
@@ -1662,7 +1692,7 @@ class Component extends DCLogic {
         var rows = a.slots.map(function (sa, i) { var sb = b.slots[i], pa = sa.id ? P[sa.id] : null, pb = sb.id ? P[sb.id] : null, same = (pa && pb && pa.id === pb.id) || (!pa && !pb); if (!same) diff++; var m0 = pb ? self.matchup(pb, 10) : null, c0 = self.muTone(m0 ? m0.tone : 'none'); return { slot: sa.key, season: pa ? pa.name : 'Unfilled', seasonV: pa ? self.f1(pa.expected) : '', week: pb ? pb.name : 'Unfilled', weekV: pb ? self.f1(pb.week10) : '', swap: same ? '' : '  ◆ differs', cls: same ? '' : 'wl-diff', mu: m0 ? (m0.bye ? 'Bye' : 'vs ' + m0.opp) : '', bg: c0[0], fg: c0[1], text: m0 ? m0.text : '' }; });
         return { rows: rows, note: diff ? 'The two views disagree on ' + diff + (diff === 1 ? ' slot' : ' slots') + ' this week. Season view ranks by Expected PPG; matchup view ranks by ESPN’s projection for this week, which includes the opponent. Neither changes your ESPN lineup.' : 'Both views pick the same starters this week.' };
       })(),
-      listKey: listKey, odds: odds, power: power, pickups: pickups, digest: digest, co: co, tCounter: s.ttab === 'counter',
+      listKey: listKey, odds: odds, power: power, pk: pk, digest: digest, co: co, tCounter: s.ttab === 'counter',
       tr: tr, ttabs: ttabs, tManual: s.ttab === 'manual', tFind: s.ttab === 'find', tChain: s.ttab === 'chain', lb: lb, fd: fd, ch: ch,
       goLeague: go('league'), isLeague: s.screen === 'league', league: league,
       cellOpen: !!s.cell, cell: cell, closeCell: function () { self.fb('tap'); self.setState({ cell: null }); },

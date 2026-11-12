@@ -11,6 +11,7 @@ import type { Model } from "../../domain/valuation";
 import { useKeyboardReference } from "./KeyboardReference";
 import { SimulationIssuePopover } from "./SimulationIssuePopover";
 import { usePopovers } from "../../ui/popover/PopoverStack";
+import { useOpenPlayer } from "./PlayerCard";
 import { Segmented } from "../../ui/primitives";
 import {
   animationPrefs,
@@ -35,6 +36,7 @@ export interface FeelValues {
 
 // Search any player by name; results come from the domain search and open the player's evaluation.
 function PlayerSearch({ model }: { model: Model | null }) {
+  const openPlayer = useOpenPlayer();
   const [query, setQuery] = useState(""),
     [active, setActive] = useState(0),
     [open, setOpen] = useState(false),
@@ -48,7 +50,7 @@ function PlayerSearch({ model }: { model: Model | null }) {
     if (!hit) return;
     setOpen(false);
     setQuery("");
-    location.hash = `#/player/${hit.id}`;
+    openPlayer(hit.id);
   }
   return (
     <div className="gd-search">

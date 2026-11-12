@@ -236,10 +236,10 @@ function ManualAnalyzer({
       : null;
   const slots = moves ? (phase === "before" ? moves.before : moves.after) : [];
   const forceErrors = scenarioTradeErrors(m, draft);
-  const sendPlayer = draft.give[0] ? m.byId.get(draft.give[0]) : undefined;
-  const receivePlayer = draft.get[0] ? m.byId.get(draft.get[0]) : undefined;
-  const sendColors = sendPlayer ? teamColors(sendPlayer.nfl) : undefined;
-  const receiveColors = receivePlayer ? teamColors(receivePlayer.nfl) : undefined;
+  const analyzedPlayerIds = useMemo(
+    () => [...draft.give, ...draft.get],
+    [draft.give, draft.get],
+  );
 
   const giveAdd = useMemo(
     () =>
@@ -304,7 +304,7 @@ function ManualAnalyzer({
             className="side gd-side gd-side-send"
             role="group"
             aria-label="Players you send"
-            style={{ background: sendColors?.background ?? "#3B2F8F" }}
+            style={{ background: "#3B2F8F" }}
           >
             <span className="kick" style={{ color: "rgba(255, 255, 255, 0.8)", fontSize: "13px", fontWeight: 700, textTransform: "uppercase" }}>
               YOU SEND
@@ -314,14 +314,65 @@ function ManualAnalyzer({
               const p = m.byId.get(id);
               if (!p) return null;
               const pColors = teamColors(p.nfl);
+              const eppgText = p.blendedExpected !== null ? p.blendedExpected.toFixed(1) : "—";
+              const surplusText = p.index !== null ? Math.round(p.index) : "—";
               return (
                 <div key={id} className="tp">
-                  <span className="lab" style={{ background: pColors.background, color: "#fff", padding: "2px 8px", borderRadius: "6px", fontWeight: 700, fontSize: "12px" }}>
+                  <button
+                    type="button"
+                    onClick={() => openPlayer(p.id, analyzedPlayerIds)}
+                    style={{
+                      background: "none",
+                      border: 0,
+                      padding: 0,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      borderRadius: "50%",
+                      flexShrink: 0,
+                    }}
+                    aria-label={`View ${p.name}'s card`}
+                  >
+                    <PlayerPhoto player={p} size={32} />
+                  </button>
+                  <span
+                    className="lab"
+                    style={{
+                      background: pColors.background,
+                      color: "#fff",
+                      padding: "2px 8px",
+                      borderRadius: "6px",
+                      fontWeight: 700,
+                      fontSize: "12px",
+                      flexShrink: 0,
+                    }}
+                  >
                     {p.nfl}
                   </span>
-                  <button type="button" className="nm" onClick={() => openPlayer(p.id)}>
+                  <button
+                    type="button"
+                    className="nm"
+                    onClick={() => openPlayer(p.id, analyzedPlayerIds)}
+                  >
                     {p.name}
                   </button>
+                  <span
+                    className="metric"
+                    style={{
+                      marginLeft: "auto",
+                      fontWeight: 700,
+                      fontSize: "15px",
+                      color: "#fff",
+                      display: "inline-flex",
+                      alignItems: "baseline",
+                      gap: "2px",
+                      flexShrink: 0,
+                    }}
+                    title={`Expected PPG ${eppgText} / Surplus index ${surplusText}`}
+                  >
+                    <span>{eppgText}</span>
+                    <span style={{ opacity: 0.6 }}>/</span>
+                    <span style={{ color: "#FFD60A" }}>{surplusText}</span>
+                  </span>
                   <button
                     type="button"
                     className="x"
@@ -393,7 +444,7 @@ function ManualAnalyzer({
                   <i
                     style={{
                       width: `${r.sendPct ?? 0}%`,
-                      background: sendColors?.background ?? "#3B2F8F",
+                      background: "#3B2F8F",
                     }}
                   />
                 </div>
@@ -401,7 +452,7 @@ function ManualAnalyzer({
                   <i
                     style={{
                       width: `${r.receivePct ?? 0}%`,
-                      background: receiveColors?.background ?? "#8C2F39",
+                      background: "#8C2F39",
                     }}
                   />
                 </div>
@@ -420,7 +471,7 @@ function ManualAnalyzer({
         <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: 0 }}>
           <section
             className="side gd-side gd-side-receive"
-            style={{ background: receiveColors?.background ?? "#8C2F39" }}
+            style={{ background: "#8C2F39" }}
           >
             <select
               className="visually-hidden"
@@ -466,14 +517,65 @@ function ManualAnalyzer({
               const p = m.byId.get(id);
               if (!p) return null;
               const pColors = teamColors(p.nfl);
+              const eppgText = p.blendedExpected !== null ? p.blendedExpected.toFixed(1) : "—";
+              const surplusText = p.index !== null ? Math.round(p.index) : "—";
               return (
                 <div key={id} className="tp">
-                  <span className="lab" style={{ background: pColors.background, color: "#fff", padding: "2px 8px", borderRadius: "6px", fontWeight: 700, fontSize: "12px" }}>
+                  <button
+                    type="button"
+                    onClick={() => openPlayer(p.id, analyzedPlayerIds)}
+                    style={{
+                      background: "none",
+                      border: 0,
+                      padding: 0,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      borderRadius: "50%",
+                      flexShrink: 0,
+                    }}
+                    aria-label={`View ${p.name}'s card`}
+                  >
+                    <PlayerPhoto player={p} size={32} />
+                  </button>
+                  <span
+                    className="lab"
+                    style={{
+                      background: pColors.background,
+                      color: "#fff",
+                      padding: "2px 8px",
+                      borderRadius: "6px",
+                      fontWeight: 700,
+                      fontSize: "12px",
+                      flexShrink: 0,
+                    }}
+                  >
                     {p.nfl}
                   </span>
-                  <button type="button" className="nm" onClick={() => openPlayer(p.id)}>
+                  <button
+                    type="button"
+                    className="nm"
+                    onClick={() => openPlayer(p.id, analyzedPlayerIds)}
+                  >
                     {p.name}
                   </button>
+                  <span
+                    className="metric"
+                    style={{
+                      marginLeft: "auto",
+                      fontWeight: 700,
+                      fontSize: "15px",
+                      color: "#fff",
+                      display: "inline-flex",
+                      alignItems: "baseline",
+                      gap: "2px",
+                      flexShrink: 0,
+                    }}
+                    title={`Expected PPG ${eppgText} / Surplus index ${surplusText}`}
+                  >
+                    <span>{eppgText}</span>
+                    <span style={{ opacity: 0.6 }}>/</span>
+                    <span style={{ color: "#FFD60A" }}>{surplusText}</span>
+                  </span>
                   <button
                     type="button"
                     className="x"
@@ -659,7 +761,7 @@ function ManualAnalyzer({
                 onClick={() => {
                   if (p) {
                     notify("select");
-                    openPlayer(p.id);
+                    openPlayer(p.id, analyzedPlayerIds);
                   }
                 }}
               >
