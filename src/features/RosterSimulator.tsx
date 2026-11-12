@@ -4,6 +4,7 @@ import type { Model } from "../domain/valuation";
 import {
   activeRosterScenario,
   appendScenarioMove,
+  isReservedSimulationName,
   readRosterScenarios,
   writeRosterScenarios,
   rosterScenariosKey,
@@ -23,8 +24,9 @@ import {
   starterLineupsKey,
   type StarterAssignments,
 } from "../domain/starter-lineups";
-import { Panel, TeamsOptions } from "../ui/layout";
+import { TeamsOptions } from "../ui/layout";
 import { Metric, fmt, signed } from "../ui/components";
+import { PlayerPhoto } from "../ui/PlayerPhoto";
 import { StarterLineupEditor } from "./StarterLineupEditor";
 import { ScenarioLineupBoards } from "./ScenarioLineupBoards";
 
@@ -232,12 +234,14 @@ export function RosterSimulator({
   // Show the consequence of cuts/pickups themselves, independently of a subsequent trade draft.
   const impact = current ? scenarioTeamImpact(real, model, team) : null;
   return (
-    <Panel
-      title="Hypothetical roster simulator"
-      note="Analysis only. Add anyone in the league, plan cuts/transfers and compare expected scoring; live rosters and player indices stay separate."
-    >
+    <section className="gd-sim" aria-label="Hypothetical roster simulator">
+      <h2>Hypothetical roster simulator</h2>
+      <p className="gd-muted">
+        Analysis only. Add anyone in the league, plan cuts/transfers and compare
+        expected scoring; live rosters and player indices stay separate.
+      </p>
       {read.issue && (
-        <p className="notice danger">
+        <p className="notice danger gd-notice">
           {read.issue}
           <button className="subtle" onClick={() => change("")}>
             Clear unreadable simulations
@@ -245,11 +249,57 @@ export function RosterSimulator({
         </p>
       )}
       {message && (
-        <p role="alert" className="notice danger">
+        <p role="alert" className="notice danger gd-notice">
           {message}
         </p>
       )}
-      <div className="toolbar">
+
+      {/* Segmented simulation chips: Live roster and each saved scenario */}
+      <div
+        className="gd-sim-chips"
+        aria-label="Roster simulations"
+      >
+        <button
+          type="button"
+          aria-pressed={!collection.active}
+          className={`gd-sim-chip ${!collection.active ? "active" : ""}`}
+          onClick={() => {
+            setName("");
+            persist({ ...collection, active: "" });
+          }}
+        >
+          Live roster
+        </button>
+        {collection.scenarios.map((s) => {
+          const isCurrent = collection.active === s.id;
+          const isDirty = rosterScenarioDirty(
+            savedRaw,
+            state.filters[rosterScenariosKey],
+            s.id,
+          );
+          return (
+            <button
+              key={s.id}
+              type="button"
+              aria-pressed={isCurrent}
+              className={`gd-sim-chip ${isCurrent ? "active" : ""}`}
+              onClick={() => {
+                setName(s.name);
+                persist({ ...collection, active: s.id });
+              }}
+            >
+              <span>{s.name}</span>
+              {isDirty && (
+                <span className="gd-sim-dirty-star" title="Unsaved changes">
+                  *
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="toolbar gd-sim-toolbar">
         <label className="control">
           <span>Simulation</span>
           <select
@@ -271,11 +321,20 @@ export function RosterSimulator({
         <label className="control">
           <span>Simulation name</span>
           <input
+            aria-label="Simulation name"
             value={name}
             onChange={(e) => {
-              setName(e.target.value);
-              if (current && e.target.value.trim())
-                update({ ...current, name: e.target.value });
+              const val = e.target.value;
+              setName(val);
+              if (isReservedSimulationName(val)) {
+                setMessage(
+                  "‘Live’ and ‘Live roster’ are reserved for the real roster. Choose another name for your simulation.",
+                );
+                return;
+              }
+              setMessage("");
+              if (current && val.trim())
+                update({ ...current, name: val });
             }}
             maxLength={120}
             placeholder={current?.name ?? "Name your next moves"}
@@ -285,6 +344,12 @@ export function RosterSimulator({
           className="button primary"
           disabled={!!read.issue}
           onClick={() => {
+            if (isReservedSimulationName(name)) {
+              setMessage(
+                "‘Live’ and ‘Live roster’ are reserved for the real roster. Choose another name for your simulation.",
+              );
+              return;
+            }
             const scenario: RosterScenario = {
               id: crypto.randomUUID(),
               name: name.trim() || "New roster scenario",
@@ -302,20 +367,19 @@ export function RosterSimulator({
               scenarios: [...collection.scenarios, scenario],
             });
             setName("");
+            setMessage("");
             setViewTeam(state.preferredTeam);
           }}
         >
           New simulation
         </button>
         {current && (
-          <>
-            <button
-              className="subtle"
-              onClick={() => deleteScenario(current.id)}
-            >
-              Delete simulation
-            </button>
-          </>
+          <button
+            className="subtle"
+            onClick={() => deleteScenario(current.id)}
+          >
+            Delete simulation
+          </button>
         )}
       </div>
       {current && (
@@ -482,6 +546,12 @@ export function RosterSimulator({
                           if (!name.trim()) {
                             setMessage(
                               "Enter a simulation name before saving.",
+                            );
+                            return;
+                          }
+                          if (isReservedSimulationName(name)) {
+                            setMessage(
+                              "‘Live’ and ‘Live roster’ are reserved for the real roster. Choose another name for your simulation.",
                             );
                             return;
                           }
@@ -687,21 +757,73 @@ export function RosterSimulator({
                 Cut player to available pool
               </button>
             </div>
+            {selected && (
+              <div className="sim-selected-player-preview">
+                <PlayerPhoto player={selected} size={32} />
+                <div className="sim-preview-info">
+                  <strong>{selected.name}</strong>
+                  <small className="gd-muted">
+                    {selected.pos} · {selected.nfl || "FA"} · Owner:{" "}
+                    {selected.owner === "0"
+                      ? "Available"
+                      : String(
+                          real.dataset.tables.ModelTeams.find(
+                            (t) => String(t.TeamID) === selected.owner,
+                          )?.TeamName,
+                        )}
+                  </small>
+                </div>
+                <div className="sim-preview-stats">
+                  <span>
+                    EPPG <b>{fmt(selected.expected)}</b>
+                  </span>
+                </div>
+              </div>
+            )}
           </details>
-          <details>
-            <summary>Move history</summary>
-            <ol>
-              {current.moves.map((action, i) => (
-                <li key={i}>
-                  {i < current.cursor ? "Applied" : "Undone"}:{" "}
-                  {action.kind === "move"
-                    ? `${model.byId.get(action.player)?.name ?? action.player} → ${action.to === "0" ? "Available / cut" : String(real.dataset.tables.ModelTeams.find((t) => String(t.TeamID) === action.to)?.TeamName)}`
-                    : action.kind === "trade"
-                      ? `Trade: ${action.give.map((id) => model.byId.get(id)?.name ?? id).join(" + ")} → ${String(real.dataset.tables.ModelTeams.find((t) => String(t.TeamID) === action.teamB)?.TeamName)}; ${action.get.map((id) => model.byId.get(id)?.name ?? id).join(" + ")} → ${String(real.dataset.tables.ModelTeams.find((t) => String(t.TeamID) === action.teamA)?.TeamName)}`
-                      : `Starter plan for ${String(real.dataset.tables.ModelTeams.find((t) => String(t.TeamID) === action.team)?.TeamName)}`}
-                </li>
-              ))}
-            </ol>
+          <details className="sim-advanced">
+            <summary>Move history ({current.moves.length})</summary>
+            {current.moves.length === 0 ? (
+              <p className="gd-muted">
+                No moves recorded yet in this simulation.
+              </p>
+            ) : (
+              <ol className="gd-move-history">
+                {current.moves.map((action, i) => {
+                  const isApplied = i < current.cursor;
+                  const canUndoThis = i === current.cursor - 1;
+                  return (
+                    <li
+                      key={i}
+                      className={`gd-move-item ${isApplied ? "applied" : "undone"}`}
+                    >
+                      <span className="gd-move-status">
+                        {isApplied ? "Applied" : "Undone"}:
+                      </span>{" "}
+                      <span className="gd-move-desc">
+                        {action.kind === "move"
+                          ? `${model.byId.get(action.player)?.name ?? action.player} → ${action.to === "0" ? "Available / cut" : String(real.dataset.tables.ModelTeams.find((t) => String(t.TeamID) === action.to)?.TeamName)}`
+                          : action.kind === "trade"
+                            ? `Trade: ${action.give.map((id) => model.byId.get(id)?.name ?? id).join(" + ")} → ${String(real.dataset.tables.ModelTeams.find((t) => String(t.TeamID) === action.teamB)?.TeamName)}; ${action.get.map((id) => model.byId.get(id)?.name ?? id).join(" + ")} → ${String(real.dataset.tables.ModelTeams.find((t) => String(t.TeamID) === action.teamA)?.TeamName)}`
+                            : `Starter plan for ${String(real.dataset.tables.ModelTeams.find((t) => String(t.TeamID) === action.team)?.TeamName)}`}
+                      </span>
+                      {canUndoThis && (
+                        <button
+                          type="button"
+                          className="subtle gd-move-undo"
+                          onClick={() =>
+                            update({ ...current, cursor: current.cursor - 1 })
+                          }
+                          aria-label={`Undo move ${i + 1}`}
+                        >
+                          Undo
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
           </details>
           <p>
             Hypothetical scoring optimizes each week with byes and temporary
@@ -733,6 +855,6 @@ export function RosterSimulator({
           </details>
         </>
       )}
-    </Panel>
+    </section>
   );
 }

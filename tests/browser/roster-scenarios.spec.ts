@@ -1,4 +1,4 @@
-import { openTradeDetails, openTradeFilters, openLegacyTrades } from "./trade-workspace-helpers";
+import { openTradeFilters } from "./trade-workspace-helpers";
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import {
@@ -95,6 +95,25 @@ async function seed(page: Page, flexBye = false, temporary = false) {
     }),
   ).toBeVisible();
   return dataset;
+}
+
+// The players a Manual analyzer user can send from their own team, matched by name.
+const sendable = (page: Page, name: string) =>
+  page
+    .getByRole("group", { name: "Players you send" })
+    .getByRole("button", { name: new RegExp(name) });
+
+// The players a Manual analyzer user can receive from the partner team, matched by name.
+const receivable = (page: Page, name: string) =>
+  page
+    .getByRole("group", { name: "Players you receive" })
+    .getByRole("button", { name: new RegExp(name) });
+
+// Open Find trades with every filter group expanded; the package chosen in the Manual analyzer is kept.
+async function openFind(page: Page) {
+  await page.goto("./#/trade");
+  await page.getByRole("tab", { name: "Find trades", exact: true }).click();
+  await openTradeFilters(page);
 }
 
 // Wait on durable account state rather than using fixed sleeps before a reload or navigation.
@@ -196,10 +215,10 @@ test("My team stays selected and hypothetical moves are independent, durable and
   page,
 }) => {
   const dataset = await seed(page);
-  await page.goto("./#/teams");
-  await page
-    .getByRole("combobox", { name: "Team", exact: true })
-    .selectOption("2");
+  await page.goto("./#/league");
+  await page.getByRole("button", { name: "Test B full roster" }).click();
+  // The roster popover stays open across navigation, so close it before leaving.
+  await page.keyboard.press("Escape");
   // The My team selector lives in Lab Settings.
   await page.goto("./#/lab");
   await expect(page.getByLabel("My team", { exact: true })).toHaveValue("1");
@@ -248,7 +267,7 @@ test("My team stays selected and hypothetical moves are independent, durable and
   expect((await stored(page)).dataset).toEqual(dataset);
   await page.reload();
   await expect(
-    page.getByText("Hypothetical: Plan A", { exact: true }).first(),
+    page.getByText("Simulation: Plan A", { exact: true }).first(),
   ).toBeVisible();
   // A saved hypothetical remains active after reload without permanent routine warnings or a forced live-roster switch.
   await expect(
@@ -265,14 +284,8 @@ test("My team stays selected and hypothetical moves are independent, durable and
   ).toHaveCount(0);
   await page.goto("./#/lab");
   await expect(page.getByLabel("My team", { exact: true })).toHaveValue("1");
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
-  await expect(
-    page
-      .getByLabel("Outgoing player 1", { exact: true })
-      .locator('option[value="200"]'),
-  ).toHaveCount(1);
+  await page.goto("./#/trade");
+  await expect(sendable(page, "Incoming QB")).toHaveCount(1);
   // Switching back is an explicit My team selection, never a prompt on another screen.
   await expect(
     page.getByRole("button", { name: "Return to live roster", exact: true }),
@@ -280,16 +293,10 @@ test("My team stays selected and hypothetical moves are independent, durable and
   await page.goto("./#/roster");
   await page.getByLabel("Roster simulation", { exact: true }).selectOption("");
   await expect(
-    page.getByText("Hypothetical: Plan A", { exact: true }),
+    page.getByText("Simulation: Plan A", { exact: true }),
   ).toHaveCount(0);
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
-  await expect(
-    page
-      .getByLabel("Outgoing player 1", { exact: true })
-      .locator('option[value="200"]'),
-  ).toHaveCount(0);
+  await page.goto("./#/trade");
+  await expect(sendable(page, "Incoming QB")).toHaveCount(0);
   // Explicit My team changes survive reload and keep the analyzer's outgoing team aligned.
   await page.goto("./#/lab");
   await page.getByLabel("My team", { exact: true }).selectOption("2");
@@ -374,19 +381,23 @@ test("saved hypothetical trades restore their own recipe and debug exports conta
   await page
     .getByRole("button", { name: "Move player to selected team", exact: true })
     .click();
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
+  await page.goto("./#/trade");
   await page
-    .getByLabel("Outgoing player 1", { exact: true })
-    .selectOption("102");
+    .getByRole("combobox", { name: "Trade partner" })
+    .selectOption("2");
+  await sendable(page, "Synthetic 102").click();
+  await page
+    .getByRole("group", { name: "Players you receive" })
+    .getByRole("button")
+    .first()
+    .click();
   const save = page.getByRole("button", {
     name: "Save current trade",
     exact: true,
   });
   await expect(save).toBeEnabled();
   await save.click();
-  await expect(save).toContainText("Saved");
+  await expect(page.getByText(/^Trade saved\./)).toBeVisible();
   await expect
     .poll(
       async () =>
@@ -396,19 +407,21 @@ test("saved hypothetical trades restore their own recipe and debug exports conta
     .toBe(1);
   await page.goto("./#/roster");
   await page.getByRole("button", { name: "Undo move", exact: true }).click();
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
-  const savedPanel = page.locator("section").filter({
-    has: page.getByRole("heading", { name: "Saved trades", exact: true }),
-  });
-  await savedPanel.locator("summary").click();
+  await page.goto("./#/trade");
+  const savedPanel = page.locator("details.trade-saved-drawer");
+  if ((await savedPanel.getAttribute("open")) === null)
+    await savedPanel.locator(":scope > summary").click();
+  // Each saved trade is its own disclosure inside the drawer.
+  await savedPanel.locator("details > summary").first().click();
   await savedPanel
     .getByRole("button", { name: "Load saved trade", exact: true })
     .click();
-  await expect(
-    page.getByLabel("Outgoing player 1", { exact: true }),
-  ).toHaveValue("102");
+  await expect(sendable(page, "Synthetic 102")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByRole("tab", { name: "Find trades", exact: true }).click();
+  await openTradeFilters(page);
   const search = page.locator("section").filter({
     has: page.getByRole("heading", {
       name: "Find matching trades",
@@ -425,7 +438,9 @@ test("saved hypothetical trades restore their own recipe and debug exports conta
     })
     .uncheck();
   // The index window defaults to Off, so no price range needs widening.
-  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await search
+    .getByRole("button", { name: "Run standard trade search" })
+    .click();
   await expect(
     search.getByRole("button", { name: "Cancel", exact: true }),
   ).toHaveCount(0);
@@ -605,12 +620,12 @@ test("hypothetical search ignores byes and returning to live restores scheduled 
   await page
     .getByRole("button", { name: "New simulation", exact: true })
     .click();
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
-  await page
-    .getByLabel("Outgoing player 1", { exact: true })
-    .selectOption("401");
+  // Pick the outgoing player in the Manual analyzer; Find trades searches from that package.
+  await page.goto("./#/trade");
+  // The seeded draft already sends Bench QB; swap it for the Bye RB.
+  await sendable(page, "Bench QB").click();
+  await sendable(page, "Bye RB").click();
+  await openFind(page);
   const search = page
     .locator("section")
     .filter({
@@ -624,7 +639,9 @@ test("hypothetical search ignores byes and returning to live restores scheduled 
       .getByLabel("Search goal", { exact: true })
       .selectOption("custom");
     await search.getByLabel("Create package", { exact: true }).uncheck();
-    await search.getByRole("button", { name: "Search", exact: true }).click();
+    await search
+      .getByRole("button", { name: "Run standard trade search" })
+      .click();
     await openSearchTeams(search);
     const row = search
       .locator("tbody tr")
@@ -640,9 +657,7 @@ test("hypothetical search ignores byes and returning to live restores scheduled 
   await expect(hypothetical.locator("td").nth(3)).toHaveText(/\+20\.00/);
   await page.goto("./#/roster");
   await page.getByLabel("Roster simulation", { exact: true }).selectOption("");
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
+  await openFind(page);
   const live = await run();
   await expect(live.locator("td").nth(2)).toHaveText(/[-−]7\.92/);
   await expect(search.getByText(/Hypothetical: byes ignored/)).toHaveCount(0);
@@ -653,47 +668,25 @@ test("forced trades update both simulated rosters and later searches and undo to
   page,
 }) => {
   const dataset = await seed(page);
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
+  await page.goto("./#/trade");
   const apply = page.getByRole("button", {
-    name: "Apply trade to hypothetical roster",
+    name: "Force this trade into a hypothetical roster",
     exact: true,
   });
   await expect(apply).toBeEnabled();
   await apply.click();
+  // The header chip names the simulation the forced trade created.
   await expect(
-    page
-      .getByRole("status")
-      .filter({
-        hasText: "Applied hypothetical trade: Bench QB ↔ Incoming QB",
-      }),
+    page.getByRole("button", { name: "Simulation: Forced trade scenario" }),
   ).toBeVisible();
-  await expect(
-    page.getByLabel("Outgoing player 1", { exact: true }),
-  ).toHaveValue("");
-  await expect(
-    page
-      .getByLabel("Outgoing player 1", { exact: true })
-      .locator('option[value="200"]'),
-  ).toHaveCount(1);
-  await expect(
-    page
-      .getByLabel("Outgoing player 1", { exact: true })
-      .locator('option[value="101"]'),
-  ).toHaveCount(0);
-  await expect(
-    page
-      .getByLabel("Incoming player 1", { exact: true })
-      .locator('option[value="101"]'),
-  ).toHaveCount(1);
+  // Both simulated rosters now hold the swapped players.
+  await expect(sendable(page, "Incoming QB")).toHaveCount(1);
+  await expect(sendable(page, "Bench QB")).toHaveCount(0);
+  await expect(receivable(page, "Bench QB")).toHaveCount(1);
   await page.goto("./#/roster");
   await page
     .getByRole("button", { name: "Save to slot 1", exact: true })
     .click();
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
   await expect
     .poll(async () => {
       const w = await stored(page);
@@ -705,16 +698,14 @@ test("forced trades update both simulated rosters and later searches and undo to
     .toBe("trade");
   expect((await stored(page)).dataset).toEqual(dataset);
   await page.reload();
-  await openTradeDetails(page);
+  await page.goto("./#/trade");
+  await expect(sendable(page, "Incoming QB")).toHaveCount(1);
+  if (
+    (await sendable(page, "Incoming QB").getAttribute("aria-pressed")) !== "true"
+  )
+    await sendable(page, "Incoming QB").click();
+  await page.getByRole("tab", { name: "Find trades", exact: true }).click();
   await openTradeFilters(page);
-  await expect(
-    page
-      .getByLabel("Outgoing player 1", { exact: true })
-      .locator('option[value="200"]'),
-  ).toHaveCount(1);
-  await page
-    .getByLabel("Outgoing player 1", { exact: true })
-    .selectOption("200");
   const search = page
     .locator("section")
     .filter({
@@ -730,7 +721,9 @@ test("forced trades update both simulated rosters and later searches and undo to
   await search
     .getByRole("combobox", { name: "Required incoming player", exact: true })
     .selectOption("101");
-  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await search
+    .getByRole("button", { name: "Run standard trade search" })
+    .click();
   await openSearchTeams(search);
   const row = search
     .locator("tbody tr")
@@ -749,19 +742,11 @@ test("forced trades update both simulated rosters and later searches and undo to
     JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0]
       .cursor,
   ).toBe(1);
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
-  await expect(
-    page
-      .getByLabel("Outgoing player 1", { exact: true })
-      .locator('option[value="101"]'),
-  ).toHaveCount(1);
-  await expect(
-    page
-      .getByLabel("Incoming player 1", { exact: true })
-      .locator('option[value="200"]'),
-  ).toHaveCount(1);
+  await page.goto("./#/trade");
+  // The room reopens on the tab used last, which was Find trades.
+  await page.getByRole("tab", { name: "Manual analyzer", exact: true }).click();
+  await expect(sendable(page, "Bench QB")).toHaveCount(1);
+  await expect(receivable(page, "Incoming QB")).toHaveCount(1);
   await page.goto("./#/roster");
   await page.getByRole("button", { name: "Redo move", exact: true }).click();
   await expect
@@ -821,31 +806,24 @@ test("hypothetical cards, overview, analyzer and search share temporary-injury t
     qb.getByRole("link", { name: "Incoming QB", exact: true }),
   ).toBeVisible();
   const other = (await after.locator(".sim-score strong").innerText()).trim();
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
+  // The Manual analyzer's "before" averages are the simulated rosters' scores.
+  await page.goto("./#/trade");
   await page
-    .getByRole("combobox", {
-      name: "Evaluate lineup impact using",
-      exact: true,
-    })
-    .selectOption("best-available");
-  const primary = page.locator("section").filter({
-    has: page.getByRole("heading", {
-      name: "Expected team gain per week",
-      exact: true,
-    }),
+    .getByRole("tab", { name: "Manual analyzer", exact: true })
+    .click();
+  const scoreboard = page.getByRole("region", {
+    name: "Trade scoring summary",
   });
-  await expect(
-    primary
-      .locator("p.model")
-      .filter({ hasText: "Your Expected points/week:" }),
-  ).toContainText(`Before ${own}`);
-  await expect(
-    primary
-      .locator("p.model")
-      .filter({ hasText: "Their Expected points/week:" }),
-  ).toContainText(`Before ${other}`);
+  const before = (who: string) =>
+    scoreboard
+      .locator(".trade-score-team")
+      .filter({ hasText: `${who} average Expected PPG` })
+      .locator(".trade-score-values span")
+      .first();
+  await expect(before("Your")).toHaveText(own);
+  await expect(before("Their")).toHaveText(other);
+  await page.getByRole("tab", { name: "Find trades", exact: true }).click();
+  await openTradeFilters(page);
   const search = page.locator("section").filter({
     has: page.getByRole("heading", {
       name: "Find matching trades",
@@ -855,7 +833,9 @@ test("hypothetical cards, overview, analyzer and search share temporary-injury t
   await search
     .getByLabel("Search goal", { exact: true })
     .selectOption("custom");
-  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await search
+    .getByRole("button", { name: "Run standard trade search" })
+    .click();
   await openSearchTeams(search);
   const row = search
     .locator("tbody tr")
@@ -914,24 +894,16 @@ test("roster save slots restore exact working points and require explicit saves"
     JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0]
       .cursor,
   ).toBe(0);
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
-  await expect(
-    page
-      .getByLabel("Outgoing player 1", { exact: true })
-      .locator('option[value="200"]'),
-  ).toHaveCount(1);
-  // An unrelated persisted setting cannot accidentally save the roster draft.
+  await page.goto("./#/trade");
   await page
-    .getByRole("combobox", {
-      name: "Evaluate lineup impact using",
-      exact: true,
-    })
-    .selectOption("marked-starters");
+    .getByRole("tab", { name: "Manual analyzer", exact: true })
+    .click();
+  await expect(sendable(page, "Incoming QB")).toHaveCount(1);
+  // An unrelated persisted setting (the theme) cannot accidentally save the roster draft.
+  await page.getByRole("button", { name: "Switch to dark theme" }).click();
   await expect
-    .poll(async () => (await stored(page)).state.filters.tradeLineupBasis)
-    .toBe("marked-starters");
+    .poll(async () => (await stored(page)).state.filters.feelTheme)
+    .toBe("dark");
   expect(
     JSON.parse((await stored(page)).state.filters.rosterScenarios).scenarios[0]
       .cursor,
@@ -1069,31 +1041,26 @@ test("active save slot auto-saves forced trades, displays deal grade and positio
   await slots.getByRole("tab", { name: /^Slot 4\b/ }).click();
   await expect(slots.getByRole("button", { name: "Save to slot 4", exact: true })).toBeVisible();
 
-  // Navigate to Trade Analyzer
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
+  // Navigate to the Manual analyzer and set up a trade offer: Main QB for Incoming QB.
+  await page.goto("./#/trade");
+  await page.getByRole("tab", { name: "Manual analyzer", exact: true }).click();
+  await sendable(page, "Bench QB").click();
+  await sendable(page, "Main QB").click();
+  await expect(receivable(page, "Incoming QB")).toHaveAttribute("aria-pressed", "true");
 
-  // Set up a trade offer
-  await page.getByLabel("Outgoing player 1", { exact: true }).selectOption("100");
-  await page.getByLabel("Incoming player 1", { exact: true }).selectOption("200");
+  // The surplus verdict states the deal grade.
+  const verdicts = page.getByRole("region", { name: "Verdicts" });
+  await expect(verdicts.locator("details").first()).toContainText("Surplus exchange");
 
-  // Verify the concise surplus deal grade pill in the top sticky score strip
-  const dealPill = page.locator(".trade-deal-pill");
-  await expect(dealPill).toBeVisible();
-  await expect(dealPill).toContainText("Surplus:");
-
-  // Verify positional grade changes row in the lineup impact panel
-  const gradeChips = page.locator(".trade-position-grades");
-  await expect(gradeChips).toBeVisible();
-  await expect(gradeChips.locator(".position-grade-chip").first()).toBeVisible();
+  // Grade-step chips appear under the side whose position grade moves.
+  await expect(page.getByRole("list", { name: /grade/i }).first()).toBeVisible();
 
   // Force the trade to hypothetical roster
-  const applyButton = page.getByRole("button", { name: "Apply trade to hypothetical roster", exact: true });
+  const applyButton = page.getByRole("button", { name: "Force this trade into a hypothetical roster", exact: true });
   await expect(applyButton).toBeEnabled();
   await applyButton.click();
 
-  // Verify toast message specifies Slot 4
+  // The confirmation names Slot 4, the slot that received the trade.
   const tradeToast = page.locator(".trade-toast");
   await expect(tradeToast).toBeVisible();
   await expect(tradeToast).toContainText("Saved to Slot 4");
@@ -1139,10 +1106,6 @@ test("active save slot auto-saves forced trades, displays deal grade and positio
   await expect(slots.getByRole("tab", { name: /^Slot 4\b/ })).toContainText("○");
 
   // Capture verification screenshots
-  await openLegacyTrades(page);
-  await page.screenshot({
-    path: "C:/Users/israe/.gemini/antigravity/brain/2eea40f1-347c-49f2-855d-0f59973c47d2/trade-analyzer-enhancements.png",
-  });
   await page.goto("./#/roster");
   await slots.screenshot({
     path: "C:/Users/israe/.gemini/antigravity/brain/2eea40f1-347c-49f2-855d-0f59973c47d2/active-slot-selection.png",

@@ -18,6 +18,10 @@ const offlineShell = () => ({
       "icon.svg",
       "manifest.webmanifest",
       ...fs.readdirSync("dist/assets").map((n) => `assets/${n}`),
+      // Self-hosted fonts are not part of the hashed bundle, so list them for the offline shell.
+      ...(fs.existsSync("dist/fonts")
+        ? fs.readdirSync("dist/fonts").map((n) => `fonts/${n}`)
+        : []),
     ];
     const version = `fantasy-lab-${Date.now()}`;
     fs.writeFileSync(

@@ -207,6 +207,8 @@ test.describe("phone (390 wide)", () => {
       .click();
     const cells = page.locator(".gd-verdict");
     await expect(cells).toHaveCount(4);
+    // The four rows rise in one after another; measure once they have settled.
+    await page.waitForTimeout(700);
     const bar = await page.locator(".gd-bottombar").boundingBox();
     for (let i = 0; i < 4; i++) {
       const box = await cells.nth(i).boundingBox();

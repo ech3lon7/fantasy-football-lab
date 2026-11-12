@@ -1,3 +1,4 @@
+import { useFeedback } from "./feel/feedback";
 import type { ReactNode } from "react";
 import { barPositions, isEdited, type Range } from "../domain/view/primitives";
 
@@ -26,13 +27,17 @@ export function Pill({
   pressed?: boolean;
   disabled?: boolean;
 }) {
+  const notify = useFeedback();
   return (
     <button
       type="button"
       className="gd-pill"
       aria-pressed={pressed}
       disabled={disabled}
-      onClick={onClick}
+      onClick={() => {
+        notify("select");
+        onClick?.();
+      }}
     >
       {children}
     </button>
@@ -54,6 +59,7 @@ export function Segmented<T extends string>({
   // Optional display text per option; defaults to the capitalised option.
   format?: (option: T) => string;
 }) {
+  const notify = useFeedback();
   return (
     <div className="gd-seg" role="group" aria-label={label}>
       {options.map((option) => (
@@ -61,7 +67,10 @@ export function Segmented<T extends string>({
           key={option}
           type="button"
           aria-pressed={value === option}
-          onClick={() => onChange(option)}
+          onClick={() => {
+            if (value !== option) notify("select");
+            onChange(option);
+          }}
         >
           {format ? format(option) : option[0].toUpperCase() + option.slice(1)}
         </button>

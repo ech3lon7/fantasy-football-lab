@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { createServer, type Server } from "node:http";
+import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import {
@@ -29,6 +30,10 @@ test.beforeAll(async () => {
     assets.set(`${base}assets/${name}`, await readFile(`dist/assets/${name}`));
   for (const name of ["icon.svg", "manifest.webmanifest"])
     assets.set(`${base}${name}`, await readFile(`dist/${name}`));
+  // The offline shell precaches the self-hosted fonts, so the virtual host has to serve them.
+  if (existsSync("dist/fonts"))
+    for (const name of await readdir("dist/fonts"))
+      assets.set(`${base}fonts/${name}`, await readFile(`dist/fonts/${name}`));
   server = createServer(async (request, response) => {
     // Deliberately remove the previous entry on deployment, matching static-host asset replacement.
     const url = new URL(request.url!, "http://localhost");
@@ -89,7 +94,11 @@ self.addEventListener('fetch',e=>{const u=new URL(e.request.url),s=new URL(self.
             ? "text/javascript"
             : url.pathname.endsWith(".svg")
               ? "image/svg+xml"
-              : "application/manifest+json",
+              : url.pathname.endsWith(".woff2")
+                ? "font/woff2"
+                : url.pathname.endsWith(".txt")
+                  ? "text/plain; charset=utf-8"
+                  : "application/manifest+json",
         assets.get(url.pathname)!,
       );
     else if (url.pathname === "/other/sw.js")

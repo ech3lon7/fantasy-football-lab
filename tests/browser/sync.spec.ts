@@ -1,4 +1,4 @@
-import { openLegacyTrades } from "./trade-workspace-helpers";
+import { buildManualOffer } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import {
@@ -191,13 +191,11 @@ test("Sync now retains in-flight edits and the next sync succeeds", async ({
   const started = cloud.pause();
   await page.getByRole("button", { name: "Sync now", exact: true }).click();
   await started;
-  await openLegacyTrades(page);
+  await buildManualOffer(page);
   await page
-    .getByRole("combobox", {
-      name: "Evaluate lineup impact using",
-      exact: true,
-    })
-    .selectOption("marked-starters");
+    .getByRole("group", { name: "Lineup basis" })
+    .getByRole("button", { name: "Marked starters" })
+    .click();
   await expect
     .poll(
       async () =>

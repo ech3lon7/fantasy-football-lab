@@ -70,7 +70,7 @@ test("optional stress test stays isolated, validates edits, exports and restores
     db.close();
   }, workspace);
   await page.reload();
-  await openLegacyTrades(page);
+  await openLegacyTrades(page, "Manual analyzer");
   const stress = page.locator(".trade-stress-test");
   await expect(stress).toBeVisible();
   await expect(stress).not.toHaveAttribute("open", "");

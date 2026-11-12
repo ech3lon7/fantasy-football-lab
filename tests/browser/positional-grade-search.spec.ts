@@ -224,10 +224,14 @@ test.describe("Positional Grade Search E2E", () => {
     await seedWorkspace(page, "chain");
 
     // Switch to Chain Planner mode in the Trade Analyzer workspace
-    const chainTabBtn = page.getByRole("button", {
-      name: "Two-trade chain planner",
-      exact: true,
-    });
+    const chainTabBtn = page
+      .getByRole("tab", { name: "Chain planner" })
+      .or(
+        page.getByRole("button", {
+          name: "Two-trade chain planner",
+          exact: true,
+        }),
+      );
     await expect(chainTabBtn).toBeVisible();
     await chainTabBtn.click();
 

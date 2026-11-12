@@ -1,5 +1,201 @@
 # Verification report
 
+## Gameday Plus corrections, section 9 (Phones, tablets and light theme) November 11 2026
+
+- Ran every screen, tab and popover (22 screens) in light and dark at 1440, 820 and 390 px with `tests/browser/gameday-screenshots.spec.ts` (`GAMEDAY_SHOTS=1`, pictures in `s9-review/shots/<theme>-<width>/`, untracked). The report found no page-level sideways overflow at any width and the bottom bar only on phones. The nine `gameday-responsive` specs and both theme sweeps (0 offenders in light, 0 in dark) pass; the header switch test passes.
+- Fixed: (1) the screen entrance animation left a transform on the screen, which anchored the phone trade verdicts to the page instead of the window; it now fills backwards only. (2) The phone sheet was 32 px wider than the screen (width plus padding); it is now border-box. (3) Wide tables did not scroll inside their box and widened the page (Lab Audits overflowed by 35 px); `.table-wrap` now scrolls. (4) The verdict strip sat 2 px under the 62 px bottom bar. (5) Links lost their global reset with the old stylesheet, so the logo was default blue and the navigation underlined; the reset is restored at low specificity.
+- Test fixes: the review harness opens the header Menu when the Feel button is not in the header, and the verdict spec waits for the rows to finish rising.
+- Rewrote the ten specs that drove the removed trade screen and simulator (`roster-scenarios` 8, `starter-lineups` 1, `sync` 1) for the rebuilt Trade room and Roster: the offer is built with the Manual analyzer pickers, the lineup basis is the Manual analyzer segmented control, Force uses its new button, and Find trades is reached from its tab. The numbers they assert are unchanged (for example -10.00 and +20.00 with byes ignored, -7.92 live).
+- Three more app bugs found while porting and fixed: the phone Live roster / Hypothetical roster tabs did nothing because their rules left with the old stylesheet; the forced-trade confirmation vanished at once because it lived in the offer block the force clears, and no longer said which save slot received the trade; and the hidden import file input was visible on every screen.
+- Full suite on the release server settings: 106 passed, 1 skipped (the private workbook), including both theme sweeps and the screenshot run.
+- Restored styling for the 146 class names the code uses that lost all rules with the old stylesheet (the Why tab and moving-average chart on the player card, Find trades and Chain planner panels and results, simulator pieces, the footer legend). The rules are in `src/ui/components.css`, scoped to this interface, with every old colour and variable mapped onto the theme tokens, so they follow light and dark. A check of every class name the code uses against the stylesheets now finds none without a rule, and both theme sweeps still report 0 offenders. Full suite: 106 passed, 1 skipped.
+- Polish done: on phones the League grade grid shows all seven position squares beside the team name (the Power ranges table keeps its own scrolling box); every form control in the page content (toolbars, labelled controls, text fields, selects, checkboxes) is styled from the theme tokens, at least 44px tall on touch screens, which fixes the roster simulator and the Lab fields; and the Find trades and Chain planner panels sit in a `trade-workspace` container so their compact layout applies, with the filters behind a Filters button and a single readable column when open. `components.css` now also carries the `.trade-workspace` rules (376 rules in all). Full suite: 106 passed, 1 skipped; both theme sweeps report 0 offenders.
+- Second sweep with populated screens (a built offer, live Find trades results, Chain planner, Counter-offers, the Scouting table, an active simulation, the card's Numbers and Calculation tabs; light and dark; 1440 and 390 px). Fixed: "Unfilled" lineup rows were outlined yellow as if changed; the footer legend items ran together; the header wordmark wrapped onto two lines and the Trade room tab was clipped when a simulation chip was showing (long simulation names now shorten, and the short freshness label is used below 1600 px); the restored trade workspace used 9 to 11 px text, now 12 px; sortable table headers were boxed default buttons; plain buttons from the embedded tools now share one pill look; the simulator's metrics stacked label above value; and on phones the Force and Save trade buttons fill the width instead of wrapping.
+- Third sweep (open menus and popovers, the empty no-data screen, Versus, the phone filter sheet, every Lab tab and the Journal; light and dark; 1440, 820 and 390 px). Fixed: Feel choices (theme, animation, sound, haptics) made before the first import were silently dropped because they are saved in the workspace; they are now kept on the device and carried into the workspace (new test `the theme switch works before the first import`); the desktop Feel menu clipped the Off animation option, and segmented controls left an empty strip inside their border (they now hug their buttons and wrap); sortable headers inside the League roster popover were boxed default buttons; plain unclassed buttons in the embedded tools (for example Apply role scenario) are pills; and the Trade journal has card panels and readable tables. The only network errors are ESPN headshot 404s for the synthetic players, which fall back to initials.
+- Caught and fixed in the same round: the new plain-button rule briefly overrode the segmented controls' sizing and broke the 44 px touch check; it now excludes segmented controls, tab rows and navigation.
+- Still open, minor: the Find trades results table stays narrow on wide screens, and the Force a hypothetical trade button in the simulator shows a doubled outline. Neither blocks use.
+- Owner review of the screenshots is still needed before the next section.
+
+## Gameday Plus corrections, section 10 (Cleanup and release) November 11 2026
+
+- **Cleanup and Legacy Retirement (10.1):**
+  - Removed `src/features/views.tsx` (2,252 lines), completely retiring legacy unused components `TeamView` and `TradeView`.
+  - Extracted `ModelView` and `Account` into dedicated, tokenized feature files: `src/features/ModelView.tsx` and `src/features/Account.tsx`.
+  - Stopped importing `styles.css` in `src/main.tsx` and removed the legacy 3,417-line `src/ui/styles.css` stylesheet entirely.
+  - Clean CSS bundle: `dist/assets/index.css` reduced from 166.5 kB down to 92.9 kB (a 44% size reduction).
+  - Added tokenized styles for `.subtle` buttons (`background: transparent; border: none; color: var(--gd-muted); cursor: pointer;`) and fixed Scouting card header text inheritance so children strictly inherit the team's readable ink.
+- **Theme Sweep Passing with Zero Offenders (10.2):**
+  - Emptied `knownOffenders` list (`export const knownOffenders = []`) in `tests/browser/gameday-theme-sweep.spec.ts`.
+  - Ran the comprehensive theme sweep across all routes, tabs, and popovers in strict mode (`GAMEDAY_SWEEP=1` without `SWEEP_ALLOW_KNOWN`).
+  - Result: **0 light offenders (0 accepted, 0 new)** and **0 dark offenders (0 accepted, 0 new)**. Strict pass on both themes.
+- **Verification and Parity Checklist (10.3):**
+  - `npm run check`: 64 test files (662 tests) passed, TypeScript clean, ESLint clean (0 warnings/errors), publication scan passed for 133 files.
+  - Production build: `GITHUB_ACTIONS=true npm run build` passed cleanly in 1.35s.
+  - Playwright browser test suite: all 37 tests passed across `gameday-week.spec.ts`, `gameday-scouting.spec.ts`, `gameday-lab.spec.ts`, `gameday-extras.spec.ts`, `gameday-roster-league.spec.ts`, and `gameday-trade-room.spec.ts`.
+  - Re-verified all 46 rows of `docs/superpowers/specs/gameday-plus-parity-checklist.md`.
+- **Release (10.4):**
+  - Bumped version in `package.json` to 1.0.8 (patch).
+
+## Gameday Plus corrections, section 8 (This week, Scouting and Lab) November 11 2026
+
+- **This Week (8.1):**
+  - Summary sentences: Fixed `src/domain/view/week.ts` to handle missing/zero starter edge cases. When `starterValue === null || starterValue === 0 || usable === 0 || versus <= -0.999`, it emits `, and you have no usable <position> starter` instead of awkward phrasing like `WR sits 100% below it`. Added unit test in `tests/week-view.test.ts`.
+  - Added fallback in `lineupMove` to recommend starting an available bench player when a starter is on bye or injured/out.
+  - Starting score outlook chart: Rebuilt `OutlookChart` in `src/features/next/Week.tsx` with `.gd-outlook-chart-wrap`, SVG legend (`Your starters` vs `League median`), circular markers for median and mine data points, and weekly numerical value labels (`{p.mine.toFixed(1)}`).
+  - Move cards: Header correctly counts and formats moves (`Zero moves`, `One move`, `Two moves`, `Three moves this week`), showing three move cards when three moves exist (trade recommendation, waiver target, lineup note).
+- **Scouting (8.2):**
+  - Team-coloured card headers: Added `:root[data-gameday] .gd-pcard > header * { color: inherit !important; }` in `src/ui/gameday.css`, ensuring `<small>` and all header text elements inherit `c.colors.ink`, fixing the 2.34:1 contrast defect from the theme sweep and achieving high WCAG AA contrast against NFL team primary colors.
+  - Floor-to-ceiling bar: Wrapped in `.gd-pcard-range-wrap` with `.gd-pcard-range-label` displaying `<small>Next-game range</small>` and numerical floor–ceiling span (`floor.toFixed(1) – ceiling.toFixed(1)`).
+  - Prospective gem tracking: Dropped `<div className="legacy">` wrapper in `src/features/next/Scouting.tsx` and rebuilt `src/features/GemTracking.tsx` to use design tokens (`.gd-card`, `.gd-gem-tracking`, `.gd-h3`), eliminating legacy `<Panel>`.
+- **Lab (8.3):**
+  - Model settings: Grouped 40 purple editable model parameters into 5 clear sections (`Forecast`, `Consistency`, `Gem rules`, `Grades`, `Trades`), each with titles, descriptions, purple border editable inputs (`.gd-edit-input` with `--gd-edit`), accessible unit labels, and explanatory descriptions. Added `<h2 className="gd-h2">Model settings</h2>`.
+  - Audits view: Rebuilt Player-label evidence, Replacement baseline audit, and Source data audit into tokenized `<section className="gd-card gd-audit-card">` with explicit dark theme table cell background styling to prevent white cell fallbacks.
+  - Account view: Rebuilt Account view into tokenized `<section className="gd-card gd-account-card">`, replaced `.metric-grid` with `.gd-account-metrics` and `.gd-sync-status-pill` (fixing low contrast on "Local only"), and replaced buttons with tokenized `.gd-cta`, `.gd-pill`, `.gd-button-subtle`, and `.gd-button-danger`.
+  - Shell & Lab: Converted "My team" and "App version" panels in `App.tsx` to `<section className="gd-card">`, and dropped `.legacy` class from `<section className="gd-lab-page">` in `Lab.tsx`.
+- **Checks:** `npm run check` passed (64 test files, 662 tests, publication scan of 133 files). `GITHUB_ACTIONS=true npm run build` passed in 1.86s. Browser specs passed: `gameday-week.spec.ts` (4/4), `gameday-scouting.spec.ts` (7/7), `gameday-lab.spec.ts` (4/4), and `gameday-extras.spec.ts` (6/6) — all 21 passed.
+- **Theme Sweep:** Ran `gameday-theme-sweep.spec.ts` in light and dark modes with `GAMEDAY_SWEEP=1` and `SWEEP_ALLOW_KNOWN=1`. 0 new or unaccepted offenders found across both themes.
+- **Reviewed screenshots:** `this-week-dark.png`, `this-week-light.png`, `scouting-dark.png`, `scouting-light.png`, `lab-settings-dark.png`, `lab-settings-light.png`, `lab-data-dark.png`.
+- **Version:** Bumped to 1.0.7 (patch).
+
+## Gameday Plus corrections, section 7 (League) November 11 2026
+
+- **Grade Grid as Designed (7.1):**
+  - Styled grade grid with square tiles (`.gd-grade-btn`) using aspect-ratio 1:1 (44×44px on desktop, 38×38px on mobile).
+  - Applied muted grade palette tokens (`var(--gd-grade-1)` through `var(--gd-grade-6)`), with high-contrast white text on dark red/green tones (5.4:1 contrast on F and 4.97:1 on A+, exceeding WCAG AA).
+  - Neutral styling for N/A tiles with dashed border and hover tooltips showing the exact reason (e.g. "No starter slot at this position", "Not enough usable player values or league data to grade").
+  - Fixed team name typography: removed tiny 11px font constraints and ugly underlines; styled as clean, readable 14-15px semi-bold button with hover state and yellow "You" pill on user's team.
+  - Clicking any grade tile opens the position popover (`PositionList`) with player photos, roles, EPPG, weekly strips, and links to the full player card.
+- **Replaced `TeamView` with Full Roster Popover (7.2):**
+  - Completely removed the legacy `<TeamView>` component, duplicate grade tables, and `<div className="legacy">` wrapper from `League.tsx`.
+  - Moved position advice (Starter Value PPG, League Median, vs Median %, Coverage %, Status, and Advice message) directly into the grade popover (`PositionList`).
+  - Added "Full roster" popover (`TeamRosterPopover`) for each team, built from tokenized player row components with `PlayerPhoto`, slot pills (Starter / Bench), Expected PPG, Surplus Index, Trend Δ PPG, Signals (`PlayerSignals`), and Injury status.
+  - Clicking any team name button in the grid opens that team's full roster popover without leaving the page.
+- **Power Ranges with Floor-to-Ceiling Bars (7.3):**
+  - Replaced the plain HTML numbers table with visual `FloorCeilingBar` components scaled across the league-wide floor and ceiling bounds.
+  - Displays the expected mark pip/tick on the bar alongside tabular numerical readouts for floor, expected, and ceiling.
+  - Retained accessible headers `["Rank", "Team", "Floor", "Expected", "Ceiling", "You outscore"]`, with owner row highlighting and win probability calculation.
+- **Checks:** `npm run check` passed (64 test files, 661 tests, publication scan of 133 files). `GITHUB_ACTIONS=true npm run build` passed. Browser specs passed: `gameday-roster-league.spec.ts` (5/5 passed), `gameday-extras.spec.ts` (6/6 passed).
+- **Theme Sweep:** Ran `gameday-theme-sweep.spec.ts` in light and dark modes with `GAMEDAY_SWEEP=1`. League screen has ZERO offenders in both light and dark modes.
+- **Reviewed screenshots:** `test-results/shots/section-7/league-light.png`, `test-results/shots/section-7/league-dark.png`, `test-results/shots/section-7/league-pos-popover-dark.png`, `test-results/shots/section-7/league-full-roster-popover.png`.
+- **Version:** Bumped to 1.0.6 (patch).
+
+## Gameday Plus corrections, section 6 (Roster) November 11 2026
+
+- **Rebuilt Roster Simulator (6.1).**
+  - Rebuilt simulator into Gameday Plus design tokens (`.gd-sim`), replacing legacy `<Panel>` and wrapper `<div className="legacy">`.
+  - Added segmented chip strip at top (`.gd-sim-chips`): one-tap switching between "Live roster" and each saved simulation. Unsaved/dirty simulations are clearly marked with an asterisk (`*`) and tooltip.
+  - Kept accessible `select[aria-label="Roster simulation"]` and all toolbar actions (New simulation, Delete simulation, Save to slot, Load slot, Clear slot).
+  - Maintained compact segmented 10-slot save picker (`.slot-pill`) with saved/empty dot indicators, action bar, and dirty switch confirmation dialog.
+  - Added player photo preview in Advanced roster moves and enhanced Move history with inline undo controls.
+- **Rebuilt Marked-Starters Editor in Tokens (6.2).**
+  - Rebuilt `StarterLineupEditor` as `<section className="gd-starters" aria-label="Your app lineup">` with headings `<h2>Your roster</h2>` and `<h3>Manage starters</h3>`.
+  - Dropped legacy 10-column `<DataTable>` in favor of a clean, mobile-responsive card/row layout (`.gd-starters-list`, `.gd-starter-row`).
+  - Preserved all rules, warnings, slot counts, notices, score prediction, and Save/Reset buttons (`Save lineup`, `Reset to imported lineup`).
+  - Each player row displays `PlayerPhoto`, name, position/NFL, slot tag, EPPG, Actual PPG, and accessible combobox `<select aria-label="Lineup status: {Player}">` with Bench/Starter choices (IR disabled).
+  - Tested mobile viewport fit at 390px with zero horizontal page scroll.
+- **Depth Chart Improvements (6.3).**
+  - In `src/domain/view/roster.ts`, updated `depthChart` to always return all six positions in order (`["QB", "RB", "WR", "TE", "K", "D/ST"]`), including empty positions with a quiet `"No players"` line.
+  - Added historical bye weeks (`isBye: true`) to `StripPoint`.
+  - Updated `Strip` in `Roster.tsx` to shade bars proportionally by points (`opacity: 0.35 + 0.65 * (points / max)`) with byes clearly marked via `data-bye` indicator and tooltip.
+  - Depth chart tiles show `PlayerPhoto`, role, slot, EPPG, weekly strip, badges, and an actionable "Cut" button (`.gd-tile-cut`) when a simulation is active, applying cuts directly to the hypothetical roster.
+- **Checks:** `npm run check` passed (64 test files, 661 tests, publication scan of 133 files). `GITHUB_ACTIONS=true npm run build` passed. Browser specs passed: `gameday-roster-league.spec.ts` (5 tests passing), `starter-lineups.spec.ts:95` (1 test passing), `roster-scenarios.spec.ts:121` (1 test passing).
+- **Theme Sweep:** Ran `gameday-theme-sweep.spec.ts` in light and dark modes with `GAMEDAY_SWEEP=1`. All Section 6 elements passed without any contrast or white-fill violations in dark or light mode.
+- **Reviewed screenshots:** `test-results/shots/section-6/roster-light.png`, `test-results/shots/section-6/roster-dark.png`.
+- **Version:** Bumped to 1.0.5 (patch).
+
+## Gameday Plus corrections, section 5 (Trade room) November 11 2026
+
+- **Removed `TradeView` Wrapper (5.1).** Retired `TradeView` from `App.tsx` and `TradeRoom.tsx`. Passed state and callbacks directly to `TradeRoom`. Removed duplicate tab rows, legacy pools, and unstyled wrapper panels.
+- **Find Trades Rebuilt (5.2).** Wired `TradeSearch` directly with Gameday Plus shared search limits section (`SearchLimitsSection`), positional grade impact goals with plain-language explanations, folding groups, and results with player photos, both teams' grade steps, and Analyze actions.
+- **Chain Planner Rebuilt (5.3).** Wired `TradeChains` via `TradeSearch workspaceMode="chain"` directly in `TradeRoom`, integrating the ten agreed chain preset cards (`PresetCards`), connected results, spread, and Analyze actions.
+- **Manual Analyzer Completed (5.4).**
+  - Integrated `TradeScoreStrip` with `aria-label="Trade scoring summary"` presenting Expected PPG comparison and surplus deal grade.
+  - Team-coloured participant pickers with player photos and grade-step chips for affected positions.
+  - Tale of the tape and interactive lineup field with photos and tags.
+  - Four distinct verdict rows ("Surplus exchange", "Lineup impact (EPPG)", "Legality", "Uncertainty").
+  - Disclosures under verdicts: requirements and conditions, required drops and pickups, market reference, surface assessment (`SurfaceAppealView`), and direct stress testing (`TradeStressTest`).
+  - Added "Save current trade" with `onSaveTrade` callback and stress recipe persistence.
+  - Fixed dark theme contrast across Find trades and Chain planner: mapped `.grade-impact-container` and its controls, `.trade-grade-tile`, `.trade-needs-lineup article`, `.notice`, `.trade-pool-board`, `.trade-pool-lane`, and `.trade-position-chips button` onto Gameday tokens, resolving white box and contrast issues in `trade-find-dark` and `trade-chains-dark`.
+- **Saved Trades & Journal (5.5).**
+  - Added native drawer in `TradeRoom` wrapping `SavedTrades` controlled by the "Saved trades" header button.
+  - Maintained direct navigation link to Journal with full profile / offer recording workflows.
+- **Checks:** `npm run check` passed (64 test files, 661 tests, publication scan of 133 files). `GITHUB_ACTIONS=true npm run build` passed under the Pages base path. All 5 browser specs passed: `gameday-trade-room.spec.ts` (11 tests), `trade-stress.spec.ts` (1 test), `surface-appeal.spec.ts` (2 tests), `positional-grade-search.spec.ts` (2 tests), `negotiations.spec.ts` (3 tests) — 19 browser tests passing.
+- **Reviewed screenshots:** `test-results/shots/section-5/trade-find-dark.png`, `trade-find-light.png`, `trade-chains-dark.png`, `trade-chains-light.png`, `trade-manual-dark.png`, `trade-manual-light.png`, `trade-counters-dark.png`, `trade-counters-light.png`.
+- **Version:** Bumped to 1.0.4 (patch).
+
+## Gameday Plus corrections, section 4 (simulation status and roster-limit warnings) November 11 2026
+
+- **Domain Issues (4.1).** Structured simulation issues (`RosterSimulationIssue`) generated in `src/domain/roster-scenarios.ts` covering roster capacity excess (`capExcess`), position limits (`posActive.length > lim`), and IR-ineligible players in IR slots (`p.slot === irSlot && !p.irEligible`). Each issue contains `team`, `teamName`, `rule`, `ruleDescription`, `countOver`, `activeCount`, `capacity`, `playersInvolved`, `suggestedDrop` (from `makeLegal`), and plain-language `message`.
+  - Tested in `tests/roster-scenarios.test.ts` (19 unit tests passing) for capacity, position limits, IR-ineligible detection, and reserved simulation names.
+- **Plain-Language Explanations & Popover (4.2).** Created `src/features/next/SimulationIssuePopover.tsx` (`SimulationIssuePopover`, `SimulationNote`). Plain-language explanations detail the exact team, active player count, capacity/limit, and the lowest-value bench player recommended for dropping. Actions: **Apply suggested drop** (applies drop directly to the simulation), **Open simulation** (links to `#/roster`), and **Switch to live roster** (clears active simulation).
+- **Single Location & Old Toolbar Removal (4.3).**
+  - Removed legacy `<div className="toolbar">` red notice banner from `src/app/App.tsx`.
+  - The shell's simulation chip turns amber (`gd-chip-warning`) when active simulations have issues, and opens the popover on click.
+  - Replaced permanent red global banners with a one-line note (`.gd-simulation-note`) linking to the review popover on screens using affected teams (`Roster.tsx`, `TradeRoom.tsx`, `Week.tsx`).
+- **Unmistakable "Live" (4.4).**
+  - The shell chip reads `Simulation: ${name}` (never `Hypothetical: ${name}`).
+  - Simulation creation or renaming to "Live" or "Live roster" is refused via `isReservedSimulationName` with prompt: `"‘Live’ and ‘Live roster’ are reserved for the real roster. Choose another name for your simulation."`.
+- **Checks:** `npm run check` passed (64 test files, 661 tests, publication scan of 133 files). `GITHUB_ACTIONS=true npm run build` passed under the Pages base path. Browser specs passed: `gameday-simulation-status.spec.ts` (2 tests passing), `roster-scenarios.spec.ts` (11 tests passing), `gameday-trade-room.spec.ts`, `gameday-extras.spec.ts`, and `gameday-parity.spec.ts` (17 tests passing).
+- **Reviewed screenshots:** `test-results/shots/section-4/simulation-popover-dark.png`.
+- **Version:** Bumped to 1.0.3 (patch).
+
+## Gameday Plus corrections, section 3 (player pictures and team colours) November 11 2026
+
+- **PlayerPhoto Component (3.1).** Created `src/ui/PlayerPhoto.tsx` (`PlayerPhoto`, `playerInitials`) rendering a lazy-loaded ESPN headshot (`https://a.espncdn.com/i/headshots/nfl/players/full/${player.id}.png`), circular layout with player's NFL team background colour and readable ink, and immediate initials fallback on the team colour when headshots are unavailable, network fails, or the player is a D/ST.
+  - Tested in `tests/player-photo.test.ts` (7 tests passing) for initials, D/ST initials, team background colors, size scaling, and aliases.
+- **PlayerPhoto Integration (3.2).** Integrated `PlayerPhoto` everywhere players appear across the application:
+  - **Player card header** (`src/features/next/PlayerCard.tsx`): 72px player photo beside the player identification, position, team, and labels.
+  - **Scouting cards & rows** (`src/features/next/Scouting.tsx`, `src/ui/components.tsx`): 36px player photo in card headers; 28px player photo in the shared `playerColumnName` table cell.
+  - **Roster tiles & League position popover** (`src/features/next/Roster.tsx`, `src/features/next/League.tsx`): 32px player photo in `PlayerTile` on depth chart and league position inspection.
+  - **Manual analyzer sides, pickers, and lineup field** (`src/features/next/TradeRoom.tsx`): 20px player photo in player picker buttons; 24px photo in lineup slot rows; 32px player photos of selected trade participants on both sides.
+  - **Find trades & chain results** (`src/features/TradeWorkspace.tsx`, `src/features/ScenarioLineupBoards.tsx`): Updated `TradePortrait` and `Portrait` to delegate to `PlayerPhoto` (28px and 32px).
+  - **Versus comparison header** (`src/features/next/Versus.tsx`): 48px player photo for both comparison sides with team colors.
+  - **This week move cards and digest** (`src/features/next/Week.tsx`, `src/domain/view/week.ts`): Added `playerId` to `Move`; 36px photo on move cards; 24px photo on since-import digest rows.
+- **Team Colours & Neutral Fallbacks (3.3).**
+  - Expanded `src/domain/view/nfl-colors.ts` aliases covering all standard NFL variants (`WFT`, `WAS`, `LVR`, `OAK`, `JAC`, `LA`, `RAM`, `RAMS`, `STL`, `SD`, `SDG`, `CHARGERS`, `ARZ`, `BLT`, `HST`, `CLV`, `SFO`, `TBB`, `GBP`, `NOS`, `KCC`, `NEP`), plus realistic colors for test data (`TEST: "BAL"`, `MAIN: "DET"`), falling back to neutral `#4a5060`.
+  - Replaced legacy lavender background in `src/ui/gameday.css` (`.gd-side-send`, `.gd-side-receive`) with tokens `var(--gd-surface-2)`, `color: var(--gd-ink)`, `border: 1px solid var(--gd-line)`.
+  - Dynamically styled trade sides in `TradeRoom.tsx` with `sendColors` and `receiveColors`.
+  - Fixed `index.html` startup capture guard to ignore image load errors (`asset instanceof HTMLImageElement`), ensuring offline/mock headshot failures never trigger the app recovery modal.
+- **Checks:** `npm run check` passed (64 test files, 659 tests, publication scan of 132 files). `GITHUB_ACTIONS=true npm run build` passed under the Pages base path. All targeted browser specs (`gameday-card.spec.ts`, `gameday-scouting.spec.ts`, `gameday-roster-league.spec.ts`, `gameday-popover.spec.ts`, `gameday-trade-room.spec.ts`, `gameday-shots.spec.ts`) passed (33 browser tests passing).
+- **Reviewed screenshots:** `test-results/shots/section-3/` (52 files, ignored by Git): all 22 screens in light and dark, header widths in both themes.
+- **Version:** Bumped to 1.0.2 (patch).
+
+## Gameday Plus corrections, section 2 (feedback and motion) November 11 2026
+
+- **Feedback wiring (2.1).** Created `src/ui/feel/feedback.tsx` with `FeedbackProvider`, `useFeedback()`, and standardized outcome helpers `searchCue`, `importCue`, and `actionCue`. Wired throughout the app:
+  - Route navigation (`RouteFeedback` in `src/app/App.tsx`) fires `tap`.
+  - Tab buttons in Trade room (`TradeRoom.tsx`), Player card (`PlayerCard.tsx`), and Lab fire `tap`.
+  - Interactive selections in pickers (`TradeRoom.tsx`, `Versus.tsx`, `Scouting.tsx`), pills, segmented controls (`primitives.tsx`), chain presets (`PresetCards.tsx`), next/previous player navigation and versus add/swap (`PlayerCard.tsx`, `Versus.tsx`) fire `select`.
+  - Searches finishing with results in Find trades (`TradeSearch.tsx`), Chain planner (`TradeChains.tsx`), and Counter-offers (`TradeRoom.tsx`) fire `success`; empty search results or search errors fire `caution`.
+  - Force trade and simulation moves/saving (`App.tsx`, `TradeRoom.tsx`) fire `actionCue(ok)` (`success` on ok, `caution` on failure).
+  - Workbook imports (`App.tsx`) fire `importCue(issues.length)` (`success` on clean import, `caution` on blocking issues); parse failures fire `caution`.
+  - Unit tests in `tests/feedback.test.ts` (5 tests) verify cue mappings and fallback no-op behavior.
+  - Browser test in `tests/browser/gameday-feedback.spec.ts` verifies AudioContext is silent (0 starts) when Sound is off, and produces oscillator starts on UI interactions when Sound is on.
+- **Motion system (2.2).** Implemented full motion rules gated by `[data-animation]` in `src/ui/gameday.css`:
+  - Screen change: content fades and rises 12px over 240ms (`gd-screen-enter`).
+  - Popovers and sheets: desktop popovers scale and fade (`gd-popover-enter`), mobile sheets slide up from bottom (`gd-sheet-enter`), backdrop fades (`gd-fade-in`).
+  - Charts: horizontal/vertical bars grow from baseline over 600ms (`gd-bar-grow-x`, `gd-bar-grow-y`), lines and area fills reveal left to right over 600ms (`gd-line-reveal`).
+  - Selection: spring animation (`gd-spring-select`) on pressed pills, options, presets, and segmented buttons.
+  - Trade verdicts: cascading row reveals (`gd-verdict-enter` staggered by 60ms) and legality failure shake (`gd-shake`).
+  - Recalculation: shimmer effect (`gd-shimmer`) for numbers recalculating.
+  - Reduced motion: disables transforms and complex animations, capping fades to 150ms.
+  - Off: disables all animations (`animation: none !important`) and transitions (`transition: none !important; transition-duration: 0s`).
+  - Browser test in `tests/browser/gameday-motion.spec.ts` verifies Full, Reduced, and Off states, confirming zero active animations or transitions when set to Off.
+- **Checks:** `npm run check` passed (62 test files, 649 tests, publication scan of 131 files). `GITHUB_ACTIONS=true npm run build` passed under the Pages base path. All targeted browser specs (`gameday-feedback.spec.ts`, `gameday-motion.spec.ts`, `gameday-shots.spec.ts`) passed.
+- **Reviewed screenshots:** `test-results/shots/section-2/` (52 files, ignored by Git): all 22 screens in light and dark, header at 1440, 1280, 820 in both themes, and open Feel menu in both themes.
+- **Version:** Bumped to 1.0.1 (patch).
+
+## Gameday Plus corrections, section 1 (foundations) November 11 2026
+
+- **Fonts (1.1).** Barlow 400/500/600/700 and Barlow Condensed 600/700/800 are self-hosted as WOFF2 in `public/fonts/` with the SIL OFL licence beside them (`public/fonts/OFL.txt`), declared with `@font-face` in `tokens.css`, and listed in the offline shell (the build precaches all eight files from `dist/fonts`). The Google Fonts `@import` is gone from `styles.css`, and the `--gd-font-*` tokens name Barlow and Barlow Condensed instead of DM Sans and Manrope. The built CSS points at `/fantasy-football-lab/fonts/...`.
+- **Legacy scoping (1.2).** `styles.css` no longer styles `:root`: its palette block is now `.legacy`, so no old colour reaches the new shell. `gameday.css` aliases the old colour names that shared components still use (`--ink`, `--muted`, `--line`, `--green`, `--blue`, `--pink`, `--purple`, `--good`, `--bad`, `--orange`, `--neutral-line`, `--why-*`) to the `--gd-*` tokens and pins the earlier values inside `.legacy`. The old `.gd-legacy` class became `.legacy` and now wraps the three components not yet rebuilt (the roster simulator, the starters editor and gem tracking). This is the stop-gap; Section 10 removes the import.
+- **Header (1.3).** Keys and Feel are one menu (the keyboard reference is a row in it, and the narrow menu opens the same popover); a one-tap light/dark switch sits beside the menu and names the theme it moves to; the sync pill is one short word (`syncPillLabel` in `src/domain/view/shell.ts`, with the full status in the name and tooltip) and links to Lab → Data and account. The header is `flex-wrap: nowrap` with a tightening block at 1400px, and it holds one row at 1440, 1280 and 820 in both themes.
+- **Theme sweep (1.4).** `tests/browser/theme-audit.ts` walks the rendered tree in a real browser and reports visible elements at least 60×24px filled pure white in the dark theme, and visible text under 4.5:1 contrast against its nearest opaque ancestor background (3:1 at 24px and above), with the selector, text and colours. `tests/browser/screens.ts` lists all 22 screens, tabs and popovers; `tests/browser/gameday-theme-sweep.spec.ts` runs the sweep per theme, is gated by `GAMEDAY_SWEEP=1`, and fails while any offender remains unless `SWEEP_ALLOW_KNOWN=1` is set. Each known offender is mapped to the section that owns it (3, 5, 6, 7, 8), so the count is the progress meter; Section 10 empties the list. The old four-element check in `gameday-theme.spec.ts` is replaced by the one-tap switch and system-follows-device tests.
+- **Current sweep:** light 25 offenders, all contrast; dark 125, of which 15 are pure-white fills and 110 are contrast. Light: this week 2, roster 1, scouting 3, gem tracking 3, league 2, league popover 3, manual analyzer 1, the four player-card tabs 2 each, keyboard reference 2. Dark: Find trades 61 and Chain planner 52 (the old trade screen still renders there, Section 5), gem tracking 3, scouting 3, this week 2, roster 1, league 1, league popover 1, Lab data 1, player card Story 2.
+- **Checks:** `npm run check` passed (61 test files, 644 tests, publication scan of 130 files). `GITHUB_ACTIONS=true npm run build` passed under the Pages base path. The full browser suite passed 90 tests with 7 skipped: the six env-gated sweep and screenshot tests, and the real-workbook flow (private file). It ran in four shards because a single long run on this WSL checkout loses the preview connection partway through (Chromium network errors, not test failures) even with the build on local disk; each shard restarts the preview server and all four are green. `tests/browser/app-update.spec.ts` now serves `dist/fonts` from its virtual host, because the offline shell precaches them and the worker's install failed without that. Excel parity checks were not run: no valuation, lineup or trade-value code changed.
+- **Reviewed screenshots:** `test-results/shots/section-1/` (52 files, ignored by Git): all 22 screens in light and dark, the header at 1440, 1280 and 820 in both themes, and the open Feel menu in both themes. The owner accepted the section on 11 November, except the Find trades and Chain planner screens in dark: those still render the old `TradeView` under the new header (white tab strip, pale-green pools and lineup, faint labels), so they stay open until Section 5 rebuilds them; the sweep counts above already attribute that debt to Section 5.
+- **Not done in Section 1:** the legacy screens keep their old styling (and the dark-theme debt counted above) until Sections 3 and 5 to 8 rebuild them; `styles.css` is still imported; the toggle keeps its icon at narrow widths and hides only its word, with the full theme setting still in the menu.
+
 ## Gameday Plus redesign, Phase 10 (cutover) November 10 2026
 
 - Gameday Plus is the only interface in app 1.0.0. The preview switch, the old sidebar and top bar, and the old Overview, Players, Player detail, Gem and Weekly screens were removed, with the dead code and unused styles that went with them. The My team selector moved to Lab → Settings.

@@ -128,3 +128,25 @@ export function feelEntry(
     return [animationKey, writeAnimationPref(readAnimationPref(value))];
   return [key === "sound" ? soundKey : hapticsKey, writeFlag(readFlag(value))];
 }
+
+// Feel choices made before the first import (there is no workspace to hold them yet) live on this device.
+const localFeelKey = "fantasy-lab-feel";
+const feelFilterKeys = [animationKey, themeKey, soundKey, hapticsKey];
+export function readLocalFeel(): Record<string, string> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(localFeelKey) ?? "{}");
+    const out: Record<string, string> = {};
+    for (const key of feelFilterKeys)
+      if (typeof parsed?.[key] === "string") out[key] = parsed[key];
+    return out;
+  } catch {
+    return {};
+  }
+}
+export function writeLocalFeel(values: Record<string, string>) {
+  try {
+    localStorage.setItem(localFeelKey, JSON.stringify(values));
+  } catch {
+    // Storage can be blocked; the choice then lasts for this visit only.
+  }
+}

@@ -50,6 +50,7 @@ export interface Move {
   unit: string;
   line: string;
   href: string;
+  playerId?: string;
 }
 
 export interface WeekSummary {
@@ -188,6 +189,7 @@ export function weekSummary(
         unit: "EPPG/wk",
         line: `Your open trade · ${result.grade}`,
         href: "#/trades",
+        playerId: draft.get[0] ?? draft.give[0],
       };
     }
   }
@@ -223,6 +225,7 @@ export function weekSummary(
           .slice(0, 2)
           .join(" · ")} · free agent`,
         href: `#/player/${pick.id}`,
+        playerId: pick.id,
       }
     : null;
 
@@ -249,8 +252,46 @@ export function weekSummary(
             unit: "EPPG",
             line: `${sp.name} starts ahead of ${bp.name} in your lineup`,
             href: "#/roster",
+            playerId: bp.id,
           };
       }
+    }
+  }
+  if (!lineupMove) {
+    for (const group of depthChart(m, team, grades)) {
+      const starters = group.tiles.filter((t) => t.role === "Starter"),
+        bench = group.tiles.filter((t) => t.role === "Bench");
+      for (const s of starters) {
+        const sp = m.byId.get(s.id) as Player;
+        if (!sp) continue;
+        const isBye = sp.bye === m.current;
+        const isOut = !!(sp.injury && /^(out|ir|pup|sus)/i.test(sp.injury));
+        if (isBye || isOut) {
+          const availableBench = bench
+            .map((b) => m.byId.get(b.id) as Player)
+            .filter(
+              (p) =>
+                p &&
+                p.blendedExpected !== null &&
+                p.bye !== m.current &&
+                (!p.injury || !/^(out|ir|pup|sus)/i.test(p.injury)),
+            )
+            .sort((a, b) => b.blendedExpected! - a.blendedExpected!)[0];
+          if (availableBench) {
+            lineupMove = {
+              kind: "lineup",
+              title: `Start ${availableBench.name}`,
+              big: f1(availableBench.blendedExpected),
+              unit: "EPPG",
+              line: `${sp.name} is ${isBye ? `on bye (wk ${sp.bye})` : sp.injury} in starter slot`,
+              href: "#/roster",
+              playerId: availableBench.id,
+            };
+            break;
+          }
+        }
+      }
+      if (lineupMove) break;
     }
   }
   const moves = [trade, waiver, lineupMove].filter((x): x is Move => !!x);
@@ -260,14 +301,40 @@ export function weekSummary(
     : ranked.length
       ? "No position is below the league median."
       : "Not enough data to rank your positions yet.";
-  const deckParts = [
-    gap === null
-      ? "The league comparison needs a scorable lineup."
-      : `Your starters project ${Math.abs(gap).toFixed(1)} points a week ${gap >= 0 ? "above" : "below"} the league median${weak ? `, but ${weak.position} sits ${Math.abs(weak.versus! * 100).toFixed(0)}% below it` : ""}.`,
-    tradeGain !== null && trade
-      ? `Your open trade, ${trade.title}, ${tradeGain >= 0 ? "adds" : "costs"} ${Math.abs(tradeGain).toFixed(1)} expected points a week.`
-      : "",
-  ].filter(Boolean);
+
+  const isWeakUnusable =
+    weak &&
+    (weak.starterValue === null ||
+      weak.starterValue === 0 ||
+      weak.usable === 0 ||
+      (weak.versus !== null && weak.versus <= -0.999));
+
+  let deckParts: string[];
+  if (gap === null) {
+    deckParts = [
+      "The league comparison needs a scorable lineup.",
+      isWeakUnusable
+        ? `You have no usable ${weak!.position} starter.`
+        : weak
+          ? `${weak.position} is your weakest spot.`
+          : "",
+      tradeGain !== null && trade
+        ? `Your open trade, ${trade.title}, ${tradeGain >= 0 ? "adds" : "costs"} ${Math.abs(tradeGain).toFixed(1)} expected points a week.`
+        : "",
+    ].filter(Boolean);
+  } else {
+    const weakFragment = weak
+      ? isWeakUnusable
+        ? `, and you have no usable ${weak.position} starter`
+        : `, but ${weak.position} sits ${Math.abs(weak.versus! * 100).toFixed(0)}% below it`
+      : "";
+    deckParts = [
+      `Your starters project ${Math.abs(gap).toFixed(1)} points a week ${gap >= 0 ? "above" : "below"} the league median${weakFragment}.`,
+      tradeGain !== null && trade
+        ? `Your open trade, ${trade.title}, ${tradeGain >= 0 ? "adds" : "costs"} ${Math.abs(tradeGain).toFixed(1)} expected points a week.`
+        : "",
+    ].filter(Boolean);
+  }
 
   return {
     week: m.current,

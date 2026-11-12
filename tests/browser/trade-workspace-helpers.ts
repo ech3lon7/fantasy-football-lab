@@ -4,6 +4,7 @@ import { expect, type Page } from "@playwright/test";
 export async function openTradeDetails(page: Page) {
   for (const selector of [".trade-full-analysis", ".trade-saved-drawer"]) {
     const details = page.locator(selector);
+    if ((await details.count()) === 0) continue;
     await details.locator(":scope > summary").waitFor({ state: "visible" });
     if ((await details.getAttribute("open")) === null)
       await details.locator(":scope > summary").click();
@@ -30,8 +31,28 @@ export async function openTradeFilters(page: Page, scope = "Standard") {
 // The earlier trade finder and chain planner open under their Trade room tabs.
 export async function openLegacyTrades(
   page: Page,
-  tab: "Find trades" | "Chain planner" = "Find trades",
+  tab: "Find trades" | "Chain planner" | "Manual analyzer" = "Find trades",
 ) {
   await page.goto("./#/trades");
   await page.getByRole("tab", { name: tab }).click();
+}
+
+// Build the simplest valid offer in the Manual analyzer: one player from each team. Navigates by hash so unsaved state survives.
+export async function buildManualOffer(page: Page, partner = "Test B") {
+  await page.evaluate(() => {
+    location.hash = "#/trade";
+  });
+  await page
+    .getByRole("combobox", { name: "Trade partner" })
+    .selectOption({ label: partner });
+  await page
+    .getByRole("group", { name: "Players you send" })
+    .getByRole("button")
+    .first()
+    .click();
+  await page
+    .getByRole("group", { name: "Players you receive" })
+    .getByRole("button")
+    .first()
+    .click();
 }

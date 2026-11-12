@@ -68,7 +68,7 @@ test("add and drop pairs section lists helpful pickups or says none help", async
       .first()
       .click();
     await expect(page.locator(".gd-header .gd-chip")).toContainText(
-      "Hypothetical:",
+      "Simulation:",
     );
   }
   // The depth-only switch is on by default and can be turned off.

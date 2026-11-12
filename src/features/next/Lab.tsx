@@ -46,7 +46,7 @@ export function Lab({
         </nav>
       </header>
       <section
-        className="gd-lab-page gd-legacy"
+        className="gd-lab-page"
         aria-label={labTabs.find((t) => t.id === tab)?.label}
       >
         {tab === "settings" && (settings ?? needsData)}

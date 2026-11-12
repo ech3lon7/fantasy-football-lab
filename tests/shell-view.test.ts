@@ -6,6 +6,7 @@ import {
   sectionForRoute,
   sections,
   sourceFreshness,
+  syncPillLabel,
 } from "../src/domain/view/shell";
 import type { Model } from "../src/domain/valuation";
 
@@ -83,6 +84,27 @@ describe("source freshness", () => {
         short: "No time",
         stale: true,
       });
+  });
+});
+
+describe("sync pill", () => {
+  it("shortens every known status to one word and keeps unknown detail to its first word", () => {
+    for (const [status, short] of [
+      ["Synced", "Synced"],
+      ["Syncing", "Syncing"],
+      ["Changes pending", "Pending"],
+      ["Changes pending; sync again", "Pending"],
+      ["Offline changes pending", "Offline"],
+      ["Ready to sync", "Ready"],
+      ["Sync failed", "Failed"],
+      ["Conflict", "Conflict"],
+      ["Local only", "Local"],
+      ["Journal records pending", "Journal"],
+    ] as const)
+      expect(syncPillLabel(status)).toBe(short);
+    // A truncated sentence never stands in for a status.
+    expect(syncPillLabel("")).toBe("Status");
+    expect(syncPillLabel("Somethingwentwrongverylong")).toBe("Somethingwen");
   });
 });
 

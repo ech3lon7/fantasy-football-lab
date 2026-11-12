@@ -1,8 +1,19 @@
 import { z } from "zod";
-import { num, str, type AppState, type Dataset, type Draft } from "./contracts";
-import type { Model } from "./valuation";
 import {
+  cmpId,
+  num,
+  positions,
+  str,
+  type AppState,
+  type Dataset,
+  type Draft,
+} from "./contracts";
+import type { Model, Player } from "./valuation";
+import {
+  capacity,
+  irAssignments,
   lineup,
+  makeLegal,
   roster,
   rosterExcess,
   forHypotheticalScoring,
@@ -16,6 +27,41 @@ import {
   starterAssignmentsSchema,
   starterLineupsKey,
 } from "./starter-lineups";
+
+// Reserved simulation names that would cause confusion with the live roster.
+export function isReservedSimulationName(name: string): boolean {
+  const norm = name.trim().toLowerCase();
+  return norm === "live" || norm === "live roster";
+}
+
+export type SimulationIssueRule =
+  | "capacity"
+  | "position_limit"
+  | "ir_ineligible";
+
+export interface RosterSimulationIssue {
+  team: string;
+  teamName: string;
+  rule: SimulationIssueRule;
+  ruleDescription: string;
+  countOver: number;
+  activeCount: number;
+  capacity: number;
+  position?: string;
+  positionLimit?: number;
+  playersInvolved: Player[];
+  suggestedDrop?: Player;
+  message: string;
+}
+
+const posLimitField: Record<string, string> = {
+  QB: "QBLimit",
+  RB: "RBLimit",
+  WR: "WRLimit",
+  TE: "TELimit",
+  K: "KLimit",
+  "D/ST": "DSTLimit",
+};
 
 // Store compact move recipes in existing private settings; never retain another workbook or mutate the live snapshot.
 export const rosterScenariosKey = "rosterScenarios";
@@ -263,6 +309,10 @@ export function saveRosterSnapshot(
   );
   if (!current)
     throw Error("Select a roster scenario before saving a snapshot.");
+  if (isReservedSimulationName(current.name))
+    throw Error(
+      "‘Live’ and ‘Live roster’ are reserved for the real roster. Choose another name for your simulation.",
+    );
   const scenario = rosterScenarioSchema.parse({
     ...current,
     baseLineups: current.baseLineups ?? state.filters.startingLineups ?? "",
@@ -734,13 +784,143 @@ export function applyRosterScenario(
       PlayerID: p.id,
       LineupSlotID: p.slot ?? null,
     }));
+  const structuredIssues: RosterSimulationIssue[] = [];
+  const ctx = m.dataset.tables.ModelContext[0];
+  const cap = capacity(m);
+  const irSlot = 21;
   for (const team of teams) {
     const ids = roster(m, team),
       excess = rosterExcess(m, ids);
-    if (excess > 0)
-      issues.push(
-        `${str(real.dataset.tables.ModelTeams.find((t) => str(t.TeamID) === team)?.TeamName)} has an unresolved roster/position limit (${excess}).`,
-      );
+    if (excess > 0) {
+      const teamName =
+        str(
+          real.dataset.tables.ModelTeams.find((t) => str(t.TeamID) === team)
+            ?.TeamName,
+        ) || team;
+      const irSet = new Set(irAssignments(m, ids));
+      const activeIds = ids.filter((id) => !irSet.has(id));
+      const legal = makeLegal(m, ids);
+      const suggestedDrop = legal.drops[0]
+        ? m.byId.get(legal.drops[0])
+        : undefined;
+
+      let foundSpecific = false;
+
+      // 1. Capacity issue
+      const capExcess = Math.max(0, activeIds.length - cap);
+      if (capExcess > 0) {
+        foundSpecific = true;
+        const involved = activeIds
+          .map((id) => m.byId.get(id))
+          .filter((p): p is Player => !!p)
+          .sort(
+            (a, b) =>
+              (a.blendedExpected ?? 0) - (b.blendedExpected ?? 0) ||
+              (a.index ?? Infinity) - (b.index ?? Infinity) ||
+              cmpId(a.id, b.id),
+          );
+        const issue: RosterSimulationIssue = {
+          team,
+          teamName,
+          rule: "capacity",
+          ruleDescription: "roster over capacity",
+          countOver: capExcess,
+          activeCount: activeIds.length,
+          capacity: cap,
+          playersInvolved: involved.slice(0, capExcess),
+          suggestedDrop,
+          message: `In your simulation ‘${scenario.name}’, ${teamName} has ${activeIds.length} active players but room for ${cap}. Suggested drop: ${suggestedDrop ? `${suggestedDrop.name} (${suggestedDrop.pos})` : "a bench player"}. Analysis that involves this team is conditional until it's fixed.`,
+        };
+        structuredIssues.push(issue);
+        issues.push(
+          `${teamName} has an unresolved roster/position limit (${excess}): roster over capacity by ${capExcess}.`,
+        );
+      }
+
+      // 2. Position limit issues
+      for (const pos of positions) {
+        const fieldName = posLimitField[pos];
+        const lim = fieldName ? num(ctx[fieldName]) : 0;
+        if (lim > 0) {
+          const posActive = activeIds
+            .map((id) => m.byId.get(id))
+            .filter((p): p is Player => !!p && p.pos === pos);
+          if (posActive.length > lim) {
+            foundSpecific = true;
+            const countOver = posActive.length - lim;
+            posActive.sort(
+              (a, b) =>
+                (a.blendedExpected ?? 0) - (b.blendedExpected ?? 0) ||
+                (a.index ?? Infinity) - (b.index ?? Infinity) ||
+                cmpId(a.id, b.id),
+            );
+            const issue: RosterSimulationIssue = {
+              team,
+              teamName,
+              rule: "position_limit",
+              ruleDescription: `too many ${pos}s`,
+              countOver,
+              activeCount: activeIds.length,
+              capacity: cap,
+              position: pos,
+              positionLimit: lim,
+              playersInvolved: posActive.slice(0, countOver),
+              suggestedDrop,
+              message: `In your simulation ‘${scenario.name}’, ${teamName} has ${posActive.length} ${pos}s but the position limit is ${lim}. Suggested drop: ${suggestedDrop ? `${suggestedDrop.name} (${suggestedDrop.pos})` : `a ${pos}`}. Analysis that involves this team is conditional until it's fixed.`,
+            };
+            structuredIssues.push(issue);
+            issues.push(
+              `${teamName} has an unresolved roster/position limit (${excess}): too many ${pos}s (${posActive.length} vs limit ${lim}).`,
+            );
+          }
+        }
+      }
+
+      // 3. IR-ineligible players in IR slot
+      const irIneligible = ids
+        .map((id) => m.byId.get(id))
+        .filter(
+          (p): p is Player => !!p && p.slot === irSlot && !p.irEligible,
+        );
+      if (irIneligible.length > 0) {
+        foundSpecific = true;
+        const issue: RosterSimulationIssue = {
+          team,
+          teamName,
+          rule: "ir_ineligible",
+          ruleDescription: "ineligible player in IR",
+          countOver: irIneligible.length,
+          activeCount: activeIds.length,
+          capacity: cap,
+          playersInvolved: irIneligible,
+          suggestedDrop,
+          message: `In your simulation ‘${scenario.name}’, ${teamName} has ${irIneligible.map((p) => p.name).join(", ")} in an IR slot who is no longer IR-eligible. Suggested drop: ${suggestedDrop ? `${suggestedDrop.name} (${suggestedDrop.pos})` : "a bench player"}. Analysis that involves this team is conditional until it's fixed.`,
+        };
+        structuredIssues.push(issue);
+        issues.push(
+          `${teamName} has an unresolved roster/position limit (${excess}): ineligible player in IR slot.`,
+        );
+      }
+
+      if (!foundSpecific) {
+        const issue: RosterSimulationIssue = {
+          team,
+          teamName,
+          rule: "capacity",
+          ruleDescription: "roster limit",
+          countOver: excess,
+          activeCount: activeIds.length,
+          capacity: cap,
+          playersInvolved: [],
+          suggestedDrop,
+          message: `In your simulation ‘${scenario.name}’, ${teamName} has an unresolved roster/position limit (${excess}). Analysis that involves this team is conditional until it's fixed.`,
+        };
+        structuredIssues.push(issue);
+        issues.push(
+          `${teamName} has an unresolved roster/position limit (${excess}).`,
+        );
+      }
+    }
   }
   const signature = JSON.stringify(scenario);
   // Stay within the existing hash-field limit even for an unusually long imported source identifier.
@@ -754,6 +934,7 @@ export function applyRosterScenario(
     // Nested chain previews must keep the true imported source, rather than treating projected ownership as a new import.
     sourceDataset: real.simulation?.sourceDataset ?? real.dataset,
     issues,
+    structuredIssues,
     lineupsRaw: plans,
     rebased: scenario.sourceHash !== real.dataset.hash,
   };

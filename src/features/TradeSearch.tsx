@@ -92,6 +92,7 @@ import {
   OpponentIncentiveView,
   TradeDiscoveryControls,
 } from "./TradeDiscovery";
+import { searchCue, useFeedback } from "../ui/feel/feedback";
 
 // Keep ephemeral search results out of the saved/synced trade draft until the user explicitly loads one.
 interface SearchJob {
@@ -143,6 +144,7 @@ export function TradeSearch({
   onChainPool,
   onClearPreview,
   followupRequest,
+  onAnalyze,
 }: {
   followupRequest?: { id: string; draft: Draft };
   poolHost?: HTMLElement | null;
@@ -150,6 +152,7 @@ export function TradeSearch({
   onModeChange?: (mode: TradeWorkspaceMode) => void;
   onPreview?: (value: TradeWorkspacePreview) => void;
   onClearPreview?: () => void;
+  onAnalyze?: (draft: Draft) => void;
   onChainPool?: (value: {
     team: string;
     pool: string[];
@@ -196,6 +199,7 @@ export function TradeSearch({
     else setLocalFinder(value);
   };
   // Drawers and preview selection are local presentation state, independent of persisted query criteria.
+  const notify = useFeedback();
   const [filtersOpen, setFiltersOpen] = useState(true),
     [selectedPreview, setSelectedPreview] = useState("");
   const resultPlans = useRef<string | undefined>(undefined);
@@ -761,13 +765,18 @@ export function TradeSearch({
             paging: false,
           };
         });
+        if (message.type === "browse") {
+          notify(searchCue(message.total > 0));
+        }
         if (message.type === "error") {
+          notify("caution");
           worker.terminate();
           active.current = null;
         }
       };
       worker.onerror = () => {
         if (active.current?.id !== id) return;
+        notify("caution");
         worker.terminate();
         active.current = null;
         setJob((previous) =>
@@ -2566,6 +2575,25 @@ export function TradeSearch({
                             >
                               Inspect
                             </button>
+                            {onAnalyze && (
+                              <button
+                                type="button"
+                                className="subtle trade-analyze-button"
+                                aria-label={`Analyze trade ${row.key}`}
+                                onClick={() => {
+                                  const targetDraft = {
+                                    teamA: query.teamA,
+                                    teamB: row.teamB,
+                                    give: row.give ?? query.give,
+                                    get: row.get,
+                                  };
+                                  change(targetDraft);
+                                  onAnalyze(targetDraft);
+                                }}
+                              >
+                                Analyze
+                              </button>
+                            )}
                             {row.give && (
                               <small>Offer: {names(row.give)}</small>
                             )}
@@ -3250,6 +3278,7 @@ export function TradeSearch({
         m={m}
         onPreview={onPreview}
         onPool={onChainPool}
+        onAnalyze={onAnalyze}
         team={draft.teamA}
         pool={discovery.flexible ? discovery.pool : draft.give}
         basis={lineupBasis}

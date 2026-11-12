@@ -12,9 +12,11 @@ test("popover stack: Esc closes the top one, focus returns, Tab is trapped", asy
   page,
 }) => {
   await enablePreview(page);
-  const keys = page.getByRole("button", { name: "Keys", exact: true });
-  await keys.focus();
-  await keys.press("Enter");
+  // The keyboard reference now lives in the header menu, so opening it is a menu trip.
+  const feel = page.getByRole("button", { name: "Feel", exact: true });
+  await feel.click();
+  const keys = page.getByRole("button", { name: "Keyboard reference" });
+  await keys.click();
   const first = page.getByRole("dialog", { name: "Keyboard reference" });
   await expect(first).toBeVisible();
   // Focus moves into the popover on open.
@@ -48,7 +50,8 @@ test("popover stack: Esc closes the top one, focus returns, Tab is trapped", asy
   await expect(nested).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(first).toHaveCount(0);
-  await expect(keys).toBeFocused();
+  // Focus returns to the header menu button, which is what opened the menu the reference came from.
+  await expect(feel).toBeFocused();
 });
 
 // Up and Down move between player rows, stop at the ends, and leave fields alone.

@@ -9,26 +9,18 @@ export const shortcuts: [string, string][] = [
   ["← → in versus", "Swap the two sides."],
 ];
 
-// The keyboard reference popover; its second popover demonstrates that Escape peels back one layer at a time.
-export function KeyboardReferenceButton() {
+// Opens the keyboard reference; shared by the header menu and the Lab so both open the same popover.
+export function useKeyboardReference() {
   const popovers = usePopovers();
-  return (
-    <button
-      type="button"
-      className="gd-pill"
-      onClick={() =>
-        popovers.open({
-          title: "Keyboard reference",
-          width: 560,
-          render: () => <KeyboardReference />,
-        })
-      }
-    >
-      Keys
-    </button>
-  );
+  return () =>
+    popovers.open({
+      title: "Keyboard reference",
+      width: 560,
+      render: () => <KeyboardReference />,
+    });
 }
 
+// The keyboard reference popover; its second popover demonstrates that Escape peels back one layer at a time.
 function KeyboardReference() {
   const popovers = usePopovers();
   return (

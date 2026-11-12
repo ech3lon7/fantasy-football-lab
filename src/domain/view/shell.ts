@@ -102,6 +102,24 @@ export function sourceFreshness(
   };
 }
 
+// The sync pill stays one short word so the header fits one row; the full status lives in its name and tooltip.
+export function syncPillLabel(status: string): string {
+  const short: [RegExp, string][] = [
+    [/^Synced$/, "Synced"],
+    [/^Syncing$/, "Syncing"],
+    [/^Changes pending/, "Pending"],
+    [/^Offline changes pending$/, "Offline"],
+    [/^Ready to sync$/, "Ready"],
+    [/^Sync failed$/, "Failed"],
+    [/^Conflict$/, "Conflict"],
+    [/^Local only$/, "Local"],
+  ];
+  const known = short.find(([test]) => test.test(status));
+  if (known) return known[1];
+  // Journal and other detail messages keep their first word, never a truncated sentence.
+  return status.split(/[\s;:]/)[0]?.slice(0, 12) || "Status";
+}
+
 // The phone bottom bar: five sections with short labels; Lab, Feel and the journal live in the header menu.
 export const bottomBarItems = [
   { id: "week", label: "Week" },

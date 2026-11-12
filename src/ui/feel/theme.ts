@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 // Store the theme choice in the existing string-valued filter record so it syncs with the account.
 export const themeKey = "feelTheme";
@@ -39,3 +39,24 @@ export function useGamedayRoot(pref: ThemePref) {
     };
   }, [pref]);
 }
+
+// The theme actually shown, so a one-tap switch can name the theme it moves to.
+export function useResolvedTheme(pref: ThemePref): ResolvedTheme {
+  const query = () =>
+    typeof window === "undefined"
+      ? false
+      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const [resolved, setResolved] = useState(() =>
+    resolveTheme(pref, query()),
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => setResolved(resolveTheme(pref, media.matches));
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, [pref]);
+  return resolved;
+}
+

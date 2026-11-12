@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { evaluate } from "../src/domain/valuation";
-import { teamsAssessment } from "../src/domain/lineups";
+import { teamsAssessment, type PositionGrade } from "../src/domain/lineups";
 import { tickerItems, weekSummary } from "../src/domain/view/week";
 import { fixture } from "./fixtures";
 
@@ -106,6 +106,16 @@ describe("headline, deck and moves", () => {
     expect(JSON.stringify(m.players.map((p) => p.blendedExpected))).toBe(
       before,
     );
+  });
+  it("describes an unusable starter plainly instead of reporting 100% below", () => {
+    const gradesWithZeroWR: PositionGrade[] = mine.map((g) =>
+      g.position === "WR"
+        ? { ...g, starterValue: 0, usable: 0, versus: -1 }
+        : g,
+    );
+    const s = weekSummary(m, team, gradesWithZeroWR);
+    expect(s.deck).not.toMatch(/100% below/);
+    expect(s.deck).toContain("no usable WR starter");
   });
 });
 

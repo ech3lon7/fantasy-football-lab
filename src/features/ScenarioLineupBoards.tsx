@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Shield, UserRound, X } from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import type { Model, Player } from "../domain/valuation";
 import { available, forHypotheticalScoring } from "../domain/lineups";
 import { scenarioLineupBoard } from "../domain/roster-scenarios";
@@ -9,26 +9,11 @@ import {
 } from "../domain/starter-lineups";
 import { fmt } from "../ui/components";
 import { PlayerName } from "../ui/PlayerName";
+import { PlayerPhoto } from "../ui/PlayerPhoto";
 
-// Use public ESPN player portraits, with the app's icon set when unavailable; portraits never determine player identity or scoring.
+// Use public ESPN player portraits, with team colours and initials fallback.
 function Portrait({ player }: { player: Player }) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <div className="sim-portrait" aria-hidden="true">
-      {Number(player.id) > 0 && !failed ? (
-        <img
-          alt=""
-          loading="lazy"
-          src={`https://a.espncdn.com/i/headshots/nfl/players/full/${player.id}.png`}
-          onError={() => setFailed(true)}
-        />
-      ) : player.pos === "D/ST" ? (
-        <Shield size={32} />
-      ) : (
-        <UserRound size={32} />
-      )}
-    </div>
-  );
+  return <PlayerPhoto player={player} size={32} className="sim-portrait" />;
 }
 
 // Card actions edit only the hypothetical recipe; names continue to open the existing player-detail popover.

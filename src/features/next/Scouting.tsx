@@ -1,3 +1,4 @@
+import { useFeedback } from "../../ui/feel/feedback";
 import { useEffect, useMemo, useState } from "react";
 import { str } from "../../domain/contracts";
 import {
@@ -50,6 +51,7 @@ import {
 import { PlayerName } from "../../ui/PlayerName";
 import { GemTracking } from "../GemTracking";
 import { useVersus } from "./PlayerCard";
+import { PlayerPhoto } from "../../ui/PlayerPhoto";
 import type { GemTrackingState } from "../../domain/gem-tracking";
 import {
   Chip,
@@ -82,8 +84,17 @@ function Option({
   on: boolean;
   change: () => void;
 }) {
+  const notify = useFeedback();
   return (
-    <button type="button" className="gd-opt" aria-pressed={on} onClick={change}>
+    <button
+      type="button"
+      className="gd-opt"
+      aria-pressed={on}
+      onClick={() => {
+        notify("select");
+        change();
+      }}
+    >
       {label}
       <small>{count === null ? "" : count}</small>
     </button>
@@ -667,27 +678,40 @@ export function Scouting({
                               color: c.colors.ink,
                             }}
                           >
-                            <PlayerName
-                              p={p}
-                              className="player-link gd-pcard-name"
-                              ariaLabel={`${c.name} ${c.pos} · ${c.nfl}`}
-                            >
-                              <b>{c.name}</b>
-                              <small>
-                                {c.pos} · {c.nfl}
-                              </small>
-                            </PlayerName>
+                            <div className="gd-pcard-ident">
+                              <PlayerPhoto player={p} size={36} />
+                              <PlayerName
+                                p={p}
+                                className="player-link gd-pcard-name"
+                                ariaLabel={`${c.name} ${c.pos} · ${c.nfl}`}
+                              >
+                                <b>{c.name}</b>
+                                <small>
+                                  {c.pos} · {c.nfl}
+                                </small>
+                              </PlayerName>
+                            </div>
                             <span className="gd-pcard-eppg">
                               <small>EPPG</small>
                               {c.eppg ?? "—"}
                             </span>
                           </header>
                           <div className="gd-pcard-body">
-                            <FloorCeilingBar
-                              range={c.range}
-                              scale={cards.scale}
-                              unavailableReason="Next-game range needs a usable EPPG and scoring variability."
-                            />
+                            <div className="gd-pcard-range-wrap">
+                              <div className="gd-pcard-range-label">
+                                <small>Next-game range</small>
+                                {c.range.floor !== null && c.range.ceiling !== null && (
+                                  <span>
+                                    {c.range.floor.toFixed(1)} – {c.range.ceiling.toFixed(1)}
+                                  </span>
+                                )}
+                              </div>
+                              <FloorCeilingBar
+                                range={c.range}
+                                scale={cards.scale}
+                                unavailableReason="Next-game range needs a usable EPPG and scoring variability."
+                              />
+                            </div>
                             <div className="gd-pcard-stats">
                               <span>Recent {c.recent ?? "—"}</span>
                               <span>Surplus {c.surplus ?? "—"}</span>
@@ -758,6 +782,7 @@ export function Scouting({
           })
         }
       >
+        {/* Prospective gem tracking rebuilt in tokens */}
         <GemTracking tracking={tracking} />
       </FoldingGroup>
     </div>

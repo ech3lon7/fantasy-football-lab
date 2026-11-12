@@ -5,16 +5,24 @@ import {
   sectionForRoute,
   sections,
   sourceFreshness,
+  syncPillLabel,
 } from "../../domain/view/shell";
 import type { Model } from "../../domain/valuation";
-import { KeyboardReferenceButton } from "./KeyboardReference";
+import { useKeyboardReference } from "./KeyboardReference";
+import { SimulationIssuePopover } from "./SimulationIssuePopover";
+import { usePopovers } from "../../ui/popover/PopoverStack";
 import { Segmented } from "../../ui/primitives";
 import {
   animationPrefs,
   feedback,
   type AnimationPref,
 } from "../../ui/feel/settings";
-import { themePrefs, type ThemePref } from "../../ui/feel/theme";
+import {
+  themePrefs,
+  useResolvedTheme,
+  type ThemePref,
+} from "../../ui/feel/theme";
+import { Moon, Sun } from "lucide-react";
 
 export interface FeelValues {
   theme: ThemePref;
@@ -161,7 +169,37 @@ export function FeelSettings({
   );
 }
 
-// The Feel menu holds the four independent settings: theme, animation, sound and haptics.
+// The one-tap theme switch beside the menu: it names the theme it moves to, so light and dark are one tap apart.
+function ThemeToggle({
+  feel,
+  change,
+}: {
+  feel: FeelValues;
+  change: (key: "theme", value: string) => void;
+}) {
+  const resolved = useResolvedTheme(feel.theme),
+    next = resolved === "dark" ? "light" : "dark";
+  return (
+    <button
+      type="button"
+      className="gd-pill gd-theme-toggle"
+      aria-label={`Switch to ${next} theme`}
+      title={`Switch to ${next} theme`}
+      onClick={() => change("theme", next)}
+    >
+      {resolved === "dark" ? (
+        <Sun size={16} aria-hidden />
+      ) : (
+        <Moon size={16} aria-hidden />
+      )}
+      <span className="gd-wide-only">
+        {next === "dark" ? "Dark" : "Light"}
+      </span>
+    </button>
+  );
+}
+
+// One menu holds the four Feel settings and the keyboard reference, so the header keeps to a single row.
 function FeelMenu({
   feel,
   change,
@@ -173,7 +211,9 @@ function FeelMenu({
   ) => void;
 }) {
   const [open, setOpen] = useState(false),
-    ref = useRef<HTMLDivElement>(null);
+    ref = useRef<HTMLDivElement>(null),
+    button = useRef<HTMLButtonElement>(null),
+    openReference = useKeyboardReference();
   useEffect(() => {
     if (!open) return;
     const close = (e: KeyboardEvent) => {
@@ -185,6 +225,7 @@ function FeelMenu({
   return (
     <div className="gd-feel" ref={ref}>
       <button
+        ref={button}
         type="button"
         className="gd-pill"
         aria-expanded={open}
@@ -195,6 +236,18 @@ function FeelMenu({
       {open && (
         <div className="gd-menu" role="group" aria-label="Feel settings">
           <FeelSettings feel={feel} change={change} />
+          <button
+            type="button"
+            className="gd-menu-link"
+            onClick={() => {
+              // The menu closes, so focus returns to its button when the reference is closed.
+              setOpen(false);
+              button.current?.focus({ preventScroll: true });
+              openReference();
+            }}
+          >
+            Keyboard reference
+          </button>
         </div>
       )}
     </div>
@@ -218,7 +271,8 @@ function MoreMenu({
     value: string,
   ) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false),
+    openReference = useKeyboardReference();
   useEffect(() => {
     if (!open) return;
     const close = (e: KeyboardEvent) => {
@@ -260,8 +314,17 @@ function MoreMenu({
           <a href="#/lab/data">Sync status: {syncStatus}</a>
           <a href="#/lab">Lab</a>
           <a href="#/journal">Trade journal</a>
-          <a href="#/lab/keys">Keyboard reference</a>
           <FeelSettings feel={feel} change={changeFeel} />
+          <button
+            type="button"
+            className="gd-menu-link"
+            onClick={() => {
+              setOpen(false);
+              openReference();
+            }}
+          >
+            Keyboard reference
+          </button>
         </div>
       )}
     </div>
@@ -286,7 +349,7 @@ export function BottomBar({ route }: { route: string }) {
   );
 }
 
-// The always-visible bar: wordmark, six sections, search, week and source freshness, hypothetical chip, import, sync and Feel.
+// The always-visible bar: wordmark, six sections, search, week and source freshness, simulation chip, import, sync and Feel.
 export function GamedayHeader({
   route,
   model,
@@ -295,10 +358,13 @@ export function GamedayHeader({
   finalWeek,
   syncStatus,
   hypothetical,
+  simulation,
   busy,
   onImport,
   feel,
   changeFeel,
+  onApplyDrop,
+  onSwitchToLive,
 }: {
   route: string;
   model: Model | null;
@@ -306,7 +372,8 @@ export function GamedayHeader({
   week: number | null;
   finalWeek: number | null;
   syncStatus: string;
-  hypothetical: string | null;
+  hypothetical?: string | null;
+  simulation?: Model["simulation"] | null;
   busy: boolean;
   onImport: () => void;
   feel: FeelValues;
@@ -314,9 +381,31 @@ export function GamedayHeader({
     key: "theme" | "animation" | "sound" | "haptics",
     value: string,
   ) => void;
+  onApplyDrop?: (team: string, playerId: string) => void;
+  onSwitchToLive?: () => void;
 }) {
   const current = sectionForRoute(route),
     fresh = sourceFreshness(sourceUTC, Date.now());
+  const popovers = usePopovers();
+  const simName = simulation?.scenario.name ?? hypothetical;
+  const hasIssues = Boolean(
+    simulation?.structuredIssues && simulation.structuredIssues.length > 0,
+  );
+  const openSimPopover = () => {
+    if (!simulation) return;
+    popovers.open({
+      title: `Simulation: ${simulation.scenario.name}`,
+      width: 480,
+      render: (close) => (
+        <SimulationIssuePopover
+          simulation={simulation}
+          onApplyDrop={onApplyDrop}
+          onSwitchToLive={onSwitchToLive}
+          close={close}
+        />
+      ),
+    });
+  };
   return (
     <header className="gd-header">
       <a className="gd-wordmark" href="#/overview">
@@ -349,17 +438,33 @@ export function GamedayHeader({
           </>
         )}
       </span>
-      {hypothetical && (
-        <a className="gd-chip" href="#/overview">
-          Hypothetical: {hypothetical}
-        </a>
+      {simName && (
+        simulation ? (
+          <button
+            type="button"
+            className={`gd-chip${hasIssues ? " gd-chip-warning" : ""}`}
+            onClick={openSimPopover}
+            title={
+              hasIssues
+                ? `${simulation.structuredIssues?.length} unresolved roster limit(s)`
+                : `Simulation: ${simName}`
+            }
+          >
+            Simulation: {simName}
+          </button>
+        ) : (
+          <a className="gd-chip" href="#/overview">
+            Simulation: {simName}
+          </a>
+        )
       )}
       <a
-        className="gd-pill gd-wide-only"
-        href="#/data"
+        className="gd-pill gd-wide-only gd-sync"
+        href="#/lab/data"
         aria-label={`Sync status: ${syncStatus}`}
+        title={`Sync status: ${syncStatus}`}
       >
-        {syncStatus}
+        {syncPillLabel(syncStatus)}
       </a>
       <button
         type="button"
@@ -369,9 +474,7 @@ export function GamedayHeader({
       >
         {busy ? "Reading…" : "Import"}
       </button>
-      <span className="gd-wide-only">
-        <KeyboardReferenceButton />
-      </span>
+      <ThemeToggle feel={feel} change={changeFeel} />
       <span className="gd-wide-only">
         <FeelMenu feel={feel} change={changeFeel} />
       </span>

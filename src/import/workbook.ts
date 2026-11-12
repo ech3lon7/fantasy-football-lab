@@ -14,7 +14,12 @@ import {
   n,
   sd,
 } from "../domain/contracts";
-import { evaluate } from "../domain/valuation";
+import { evaluate, playerSignals } from "../domain/valuation";
+import {
+  gemVersion,
+  preGemVersion,
+  labelRuleVersion,
+} from "../domain/label-rules";
 const xml = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -359,6 +364,14 @@ export async function importWorkbook(bytes: Uint8Array) {
     model = evaluate(dataset, settings, { workbookMode: true });
   const detail = wb.Sheets.Valuation_Detail,
     parity: string[] = [];
+  // Versioned copies verify current labels; unmarked source workbooks retain their original parity contract.
+  const labelVersion = str(detail?.HV2?.v),
+    currentLabelVersion = `${gemVersion}/${preGemVersion}/${labelRuleVersion}`;
+  if (labelVersion && labelVersion !== currentLabelVersion)
+    throw Error(
+      "Unsupported workbook label policy; update the app or use a compatible workbook.",
+    );
+  const labelModel = labelVersion ? evaluate(dataset, settings) : model;
   const metrics: Record<string, keyof (typeof model.players)[number]> = {
     ActualPPG: "actual",
     RecentPPG: "recent",
@@ -374,10 +387,25 @@ export async function importWorkbook(bytes: Uint8Array) {
   };
   if (detail) {
     const headers = new Map<string, number>();
-    for (let c = 0; c < 228; c++) {
+    for (let c = 0; c < (labelVersion ? 256 : 228); c++) {
       const h = detail[XLSX.utils.encode_cell({ r: 21, c })]?.v;
       if (h) headers.set(str(h), c);
     }
+    // A current-policy marker requires its independent-signal evidence, rather than silently skipping absent columns.
+    const signalColumns = [
+      "GemSignal",
+      "AppSignals",
+      "ReducedWorkload",
+      "RoleGrowthWatch",
+      "ScoringBreakoutWatch",
+      "ProjectionGapWatch",
+      "TDCaution",
+      "AppRegression",
+    ];
+    if (labelVersion && signalColumns.some((name) => !headers.has(name)))
+      throw Error(
+        "Current workbook label evidence is incomplete; recalculate and save the workbook.",
+      );
     for (let i = 0; i < model.players.length; i++) {
       const pid = str(detail[XLSX.utils.encode_cell({ r: 22 + i, c: 0 })]?.v);
       const p = model.byId.get(pid);
@@ -388,13 +416,60 @@ export async function importWorkbook(bytes: Uint8Array) {
         const cell = detail[XLSX.utils.encode_cell({ r: 22 + i, c })];
         if (!cell) continue;
         const expected = cell.v === "n.a." ? null : cell.v,
-          actual = p[key];
+          actual =
+            metric === "GemSignal" ? labelModel.byId.get(pid)!.gem : p[key];
         if (
           typeof expected === "number"
             ? typeof actual !== "number" || Math.abs(expected - actual) > 1e-8
             : actual !== expected
         )
           parity.push(`${p.name}: ${metric} differs from cached Excel output`);
+      }
+      // Compare each independently active flag and regression result against the same domain classifier used by the UI.
+      if (labelVersion) {
+        const current = labelModel.byId.get(pid)!;
+        const signals = playerSignals(current);
+        const flags = {
+          ReducedWorkload: "Reduced workload",
+          RoleGrowthWatch: "Role-growth watch",
+          ScoringBreakoutWatch: "Scoring breakout watch",
+          ProjectionGapWatch: "Projection-gap watch",
+          TDCaution: "TD caution",
+        };
+        for (const [column, signal] of Object.entries(flags)) {
+          const value =
+            detail[
+              XLSX.utils.encode_cell({ r: 22 + i, c: headers.get(column)! })
+            ]?.v;
+          if (value !== Number(signals.includes(signal)))
+            parity.push(
+              `${p.name}: ${column} differs from cached Excel output`,
+            );
+        }
+        const savedSignals = str(
+          detail[
+            XLSX.utils.encode_cell({ r: 22 + i, c: headers.get("AppSignals")! })
+          ]?.v,
+        )
+          .split(";")
+          .map((signal) => signal.trim())
+          .filter(Boolean);
+        if (
+          JSON.stringify([...new Set(savedSignals)].sort()) !==
+          JSON.stringify([...signals].sort())
+        )
+          parity.push(`${p.name}: AppSignals differs from cached Excel output`);
+        if (
+          detail[
+            XLSX.utils.encode_cell({
+              r: 22 + i,
+              c: headers.get("AppRegression")!,
+            })
+          ]?.v !== current.regression
+        )
+          parity.push(
+            `${p.name}: AppRegression differs from cached Excel output`,
+          );
       }
     }
   }

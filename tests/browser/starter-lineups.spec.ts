@@ -1,4 +1,3 @@
-import { openTradeDetails, openTradeFilters, openLegacyTrades } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { starterLineupsKey } from "../../src/domain/starter-lineups";
@@ -195,57 +194,48 @@ test("starter controls save, enforce QB limits, reset, and fit a mobile screen",
   ).toHaveValue("Bench");
 });
 
-// The worker must receive the saved plan: bench loss is zero even when value exchange and optimized coverage are negative.
+// The saved plan must reach the evaluator: bench loss is zero even when value exchange and optimized coverage are negative.
 test("bench trades keep direct points unchanged while exchange grade and coverage remain separate", async ({
   page,
 }) => {
   await seed(page);
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
+  await page.goto("./#/trade");
+  await page.getByRole("combobox", { name: "Trade partner" }).selectOption("2");
   await page
-    .getByLabel("Outgoing player 1", { exact: true })
-    .selectOption("101");
+    .getByRole("group", { name: "Players you send" })
+    .getByRole("button", { name: /Bench QB/ })
+    .click();
   await page
-    .getByLabel("Incoming player 1", { exact: true })
-    .selectOption("200");
-  // The other scoring basis is deliberately secondary and must be opened explicitly.
-  await page.getByText("Compare with Marked starters", { exact: true }).click();
-  const direct = page.locator("section").filter({
-    has: page.getByRole("heading", {
-      name: "Your direct starter impact",
-      exact: true,
-    }),
-  });
-  const gain = direct
-    .locator(".metric")
-    .filter({
-      has: page.getByText("Expected scoring gain / week", { exact: true }),
-    })
-    .locator("strong");
-  await expect(gain).toHaveText("0.00");
-  await expect(page.locator(".trade-full-analysis").getByRole("heading", { name: "Horrible deal", exact: true })).toBeVisible();
+    .getByRole("group", { name: "Players you receive" })
+    .getByRole("button", { name: /Incoming QB/ })
+    .click();
+  const verdicts = page.getByRole("region", { name: "Verdicts" });
+  const lineupGain = verdicts
+    .locator("details")
+    .filter({ hasText: "Lineup impact (EPPG)" })
+    .locator("summary strong");
+  const exchange = verdicts
+    .locator("details")
+    .filter({ hasText: "Surplus exchange" })
+    .locator("summary strong");
+  // Scoring on the marked starters leaves a bench-for-bench trade at no gain, while the exchange stays horrible.
   await page
-    .getByText("Modeled future coverage impact (includes bench)", {
-      exact: true,
-    })
+    .getByRole("group", { name: "Lineup basis" })
+    .getByRole("button", { name: "Marked starters" })
+    .click();
+  await expect(lineupGain).toHaveText(/^\+?0\.0/);
+  await expect(exchange).toHaveText("Horrible deal");
+  // Optimized coverage, which includes the bench, is a separate and negative result.
+  await page
+    .getByText("Optimized future lineups and coverage", { exact: true })
     .click();
   const coverage = page
-    .locator(".metric")
-    .filter({
-      has: page.getByText("Your modeled coverage gain / week", { exact: true }),
-    });
-  await expect(coverage.locator("strong")).toHaveText(/^-/);
-  // Inspect the marked baseline inside its own disclosure, rather than a similarly worded optimized lineup.
-  await direct
-    .getByText("Your alternative weekly lineups", { exact: true })
-    .click();
-  await expect(direct.getByText(/Before: Main QB/).first()).toBeVisible();
-  await page.screenshot({
-    path: "test-results/direct-starter-trade.png",
-    fullPage: true,
-  });
-  // A saved starter switch must invalidate direct trade results without changing the selected package.
+    .locator("details")
+    .filter({ hasText: "Optimized future lineups and coverage" });
+  await expect(
+    coverage.getByRole("row", { name: /^You/ }).locator("td").first(),
+  ).toHaveText(/^-|^−/);
+  // A saved starter switch must change the marked-starter result without changing the selected package.
   await page.goto("./#/roster");
   await page
     .getByRole("combobox", { name: "Lineup status: Main QB", exact: true })
@@ -255,16 +245,21 @@ test("bench trades keep direct points unchanged while exchange grade and coverag
     .selectOption("Starter");
   await page.getByRole("button", { name: "Save lineup", exact: true }).click();
   await expect(page.getByText(/Lineup source: Saved app lineup/)).toBeVisible();
-  await openLegacyTrades(page);
-  await openTradeDetails(page);
-  await openTradeFilters(page);
-  await page.getByText("Compare with Marked starters", { exact: true }).click();
-  await expect(gain).toHaveText(/^-/);
+  await page.goto("./#/trade");
+  await page
+    .getByRole("group", { name: "Lineup basis" })
+    .getByRole("button", { name: "Marked starters" })
+    .click();
+  await expect(lineupGain).toHaveText(/^-|^−/);
   await expect(
-    page.getByLabel("Outgoing player 1", { exact: true }),
-  ).toHaveValue("101");
+    page
+      .getByRole("group", { name: "Players you send" })
+      .getByRole("button", { name: /Bench QB/ }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(
-    page.getByLabel("Incoming player 1", { exact: true }),
-  ).toHaveValue("200");
-  await expect(page.locator(".trade-full-analysis").getByRole("heading", { name: "Horrible deal", exact: true })).toBeVisible();
+    page
+      .getByRole("group", { name: "Players you receive" })
+      .getByRole("button", { name: /Incoming QB/ }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(exchange).toHaveText("Horrible deal");
 });

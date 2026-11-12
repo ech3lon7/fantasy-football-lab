@@ -6,8 +6,10 @@ import type { PositionGrade } from "../../domain/lineups";
 import type { Model, Player } from "../../domain/valuation";
 import { starterLineupsKey } from "../../domain/starter-lineups";
 import { PlayerName } from "../../ui/PlayerName";
+import { PlayerPhoto } from "../../ui/PlayerPhoto";
 import { Chip } from "../../ui/primitives";
 import { StarterLineupEditor } from "../StarterLineupEditor";
+import { SimulationNote } from "./SimulationIssuePopover";
 
 // A grade letter on the shared six-step scale; the letter is always shown, never colour alone.
 export function GradeBadge({
@@ -28,7 +30,7 @@ export function GradeBadge({
   );
 }
 
-// The recent-games strip: one bar per played game on the group's scale, with gaps for unrecorded scores.
+// The recent-games strip: one bar per played game on the group's scale, with gaps for unrecorded scores and byes marked.
 function Strip({ tile, max }: { tile: DepthTile; max: number }) {
   if (tile.strip.length === 0)
     return <span className="gd-strip-na">No games yet</span>;
@@ -37,20 +39,32 @@ function Strip({ tile, max }: { tile: DepthTile; max: number }) {
       className="gd-strip"
       role="img"
       aria-label={`Recent scores: ${tile.strip
-        .map((s) => (s.points === null ? "unavailable" : s.points.toFixed(1)))
+        .map((s) =>
+          s.isBye
+            ? "bye"
+            : s.points === null
+              ? "unavailable"
+              : s.points.toFixed(1),
+        )
         .join(", ")}`}
     >
       {tile.strip.map((s) => (
         <i
           key={s.week}
-          title={`Week ${s.week}: ${s.points === null ? "unavailable" : s.points.toFixed(1)}`}
+          title={`Week ${s.week}: ${s.isBye ? "Bye" : s.points === null ? "unavailable" : s.points.toFixed(1)}`}
           style={{
-            height:
-              s.points === null
+            height: s.isBye
+              ? 6
+              : s.points === null
                 ? 2
                 : `${Math.max(4, (Math.max(0, s.points) / max) * 100)}%`,
+            opacity:
+              s.isBye || s.points === null
+                ? undefined
+                : Math.max(0.35, Math.min(1, 0.35 + 0.65 * (s.points / max))),
           }}
-          data-gap={s.points === null ? "" : undefined}
+          data-gap={s.points === null && !s.isBye ? "" : undefined}
+          data-bye={s.isBye ? "" : undefined}
         />
       ))}
     </span>
@@ -62,27 +76,48 @@ export function PlayerTile({
   tile,
   player,
   max,
+  onCut,
 }: {
   tile: DepthTile;
   player: Player;
   max: number;
+  onCut?: (id: string) => void;
 }) {
   return (
     <article className="gd-tile" data-role={tile.role} data-player-row="">
-      <PlayerName
-        p={player}
-        className="player-link gd-tile-name"
-        ariaLabel={`${tile.name} ${tile.pos} · ${tile.nfl}`}
-      >
-        <b>{tile.name}</b>
-        <small>
-          {tile.role === "Starter" ? `Starter · ${tile.slot}` : tile.role}
-        </small>
-      </PlayerName>
-      <span className="gd-tile-eppg">
-        <small>EPPG</small>
-        {tile.eppg ?? "—"}
-      </span>
+      <div className="gd-tile-ident">
+        <PlayerPhoto player={player} size={32} />
+        <PlayerName
+          p={player}
+          className="player-link gd-tile-name"
+          ariaLabel={`${tile.name} ${tile.pos} · ${tile.nfl}`}
+        >
+          <b>{tile.name}</b>
+          <small>
+            {tile.role === "Starter" ? `Starter · ${tile.slot}` : tile.role}
+          </small>
+        </PlayerName>
+      </div>
+      <div className="gd-tile-side">
+        <span className="gd-tile-eppg">
+          <small>EPPG</small>
+          {tile.eppg ?? "—"}
+        </span>
+        {onCut && (
+          <button
+            type="button"
+            className="gd-tile-cut"
+            aria-label={`Cut ${tile.name}`}
+            title={`Cut ${tile.name} from simulation`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCut(tile.id);
+            }}
+          >
+            Cut
+          </button>
+        )}
+      </div>
       <Strip tile={tile} max={max} />
       {(tile.labels.length > 0 ||
         (tile.injury && tile.injury !== "Active")) && (
@@ -108,6 +143,8 @@ export function Roster({
   onFilters,
   simulator,
   tryPair,
+  onApplyDrop,
+  onSwitchToLive,
 }: {
   // Applies a cut and an add to a hypothetical roster; returns whether it worked.
   tryPair: (moves: ScenarioMove[]) => boolean;
@@ -117,12 +154,20 @@ export function Roster({
   filters: Record<string, string>;
   onFilters: (patch: Record<string, string>) => void;
   simulator: ReactNode;
+  onApplyDrop?: (team: string, playerId: string) => void;
+  onSwitchToLive?: () => void;
 }) {
   const chart = depthChart(m, team, grades),
     pairs = useMemo(() => addDropPairs(m, team), [m, team]),
     [depthOnly, setDepthOnly] = useState(true),
     [tried, setTried] = useState("");
   const shownPairs = pairs.filter((p) => depthOnly || p.starts === "starts");
+  const handleCut = (id: string) => {
+    if (tryPair([{ kind: "move", player: id, from: team, to: "0" }])) {
+      const p = m.byId.get(id);
+      setTried(`Cut ${p?.name ?? id} in simulation.`);
+    }
+  };
   return (
     <div className="gd-roster">
       {simulator}
@@ -185,28 +230,40 @@ export function Roster({
       </section>
       <section aria-label="Depth chart" className="gd-depth">
         <h2>Depth chart</h2>
-        {m.simulation && (
-          <p className="gd-muted">
-            Showing the hypothetical roster “{m.simulation.scenario.name}”.
-            Grades and lineups use it everywhere in the app.
-          </p>
-        )}
+        <SimulationNote
+          simulation={m.simulation}
+          team={team}
+          onApplyDrop={onApplyDrop}
+          onSwitchToLive={onSwitchToLive}
+        />
+        {m.simulation &&
+          !m.simulation.structuredIssues?.some((i) => i.team === team) && (
+            <p className="gd-muted">
+              Showing the hypothetical roster “{m.simulation.scenario.name}”.
+              Grades and lineups use it everywhere in the app.
+            </p>
+          )}
         {chart.map((group) => (
           <section key={group.position} className="gd-depth-group">
             <h3>
               {group.position}
               <GradeBadge grade={group.grade} tone={group.tone} />
             </h3>
-            <div className="gd-tiles">
-              {group.tiles.map((tile) => (
-                <PlayerTile
-                  key={tile.id}
-                  tile={tile}
-                  player={m.byId.get(tile.id)!}
-                  max={group.scaleMax}
-                />
-              ))}
-            </div>
+            {group.tiles.length === 0 ? (
+              <p className="gd-muted">No players</p>
+            ) : (
+              <div className="gd-tiles">
+                {group.tiles.map((tile) => (
+                  <PlayerTile
+                    key={tile.id}
+                    tile={tile}
+                    player={m.byId.get(tile.id)!}
+                    max={group.scaleMax}
+                    onCut={m.simulation ? handleCut : undefined}
+                  />
+                ))}
+              </div>
+            )}
           </section>
         ))}
         {chart.length === 0 && <p>No players on this roster.</p>}

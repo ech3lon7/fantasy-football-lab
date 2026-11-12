@@ -94,9 +94,10 @@ export function assessGem(
     previous = usable ? amounts(previousRows) : [];
   result.recent = mean(recent);
   result.previous = mean(previous);
+  // Stabilize divided integer counts so inclusive growth floors agree with native Excel at exact boundaries.
   result.increase =
     result.recent !== null && result.previous !== null
-      ? result.recent - result.previous
+      ? Math.round((result.recent - result.previous) * 1e10) / 1e10
       : null;
   result.growthPct =
     result.increase !== null && result.previous !== null && result.previous > 0

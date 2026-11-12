@@ -164,14 +164,14 @@ test("keeps direct/search toggles independent and freezes an explicitly logged f
   // Each optional assessment is reached through its own mode and filter drawer.
   const searchToggle = page.getByRole("checkbox", { name: "Enable Surface Trading", exact: true });
   await expect(searchToggle).not.toBeChecked();
-  await page.getByRole("button", { name: "Manual analyzer", exact: true }).click();
+  await page.getByRole("tab", { name: "Manual analyzer" }).or(page.getByRole("button", { name: "Manual analyzer", exact: true })).click();
   await openTradeFilters(page, "Manual");
   const directToggle = page.getByRole("checkbox", { name: "Enable Surface Trading", exact: true });
   await expect(directToggle).not.toBeChecked();
   await directToggle.check();
-  await page.getByRole("button", { name: "Find matching trades", exact: true }).click();
+  await page.getByRole("tab", { name: "Find trades" }).or(page.getByRole("button", { name: "Find matching trades", exact: true })).click();
   await expect(searchToggle).not.toBeChecked();
-  await page.getByRole("button", { name: "Manual analyzer", exact: true }).click();
+  await page.getByRole("tab", { name: "Manual analyzer" }).or(page.getByRole("button", { name: "Manual analyzer", exact: true })).click();
   const assessment = page.getByRole("region", {
     name: "Manager expectations assessment",
     exact: true,

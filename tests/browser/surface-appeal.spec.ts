@@ -174,6 +174,7 @@ test("retires legacy surface restrictions from preferences and saved trades", as
     db.close();
   }, workspace);
   await page.reload();
+  await openLegacyTrades(page);
   await openTradeDetails(page);
   await openTradeFilters(page);
   const card = page
@@ -215,10 +216,10 @@ test("uses one optional Surface Trading control per tool and per chain stage", a
     panel.getByRole("combobox", { name: "Recipient preset", exact: true }),
   ).toBeVisible();
   // The manual opt-in remains off behind its own independent filter drawer.
-  await page.getByRole("button", { name: "Manual analyzer", exact: true }).click();
+  await page.getByRole("tab", { name: "Manual analyzer" }).or(page.getByRole("button", { name: "Manual analyzer", exact: true })).click();
   await openTradeFilters(page, "Manual");
   await expect(page.getByRole("checkbox", { name: "Enable Surface Trading", exact: true })).not.toBeChecked();
-  await page.getByRole("button", { name: "Find matching trades", exact: true }).click();
+  await page.getByRole("tab", { name: "Find trades" }).or(page.getByRole("button", { name: "Find matching trades", exact: true })).click();
   await expect
     .poll(
       async () =>
@@ -230,7 +231,8 @@ test("uses one optional Surface Trading control per tool and per chain stage", a
   await panel.getByRole("button", { name: "Search", exact: true }).click();
   await expect(panel.getByText(/1 index matches/)).toBeVisible();
   await page
-    .getByRole("button", { name: "Two-trade chain planner", exact: true })
+    .getByRole("tab", { name: "Chain planner" })
+    .or(page.getByRole("button", { name: "Two-trade chain planner", exact: true }))
     .click();
   await openTradeFilters(page, "Chain");
   await expect(

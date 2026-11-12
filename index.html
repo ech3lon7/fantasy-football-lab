@@ -81,6 +81,7 @@
           "error",
           (event) => {
             const asset = event.target;
+            if (asset instanceof HTMLImageElement) return;
             if (!ready || (asset instanceof HTMLScriptElement && asset.src))
               fail();
           },

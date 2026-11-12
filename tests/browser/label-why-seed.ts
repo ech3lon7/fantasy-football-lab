@@ -9,7 +9,12 @@ import {
 } from "../../src/domain/contracts";
 
 // Seed only this isolated test browser with synthetic players that exercise earned and near labels.
-export async function seedLabelWhy(page: Page, stale = false) {
+// Extra app settings, such as the theme, ride along in the filter record the app already syncs.
+export async function seedLabelWhy(
+  page: Page,
+  stale = false,
+  filters: Record<string, string> = {},
+) {
   const d: Dataset = JSON.parse(
     execFileSync(
       process.execPath,
@@ -95,10 +100,11 @@ export async function seedLabelWhy(page: Page, stale = false) {
   );
   // An old source timestamp exercises the stale notice without changing any label.
   if (stale) dataset.sourceUTC = "2020-01-01T00:00:00.000Z";
+  const state = initialState(dataset);
   const workspace: Workspace = {
     owner: "local",
     dataset,
-    state: initialState(dataset),
+    state: { ...state, filters: { ...state.filters, ...filters } },
     datasetRevision: 0,
     stateRevision: 0,
     pendingDataset: false,

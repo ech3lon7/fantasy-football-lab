@@ -7,6 +7,7 @@ import {
   appendScenarioMove,
   appendScenarioTrade,
   applyRosterScenario,
+  isReservedSimulationName,
   readRosterScenarios,
   rosterScenariosKey,
   selectMyTeam,
@@ -927,4 +928,71 @@ it("ignores missing IR forecasts but keeps missing eligible-player scores unavai
     scenarioLineupBoard(projected, "1", m.current, "optimized").expected,
   ).toBeNull();
   expect(scenarioTeamImpact(m, projected, "1").after).toBeNull();
+});
+
+it("generates structured issues and plain explanations for capacity, position limits, and IR ineligibility", async () => {
+  const { m, scenario } = await sample();
+
+  // 1. Capacity issue: reduce capacity to 2 when team 1 has 3 players (100, 101, 1)
+  const ctx = m.dataset.tables.ModelContext[0];
+  ctx.BenchSlots = 0;
+  ctx.QBSlots = 1;
+  ctx.RBSlots = 1;
+  ctx.WRSlots = 0;
+  ctx.TESlots = 0;
+  ctx.KSlots = 0;
+  ctx.DSTSlots = 0;
+  ctx.FlexSlots = 0;
+
+  const projCap = applyRosterScenario(m, scenario);
+  expect(projCap.simulation?.structuredIssues).toBeDefined();
+  const capIssue = projCap.simulation?.structuredIssues?.find(
+    (i) => i.rule === "capacity",
+  );
+  expect(capIssue).toBeDefined();
+  expect(capIssue?.ruleDescription).toBe("roster over capacity");
+  expect(capIssue?.countOver).toBe(1);
+  expect(capIssue?.suggestedDrop).toBeDefined();
+  expect(capIssue?.message).toContain("room for 2");
+  expect(capIssue?.message).toContain("Suggested drop:");
+
+  // 2. Position limit issue: reset slots, set QBLimit = 1 when team 1 has 2 QBs (100, 101)
+  ctx.BenchSlots = 5;
+  ctx.QBLimit = 1;
+  const projPos = applyRosterScenario(m, scenario);
+  const posIssue = projPos.simulation?.structuredIssues?.find(
+    (i) => i.rule === "position_limit",
+  );
+  expect(posIssue).toBeDefined();
+  expect(posIssue?.ruleDescription).toContain("too many QB");
+  expect(posIssue?.position).toBe("QB");
+  expect(posIssue?.suggestedDrop).toBeDefined();
+  expect(posIssue?.message).toContain("limit is 1");
+
+  // 3. IR ineligibility issue: a player assigned to IR slot 21 who is NOT irEligible when roster is at capacity
+  ctx.BenchSlots = 0;
+  ctx.QBSlots = 1;
+  ctx.RBSlots = 1;
+  ctx.QBLimit = 10;
+  Object.assign(m.byId.get("101")!, {
+    slot: 21,
+    injury: "Active",
+    irEligible: false,
+  });
+  const projIR = applyRosterScenario(m, scenario);
+  const irIssue = projIR.simulation?.structuredIssues?.find(
+    (i) => i.rule === "ir_ineligible",
+  );
+  expect(irIssue).toBeDefined();
+  expect(irIssue?.ruleDescription).toBe("ineligible player in IR");
+  expect(irIssue?.playersInvolved.map((p) => p.id)).toContain("101");
+  expect(irIssue?.message).toContain("no longer IR-eligible");
+});
+
+it("refuses creating or saving simulations named Live or Live roster", () => {
+  expect(isReservedSimulationName("Live")).toBe(true);
+  expect(isReservedSimulationName("live")).toBe(true);
+  expect(isReservedSimulationName("LIVE ROSTER")).toBe(true);
+  expect(isReservedSimulationName("  live roster  ")).toBe(true);
+  expect(isReservedSimulationName("My Simulation")).toBe(false);
 });

@@ -74,6 +74,7 @@ import { DeficitProtectionControls } from "./DeficitProtectionControls";
 import { defaultDeficitProtection } from "../domain/trade-safeguards";
 import { PlayerName } from "../ui/PlayerName";
 import { fmt, signed, Signal } from "../ui/components";
+import { searchCue, useFeedback } from "../ui/feel/feedback";
 import {
   ChainPlayerRequirements,
   ChainGradeLimitControls,
@@ -192,9 +193,11 @@ export function TradeChains({
   onPreview,
   onPool,
   followup,
+  onAnalyze,
 }: {
   followup?: { id: string; draft: Draft };
   poolHost?: HTMLElement | null;
+  onAnalyze?: (draft: Draft) => void;
   onPool?: (value: {
     team: string;
     pool: string[];
@@ -220,6 +223,7 @@ export function TradeChains({
   ) => boolean | void;
 }) {
   // Seed once from the previous selections; subsequent single-trade edits cannot change any chain option.
+  const notify = useFeedback();
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [team, setTeam] = useState(initial?.query.team ?? initialTeam);
   const [pool, setPool] = useState(initial?.query.pool ?? [...initialPool]);
@@ -656,6 +660,12 @@ export function TradeChains({
             elapsed: message.elapsed,
           });
         else {
+          if (message.type === "complete") {
+            const count = message.result.plans?.length ?? 0;
+            notify(searchCue(count > 0));
+          } else {
+            notify("caution");
+          }
           setJob(
             message.type === "complete"
               ? {
@@ -682,6 +692,7 @@ export function TradeChains({
       };
       worker.onerror = () => {
         if (active.current !== worker) return;
+        notify("caution");
         worker.terminate();
         active.current = null;
         setJob({
@@ -1338,6 +1349,15 @@ export function TradeChains({
             }}
           >
             Inspect step {step}
+          </button>
+        )}
+        {onAnalyze && (
+          <button
+            type="button"
+            className="subtle trade-chain-analyze-button"
+            onClick={() => onAnalyze(leg.draft)}
+          >
+            Analyze step {step}
           </button>
         )}
         <p>

@@ -21,6 +21,8 @@ import { Radar } from "./Radar";
 import { PlayerEvidence } from "./PlayerEvidence";
 import { VersusView } from "./Versus";
 import { addToVersus } from "../../domain/view/versus";
+import { useFeedback } from "../../ui/feel/feedback";
+import { PlayerPhoto } from "../../ui/PlayerPhoto";
 
 export const tabs = ["story", "numbers", "why", "calc"] as const;
 export type CardTab = (typeof tabs)[number];
@@ -83,6 +85,7 @@ function CardView({
   addToVersus: (id: string) => void;
   close: () => void;
 }) {
+  const notify = useFeedback();
   const [id, setId] = useState(start),
     [tab, setTab] = useState<CardTab>(startTab),
     chart = useRef<HTMLDivElement>(null),
@@ -94,9 +97,12 @@ function CardView({
     (by: number) => {
       if (!list || at < 0) return;
       const next = list[at + by];
-      if (next) setId(next);
+      if (next) {
+        notify("tap");
+        setId(next);
+      }
     },
-    [list, at],
+    [list, at, notify],
   );
   // The chart badge opens the card scrolled to the moving-average chart.
   useEffect(() => {
@@ -147,17 +153,20 @@ function CardView({
         style={{ background: h.colors.background, color: h.colors.ink }}
       >
         <div className="gd-card-id">
-          <span>
-            {h.pos} · {h.nfl} · {h.owner}
-          </span>
-          <h2>{h.name}</h2>
-          <div className="gd-card-labels">
-            {h.labels.map((label) => (
-              <Chip key={label}>{label}</Chip>
-            ))}
-            {h.injury && h.injury !== "Active" && (
-              <Chip tone="warning">{h.injury}</Chip>
-            )}
+          <PlayerPhoto player={p} size={72} className="gd-card-photo" />
+          <div className="gd-card-id-text">
+            <span>
+              {h.pos} · {h.nfl} · {h.owner}
+            </span>
+            <h2>{h.name}</h2>
+            <div className="gd-card-labels">
+              {h.labels.map((label) => (
+                <Chip key={label}>{label}</Chip>
+              ))}
+              {h.injury && h.injury !== "Active" && (
+                <Chip tone="warning">{h.injury}</Chip>
+              )}
+            </div>
           </div>
         </div>
         <div className="gd-card-eppg" aria-label="Expected points per game">
@@ -177,7 +186,10 @@ function CardView({
         <button
           type="button"
           className="gd-card-versus"
-          onClick={() => addToVersus(id)}
+          onClick={() => {
+            notify("select");
+            addToVersus(id);
+          }}
         >
           Add to versus
         </button>
@@ -215,6 +227,7 @@ function CardView({
             aria-selected={tab === t}
             aria-controls="gd-tabpanel"
             onClick={() => {
+              notify("tap");
               setTab(t);
               saveTab(t);
             }}

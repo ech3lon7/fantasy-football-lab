@@ -1,8 +1,8 @@
 import React, { Component, useEffect, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./app/App";
-import "./ui/styles.css";
 import "./ui/tokens.css";
+import "./ui/components.css";
 import "./ui/gameday.css";
 // Notify the independent HTML startup guard only after the application actually mounts.
 function Startup() {

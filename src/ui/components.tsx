@@ -4,6 +4,7 @@ import { playerSignals } from "../domain/valuation";
 // Use the same badge classification as positive-only screening without changing existing colors.
 import { signalAppearance } from "../domain/signal-appearance";
 import { PlayerName } from "./PlayerName";
+import { PlayerPhoto } from "./PlayerPhoto";
 import { FilterHelp } from "./FilterHelp";
 export const fmt = (x: unknown, digits = 2) =>
   typeof x === "number" && Number.isFinite(x)
@@ -203,24 +204,27 @@ export const playerColumnName: Column<Player> = {
   render: (p) => (
     <PlayerName
       p={p}
-      className="player-link"
+      className="player-link gd-player-cell"
       ariaLabel={`${p.name} ${p.pos} · ${p.nfl}`}
     >
-      <span className="gem-player-name-row">
-        <b>{p.name}</b>
-        {p.trend?.latest && (
-          <span
-            className={`stock-trend-pill ${p.trend.latest.tone}`}
-            title={p.trend.latest.label}
-            aria-hidden="true"
-          >
-            {p.trend.latest.badge}
-          </span>
-        )}
+      <PlayerPhoto player={p} size={28} />
+      <span className="gd-player-cell-details">
+        <span className="gem-player-name-row">
+          <b>{p.name}</b>
+          {p.trend?.latest && (
+            <span
+              className={`stock-trend-pill ${p.trend.latest.tone}`}
+              title={p.trend.latest.label}
+              aria-hidden="true"
+            >
+              {p.trend.latest.badge}
+            </span>
+          )}
+        </span>
+        <small>
+          {p.pos} · {p.nfl}
+        </small>
       </span>
-      <small>
-        {p.pos} · {p.nfl}
-      </small>
     </PlayerName>
   ),
 };

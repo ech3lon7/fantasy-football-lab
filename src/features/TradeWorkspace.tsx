@@ -2,7 +2,6 @@ import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowRight,
   ChevronLeft,
-  Shield,
   SlidersHorizontal,
   UserRound,
 } from "lucide-react";
@@ -16,6 +15,7 @@ import { type ChainPositionImpact, type ChainPositionChange, netGradeStepDelta }
 import { scenarioLineupBoard } from "../domain/roster-scenarios";
 import { fmt, signed } from "../ui/components";
 import { PlayerName } from "../ui/PlayerName";
+import { PlayerPhoto } from "../ui/PlayerPhoto";
 import field from "../assets/trade-field.webp";
 
 // A result preview carries its captured model/lineup context and never mutates search criteria or roster ownership.
@@ -44,25 +44,9 @@ export const tradeTeamName = (m: Model, id: string) =>
       ?.TeamName,
   ) || id;
 
-// Reuse the app's public ESPN portrait source and icon fallback; portrait failures never hide the player's name or stats.
+// Reuse PlayerPhoto with team colours and initials fallback; portrait failures never hide player name or stats.
 export function TradePortrait({ player }: { player: Player }) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <span className="trade-portrait" aria-hidden="true">
-      {Number(player.id) > 0 && !failed ? (
-        <img
-          loading="lazy"
-          alt=""
-          src={`https://a.espncdn.com/i/headshots/nfl/players/full/${player.id}.png`}
-          onError={() => setFailed(true)}
-        />
-      ) : player.pos === "D/ST" ? (
-        <Shield size={24} />
-      ) : (
-        <UserRound size={24} />
-      )}
-    </span>
-  );
+  return <PlayerPhoto player={player} size={28} className="trade-portrait" />;
 }
 
 // Each tool owns a nonmodal push drawer: controls stay mounted and usable without covering the offer builder or results.

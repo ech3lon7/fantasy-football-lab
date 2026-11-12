@@ -114,7 +114,7 @@ test("force this trade creates a hypothetical roster", async ({ page }) => {
   if (await force.isEnabled()) {
     await force.click();
     await expect(page.locator(".gd-header .gd-chip")).toContainText(
-      "Hypothetical:",
+      "Simulation:",
     );
   } else {
     await expect(force).toHaveAttribute("title", /.+/);

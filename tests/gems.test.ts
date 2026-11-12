@@ -11,6 +11,18 @@ import {
   validateGemDraft,
 } from "../src/domain/gem-screening";
 
+// Dividing weekly counts by three must not put an exact +2 growth below the inclusive Watch threshold.
+it("keeps exact workload-growth boundaries consistent with Excel", async () => {
+  const d = await data([2, 2, 3, 4, 4, 5], "WR", [10, 10, 10, 10, 10, 10]);
+  const p = evaluate(d, d.settings).players[0];
+  expect(p.breakout!.increase).toBe(2);
+  expect(p.gem).toBe("Watch");
+  const below = await data([2, 2, 3, 4, 4, 4], "WR", [10, 10, 10, 10, 10, 10]);
+  expect(evaluate(below, below.settings).players[0].gem).toBe(
+    "No breakout signal",
+  );
+});
+
 // The overlapping Gem windows must pair each score/workload value with its real week instead of unlabeled lists.
 it("labels individual scoring and workload evidence by week in both Gem windows", async () => {
   const d = await data([7, 8, 9, 10], "WR", [16, 17, 18, 19]);

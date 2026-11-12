@@ -20,6 +20,7 @@ export interface StripPoint {
   week: number;
   // Null when the game's points are not recorded; a missing score is a gap, not zero.
   points: number | null;
+  isBye?: boolean;
 }
 
 export interface DepthTile {
@@ -72,6 +73,19 @@ export function depthChart(
     history = playedHistory(m.dataset);
   const tile = (p: Player): DepthTile => {
     const slot = slotOf.get(p.id) ?? null;
+    const playerHistory = (history.get(p.id) ?? []).map((r) => ({
+      week: num(r.Week),
+      points: n(r.Points),
+      isBye: p.bye === num(r.Week),
+    }));
+    if (
+      p.bye > 0 &&
+      p.bye < m.current &&
+      !playerHistory.some((h) => h.week === p.bye)
+    ) {
+      playerHistory.push({ week: p.bye, points: null, isBye: true });
+      playerHistory.sort((a, b) => a.week - b.week);
+    }
     return {
       id: p.id,
       name: p.name,
@@ -82,38 +96,34 @@ export function depthChart(
       eppg: p.blendedExpected === null ? null : p.blendedExpected.toFixed(1),
       injury: p.injury,
       labels: playerSignals(p).filter((x) => x && !/^(none|no )/i.test(x)),
-      strip: (history.get(p.id) ?? [])
-        .slice(-9)
-        .map((r) => ({ week: num(r.Week), points: n(r.Points) })),
+      strip: playerHistory.slice(-9),
     };
   };
   const rank: Record<Role, number> = { Starter: 0, Bench: 1, IR: 2 };
-  return order
-    .map((position) => {
-      const tiles = ids
-        .map((id) => m.byId.get(id))
-        .filter((p): p is Player => !!p && p.pos === position)
-        .map(tile)
-        .sort(
-          (a, b) =>
-            rank[a.role] - rank[b.role] ||
-            Number(b.eppg ?? -1) - Number(a.eppg ?? -1) ||
-            +a.id - +b.id,
-        );
-      const grade =
-        grades.find((g) => g.position === position)?.grade ?? "n.a.";
-      const scores = tiles.flatMap((t) =>
-        t.strip.flatMap((s) => (s.points === null ? [] : [s.points])),
+  return order.map((position) => {
+    const tiles = ids
+      .map((id) => m.byId.get(id))
+      .filter((p): p is Player => !!p && p.pos === position)
+      .map(tile)
+      .sort(
+        (a, b) =>
+          rank[a.role] - rank[b.role] ||
+          Number(b.eppg ?? -1) - Number(a.eppg ?? -1) ||
+          +a.id - +b.id,
       );
-      return {
-        position,
-        grade,
-        tone: gradeTone(grade),
-        tiles,
-        scaleMax: Math.max(1, ...scores),
-      };
-    })
-    .filter((g) => g.tiles.length > 0);
+    const grade =
+      grades.find((g) => g.position === position)?.grade ?? "n.a.";
+    const scores = tiles.flatMap((t) =>
+      t.strip.flatMap((s) => (s.points === null ? [] : [s.points])),
+    );
+    return {
+      position,
+      grade,
+      tone: gradeTone(grade),
+      tiles,
+      scaleMax: Math.max(1, ...scores),
+    };
+  });
 }
 
 export const leagueColumns = ["QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"];
@@ -170,16 +180,19 @@ export function positionPlayers(
   team: string,
   grades: PositionGrade[],
   position: string,
-): { grade: string; tiles: DepthTile[] } {
+): { grade: string; assessment?: PositionGrade; tiles: DepthTile[] } {
   const chart = depthChart(m, team, grades);
-  const grade = grades.find((g) => g.position === position)?.grade ?? "n.a.";
+  const assessment = grades.find((g) => g.position === position);
+  const grade = assessment?.grade ?? "n.a.";
   if (position === "FLEX")
     return {
       grade,
+      assessment,
       tiles: chart.flatMap((g) => g.tiles).filter((t) => t.slot === "FLEX"),
     };
   return {
     grade,
+    assessment,
     tiles: chart.find((g) => g.position === position)?.tiles ?? [],
   };
 }

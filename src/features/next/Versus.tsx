@@ -2,6 +2,8 @@ import { useId, useMemo, useState } from "react";
 import { versus } from "../../domain/view/versus";
 import type { Model, Player } from "../../domain/valuation";
 import { isEditableTarget } from "../../ui/popover/keys";
+import { useFeedback } from "../../ui/feel/feedback";
+import { PlayerPhoto } from "../../ui/PlayerPhoto";
 
 const label = (p: Player) => `${p.name} · ${p.pos} · ${p.nfl}`;
 
@@ -17,6 +19,7 @@ function Picker({
   current: Player | undefined;
   change: (id: string) => void;
 }) {
+  const notify = useFeedback();
   const list = useId(),
     [text, setText] = useState("");
   return (
@@ -31,6 +34,7 @@ function Picker({
           setText(e.target.value);
           const hit = m.players.find((p) => label(p) === e.target.value);
           if (hit) {
+            notify("select");
             change(hit.id);
             setText("");
           }
@@ -55,9 +59,13 @@ export function VersusView({
   start: [string, string];
   close: () => void;
 }) {
+  const notify = useFeedback();
   const [ids, setIds] = useState<[string, string]>(start);
   const result = useMemo(() => versus(m, ids[0], ids[1]), [m, ids]);
-  const swap = () => setIds([ids[1], ids[0]]);
+  const swap = () => {
+    notify("select");
+    setIds([ids[1], ids[0]]);
+  };
   if (!result)
     return (
       <div className="gd-popover-body">
@@ -87,10 +95,16 @@ export function VersusView({
             className="gd-versus-side"
             style={{ background: s.colors.background, color: s.colors.ink }}
           >
-            <small>
-              {s.pos} · {s.nfl}
-            </small>
-            <h2>{s.name}</h2>
+            <PlayerPhoto
+              player={{ id: s.id, name: s.name, pos: s.pos, nfl: s.nfl }}
+              size={48}
+            />
+            <div className="gd-versus-side-text">
+              <small>
+                {s.pos} · {s.nfl}
+              </small>
+              <h2>{s.name}</h2>
+            </div>
           </div>
         ))}
         <button

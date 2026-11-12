@@ -25,7 +25,7 @@ import {
 } from "./opportunity";
 import { assessGem, gemVersion, type GemAssessment } from "./gems";
 import { labelPolicy, labelRuleVersion, preGemVersion } from "./label-rules";
-import type { RosterScenario } from "./roster-scenarios";
+import type { RosterScenario, RosterSimulationIssue } from "./roster-scenarios";
 import {
   calculatePlayerTrend,
   type PlayerTrendSummary,
@@ -115,6 +115,7 @@ export interface Model {
     scenario: RosterScenario;
     sourceDataset: Dataset;
     issues: string[];
+    structuredIssues?: RosterSimulationIssue[];
     lineupsRaw: string;
     rebased: boolean;
   };

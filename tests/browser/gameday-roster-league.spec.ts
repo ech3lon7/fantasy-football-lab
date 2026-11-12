@@ -42,6 +42,10 @@ test("roster shows the simulator, a depth chart with graded groups and the start
     page.getByRole("heading", { name: "Your roster", exact: true }),
   ).toBeVisible();
   await page.screenshot({
+    path: "test-results/shots/section-6/roster-light.png",
+    fullPage: true,
+  });
+  await page.screenshot({
     path: "test-results/roster-light.png",
     fullPage: true,
   });
@@ -87,6 +91,10 @@ test("league grid opens position popovers with the player card stacked above", a
     path: "test-results/league-light.png",
     fullPage: true,
   });
+  await page.screenshot({
+    path: "test-results/shots/section-7/league-light.png",
+    fullPage: true,
+  });
   const rb = page.getByRole("button", { name: /^Test A RB grade/ });
   await rb.click();
   const list = page.getByRole("dialog", { name: "Test A RB" });
@@ -105,17 +113,25 @@ test("league grid opens position popovers with the player card stacked above", a
   expect(errors).toEqual([]);
 });
 
-// Choosing a team name keeps the full team detail reachable under the grid.
-test("league keeps the team detail reachable from the team name", async ({
+// Choosing a team name opens the full team roster in a popover.
+test("league opens the full team roster from the team name", async ({
   page,
 }) => {
   await open(page, "#/league");
-  await page.getByRole("button", { name: "Test B", exact: true }).click();
-  const detail = page.getByRole("region", { name: "Team detail" });
+  await page.getByRole("button", { name: "Test B full roster" }).click();
+  const rosterDialog = page.getByRole("dialog", { name: /Test B/ });
+  await expect(rosterDialog).toBeVisible();
   await expect(
-    detail.getByRole("heading", { name: "Position grades and roster advice" }),
+    rosterDialog.getByRole("heading", { name: "Test B" }),
   ).toBeVisible();
-  await expect(detail.getByRole("combobox", { name: "Team" })).toHaveValue("2");
+  await expect(rosterDialog.getByText("Full roster")).toBeVisible();
+  await expect(rosterDialog.locator(".player-link").first()).toBeVisible();
+  await page.waitForTimeout(500);
+  await page.screenshot({
+    path: "test-results/shots/section-7/league-full-roster-popover.png",
+  });
+  await page.keyboard.press("Escape");
+  await expect(rosterDialog).toHaveCount(0);
 });
 
 // Dark mode keeps the grid and tiles on theme tokens: no white fills.
@@ -126,6 +142,18 @@ test("roster and league have no white fills in dark", async ({ page }) => {
     path: "test-results/league-dark.png",
     fullPage: true,
   });
+  await page.screenshot({
+    path: "test-results/shots/section-7/league-dark.png",
+    fullPage: true,
+  });
+  const rbCell = page.getByRole("button", { name: /^Test A RB grade/ });
+  await rbCell.click();
+  await expect(page.getByRole("dialog", { name: "Test A RB" })).toBeVisible();
+  await page.waitForTimeout(250);
+  await page.screenshot({
+    path: "test-results/shots/section-7/league-pos-popover-dark.png",
+  });
+  await page.keyboard.press("Escape");
   const whiteLeague = await page.evaluate(() =>
     [...document.querySelectorAll(".gd-league *")]
       .filter(
@@ -143,5 +171,9 @@ test("roster and league have no white fills in dark", async ({ page }) => {
       )
       .map((el) => `${el.tagName}.${el.getAttribute("class")}`),
   );
+  await page.screenshot({
+    path: "test-results/shots/section-6/roster-dark.png",
+    fullPage: true,
+  });
   expect(whiteRoster).toEqual([]);
 });

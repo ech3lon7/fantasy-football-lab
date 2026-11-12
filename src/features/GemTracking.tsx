@@ -5,7 +5,6 @@ import {
 } from "../domain/gem-tracking";
 import { useEffect, useState } from "react";
 import { DataTable, fmt } from "../ui/components";
-import { Panel } from "../ui/layout";
 
 // Display read-only prospective comparisons; domain-owned counts keep shadow trials separate from live Gem qualification.
 export function GemTracking({
@@ -39,10 +38,21 @@ export function GemTracking({
         ? "Awaiting outcomes"
         : "No labels";
   return (
-    <Panel
-      title="Prospective Gem tracking"
-      note="Automatic observation, not automatic retuning. Gem, Pre-gem and Watch are recorded independently of trade values."
+    <section
+      className="gd-card gd-gem-tracking"
+      aria-labelledby="gd-gem-tracking-title"
     >
+      <div className="gd-gem-tracking-header">
+        <div>
+          <h2 id="gd-gem-tracking-title" className="gd-h2">
+            Prospective Gem tracking
+          </h2>
+          <p className="gd-muted">
+            Automatic observation, not automatic retuning. Gem, Pre-gem and Watch
+            are recorded independently of trade values.
+          </p>
+        </div>
+      </div>
       <p>{state?.status ?? "Loading this account’s local tracking journal…"}</p>
       <details>
         <summary>Method and storage</summary>
@@ -262,6 +272,6 @@ export function GemTracking({
           </details>
         </details>
       ))}
-    </Panel>
+    </section>
   );
 }

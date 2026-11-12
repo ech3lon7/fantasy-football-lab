@@ -1,3 +1,54 @@
+/* Self-hosted Barlow and Barlow Condensed (SIL Open Font License, public/fonts/OFL.txt).
+   Fonts are bundled so headings and numbers keep their shape online, offline and before paint. */
+@font-face {
+  font-family: "Barlow";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/barlow-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Barlow";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/barlow-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Barlow";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/barlow-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Barlow";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/barlow-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Barlow Condensed";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/barlow-condensed-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Barlow Condensed";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/barlow-condensed-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Barlow Condensed";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/fonts/barlow-condensed-800.woff2") format("woff2");
+}
 /* Gameday Plus design tokens. Scoped to the preview root so the current interface is unaffected.
    Components use these variables only; no literal colours belong in component rules. */
 :root[data-gameday] {
@@ -12,6 +63,31 @@
   font-family: var(--gd-font-body);
   background: var(--gd-bg);
   color: var(--gd-ink);
+}
+/* Legacy colour names, kept as aliases so the shared components that still use them follow the theme.
+   The earlier stylesheet owns these names only inside a .legacy container; outside it they resolve here. */
+:root[data-gameday] {
+  --ink: var(--gd-ink);
+  --muted: var(--gd-muted);
+  --line: var(--gd-line);
+  --green: var(--gd-fact);
+  --blue: var(--gd-espn);
+  --pink: var(--gd-model);
+  --purple: var(--gd-edit);
+  --good: var(--gd-fact);
+  --bad: var(--gd-negative-ink);
+  --orange: var(--gd-grade-2);
+  --neutral-line: var(--gd-muted);
+  --why-met: var(--gd-fact);
+  --why-met-text: var(--gd-positive-ink);
+  --why-met-bg: var(--gd-positive-bg);
+  --why-miss: var(--gd-grade-2);
+  --why-miss-text: var(--gd-negative-ink);
+  --why-miss-bg: var(--gd-negative-bg);
+  --why-close-bg: var(--gd-warning-bg);
+  --why-close-text: var(--gd-warning-ink);
+  --why-neutral-bg: var(--gd-surface-2);
+  --why-neutral-text: var(--gd-muted);
 }
 :root[data-gameday][data-theme="light"] {
   color-scheme: light;

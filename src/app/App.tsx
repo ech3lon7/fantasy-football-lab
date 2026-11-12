@@ -3,7 +3,10 @@ import { starterLineupsKey } from "../domain/starter-lineups";
 import { lineupBasisKey } from "../domain/trade-impact";
 import {
   animationKey,
+  feedback,
   feelEntry,
+  readLocalFeel,
+  writeLocalFeel,
   hapticsKey,
   hapticsSupported,
   readAnimationPref,
@@ -28,11 +31,17 @@ import {
   cardTabKey,
   readCardTab,
 } from "../features/next/PlayerCard";
+import {
+  FeedbackProvider,
+  actionCue,
+  importCue,
+  useFeedback,
+} from "../ui/feel/feedback";
 import { PopoverLayer, PopoverProvider } from "../ui/popover/PopoverStack";
 import { usePlayerRowKeys } from "../ui/popover/rowNavigation";
 import { labTabForRoute, pageForRoute } from "../domain/view/shell";
 import { readThemePref, themeKey, useGamedayRoot } from "../ui/feel/theme";
-import { reconcileSavedTrades, savedTradesKey } from "../domain/saved-trades";
+import { reconcileSavedTrades } from "../domain/saved-trades";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { X } from "lucide-react";
 import {
@@ -95,7 +104,8 @@ import {
 import { Legend } from "../ui/components";
 import { FilterHelp } from "../ui/FilterHelp";
 import { Panel } from "../ui/layout";
-import { TradeView, ModelView, Account } from "../features/views";
+import { ModelView } from "../features/ModelView";
+import { Account } from "../features/Account";
 // Report this running bundle's release rather than the workbook or calculation-model version.
 const appRelease = {
   version: import.meta.env.VITE_APP_VERSION,
@@ -120,6 +130,17 @@ function useRoute() {
   }, []);
   return route;
 }
+// A route change is a navigation tap; the page the app opens on is not.
+function RouteFeedback({ route }: { route: string }) {
+  const notify = useFeedback(),
+    first = useRef(route);
+  useEffect(() => {
+    if (first.current === route) return;
+    first.current = route;
+    notify("tap");
+  }, [route, notify]);
+  return null;
+}
 export default function App() {
   const route = useRoute(),
     [w, setW] = useState<Workspace | null>(null),
@@ -139,12 +160,18 @@ export default function App() {
     [syncStatus, setSyncStatus] = useState("Local only"),
     [conflict, setConflict] = useState<Workspace | null | undefined>(undefined),
     [updateReady, setUpdateReady] = useState(false);
+  // Feel choices made before an import are kept on this device and used until the workspace stores its own.
+  const [localFeel, setLocalFeel] = useState<Record<string, string>>(readLocalFeel);
+  const feelFilters: Record<string, string> = {
+    ...localFeel,
+    ...(w?.state.filters ?? {}),
+  };
   // Apply the interface root and the resolved theme.
-  useGamedayRoot(readThemePref(w?.state.filters[themeKey]));
+  useGamedayRoot(readThemePref(feelFilters[themeKey]));
   // Up and Down move between marked player rows.
   usePlayerRowKeys();
   // Publish the effective animation level so transitions are gated on one root attribute.
-  useAnimationRoot(readAnimationPref(w?.state.filters[animationKey]));
+  useAnimationRoot(readAnimationPref(feelFilters[animationKey]));
   // Compare the current import with the summary kept from the previous one; nothing is shown without a previous import.
   useEffect(() => {
     if (!w || !realModel || realModel.dataset.hash !== w.dataset?.hash) {
@@ -556,8 +583,10 @@ export default function App() {
       rosterDraftRef.current = next.working;
       setRosterDraft(next.working);
       setError("");
+      feedback(actionCue(true), feel);
       return true;
     } catch (error) {
+      feedback(actionCue(false), feel);
       setError(
         error instanceof Error
           ? error.message
@@ -722,9 +751,11 @@ export default function App() {
       rosterDraftRef.current = saved.working;
       setRosterDraft(saved.working);
       setError("");
+      feedback(actionCue(true), feel);
       // Return success along with the targeted slot so calling views know exactly which slot was updated
       return { ok: true, slot: targetSlot };
     } catch (error) {
+      feedback(actionCue(false), feel);
       setError(
         error instanceof Error
           ? error.message
@@ -804,14 +835,114 @@ export default function App() {
       rosterDraftRef.current = saved.working;
       setRosterDraft(saved.working);
       setError("");
+      feedback(actionCue(true), feel);
       return true;
     } catch (error) {
+      feedback(actionCue(false), feel);
       setError(
         error instanceof Error
           ? error.message
           : "Could not apply the hypothetical move.",
       );
       return false;
+    }
+  }
+  // Apply a suggested drop directly to the active simulation
+  function applySimulationDrop(team: string, playerId: string) {
+    const current = wRef.current;
+    if (!current?.dataset || !realModel) return false;
+    try {
+      const read = readRosterScenarios(
+        rosterDraftRef.current ?? current.state.filters[rosterScenariosKey],
+      );
+      if (read.issue) throw Error(read.issue);
+      const selected = read.collection.scenarios.find(
+        (s) => s.id === read.collection.active,
+      );
+      if (!selected) return false;
+      const next = appendScenarioMove(selected, {
+        kind: "move",
+        player: playerId,
+        from: team,
+        to: "0",
+      });
+      const targetSlot = (read.collection.activeSlot ?? 1) as RosterSaveSlot;
+      const collection = {
+        ...read.collection,
+        active: next.id,
+        activeSlot: targetSlot,
+        scenarios: selected
+          ? read.collection.scenarios.map((s) => (s.id === next.id ? next : s))
+          : [...read.collection.scenarios, next],
+      };
+      const raw = writeRosterScenarios(current.state, collection);
+      const saved = saveRosterSnapshot(
+        current.state,
+        raw,
+        targetSlot,
+        new Date().toISOString(),
+        scenarioRosterBase(realModel),
+      );
+      updateState({
+        filters: {
+          ...current.state.filters,
+          [rosterScenariosKey]: saved.saved,
+        },
+      });
+      rosterDraftRef.current = saved.working;
+      setRosterDraft(saved.working);
+      setError("");
+      feedback("success", feel);
+      return true;
+    } catch (error) {
+      feedback("caution", feel);
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not apply suggested drop.",
+      );
+      return false;
+    }
+  }
+  // Clear the active simulation and return to the live roster
+  function switchToLiveRoster() {
+    const current = wRef.current;
+    if (!current) return;
+    try {
+      const read = readRosterScenarios(
+        rosterDraftRef.current ?? current.state.filters[rosterScenariosKey],
+      );
+      if (!read.issue) {
+        const collection = {
+          ...read.collection,
+          active: "",
+          activeSlot: undefined,
+        };
+        const raw = writeRosterScenarios(current.state, collection);
+        updateState({
+          filters: {
+            ...current.state.filters,
+            [rosterScenariosKey]: raw,
+          },
+        });
+      } else {
+        updateState({
+          filters: {
+            ...current.state.filters,
+            [rosterScenariosKey]: "",
+          },
+        });
+      }
+      rosterDraftRef.current = null;
+      setRosterDraft(null);
+      setError("");
+      feedback("select", feel);
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not switch to live roster.",
+      );
     }
   }
   async function importFile(file: File) {
@@ -847,6 +978,7 @@ export default function App() {
       if (importTimer.current) clearTimeout(importTimer.current);
       setBusy(false);
       setError("Workbook could not be parsed. The existing dataset is intact.");
+      feedback("caution", feel);
       worker.terminate();
     };
     try {
@@ -901,6 +1033,7 @@ export default function App() {
       ? await client.auth.getSession()
       : { data: { session: null } };
     const owner = data.session?.user.id ?? current?.owner ?? "local";
+    feedback(importCue(preview.dataset.issues.length), feel);
     // Keep a small summary of the dataset being replaced so the next screen can show what changed; it is not the workbook.
     if (
       realModel &&
@@ -995,10 +1128,14 @@ export default function App() {
   const labSettings = labReady ? (
     <>
       {/* This explicit account-synced selector is separate from browsing opponents. */}
-      <Panel title="My team">
-        <label className="control">
-          <span>My team</span>
+      <section className="gd-card" style={{ marginBottom: "20px" }}>
+        <h3 className="gd-settings-group-title" style={{ marginBottom: "12px" }}>
+          My team
+        </h3>
+        <label className="gd-edit-control">
+          <span className="gd-edit-label">My team</span>
           <select
+            className="gd-edit-input"
             aria-label="My team"
             value={w!.state.preferredTeam}
             onChange={(event) =>
@@ -1014,14 +1151,17 @@ export default function App() {
             ))}
           </select>
         </label>
-      </Panel>
+      </section>
       {/* Build details identify the installed app when diagnosing updates across devices. */}
-      <Panel title="App version">
+      <section className="gd-card" style={{ marginBottom: "20px" }}>
+        <h3 className="gd-settings-group-title" style={{ marginBottom: "12px" }}>
+          App version
+        </h3>
         <p>
           Fantasy Football Lab v{appRelease.version} · Build {appRelease.build}{" "}
           · Commit {appRelease.commit}
         </p>
-        <p>
+        <p className="gd-muted">
           Built{" "}
           <time dateTime={appRelease.builtAt}>
             {new Date(appRelease.builtAt).toLocaleString()}
@@ -1029,7 +1169,7 @@ export default function App() {
           . App version is separate from your imported workbook and model
           versions.
         </p>
-      </Panel>
+      </section>
       <ModelView
         part="settings"
         m={realModel!}
@@ -1073,6 +1213,33 @@ export default function App() {
         deleteScenario={deleteScenario}
       />
     ) : null;
+  // One settings object feeds the header, the Lab and the feedback cues, so they can never disagree.
+  const feel = {
+    theme: readThemePref(feelFilters[themeKey]),
+    animation: readAnimationPref(feelFilters[animationKey]),
+    sound: readFlag(feelFilters[soundKey]),
+    haptics: readFlag(feelFilters[hapticsKey]),
+    hapticsSupported: hapticsSupported(),
+  };
+  // Merge only the changed Feel key against the latest workspace, preserving unrelated filters; without one, keep it on this device.
+  const changeFeelSetting = (
+    key: "theme" | "animation" | "sound" | "haptics",
+    value: string,
+  ) => {
+    const [filterKey, stored] = feelEntry(key, value);
+    if (wRef.current)
+      updateState({
+        filters: {
+          ...wRef.current.state.filters,
+          [filterKey]: stored,
+        },
+      });
+    else {
+      const next = { ...localFeel, [filterKey]: stored };
+      setLocalFeel(next);
+      writeLocalFeel(next);
+    }
+  };
   const content = (
     <div
       className={`app-shell gd-shell${page === "trades" ? " trade-page" : ""}${["players", "gems", "weekly", "roster", "teams", "overview", "trades", "journal", "lab"].includes(page) ? " gd-new-screen" : ""}`}
@@ -1084,27 +1251,14 @@ export default function App() {
         week={d ? num(d.tables.ModelContext[0].CurrentWeek) : null}
         finalWeek={d ? num(d.tables.ModelContext[0].FinalWeek) : null}
         syncStatus={syncStatus}
+        simulation={model?.simulation ?? null}
         hypothetical={model?.simulation?.scenario.name ?? null}
         busy={busy}
         onImport={() => fileRef.current?.click()}
-        feel={{
-          theme: readThemePref(w?.state.filters[themeKey]),
-          animation: readAnimationPref(w?.state.filters[animationKey]),
-          sound: readFlag(w?.state.filters[soundKey]),
-          haptics: readFlag(w?.state.filters[hapticsKey]),
-          hapticsSupported: hapticsSupported(),
-        }}
-        // Merge only the changed Feel key against the latest workspace, preserving unrelated filters.
-        changeFeel={(key, value) => {
-          const [filterKey, stored] = feelEntry(key, value);
-          if (w)
-            updateState({
-              filters: {
-                ...wRef.current!.state.filters,
-                [filterKey]: stored,
-              },
-            });
-        }}
+        feel={feel}
+        changeFeel={changeFeelSetting}
+        onApplyDrop={applySimulationDrop}
+        onSwitchToLive={switchToLiveRoster}
       />
 
       {/* Active labels sit under the header on every screen; phones also get a bottom bar. */}
@@ -1112,33 +1266,6 @@ export default function App() {
       <SignalsTicker m={model} team={w?.state.preferredTeam ?? ""} />
       <main>
         <div className="content">
-          {/* Keep the active roster and save action compact; routine refresh explanations belong in hover help, not warning banners. */}
-          {model?.simulation && w && (
-            <div className="toolbar">
-              <FilterHelp
-                label="Hypothetical roster"
-                help="Your saved roster moves and lineup are being used. Importing updated player statistics keeps those moves. Player values are calculated from the imported league data, so hypothetical ownership changes do not change their values."
-              >
-                <strong>Hypothetical: {model.simulation.scenario.name}</strong>
-              </FilterHelp>
-              {rosterScenarioDirty(
-                w.state.filters[rosterScenariosKey],
-                scenarioRaw,
-                model.simulation.scenario.id,
-              ) && (
-                <span>
-                  Not saved.{" "}
-                  <a href="#/roster">Save a roster slot on Roster.</a>{" "}
-                </span>
-              )}
-              {/* Roster switching stays in My team's simulation selector; never prompt for it globally. */}
-              {model.simulation.issues.map((issue) => (
-                <p className="notice danger" role="alert" key={issue}>
-                  {issue} Analysis is conditional until resolved.
-                </p>
-              ))}
-            </div>
-          )}
           {updateReady && (
             <div className="notice">
               An app update is ready. Your current dataset will be preserved.
@@ -1302,6 +1429,8 @@ export default function App() {
                   tryPair={(moves) =>
                     trySimulationMoves(w.state.preferredTeam, moves)
                   }
+                  onApplyDrop={applySimulationDrop}
+                  onSwitchToLive={switchToLiveRoster}
                 />
               )}
               {page === "teams" && (
@@ -1327,6 +1456,8 @@ export default function App() {
                   draft={w.state.draft}
                   basis={w.state.filters[lineupBasisKey]}
                   digest={digest}
+                  onApplyDrop={applySimulationDrop}
+                  onSwitchToLive={switchToLiveRoster}
                 />
               )}
               {["players", "gems", "weekly"].includes(page) && (
@@ -1348,119 +1479,59 @@ export default function App() {
                   }
                 />
               )}
-              {page === "trades" &&
-                (() => {
-                  // The earlier trade tools; the Trade room shows them under Find trades and Chain planner.
-                  const tradeView = (
-                    <TradeView
-                      key={`${w.owner}/${w.state.filters[tradeTabKey]}`}
-                      initialMode={
-                        readTradeTab(w.state.filters[tradeTabKey]) === "chains"
-                          ? "chain"
-                          : "standard"
-                      }
-                      m={model}
-                      draft={w.state.draft}
-                      state={w.state}
-                      restoreScenario={restoreScenario}
-                      forceTrade={forceScenarioTrade}
-                      // Store only the analysis preference against the latest account state, preserving unrelated selections.
-                      changeBasis={(basis) =>
-                        updateState({
-                          filters: {
-                            ...wRef.current!.state.filters,
-                            [lineupBasisKey]: basis,
-                          },
-                        })
-                      }
-                      // Merge only this account-state key against the latest workspace, preserving unrelated filters.
-                      saveManagerSettings={(raw) =>
-                        updateState({
-                          filters: {
-                            ...wRef.current!.state.filters,
-                            managerExpectations: raw,
-                          },
-                        })
-                      }
-                      saveSearchSettings={(raw) =>
-                        updateState({
-                          filters: {
-                            ...wRef.current!.state.filters,
-                            tradeSearchSettings: raw,
-                          },
-                        })
-                      }
-                      saveTrades={(raw) =>
-                        updateState({
-                          filters: {
-                            ...wRef.current!.state.filters,
-                            [savedTradesKey]: raw,
-                          },
-                        })
-                      }
-                      lineupsRaw={
-                        model.simulation?.lineupsRaw ??
-                        w.state.filters[starterLineupsKey]
-                      }
-                      change={(draft) =>
-                        updateState({
-                          ...selectMyTeam(wRef.current!.state, d!, draft.teamA),
-                          draft,
-                        })
-                      }
-                    />
-                  );
-                  return (
-                    <TradeRoom
-                      key={w.owner}
-                      m={model}
-                      draft={w.state.draft}
-                      lineupsRaw={
-                        model.simulation?.lineupsRaw ??
-                        w.state.filters[starterLineupsKey]
-                      }
-                      basisRaw={w.state.filters[lineupBasisKey]}
-                      tab={readTradeTab(w.state.filters[tradeTabKey])}
-                      // Remember the selected tool against the latest workspace, preserving unrelated filters.
-                      setTab={(tab) =>
-                        updateState({
-                          filters: {
-                            ...wRef.current!.state.filters,
-                            [tradeTabKey]: tab,
-                          },
-                        })
-                      }
-                      change={(draft) =>
-                        updateState({
-                          ...selectMyTeam(wRef.current!.state, d!, draft.teamA),
-                          draft,
-                        })
-                      }
-                      changeBasis={(basis) =>
-                        updateState({
-                          filters: {
-                            ...wRef.current!.state.filters,
-                            [lineupBasisKey]: basis,
-                          },
-                        })
-                      }
-                      forceTrade={forceScenarioTrade}
-                      filters={w.state.filters}
-                      onFilters={(patch) =>
-                        updateState({
-                          filters: {
-                            ...wRef.current!.state.filters,
-                            ...patch,
-                          },
-                        })
-                      }
-                      legacy={tradeView}
-                    />
-                  );
-                })()}
+              {page === "trades" && (
+                <TradeRoom
+                  key={w.owner}
+                  m={model}
+                  draft={w.state.draft}
+                  state={w.state}
+                  lineupsRaw={
+                    model.simulation?.lineupsRaw ??
+                    w.state.filters[starterLineupsKey]
+                  }
+                  basisRaw={w.state.filters[lineupBasisKey]}
+                  tab={readTradeTab(w.state.filters[tradeTabKey])}
+                  // Remember the selected tool against the latest workspace, preserving unrelated filters.
+                  setTab={(tab) =>
+                    updateState({
+                      filters: {
+                        ...wRef.current!.state.filters,
+                        [tradeTabKey]: tab,
+                      },
+                    })
+                  }
+                  change={(draft) =>
+                    updateState({
+                      ...selectMyTeam(wRef.current!.state, d!, draft.teamA),
+                      draft,
+                    })
+                  }
+                  changeBasis={(basis) =>
+                    updateState({
+                      filters: {
+                        ...wRef.current!.state.filters,
+                        [lineupBasisKey]: basis,
+                      },
+                    })
+                  }
+                  forceTrade={forceScenarioTrade}
+                  restoreScenario={restoreScenario}
+                  filters={w.state.filters}
+                  onFilters={(patch) =>
+                    updateState({
+                      filters: {
+                        ...wRef.current!.state.filters,
+                        ...patch,
+                      },
+                    })
+                  }
+                  onApplyDrop={applySimulationDrop}
+                  onSwitchToLive={switchToLiveRoster}
+                />
+              )}
               {page === "journal" && (
                 // The journal keeps its behaviour; the new theme is applied around it.
-                <div className="gd-legacy">
+                <div className="legacy">
                   <TradeJournal m={model} ownTeam={w.state.preferredTeam} />
                 </div>
               )}
@@ -1473,23 +1544,8 @@ export default function App() {
               evidence={labEvidence}
               audits={labAudits}
               account={accountView}
-              feel={{
-                theme: readThemePref(w?.state.filters[themeKey]),
-                animation: readAnimationPref(w?.state.filters[animationKey]),
-                sound: readFlag(w?.state.filters[soundKey]),
-                haptics: readFlag(w?.state.filters[hapticsKey]),
-                hapticsSupported: hapticsSupported(),
-              }}
-              changeFeel={(key, value) => {
-                const [filterKey, stored] = feelEntry(key, value);
-                if (w)
-                  updateState({
-                    filters: {
-                      ...wRef.current!.state.filters,
-                      [filterKey]: stored,
-                    },
-                  });
-              }}
+              feel={feel}
+              changeFeel={changeFeelSetting}
             />
           )}
           <Legend />
@@ -1524,7 +1580,9 @@ export default function App() {
       owner={w?.owner ?? "local"}
       client={client}
     >
-      <PopoverProvider>
+      <FeedbackProvider settings={feel}>
+        <RouteFeedback route={route} />
+        <PopoverProvider>
         {/* The single player card replaces the anchored popover and the player page. */}
         <PlayerCardProvider
           m={model}
@@ -1550,8 +1608,8 @@ export default function App() {
           {/* Popovers render here so player links inside them open the card above them. */}
           <PopoverLayer />
         </PlayerCardProvider>
-
       </PopoverProvider>
+      </FeedbackProvider>
     </NegotiationsProvider>
   );
 }

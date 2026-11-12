@@ -1,5 +1,6 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { str, type Draft } from "../../domain/contracts";
+import { useMemo, useState } from "react";
+import { actionCue, searchCue, useFeedback } from "../../ui/feel/feedback";
+import { str, type AppState, type Draft } from "../../domain/contracts";
 import { evaluateTrade, type TradeResult } from "../../domain/trades";
 import {
   lineupBasisLabel,
@@ -8,7 +9,7 @@ import {
   tradeImpact,
   type LineupBasis,
 } from "../../domain/trade-impact";
-import { scenarioTradeErrors } from "../../domain/roster-scenarios";
+import { scenarioTradeErrors, type RosterScenario } from "../../domain/roster-scenarios";
 import {
   gradeStepChips,
   lineupMoves,
@@ -19,12 +20,15 @@ import {
 } from "../../domain/view/trade-room";
 import type { Model, Player } from "../../domain/valuation";
 import { PlayerName } from "../../ui/PlayerName";
+import { PlayerPhoto } from "../../ui/PlayerPhoto";
+import { teamColors } from "../../domain/view/nfl-colors";
 import { Chip, Segmented } from "../../ui/primitives";
 import { TradeStressTest } from "../TradeStressTest";
 import { usePopovers } from "../../ui/popover/PopoverStack";
-import { useNegotiations } from "../Negotiations";
+import { useNegotiations, DirectManagerAssessment } from "../Negotiations";
 import { newJournalOffer } from "../../domain/trade-journal";
 import { counterOffers, type CounterResults } from "../../domain/view/counter";
+import { SimulationNote } from "./SimulationIssuePopover";
 import { FoldingGroup, RangeSlider } from "../../ui/primitives";
 import {
   defaultSearchLimits,
@@ -46,6 +50,25 @@ import {
 } from "./limitsContext";
 import { gradeGoalSentence } from "../../domain/view/trade-room";
 import { teamsAssessment } from "../../domain/lineups";
+import {
+  saveTrade,
+  savedTradesKey,
+  summaryFromTrade,
+  type SavedTradeSummary,
+} from "../../domain/saved-trades";
+import type { TradeSearchQuery } from "../../domain/trade-search";
+import type { StressRecipe } from "../../domain/trade-stress";
+import { surfaceAppeal } from "../../domain/surface-appeal";
+import { SurfaceAppealView } from "../SurfaceAppeal";
+import { TradeSearch } from "../TradeSearch";
+import { SavedTrades } from "../SavedTrades";
+import {
+  TradeFiltersButton,
+  TradeFiltersDrawer,
+  tradeTeamName,
+} from "../TradeWorkspace";
+import { fmt, signed } from "../../ui/components";
+import { ArrowRight } from "lucide-react";
 
 export const tradeTabs = ["manual", "find", "chains", "counters"] as const;
 export type TradeTab = (typeof tradeTabs)[number];
@@ -81,6 +104,7 @@ function Picker({
   selected: string[];
   change: (ids: string[]) => void;
 }) {
+  const notify = useFeedback();
   return (
     <div className="gd-picker" role="group" aria-label={label}>
       {players.map((p) => (
@@ -90,9 +114,14 @@ function Picker({
           className="gd-opt"
           aria-pressed={selected.includes(p.id)}
           disabled={!selected.includes(p.id) && selected.length >= maxSide}
-          onClick={() => change(toggle(selected, p.id))}
+          onClick={() => {
+            notify("select");
+            change(toggle(selected, p.id));
+          }}
+          style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
         >
-          {p.name}
+          <PlayerPhoto player={p} size={20} />
+          <span>{p.name}</span>
           <small>
             {p.pos}{" "}
             {p.blendedExpected === null ? "—" : p.blendedExpected.toFixed(1)}
@@ -134,10 +163,16 @@ function SlotRow({ slot, m }: { slot: LineupSlot; m: Model }) {
   const p = slot.id ? m.byId.get(slot.id) : undefined;
   const tag = tagText(slot);
   return (
-    <li className="gd-slot" data-tag={tag ? "yes" : undefined}>
+    <li
+      className="gd-slot"
+      data-tag={tag && slot.tag !== "Unfilled" ? "yes" : undefined}
+    >
       <b>{slot.slot}</b>
       {p ? (
-        <PlayerName p={p} className="player-link" />
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+          <PlayerPhoto player={p} size={24} />
+          <PlayerName p={p} className="player-link" />
+        </span>
       ) : (
         <span className="gd-muted">Unfilled</span>
       )}
@@ -166,6 +201,15 @@ function ManualAnalyzer({
   change,
   changeBasis,
   forceTrade,
+  onApplyDrop,
+  onSwitchToLive,
+  state,
+  onFilters,
+  onSaveTrade,
+  initialStress,
+  stressRestoreKey,
+  manualFiltersOpen,
+  setManualFiltersOpen,
 }: {
   m: Model;
   draft: Draft;
@@ -173,13 +217,38 @@ function ManualAnalyzer({
   basis: LineupBasis;
   change: (draft: Draft) => void;
   changeBasis: (basis: LineupBasis) => void;
-  forceTrade?: (draft: Draft) => { ok: boolean } | boolean;
+  forceTrade?: (draft: Draft) => { ok: boolean; slot?: number } | boolean;
+  onApplyDrop?: (team: string, playerId: string) => void;
+  onSwitchToLive?: () => void;
+  state?: AppState;
+  onFilters?: (patch: Record<string, string>) => void;
+  onSaveTrade?: (
+    draft: Draft,
+    summary: SavedTradeSummary,
+    stressTest?: StressRecipe | null,
+  ) => boolean;
+  initialStress?: StressRecipe;
+  stressRestoreKey?: number;
+  manualFiltersOpen: boolean;
+  setManualFiltersOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
 }) {
+  const notify = useFeedback();
   const popovers = usePopovers();
   const [view, setView] = useState<"your" | "their">("your"),
     [phase, setPhase] = useState<"before" | "after">("after"),
     [week, setWeek] = useState<number>(m.weeks[0] ?? m.current),
-    [forced, setForced] = useState("");
+    [forced, setForced] = useState(""),
+    [saveMessage, setSaveMessage] = useState(""),
+    [stressRecipe, setStressRecipe] = useState<StressRecipe | undefined>(initialStress),
+    [lastRestoreKey, setLastRestoreKey] = useState(stressRestoreKey);
+
+  // The forced-trade confirmation clears as soon as a new offer is started.
+  if (forced && (draft.give.length > 0 || draft.get.length > 0)) setForced("");
+
+  if (stressRestoreKey !== lastRestoreKey) {
+    setLastRestoreKey(stressRestoreKey);
+    setStressRecipe(initialStress);
+  }
   const result = useMemo(
     () =>
       draft.give.length && draft.get.length
@@ -191,6 +260,20 @@ function ManualAnalyzer({
   const impact = valid ? tradeImpact(valid, basis) : null;
   const chips = valid ? gradeStepChips(m, draft, valid) : null;
   const verdictRows = valid ? verdicts(m, valid, basis) : null;
+  const surface = useMemo(
+    () =>
+      valid
+        ? surfaceAppeal(
+            m,
+            draft,
+            valid,
+            { metric: "both", minimum: 0, requireValueTests: false },
+            basis,
+            lineupsRaw,
+          )
+        : undefined,
+    [m, draft, valid, basis, lineupsRaw],
+  );
   const tape = taleOfTape(m, draft);
   const mineName = str(
     m.dataset.tables.ModelTeams.find((t) => str(t.TeamID) === draft.teamA)
@@ -207,16 +290,45 @@ function ManualAnalyzer({
       : null;
   const slots = moves ? (phase === "before" ? moves.before : moves.after) : [];
   const forceErrors = scenarioTradeErrors(m, draft);
+  const sendPlayer = draft.give[0] ? m.byId.get(draft.give[0]) : undefined;
+  const receivePlayer = draft.get[0] ? m.byId.get(draft.get[0]) : undefined;
+  const sendColors = sendPlayer ? teamColors(sendPlayer.nfl) : undefined;
+  const receiveColors = receivePlayer ? teamColors(receivePlayer.nfl) : undefined;
   return (
     <div className="gd-manual">
+      <SimulationNote
+        simulation={m.simulation}
+        team={[draft.teamA, draft.teamB]}
+        onApplyDrop={onApplyDrop}
+        onSwitchToLive={onSwitchToLive}
+      />
       <div className="gd-sides">
-        <section className="gd-side gd-side-send" aria-label="You send">
+        <section
+          className="gd-side gd-side-send"
+          aria-label="You send"
+          style={
+            sendColors
+              ? { borderTop: `4px solid ${sendColors.background}` }
+              : undefined
+          }
+        >
           <small>YOU SEND · {mineName}</small>
           <h2>
             {draft.give.length
               ? `${draft.give.length} player${draft.give.length === 1 ? "" : "s"}`
               : "Choose players"}
           </h2>
+          {draft.give.length > 0 && (
+            <div
+              className="gd-side-selected-photos"
+              style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "4px" }}
+            >
+              {draft.give.map((id) => {
+                const p = m.byId.get(id);
+                return p ? <PlayerPhoto key={id} player={p} size={32} /> : null;
+              })}
+            </div>
+          )}
           <Picker
             label="Players you send"
             players={m.players.filter((p) => p.owner === draft.teamA)}
@@ -235,7 +347,15 @@ function ManualAnalyzer({
             </div>
           ))}
         </section>
-        <section className="gd-side gd-side-receive" aria-label="You receive">
+        <section
+          className="gd-side gd-side-receive"
+          aria-label="You receive"
+          style={
+            receiveColors
+              ? { borderTop: `4px solid ${receiveColors.background}` }
+              : undefined
+          }
+        >
           <label className="gd-field">
             <span>YOU RECEIVE · from</span>
             <select
@@ -258,6 +378,17 @@ function ManualAnalyzer({
               ? `${draft.get.length} player${draft.get.length === 1 ? "" : "s"}`
               : "Choose players"}
           </h2>
+          {draft.get.length > 0 && (
+            <div
+              className="gd-side-selected-photos"
+              style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "4px" }}
+            >
+              {draft.get.map((id) => {
+                const p = m.byId.get(id);
+                return p ? <PlayerPhoto key={id} player={p} size={32} /> : null;
+              })}
+            </div>
+          )}
           <Picker
             label="Players you receive"
             players={m.players.filter(
@@ -270,6 +401,12 @@ function ManualAnalyzer({
         </section>
       </div>
 
+      {/* Forcing a trade clears the offer, so the confirmation lives outside the offer block until a new offer starts. */}
+      {forced && (
+        <p role="status" className="notice trade-toast gd-muted">
+          {forced} <a href="#/roster">Open Roster</a>
+        </p>
+      )}
       {!result && (
         <p className="gd-muted">
           Choose one to five players on each side to see the verdicts.
@@ -280,6 +417,75 @@ function ManualAnalyzer({
           {result.errors.join(" ")}
         </div>
       )}
+
+      {valid && (
+        <section
+          className="trade-score-strip gd-scoring-summary"
+          aria-label="Trade scoring summary"
+        >
+          <div className="trade-score-team">
+            <div>
+              <strong>{mineName}</strong>
+              <small>Your average Expected PPG</small>
+            </div>
+            <div className="trade-score-values model">
+              <span>{fmt(impact?.own.beforePerWeek ?? null)}</span>
+              <ArrowRight size={17} aria-hidden="true" />
+              <strong>{fmt(impact?.own.afterPerWeek ?? null)}</strong>
+              <b>{signed(impact?.own.expectedPerWeek ?? null)}</b>
+            </div>
+          </div>
+          <div className="trade-score-team">
+            <div>
+              <strong>{tradeTeamName(m, draft.teamB)}</strong>
+              <small>Their average Expected PPG</small>
+            </div>
+            <div className="trade-score-values model">
+              <span>{fmt(impact?.other.beforePerWeek ?? null)}</span>
+              <ArrowRight size={17} aria-hidden="true" />
+              <strong>{fmt(impact?.other.afterPerWeek ?? null)}</strong>
+              <b>{signed(impact?.other.expectedPerWeek ?? null)}</b>
+            </div>
+          </div>
+          <div className="trade-score-context-row">
+            <small className="trade-score-context">
+              Average across Weeks {m.current}–{m.final}; model scoring, not ESPN's weekly projection.
+            </small>
+            {valid.grade && (
+              <span
+                className="trade-deal-pill neutral"
+                role="status"
+                aria-label={`Surplus deal grade: ${valid.grade}`}
+              >
+                Surplus: <strong>{valid.grade}</strong>
+              </span>
+            )}
+          </div>
+        </section>
+      )}
+
+      <div className={`trade-manual-filters${manualFiltersOpen ? " filters-open" : ""}`}>
+        <TradeFiltersButton
+          scope="Manual"
+          open={manualFiltersOpen}
+          toggle={() => setManualFiltersOpen((o) => !o)}
+        />
+        <TradeFiltersDrawer
+          scope="Manual"
+          open={manualFiltersOpen}
+          close={() => setManualFiltersOpen(false)}
+        >
+          <DirectManagerAssessment
+            m={m}
+            draft={draft}
+            result={valid}
+            raw={state?.filters.managerExpectations}
+            change={(raw) => onFilters?.({ managerExpectations: raw })}
+            basis={basis}
+            lineupsRaw={lineupsRaw}
+          />
+        </TradeFiltersDrawer>
+      </div>
 
       {valid && verdictRows && (
         <>
@@ -404,18 +610,45 @@ function ManualAnalyzer({
                 disabled={forceErrors.length > 0}
                 title={forceErrors[0]}
                 onClick={() => {
-                  if (forceTrade(draft))
+                  const res = forceTrade(draft);
+                  const ok = typeof res === "object" ? res.ok : !!res;
+                  notify(actionCue(ok));
+                  // Say which save slot received the trade, so the auto-save is never a surprise.
+                  const slot = typeof res === "object" ? res.slot : undefined;
+                  if (ok)
                     setForced(
-                      "Applied to a hypothetical roster. Open Roster to see it.",
+                      `Applied to a hypothetical roster.${slot ? ` Saved to Slot ${slot}.` : ""} Open Roster to see it.`,
                     );
                 }}
               >
                 Force this trade into a hypothetical roster
               </button>
             )}
-            {forced && (
-              <span role="status" className="gd-muted">
-                {forced} <a href="#/roster">Open Roster</a>
+            {onSaveTrade && (
+              <button
+                type="button"
+                className="gd-cta"
+                aria-label="Save current trade"
+                disabled={!valid}
+                onClick={() => {
+                  if (valid) {
+                    const summary = summaryFromTrade(valid, basis);
+                    const ok = onSaveTrade(draft, summary, stressRecipe);
+                    notify(actionCue(ok));
+                    if (ok) {
+                      setSaveMessage(
+                        "Trade saved. Duplicate packages update the existing entry while preserving its name, notes and original summary.",
+                      );
+                    }
+                  }
+                }}
+              >
+                Save current trade
+              </button>
+            )}
+            {saveMessage && (
+              <span role="status" className="notice trade-toast gd-muted">
+                {saveMessage}
               </span>
             )}
           </div>
@@ -515,15 +748,24 @@ function ManualAnalyzer({
                 </p>
               )}
           </details>
-          <details className="gd-disclosure gd-legacy">
-            <summary>Stress test</summary>
-            <TradeStressTest
-              m={m}
-              draft={draft}
-              plans={lineupsRaw}
-              change={() => {}}
-            />
+          <details className="gd-disclosure">
+            <summary>Surface assessment</summary>
+            {surface ? (
+              <SurfaceAppealView value={surface} m={m} />
+            ) : (
+              <p className="gd-muted">
+                Surface assessment requires both teams to have valid modeled rosters.
+              </p>
+            )}
           </details>
+          <TradeStressTest
+            key={`${draft.give.join(",")}:${draft.get.join(",")}:${stressRestoreKey ?? 0}`}
+            m={m}
+            draft={draft}
+            plans={lineupsRaw}
+            initial={stressRecipe}
+            change={setStressRecipe}
+          />
         </>
       )}
     </div>
@@ -629,6 +871,7 @@ function CounterOffers({
   lineupsRaw: string | undefined;
   use: (draft: Draft) => void;
 }) {
+  const notify = useFeedback();
   const journal = useNegotiations();
   const [results, setResults] = useState<CounterResults | null>(null),
     [busy, setBusy] = useState(false),
@@ -657,9 +900,11 @@ function CounterOffers({
           setBusy(true);
           // Yield once so the button state paints before the search runs.
           setTimeout(() => {
-            setResults(counterOffers(m, draft, basis, lineupsRaw));
+            const next = counterOffers(m, draft, basis, lineupsRaw);
+            setResults(next);
             setForKey(offerKey);
             setBusy(false);
+            notify(searchCue(next.counters.length > 0));
           }, 20);
         }}
       >
@@ -703,7 +948,10 @@ function CounterOffers({
               <button
                 type="button"
                 className="gd-pill"
-                onClick={() => use(c.draft)}
+                onClick={() => {
+                  notify("select");
+                  use(c.draft);
+                }}
               >
                 Use this
               </button>
@@ -819,9 +1067,12 @@ export function TradeRoom({
   change,
   changeBasis,
   forceTrade,
-  legacy,
+  restoreScenario,
+  state,
   filters,
   onFilters,
+  onApplyDrop,
+  onSwitchToLive,
 }: {
   // Saved filter values, for the shared search limits and which groups are open.
   filters: Record<string, string>;
@@ -834,10 +1085,17 @@ export function TradeRoom({
   setTab: (tab: TradeTab) => void;
   change: (draft: Draft) => void;
   changeBasis: (basis: LineupBasis) => void;
-  forceTrade?: (draft: Draft) => { ok: boolean } | boolean;
-  // The current trade tools, shown for Find trades and the Chain planner until those tabs are rebuilt.
-  legacy: ReactNode;
+  forceTrade?: (draft: Draft) => { ok: boolean; slot?: number } | boolean;
+  restoreScenario?: (scenario?: RosterScenario) => boolean;
+  state?: AppState;
+  onApplyDrop?: (team: string, playerId: string) => void;
+  onSwitchToLive?: () => void;
 }) {
+  const notify = useFeedback();
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [manualFiltersOpen, setManualFiltersOpen] = useState(false);
+  const [restoredStress, setRestoredStress] = useState<StressRecipe | undefined>(undefined);
+  const [stressRestoreKey, setStressRestoreKey] = useState(0);
   const limits = readSearchLimits(filters[searchLimitsKey]),
     open = readOpenGroups(filters[foldedGroupsKey]);
   // Your current grades, so a goal can say which grade it reaches; goals about their team are described without one.
@@ -864,23 +1122,35 @@ export function TradeRoom({
       });
     },
   };
-  // Saved trades live with Find trades: switch there and open the saved drawer once it has mounted.
-  const openSaved = () => {
-    setTab("find");
-    let tries = 0;
-    const timer = setInterval(() => {
-      const drawer = document.querySelector<HTMLDetailsElement>(
-        ".trade-saved-drawer",
+
+  const saveSelection = (
+    selected: Draft,
+    summary: SavedTradeSummary,
+    query?: TradeSearchQuery,
+    context: Model = m,
+    stressTest?: StressRecipe | null,
+  ) => {
+    try {
+      const raw = saveTrade(
+        state ?? ({ filters } as unknown as AppState),
+        context,
+        selected,
+        summary,
+        query,
+        undefined,
+        stressTest,
       );
-      if (drawer || ++tries > 20) {
-        clearInterval(timer);
-        if (drawer) {
-          drawer.open = true;
-          drawer.scrollIntoView({ block: "start" });
-        }
-      }
-    }, 100);
+      onFilters({ [savedTradesKey]: raw });
+      return true;
+    } catch {
+      return false;
+    }
   };
+
+  const openSaved = () => {
+    setSavedOpen((o) => !o);
+  };
+
   return (
     <div className="gd-trade">
       <header className="gd-trade-head">
@@ -892,7 +1162,10 @@ export function TradeRoom({
               type="button"
               role="tab"
               aria-selected={tab === t}
-              onClick={() => setTab(t)}
+              onClick={() => {
+                notify("tap");
+                setTab(t);
+              }}
             >
               {tabLabel[t]}
             </button>
@@ -907,6 +1180,30 @@ export function TradeRoom({
           </a>
         </div>
       </header>
+
+      <details
+        className="trade-saved-drawer gd-disclosure"
+        open={savedOpen}
+        onToggle={(e) => setSavedOpen(e.currentTarget.open)}
+      >
+        <summary>Browse saved trades</summary>
+        <SavedTrades
+          m={m}
+          state={state ?? ({ filters } as unknown as AppState)}
+          lineupsRaw={lineupsRaw}
+          change={(raw) => onFilters({ [savedTradesKey]: raw })}
+          load={(trade) => {
+            if (trade.scenario && restoreScenario) {
+              restoreScenario(trade.scenario);
+            }
+            change(trade.draft);
+            setRestoredStress(trade.stressTest ?? undefined);
+            setStressRestoreKey((k) => k + 1);
+            setTab(trade.query ? "find" : "manual");
+          }}
+        />
+      </details>
+
       {tab === "counters" ? (
         <CounterOffers
           m={m}
@@ -927,6 +1224,15 @@ export function TradeRoom({
           change={change}
           changeBasis={changeBasis}
           forceTrade={forceTrade}
+          onApplyDrop={onApplyDrop}
+          onSwitchToLive={onSwitchToLive}
+          state={state}
+          onFilters={onFilters}
+          onSaveTrade={(d, s, recipe) => saveSelection(d, s, undefined, m, recipe)}
+          initialStress={restoredStress}
+          stressRestoreKey={stressRestoreKey}
+          manualFiltersOpen={manualFiltersOpen}
+          setManualFiltersOpen={setManualFiltersOpen}
         />
       ) : (
         <SearchLimitsContext.Provider value={limits}>
@@ -951,7 +1257,25 @@ export function TradeRoom({
               <p className="gd-muted">
                 Every {tabLabel[tab].toLowerCase()} control is below.
               </p>
-              <div className="gd-legacy">{legacy}</div>
+              <div className="trade-workspace">
+                <TradeSearch
+                  key={`${m.dataset.hash}/${tab}`}
+                  m={m}
+                  draft={draft}
+                  lineupsRaw={lineupsRaw}
+                  change={change}
+                  save={saveSelection}
+                  lineupBasis={readLineupBasis(basisRaw)}
+                  onLineupBasisChange={changeBasis}
+                  saveSettings={(raw: string) => onFilters({ tradeSearchSettings: raw })}
+                  settingsRaw={filters.tradeSearchSettings}
+                  workspaceMode={tab === "chains" ? "chain" : "standard"}
+                  onAnalyze={(targetDraft) => {
+                    change(targetDraft);
+                    setTab("manual");
+                  }}
+                />
+              </div>
             </FoldMemoryContext.Provider>
           </GradeGoalContext.Provider>
         </SearchLimitsContext.Provider>
