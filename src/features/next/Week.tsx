@@ -308,9 +308,10 @@ export function Week({
                     ? "Scout him"
                     : "Open depth chart";
               return (
-                <div
+                <a
                   key={move.kind}
                   className={`gd-move gd-move-${move.kind}`}
+                  href={move.href}
                 >
                   <div
                     style={{
@@ -337,10 +338,10 @@ export function Week({
                     </strong>
                   )}
                   <p>{move.line}</p>
-                  <a className="gd-move-btn" href={move.href}>
+                  <span className="gd-move-btn">
                     {buttonLabel}
-                  </a>
-                </div>
+                  </span>
+                </a>
               );
             })}
           </div>

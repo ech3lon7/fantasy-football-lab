@@ -5,6 +5,11 @@ const bundled =
   "/ms-playwright/chromium-1223/chrome-win64/chrome.exe";
 export default defineConfig({
   testDir: "tests/browser",
+  workers: process.env.PLAYWRIGHT_WORKERS
+    ? Number(process.env.PLAYWRIGHT_WORKERS)
+    : process.env.CI
+      ? 2
+      : 3,
   timeout: 90000,
   expect: { timeout: 20000 },
   // The shared release gate serves the Pages build itself and rejects an occupied port instead of testing an unrelated preview.
