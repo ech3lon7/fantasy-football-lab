@@ -1,3 +1,4 @@
+import { openRosterTools } from "./roster-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -91,6 +92,7 @@ test.describe("Section 4: Simulation status and roster-limit warnings", () => {
     await simulator
       .getByRole("button", { name: "New simulation", exact: true })
       .click();
+    await openRosterTools(page);
 
     // Add player 200 (QB from Team 2) to Team 1 without dropping anyone
     // Since capacity is 3 and Team 1 already has 3 players, adding player 200 causes roster over capacity!

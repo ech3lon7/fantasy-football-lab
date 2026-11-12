@@ -172,6 +172,8 @@ test("keeps direct/search toggles independent and freezes an explicitly logged f
   await page.getByRole("tab", { name: "Find trades" }).or(page.getByRole("button", { name: "Find matching trades", exact: true })).click();
   await expect(searchToggle).not.toBeChecked();
   await page.getByRole("tab", { name: "Manual analyzer" }).or(page.getByRole("button", { name: "Manual analyzer", exact: true })).click();
+  // Switching tools remounts the manual panel with its assessment disclosure closed.
+  await openTradeFilters(page, "Manual");
   const assessment = page.getByRole("region", {
     name: "Manager expectations assessment",
     exact: true,

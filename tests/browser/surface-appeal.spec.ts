@@ -135,7 +135,7 @@ test("retires legacy surface restrictions from preferences and saved trades", as
       exact: true,
     }),
   ).toHaveCount(0);
-  await panel.getByRole("button", { name: "Search", exact: true }).click();
+  await panel.getByRole("button", { name: "Run standard trade search", exact: true }).click();
   await expect(panel.getByText(/1 index matches/)).toBeVisible();
   // Saving an offer now follows the same explicit team-group expansion used in the regular finder.
   await panel.locator('tbody > tr > th button[aria-expanded="false"]').first().click();
@@ -189,7 +189,7 @@ test("retires legacy surface restrictions from preferences and saved trades", as
     .getByRole("button", { name: "Load saved trade", exact: true })
     .click();
   await expect(toggle).not.toBeChecked();
-  await panel.getByRole("button", { name: "Search", exact: true }).click();
+  await panel.getByRole("button", { name: "Run standard trade search", exact: true }).click();
   await expect(panel.getByText(/1 index matches/)).toBeVisible();
   workspace = await stored(page);
   expect(workspace.dataset).toEqual(original.dataset);
@@ -228,7 +228,7 @@ test("uses one optional Surface Trading control per tool and per chain stage", a
     )
     .toBe(1);
   await toggle.uncheck();
-  await panel.getByRole("button", { name: "Search", exact: true }).click();
+  await panel.getByRole("button", { name: "Run standard trade search", exact: true }).click();
   await expect(panel.getByText(/1 index matches/)).toBeVisible();
   await page
     .getByRole("tab", { name: "Chain planner" })

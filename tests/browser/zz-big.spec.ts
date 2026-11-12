@@ -1,7 +1,7 @@
-import { test, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { initialState, type Dataset, type Workspace } from "../../src/domain/contracts";
-import { openTradeFilters } from "./trade-workspace-helpers";
+import { openTradeFilters, buildManualOffer } from "./trade-workspace-helpers";
 
 async function seed(page: Page, filters: Record<string, string>) {
   const dataset: Dataset = JSON.parse(
@@ -28,20 +28,23 @@ test.use({ viewport: { width: 2000, height: 1120 } });
 test("big find", async ({ page }) => {
   test.setTimeout(120000);
   await seed(page, { feelTheme: "dark", feelAnimation: "off" });
-  await page.goto("./#/trade");
+  // Select a valid offer before exercising the large-screen finder.
+  await buildManualOffer(page);
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
   await page.waitForTimeout(500);
-  await page.screenshot({ path: "s9-review/big/find-collapsed.png" });
+  // Store review captures in the test artifact directory instead of modifying tracked files.
+  await page.screenshot({ path: test.info().outputPath("find-collapsed.png") });
   await openTradeFilters(page);
   await page.waitForTimeout(400);
-  await page.screenshot({ path: "s9-review/big/find-open.png", fullPage: true });
+  await page.screenshot({ path: test.info().outputPath("find-open.png"), fullPage: true });
   await page.getByRole("button", { name: "Run standard trade search" }).click();
-  await page.waitForTimeout(3000);
-  await page.screenshot({ path: "s9-review/big/find-results.png", fullPage: true });
+  await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Download search debug", exact: true })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("find-results.png"), fullPage: true });
   await page.goto("./#/roster");
   await page.waitForTimeout(500);
-  await page.screenshot({ path: "s9-review/big/roster.png", fullPage: true });
+  await page.screenshot({ path: test.info().outputPath("roster.png"), fullPage: true });
   await page.goto("./#/lab/settings");
   await page.waitForTimeout(500);
-  await page.screenshot({ path: "s9-review/big/lab.png", fullPage: true });
+  await page.screenshot({ path: test.info().outputPath("lab.png"), fullPage: true });
 });

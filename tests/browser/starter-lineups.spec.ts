@@ -1,3 +1,4 @@
+import { openManualPlayers } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { starterLineupsKey } from "../../src/domain/starter-lineups";
@@ -200,29 +201,28 @@ test("bench trades keep direct points unchanged while exchange grade and coverag
 }) => {
   await seed(page);
   await page.goto("./#/trade");
+  await openManualPlayers(page);
   await page.getByRole("combobox", { name: "Trade partner" }).selectOption("2");
   await page
-    .getByRole("group", { name: "Players you send" })
+    .locator('.gd-picker[aria-label="Players you send"]')
     .getByRole("button", { name: /Bench QB/ })
     .click();
   await page
-    .getByRole("group", { name: "Players you receive" })
+    .locator('.gd-picker[aria-label="Players you receive"]')
     .getByRole("button", { name: /Incoming QB/ })
     .click();
   const verdicts = page.getByRole("region", { name: "Verdicts" });
   const lineupGain = verdicts
-    .locator("details")
-    .filter({ hasText: "Lineup impact (EPPG)" })
-    .locator("summary strong");
+    .locator(".srow")
+    .filter({ hasText: "▲ Lineup impact" })
+    .locator(".v");
   const exchange = verdicts
-    .locator("details")
+    .locator(".srow")
     .filter({ hasText: "Surplus exchange" })
-    .locator("summary strong");
+    .locator(".v");
   // Scoring on the marked starters leaves a bench-for-bench trade at no gain, while the exchange stays horrible.
-  await page
-    .getByRole("group", { name: "Lineup basis" })
-    .getByRole("button", { name: "Marked starters" })
-    .click();
+  // Use the current select while retaining the bench-versus-starter scoring assertions.
+  await page.getByRole("combobox", { name: "Lineup basis", exact: true }).selectOption("marked-starters");
   await expect(lineupGain).toHaveText(/^\+?0\.0/);
   await expect(exchange).toHaveText("Horrible deal");
   // Optimized coverage, which includes the bench, is a separate and negative result.
@@ -246,19 +246,18 @@ test("bench trades keep direct points unchanged while exchange grade and coverag
   await page.getByRole("button", { name: "Save lineup", exact: true }).click();
   await expect(page.getByText(/Lineup source: Saved app lineup/)).toBeVisible();
   await page.goto("./#/trade");
-  await page
-    .getByRole("group", { name: "Lineup basis" })
-    .getByRole("button", { name: "Marked starters" })
-    .click();
+  await openManualPlayers(page);
+  // Use the current select while retaining the bench-versus-starter scoring assertions.
+  await page.getByRole("combobox", { name: "Lineup basis", exact: true }).selectOption("marked-starters");
   await expect(lineupGain).toHaveText(/^-|^−/);
   await expect(
     page
-      .getByRole("group", { name: "Players you send" })
+      .locator('.gd-picker[aria-label="Players you send"]')
       .getByRole("button", { name: /Bench QB/ }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(
     page
-      .getByRole("group", { name: "Players you receive" })
+      .locator('.gd-picker[aria-label="Players you receive"]')
       .getByRole("button", { name: /Incoming QB/ }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(exchange).toHaveText("Horrible deal");

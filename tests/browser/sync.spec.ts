@@ -192,10 +192,8 @@ test("Sync now retains in-flight edits and the next sync succeeds", async ({
   await page.getByRole("button", { name: "Sync now", exact: true }).click();
   await started;
   await buildManualOffer(page);
-  await page
-    .getByRole("group", { name: "Lineup basis" })
-    .getByRole("button", { name: "Marked starters" })
-    .click();
+  // The basis is now a select; changing it must still persist during the in-flight sync.
+  await page.getByRole("combobox", { name: "Lineup basis", exact: true }).selectOption("marked-starters");
   await expect
     .poll(
       async () =>

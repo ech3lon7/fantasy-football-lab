@@ -2380,8 +2380,9 @@
   padding: 0 16px;
   border-radius: 20px;
   border: 0;
-  background: #fff;
-  color: #0f1115;
+  /* Use theme tokens so home-screen actions remain readable in dark mode. */
+  background: var(--gd-surface);
+  color: var(--gd-ink);
   font-weight: 700;
   font-size: 14px;
   display: inline-flex;
@@ -4707,7 +4708,8 @@
 :root[data-gameday][data-animation="full"] .gd-moves > .gd-move,
 :root[data-gameday][data-animation="full"] .gd-tiles > .gd-tile,
 :root[data-gameday][data-animation="full"] .gd-grade-btn,
-:root[data-gameday][data-animation="full"] .gd-sides > .gd-side,
+/* Trade sides now sit inside layout wrappers; retain their entrance animation. */
+:root[data-gameday][data-animation="full"] .gd-sides > div > .gd-side,
 :root[data-gameday][data-animation="full"] .gd-lab-page > .gd-card {
   animation: gd-cardin 450ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
@@ -4716,7 +4718,7 @@
 :root[data-gameday][data-animation="full"] .gd-cards > .gd-pcard:nth-child(2),
 :root[data-gameday][data-animation="full"] .gd-moves > .gd-move:nth-child(2),
 :root[data-gameday][data-animation="full"] .gd-tiles > .gd-tile:nth-child(2),
-:root[data-gameday][data-animation="full"] .gd-sides > .gd-side:nth-child(2) {
+:root[data-gameday][data-animation="full"] .gd-sides > div:last-child > .gd-side {
   animation-delay: 60ms;
 }
 

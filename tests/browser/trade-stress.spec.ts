@@ -1,3 +1,4 @@
+import { openTradeDetails, openSavedTrades } from "./trade-workspace-helpers";
 import { test, expect } from "@playwright/test";
 import { openLegacyTrades } from "./trade-workspace-helpers";
 import { execFileSync } from "node:child_process";
@@ -71,12 +72,14 @@ test("optional stress test stays isolated, validates edits, exports and restores
   }, workspace);
   await page.reload();
   await openLegacyTrades(page, "Manual analyzer");
+  await openTradeDetails(page);
   const stress = page.locator(".trade-stress-test");
   await expect(stress).toBeVisible();
   await expect(stress).not.toHaveAttribute("open", "");
   const normal = page.getByRole("region", { name: "Trade scoring summary" });
   await expect(normal).toContainText("35.00");
   const original = await normal.innerText();
+  await openTradeDetails(page);
   await stress.locator(":scope > summary").click();
 
   // A blank input is not zero; editing hides old results immediately and preserves the normal score strip.
@@ -143,7 +146,7 @@ test("optional stress test stays isolated, validates edits, exports and restores
   await expect(
     page.getByText(/Trade saved\. Duplicate packages/),
   ).toBeVisible();
-  await page.locator(".trade-saved-drawer > summary").click();
+  await openSavedTrades(page);
   const saved = page
     .locator(".trade-saved-drawer")
     .locator("details")
@@ -155,6 +158,7 @@ test("optional stress test stays isolated, validates edits, exports and restores
   await expect(saved).toContainText("Stress-test assumptions:");
   await input.fill("15");
   await saved.getByRole("button", { name: "Load saved trade" }).click();
+  await openTradeDetails(page);
   await stress.locator(":scope > summary").click();
   await expect(
     stress.getByRole("spinbutton", { name: "Assumed PPG for Incoming QB" }),
@@ -167,9 +171,10 @@ test("optional stress test stays isolated, validates edits, exports and restores
   await expect(table).toBeVisible();
   // A full page reload retains only the saved recipe, never a stale calculated scenario.
   await page.reload();
-  await page.locator(".trade-saved-drawer > summary").click();
+  await openSavedTrades(page);
   await saved.locator(":scope > summary").click();
   await saved.getByRole("button", { name: "Load saved trade" }).click();
+  await openTradeDetails(page);
   await stress.locator(":scope > summary").click();
   await expect(input).toHaveValue("25");
   await expect(table).not.toBeVisible();

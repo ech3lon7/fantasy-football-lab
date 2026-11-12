@@ -545,6 +545,7 @@ function ManualAnalyzer({
             type="button"
             className="ibtn"
             style={{ borderColor: "var(--gd-edit)", color: "var(--gd-edit)", fontWeight: 700, padding: "8px 14px", borderRadius: "10px" }}
+            aria-label="Force this trade into a hypothetical roster"
             disabled={forceErrors.length > 0}
             title={forceErrors[0]}
             onClick={() => {
@@ -774,6 +775,17 @@ function ManualAnalyzer({
             {valid
               ? `Positive VORP in ${valid.incoming.toFixed(1)} vs out ${valid.outgoing.toFixed(1)} (${valid.incoming >= valid.outgoing ? "+" : ""}${(valid.incoming - valid.outgoing).toFixed(1)}). Premium only applies to unequal packages.`
               : "Choose players on both sides to evaluate surplus."}
+            {/* Render the existing surplus advantage without mixing it with lineup gain. */}
+            {verdictRows?.[0].bar && (
+              <div className="gd-advbar" data-tone={verdictRows[0].bar.tone}
+                aria-label={"Advantage " + (verdictRows[0].bar.percent ?? "unavailable")}>
+                <i style={{
+                  left: (50 + Math.min(0, verdictRows[0].bar.value ?? 0) * 50) + "%",
+                  width: Math.abs(verdictRows[0].bar.value ?? 0) * 50 + "%",
+                }} />
+                <em>{verdictRows[0].bar.percent ?? "—"}</em>
+              </div>
+            )}
           </div>
         </div>
         <div className="srow">

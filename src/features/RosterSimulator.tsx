@@ -334,11 +334,42 @@ export function RosterSimulator({
               );
             })}
           </div>
+          {/* Naming and validation remain available before creating a simulation. */}
+          <div className="toolbar gd-sim-toolbar">
+            <label className="control">
+              <span>Simulation name</span>
+              <input
+                aria-label="Simulation name"
+                value={name}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setName(val);
+                  if (isReservedSimulationName(val)) {
+                    setMessage(
+                      "‘Live’ and ‘Live roster’ are reserved for the real roster. Choose another name for your simulation.",
+                    );
+                    return;
+                  }
+                  setMessage("");
+                  if (current && val.trim())
+                    update({ ...current, name: val });
+                }}
+                maxLength={120}
+                placeholder={current?.name ?? "Name your next moves"}
+              />
+            </label>
+          </div>
           <button
             type="button"
+            aria-label="New simulation"
             className="pill gd-pill"
             disabled={!!read.issue}
             onClick={() => {
+              // Reject reserved names at creation as well as while editing.
+              if (isReservedSimulationName(name)) {
+                setMessage("‘Live’ and ‘Live roster’ are reserved for the real roster. Choose another name for your simulation.");
+                return;
+              }
               const scenario: RosterScenario = {
                 id: crypto.randomUUID(),
                 name: name.trim() || `Simulation ${collection.scenarios.length + 1}`,
@@ -486,30 +517,6 @@ export function RosterSimulator({
             More simulation tools
           </summary>
           <div style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "14px" }}>
-            <div className="toolbar gd-sim-toolbar">
-              <label className="control">
-                <span>Simulation name</span>
-                <input
-                  aria-label="Simulation name"
-                  value={name}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setName(val);
-                    if (isReservedSimulationName(val)) {
-                      setMessage(
-                        "‘Live’ and ‘Live roster’ are reserved for the real roster. Choose another name for your simulation.",
-                      );
-                      return;
-                    }
-                    setMessage("");
-                    if (current && val.trim())
-                      update({ ...current, name: val });
-                  }}
-                  maxLength={120}
-                  placeholder={current?.name ?? "Name your next moves"}
-                />
-              </label>
-            </div>
             {/* Three explicit save slots preserve independent recipe checkpoints; ordinary roster edits never overwrite them. */}
             <section aria-label="Roster save slots">
             <div className="roster-slots-header">

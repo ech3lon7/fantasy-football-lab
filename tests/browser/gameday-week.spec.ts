@@ -37,7 +37,8 @@ test("this week shows the headline, outlook and scoreboard from model results", 
     if (grade === "N/A") {
       await expect(row.locator(".gd-bar").first().locator("i")).toHaveCount(0);
       await expect(row.locator(".gd-bar").first()).toContainText("—");
-      expect(note).toContain("unavailable");
+      // Availability wording is case-insensitive; missing bars must still show no value.
+      expect(note).toMatch(/unavailable/i);
     }
   }
   // Nothing says "no change", and at most three moves are shown.
