@@ -104,6 +104,7 @@ import {
 import { Legend } from "../ui/components";
 import { FilterHelp } from "../ui/FilterHelp";
 import { Panel } from "../ui/layout";
+import { Skeleton } from "../ui/primitives";
 import { ModelView } from "../features/ModelView";
 import { Account } from "../features/Account";
 // Report this running bundle's release rather than the workbook or calculation-model version.
@@ -1405,7 +1406,8 @@ export default function App() {
           )}
           {calculating && (
             <div className="notice" role="status">
-              Calculating the current snapshot…
+              <Skeleton width={140} height={12} /> Calculating the current
+              snapshot…
             </div>
           )}
           {!ready ? (

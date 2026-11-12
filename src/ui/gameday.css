@@ -28,7 +28,8 @@
 :root[data-gameday][data-animation="reduced"] .gd-opt[aria-pressed="true"],
 :root[data-gameday][data-animation="reduced"] .gd-preset[aria-pressed="true"],
 :root[data-gameday][data-animation="reduced"] .gd-seg button[aria-pressed="true"],
-:root[data-gameday][data-animation="reduced"] .gd-verdict[data-tone="bad"] {
+:root[data-gameday][data-animation="reduced"] .gd-verdict[data-tone="bad"],
+:root[data-gameday][data-animation="reduced"] .gd-skeleton {
   animation: none !important;
   clip-path: none !important;
 }
@@ -2058,12 +2059,10 @@
   display: inline;
 }
 :root[data-gameday][data-animation="full"] .gd-ticker-run {
-  animation: gd-scroll 40s linear infinite;
+  animation: gd-marq 38s linear infinite;
 }
-@keyframes gd-scroll {
-  to {
-    transform: translateX(-50%);
-  }
+:root[data-gameday][data-animation="full"] .gd-ticker:hover .gd-ticker-run {
+  animation-play-state: paused;
 }
 @media (max-width: 860px) {
   :root[data-gameday] .gd-hero {
@@ -3714,51 +3713,40 @@
   border-color: var(--gd-line);
 }
 
-/* Motion System (Task 2.2) */
+/* Motion System · Section A of the design-fidelity plan.
+   The design's keyframes are ported name for name; every entrance uses backwards fill only.
+   A finished transform or clip-path would re-anchor position: fixed children (the phone
+   verdicts) and would override the hover lifts on cards. */
+@keyframes gd-wipe {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
 
-@keyframes gd-screen-enter {
+@keyframes gd-fade {
   from {
     opacity: 0;
-    transform: translateY(12px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
-@keyframes gd-popover-enter {
+@keyframes gd-slidein {
   from {
     opacity: 0;
-    transform: scale(0.96) translateY(6px);
+    transform: translateX(-24px);
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: none;
   }
 }
 
-@keyframes gd-sheet-enter {
-  from {
-    opacity: 0;
-    transform: translateY(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes gd-bar-grow-x {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-
-@keyframes gd-bar-grow-y {
+@keyframes gd-grow-y {
   from {
     transform: scaleY(0);
   }
@@ -3767,12 +3755,132 @@
   }
 }
 
-@keyframes gd-line-reveal {
+@keyframes gd-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes gd-reveal {
   from {
     clip-path: inset(0 100% 0 0);
   }
   to {
     clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes gd-popin {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -80%) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%) scale(1);
+  }
+}
+
+/* SVG callouts cannot use the centred popin transform, so they pop in place. */
+@keyframes gd-callout-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes gd-marq {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes gd-shim {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes gd-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes gd-popup {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes gd-tdrop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes gd-scale-in {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes gd-cardin {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes gd-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-4px);
+  }
+  40%,
+  80% {
+    transform: translateX(4px);
   }
 }
 
@@ -3788,31 +3896,9 @@
   }
 }
 
-@keyframes gd-verdict-enter {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes gd-shake {
-  0%, 100% {
-    transform: translateX(0);
-  }
-  20%, 60% {
-    transform: translateX(-4px);
-  }
-  40%, 80% {
-    transform: translateX(4px);
-  }
-}
-
 @keyframes gd-shimmer {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.55;
   }
   50% {
@@ -3829,101 +3915,210 @@
   }
 }
 
-/* Screen changes: content fades and rises 12px over 240ms */
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-shell > main,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-week,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-roster,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-scout,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-league,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-trade,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-lab,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-screen {
-  /* Backwards fill only: a finished transform would anchor position:fixed children (the pinned verdicts) to the screen. */
-  animation: gd-screen-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+/* Screen changes: the whole screen wipes in from the left on every route change. */
+:root[data-gameday][data-animation="full"] .gd-week,
+:root[data-gameday][data-animation="full"] .gd-roster,
+:root[data-gameday][data-animation="full"] .gd-scout,
+:root[data-gameday][data-animation="full"] .gd-league,
+:root[data-gameday][data-animation="full"] .gd-trade,
+:root[data-gameday][data-animation="full"] .gd-lab {
+  animation: gd-wipe 550ms cubic-bezier(0.7, 0, 0.2, 1) backwards;
 }
 
-/* Popovers and sheets */
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-popover {
-  animation: gd-popover-enter 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+/* Page headings slide in from the left just after the wipe starts. */
+:root[data-gameday][data-animation="full"] .gd-hero > div:first-child,
+:root[data-gameday][data-animation="full"] .gd-roster > .gd-pairs > h2,
+:root[data-gameday][data-animation="full"] .gd-league > section:first-child > h2,
+:root[data-gameday][data-animation="full"] .gd-trade-head > h2,
+:root[data-gameday][data-animation="full"] .gd-lab-head > h2 {
+  animation: gd-slidein 600ms 120ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 
-:root[data-gameday]:not([data-animation="off"]) .gd-backdrop {
-  animation: gd-fade-in 150ms ease-out both;
+/* Cards rise in: scouting cards, move cards, roster tiles, League grade tiles,
+   both sides of the Manual analyzer and the Lab's own cards. */
+:root[data-gameday][data-animation="full"] .gd-cards > .gd-pcard,
+:root[data-gameday][data-animation="full"] .gd-moves > .gd-move,
+:root[data-gameday][data-animation="full"] .gd-tiles > .gd-tile,
+:root[data-gameday][data-animation="full"] .gd-grade-btn,
+:root[data-gameday][data-animation="full"] .gd-sides > .gd-side,
+:root[data-gameday][data-animation="full"] .gd-lab-page > .gd-card {
+  animation: gd-cardin 450ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 
-@media (max-width: 719px) {
-  :root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-popover {
-    animation: gd-sheet-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-}
-
-/* Charts: bars grow from baseline and lines reveal left to right over 600ms */
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-bar,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-fc-fill,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-versus-bar {
-  animation: gd-bar-grow-x 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  transform-origin: left;
-}
-
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-versus-bar.a {
-  transform-origin: right;
-}
-
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .stock-volume-bar {
-  animation: gd-bar-grow-y 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  transform-origin: bottom;
-}
-
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-outlook-svg path,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .player-stock-svg .stock-fast-ma-line,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .player-stock-svg .stock-slow-ma-line,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .player-stock-svg .stock-points-line,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .player-stock-svg .stock-area-fill {
-  animation: gd-line-reveal 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* Selection: spring animation on selected items */
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-pill[aria-pressed="true"],
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-opt[aria-pressed="true"],
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-preset[aria-pressed="true"],
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-seg button[aria-pressed="true"] {
-  animation: gd-spring-select 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
-
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-card-versus,
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-versus {
-  animation: gd-fade-in 200ms ease-out both;
-}
-
-/* Trade verdicts: cascading enter and failure shake */
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-verdicts .gd-verdict {
-  animation: gd-verdict-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-verdicts .gd-verdict:nth-child(1) {
-  animation-delay: 0ms;
-}
-
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-verdicts .gd-verdict:nth-child(2) {
+/* A short stagger so a group arrives as a sequence, not one block. */
+:root[data-gameday][data-animation="full"] .gd-cards > .gd-pcard:nth-child(2),
+:root[data-gameday][data-animation="full"] .gd-moves > .gd-move:nth-child(2),
+:root[data-gameday][data-animation="full"] .gd-tiles > .gd-tile:nth-child(2),
+:root[data-gameday][data-animation="full"] .gd-sides > .gd-side:nth-child(2) {
   animation-delay: 60ms;
 }
 
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-verdicts .gd-verdict:nth-child(3) {
+:root[data-gameday][data-animation="full"] .gd-cards > .gd-pcard:nth-child(3),
+:root[data-gameday][data-animation="full"] .gd-moves > .gd-move:nth-child(3),
+:root[data-gameday][data-animation="full"] .gd-tiles > .gd-tile:nth-child(3) {
   animation-delay: 120ms;
 }
 
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-verdicts .gd-verdict:nth-child(4) {
+:root[data-gameday][data-animation="full"] .gd-cards > .gd-pcard:nth-child(4),
+:root[data-gameday][data-animation="full"] .gd-tiles > .gd-tile:nth-child(4) {
   animation-delay: 180ms;
 }
 
-:root[data-gameday]:not([data-animation="off"]):not([data-animation="reduced"]) .gd-verdict[data-tone="bad"] {
-  animation: gd-shake 360ms ease-in-out both;
+:root[data-gameday][data-animation="full"] .gd-cards > .gd-pcard:nth-child(5),
+:root[data-gameday][data-animation="full"] .gd-tiles > .gd-tile:nth-child(5) {
+  animation-delay: 240ms;
 }
 
-/* Recalculation: affected numbers dim and shimmer */
+:root[data-gameday][data-animation="full"] .gd-cards > .gd-pcard:nth-child(6),
+:root[data-gameday][data-animation="full"] .gd-tiles > .gd-tile:nth-child(6) {
+  animation-delay: 300ms;
+}
+
+:root[data-gameday][data-animation="full"] .gd-cards > .gd-pcard:nth-child(n + 7),
+:root[data-gameday][data-animation="full"] .gd-tiles > .gd-tile:nth-child(n + 7) {
+  animation-delay: 360ms;
+}
+
+/* Charts: bars grow from their baseline, lines and areas reveal left to right,
+   volume bars rise from the axis and callouts pop in. */
+:root[data-gameday][data-animation="full"] .gd-bar > i,
+:root[data-gameday][data-animation="full"] .gd-fc-fill {
+  transform-origin: left center;
+  animation: gd-grow-x 700ms 200ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+:root[data-gameday][data-animation="full"] .gd-versus-bar {
+  transform-origin: left center;
+  animation: gd-grow-x 700ms 200ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+:root[data-gameday][data-animation="full"] .gd-versus-bar.a {
+  transform-origin: right center;
+}
+
+:root[data-gameday][data-animation="full"] .stock-volume-bar {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: gd-grow-y 700ms 200ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+:root[data-gameday][data-animation="full"] .gd-outlook-mine,
+:root[data-gameday][data-animation="full"] .gd-outlook-median,
+:root[data-gameday][data-animation="full"] .player-stock-svg .stock-fast-ma-line,
+:root[data-gameday][data-animation="full"] .player-stock-svg .stock-slow-ma-line,
+:root[data-gameday][data-animation="full"] .player-stock-svg .stock-points-line,
+:root[data-gameday][data-animation="full"] .player-stock-svg .stock-area-fill {
+  animation: gd-reveal 1s 200ms cubic-bezier(0.3, 0.7, 0.2, 1) backwards;
+}
+
+:root[data-gameday][data-animation="full"] .gd-outlook-tag {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: gd-callout-pop 500ms 350ms cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
+}
+
+/* Radar draws in from its centre. */
+:root[data-gameday][data-animation="full"] .gd-radar {
+  transform-origin: 50% 50%;
+  animation: gd-scale-in 700ms 150ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+/* Trade verdict rows slide in one after another; a failed legality check shakes once after arriving. */
+:root[data-gameday][data-animation="full"] .gd-verdicts .gd-verdict {
+  animation: gd-slidein 450ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+:root[data-gameday][data-animation="full"] .gd-verdicts .gd-verdict:nth-child(2) {
+  animation-delay: 80ms;
+}
+
+:root[data-gameday][data-animation="full"] .gd-verdicts .gd-verdict:nth-child(3) {
+  animation-delay: 160ms;
+}
+
+:root[data-gameday][data-animation="full"] .gd-verdicts .gd-verdict:nth-child(4) {
+  animation-delay: 240ms;
+}
+
+:root[data-gameday][data-animation="full"] .gd-verdicts .gd-verdict:nth-child(5) {
+  animation-delay: 320ms;
+}
+
+:root[data-gameday][data-animation="full"] .gd-verdicts .gd-verdict[data-verdict="legality"][data-tone="bad"] summary {
+  animation: gd-shake 360ms ease-in-out 620ms backwards;
+}
+
+/* Selection springs on the chosen pill, option, preset or segment. */
+:root[data-gameday][data-animation="full"] .gd-pill[aria-pressed="true"],
+:root[data-gameday][data-animation="full"] .gd-opt[aria-pressed="true"],
+:root[data-gameday][data-animation="full"] .gd-preset[aria-pressed="true"],
+:root[data-gameday][data-animation="full"] .gd-seg button[aria-pressed="true"] {
+  animation: gd-spring-select 200ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+/* Popovers, the player card they carry, and the Feel menu. */
+:root[data-gameday][data-animation="full"] .gd-popover {
+  animation: gd-popup 350ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+:root[data-gameday][data-animation="full"] .gd-backdrop {
+  animation: gd-fade 200ms ease-out backwards;
+}
+
+:root[data-gameday][data-animation="full"] .gd-menu {
+  animation: gd-drop 250ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+@media (max-width: 719px) {
+  :root[data-gameday][data-animation="full"] .gd-popover {
+    animation: gd-sheet-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+}
+
+@keyframes gd-sheet-enter {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Inline toasts drop in; they are not centred, so they use the plain drop rather than tdrop. */
+:root[data-gameday][data-animation="full"] .slot-toast-notification,
+:root[data-gameday][data-animation="full"] .trade-toast {
+  animation: gd-drop 300ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+/* Skeleton shimmer while a screen's data is computing. */
+:root[data-gameday][data-animation="full"] .gd-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--gd-surface-2),
+    var(--gd-surface),
+    var(--gd-surface-2)
+  );
+  background-size: 200% 100%;
+  animation: gd-shim 1.1s linear infinite;
+}
+
+/* Recalculation: affected numbers dim and shimmer. */
 :root[data-gameday]:not([data-animation="off"]) .gd-recalculating,
 :root[data-gameday]:not([data-animation="off"]) .gd-shimmer {
   animation: gd-shimmer 1.2s ease-in-out infinite;
+}
+
+/* Reduced keeps short fades only: the wipe becomes a fade and nothing transforms. */
+:root[data-gameday][data-animation="reduced"] .gd-week,
+:root[data-gameday][data-animation="reduced"] .gd-roster,
+:root[data-gameday][data-animation="reduced"] .gd-scout,
+:root[data-gameday][data-animation="reduced"] .gd-league,
+:root[data-gameday][data-animation="reduced"] .gd-trade,
+:root[data-gameday][data-animation="reduced"] .gd-lab,
+:root[data-gameday][data-animation="reduced"] .gd-popover {
+  animation: gd-fade 180ms ease backwards;
 }
 
 /* ==========================================================================

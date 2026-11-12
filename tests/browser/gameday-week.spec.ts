@@ -84,7 +84,7 @@ test("signals ticker scrolls only at Full animation and opens the player card", 
   await group.getByRole("button", { name: "Reduced" }).click();
   expect(await animation()).toBe("none");
   await group.getByRole("button", { name: "Full" }).click();
-  expect(await animation()).toBe("gd-scroll");
+  expect(await animation()).toBe("gd-marq");
   // A moving ticker is hard to click, so switch animation off before opening a player from it.
   await group.getByRole("button", { name: "Off" }).click();
   await page.keyboard.press("Escape");

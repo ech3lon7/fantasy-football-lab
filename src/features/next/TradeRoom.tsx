@@ -491,7 +491,12 @@ function ManualAnalyzer({
         <>
           <section className="gd-verdicts" aria-label="Verdicts">
             {verdictRows.map((v) => (
-              <details key={v.id} className="gd-verdict" data-tone={v.tone}>
+              <details
+                key={v.id}
+                className="gd-verdict"
+                data-tone={v.tone}
+                data-verdict={v.id}
+              >
                 <summary
                   onClick={(e) => {
                     // Pinned cells on a phone open their detail as a sheet instead of expanding in place.

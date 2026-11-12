@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Direction D · Phone layouts, part 2</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=Barlow+Condensed:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#E9EBEF}
+a{color:#1F5FD1}a:hover{color:#163F8C}
+.ph{--ink:#0F1115;--mu:#555C68;--ln:#E3E5EA;--bg:#FFFFFF;--card:#FFFFFF;--soft:#F3F4F6;--fa:#11805B;--es:#1F5FD1;--mo:#C2185B;--ed:#6A3FCF;--hi:#FFD60A;--bad:#C2410C;--okbg:#E7F6EE;--okfg:#0B5B40;--badbg:#FDE6DF;--badfg:#9A2E0A;--wbg:#FFF0D6;--wfg:#7A4300;--infobg:#DDE6FF;--infofg:#163F8C;--desk:#E9EBEF;font-family:Barlow,system-ui,sans-serif;color:var(--ink);background:var(--desk);padding:36px;display:flex;gap:40px;align-items:flex-start;box-sizing:border-box}
+.ph.dark{--ink:#EEF0F4;--mu:#A3ABB9;--ln:#2B313C;--bg:#111419;--card:#181C24;--soft:#222834;--fa:#4CC79A;--es:#7FAEFF;--mo:#F27DAE;--ed:#B79CFF;--bad:#FF9466;--okbg:rgba(76,199,154,.18);--okfg:#9BE6C6;--badbg:rgba(255,148,102,.18);--badfg:#FFB79A;--wbg:rgba(255,200,90,.18);--wfg:#FFD591;--infobg:rgba(127,174,255,.2);--infofg:#B7D0FF;--desk:#07090C}
+.ph *{box-sizing:border-box}
+.col{display:flex;flex-direction:column;gap:12px;flex:none}
+.cap{font-family:'Barlow Condensed';font-weight:800;font-size:22px;text-transform:uppercase}
+.note{font-size:14px;color:var(--mu);width:390px;line-height:1.45}
+.dev{width:390px;height:844px;background:var(--bg);border-radius:36px;border:2px solid var(--ink);overflow:hidden;display:flex;flex-direction:column;position:relative;font-size:15px}
+.top{display:flex;align-items:center;gap:10px;padding:14px 16px 10px;border-bottom:2px solid var(--ink)}
+.mark{font-family:'Barlow Condensed';font-weight:800;font-size:22px;flex:1;display:flex;align-items:center;gap:6px;text-transform:uppercase}
+.mark i{width:10px;height:20px;background:var(--hi);transform:skewX(-14deg);display:inline-block}
+.ib{width:44px;height:44px;border-radius:22px;border:2px solid var(--ink);background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--ink)}
+.ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.scr{flex:1;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:14px}
+.scr>*{flex:none}
+.foot{padding:10px 16px;border-top:2px solid var(--ink);background:var(--card)}
+.tabbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-top:2px solid var(--ink);background:var(--card);padding:6px 4px 14px}
+.tb{display:flex;flex-direction:column;align-items:center;gap:3px;min-height:48px;justify-content:center;font-size:11.5px;font-weight:600;color:var(--mu);border-radius:12px}
+.tb.on{color:var(--ink);background:var(--hi);color:#0F1115}
+.kick{font-family:'Barlow Condensed';font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+.h1{font-family:'Barlow Condensed';font-weight:800;font-size:34px;line-height:.95;text-transform:uppercase;margin:0}
+.card{border:2px solid var(--ink);border-radius:16px;background:var(--card);padding:12px;display:flex;flex-direction:column;gap:8px}
+.big{font-family:'Barlow Condensed';font-weight:800;line-height:.9}
+.q{color:var(--mu);font-size:13px}
+.num{font-variant-numeric:tabular-nums}
+.pill{height:44px;padding:0 14px;border-radius:22px;border:2px solid var(--ink);background:var(--card);font-weight:700;font-size:14px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex:none}
+.pill.on{background:var(--hi);color:#0F1115}
+.hs{display:flex;gap:8px;overflow:hidden;margin:0 -16px;padding:0 16px}
+.lab{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap}
+.ok{background:var(--okbg);color:var(--okfg)}.wn{background:var(--wbg);color:var(--wfg)}.bd{background:var(--badbg);color:var(--badfg)}.inf{background:var(--infobg);color:var(--infofg)}.nw{background:var(--hi);color:#0F1115}
+.row{display:grid;grid-template-columns:6px minmax(0,1fr) auto;gap:10px;align-items:center;border:2px solid var(--ink);border-radius:14px;overflow:hidden;background:var(--card);min-height:76px}
+.row .st{align-self:stretch}
+.row .mid{padding:8px 0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.row .rt{padding:8px 12px 8px 0;text-align:right}
+.wh{position:relative;height:8px;border-radius:4px;background:var(--soft)}
+.wh i{position:absolute;top:0;bottom:0;border-radius:4px;background:var(--mo);opacity:.3}
+.wh b{position:absolute;top:-3px;bottom:-3px;width:4px;border-radius:2px;background:var(--mo)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-top:2px solid var(--ink);border-radius:24px 24px 0 0;display:flex;flex-direction:column;box-shadow:0 -20px 50px rgba(0,0,0,.25)}
+.grab{width:44px;height:5px;border-radius:3px;background:var(--mu);margin:8px auto 4px;opacity:.6}
+.scrim{position:absolute;inset:0;background:rgba(15,17,21,.5)}
+.chk{display:flex;align-items:center;gap:10px;min-height:44px;font-size:15px}
+.bx{width:22px;height:22px;border:2px solid var(--ink);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;color:transparent;flex:none}
+.bx.on{background:var(--ed);border-color:var(--ed);color:#fff}
+.sl{position:relative;height:6px;border-radius:3px;background:var(--soft);margin:14px 0}
+.sl i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--ed)}
+.sl b{position:absolute;top:-11px;width:28px;height:28px;border-radius:50%;background:var(--card);border:2px solid var(--ed);transform:translateX(-50%)}
+.btn{min-height:48px;border-radius:24px;border:2px solid var(--ink);background:var(--card);font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 16px;font-size:15px}
+.btn.pri{background:var(--hi);color:#0F1115}
+.seg{display:grid;border:2px solid var(--ink);border-radius:14px;overflow:hidden}
+.seg span{min-height:44px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;background:var(--card)}
+.seg span.on{background:var(--hi);color:#0F1115}
+.tabs{display:flex;gap:4px;overflow:hidden;border-bottom:2px solid var(--ink);margin:0 -16px;padding:0 16px}
+.tabs span{font-family:'Barlow Condensed';font-weight:800;font-size:17px;text-transform:uppercase;padding:0 12px;min-height:44px;display:flex;align-items:center;color:var(--mu);border-radius:10px 10px 0 0;white-space:nowrap}
+.tabs span.on{background:var(--hi);color:#0F1115}
+.tr{display:grid;gap:8px;padding:8px 0;border-bottom:1px solid var(--ln);font-size:14px;align-items:center}
+.av{width:40px;height:40px;border-radius:50%;color:#fff;font-family:'Barlow Condensed';font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;flex:none}
+.g{width:38px;height:38px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:18px}
+.gA{background:#2E5E4E;color:#fff}.gB{background:#5B8A78;color:#fff}.gBm{background:#A9C0B2;color:#1B2A24}.gC{background:#D9CBA3;color:#3A3219}.gD{background:#C39B80;color:#35200F}.gF{background:#96524A;color:#fff}.gN{background:var(--soft);color:var(--mu);font-size:12px}
+.side{border-radius:16px;padding:12px;color:#fff;display:flex;flex-direction:column;gap:8px}
+.tp{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.14);border-radius:10px;padding:8px 10px;min-height:44px;font-family:'Barlow Condensed';font-weight:800;font-size:19px;text-transform:uppercase}
+.gsm{display:flex;gap:4px;flex-wrap:wrap}
+.gsm span{font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px}
+.vb{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:2px solid var(--ink);background:var(--card)}
+.vb div{padding:8px 6px;text-align:center;border-right:1px solid var(--ln)}
+.vb small{display:block;font-size:10.5px;color:var(--mu);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.vb b{font-family:'Barlow Condensed';font-size:19px;font-weight:800}
+.tick{background:var(--soft);border-bottom:1px solid var(--ln);height:34px;display:flex;align-items:center;gap:20px;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden}
+.tick em{font-style:normal;background:var(--hi);color:#0F1115;align-self:stretch;display:flex;align-items:center;padding:0 10px;font-family:'Barlow Condensed';font-weight:800;text-transform:uppercase}
+.ch path{fill:none}
+</style>
+</helmet>
+<div class="{{rootClass}}">
+
+  <div class="col">
+    <span class="cap">10 · Player card · Why the labels</span>
+    <div class="dev">
+      <div class="scrim"></div>
+      <div class="sheet" style="top: 24px">
+        <div style="background: #1F7A6D; color: #fff; border-radius: 22px 22px 0 0; padding: 0 16px 10px"><div class="grab" style="background: #fff"></div><div style="display: flex; align-items: center"><div style="flex: 1"><div class="big" style="font-size: 30px; text-transform: uppercase">Malik Osei</div><span style="font-size: 12px; opacity: .9">WR · Red Zone Rascals · EPPG 14.6</span></div><span style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 18px">✕</span></div></div>
+        <div style="padding: 0 16px; flex: 1; display: flex; flex-direction: column; gap: 8px; overflow: hidden">
+          <div class="tabs"><span>Story</span><span>Numbers</span><span class="on">Why</span><span>Calc</span></div>
+          <div class="hs"><span class="pill on">◌ Scoring breakout · near</span><span class="pill">◌ Role-growth · near</span></div>
+          <b style="font-size: 17px">Scoring breakout watch: 1 check short</b>
+          <span class="q">Last 3 games: 15.4 PPG on 10.0 touches a game.</span>
+          <div style="display: flex; justify-content: space-between; font-weight: 700"><span>Is the production real?</span><span class="q">2 of 3</span></div>
+          <div class="tr" style="grid-template-columns: 26px minmax(0,1fr) auto"><span class="lab ok" style="width: 26px; justify-content: center; padding: 0">✓</span><span><b style="font-weight: 600">Recent 3 · PPG</b><br><span class="q num">15.4 PPG · needs ≥ 12.0</span></span><span class="lab ok">+3.4 spare</span></div>
+          <div class="tr" style="grid-template-columns: 26px minmax(0,1fr) auto"><span class="lab bd" style="width: 26px; justify-content: center; padding: 0">✕</span><span><b style="font-weight: 600">Recent minus earlier PPG</b><br><span class="q num">1.4 PPG · needs ≥ 3.0</span></span><span class="lab bd">1.6 short</span></div>
+          <div class="tr" style="grid-template-columns: 26px minmax(0,1fr) auto"><span class="lab ok" style="width: 26px; justify-content: center; padding: 0">✓</span><span><b style="font-weight: 600">Recent 3 · games with 10+ pts</b><br><span class="q num">3 games · needs ≥ 2</span></span><span class="lab ok">+1 spare</span></div>
+          <div style="display: flex; justify-content: space-between; font-weight: 700"><span>Is there enough to trust?</span><span class="q">2 of 2</span></div>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap"><span class="lab ok">✓ Games played (≥ 5)</span><span class="lab ok">✓ Available to play</span></div>
+          <svg class="ch" viewBox="0 0 340 80" role="img" aria-label="Points per game, earlier games versus last three, with threshold"><path d="M12 80V36H34V80M52 80V26H74V80M92 80V42H114V80M132 80V32H154V80M172 80V20H194V80" style="fill: var(--mu); opacity: .5"></path><path d="M212 80V18H234V80M252 80V28H274V80M292 80V22H314V80" style="fill: var(--mo)"></path><path d="M0 40H340" style="stroke: var(--ink); stroke-width: 2; stroke-dasharray: 6 5"></path></svg>
+          <span class="q" style="font-size: 12px">Earlier avg 14.0 · Last 3 avg 15.4 · threshold 12.0</span>
+          <div style="border: 2px dashed var(--ink); border-radius: 12px; padding: 10px; background: var(--wbg); font-size: 14px"><b style="font-size: 12px; text-transform: uppercase">What would flip it</b><br>A 19.6-point game next week would likely lift the recent average to 17.0.</div>
+          <span class="q">Historical reference ▾ · Show the 8 games ▾ · Details and caveats ▾</span>
+        </div>
+      </div>
+    </div>
+    <p class="note">The Why panel stacks into one column: label tabs, verdict, the check rows, trust chips, then the chart and the flip or undo card. Historical reference, the game list and caveats collapse so the first screen is about the checks.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">11 · Versus</span>
+    <div class="dev">
+      <div class="scrim"></div>
+      <div class="sheet" style="top: 90px">
+        <div class="grab"></div><div style="display: flex; align-items: center; padding: 4px 16px 10px; border-bottom: 2px solid var(--ink)"><b class="cap" style="flex: 1">Versus</b><span class="q">✕</span></div>
+        <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; padding: 12px 16px; align-items: center"><div class="side" style="background: #8C2F39; padding: 10px"><b class="big" style="font-size: 20px; text-transform: uppercase">Isaiah Crane</b><span style="font-size: 12px">WR · MES</span></div><span class="ib" aria-label="Swap sides">⇄</span><div class="side" style="background: #1F7A6D; padding: 10px"><b class="big" style="font-size: 20px; text-transform: uppercase">Malik Osei</b><span style="font-size: 12px">WR · SUM</span></div></div>
+        <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 10px; flex: 1"><div><div class="q" style="text-align: center; font-weight: 700; font-size: 12px; text-transform: uppercase">▲ Expected PPG</div><div style="display: grid; grid-template-columns: 44px 1fr 1fr 44px; gap: 4px; align-items: center"><b class="num">17.5</b><div style="display: flex; justify-content: flex-end"><i style="display: block; height: 14px; border-radius: 4px; width: 100%; background: #8C2F39"></i></div><div><i style="display: block; height: 14px; border-radius: 4px; width: 83%; background: #1F7A6D"></i></div><span class="num" style="text-align: right">14.6</span></div></div><div><div class="q" style="text-align: center; font-weight: 700; font-size: 12px; text-transform: uppercase">● Recent 3 PPG</div><div style="display: grid; grid-template-columns: 44px 1fr 1fr 44px; gap: 4px; align-items: center"><b class="num">18.7</b><div style="display: flex; justify-content: flex-end"><i style="display: block; height: 14px; border-radius: 4px; width: 100%; background: #8C2F39"></i></div><div><i style="display: block; height: 14px; border-radius: 4px; width: 82%; background: #1F7A6D"></i></div><span class="num" style="text-align: right">15.4</span></div></div><div><div class="q" style="text-align: center; font-weight: 700; font-size: 12px; text-transform: uppercase">◆ ESPN season PPG</div><div style="display: grid; grid-template-columns: 44px 1fr 1fr 44px; gap: 4px; align-items: center"><b class="num">15.5</b><div style="display: flex; justify-content: flex-end"><i style="display: block; height: 14px; border-radius: 4px; width: 100%; background: #8C2F39"></i></div><div><i style="display: block; height: 14px; border-radius: 4px; width: 87%; background: #1F7A6D"></i></div><span class="num" style="text-align: right">13.5</span></div></div><div><div class="q" style="text-align: center; font-weight: 700; font-size: 12px; text-transform: uppercase">▲ Surplus index</div><div style="display: grid; grid-template-columns: 44px 1fr 1fr 44px; gap: 4px; align-items: center"><b class="num">100</b><div style="display: flex; justify-content: flex-end"><i style="display: block; height: 14px; border-radius: 4px; width: 100%; background: #8C2F39"></i></div><div><i style="display: block; height: 14px; border-radius: 4px; width: 66%; background: #1F7A6D"></i></div><span class="num" style="text-align: right">66</span></div></div><div><div class="q" style="text-align: center; font-weight: 700; font-size: 12px; text-transform: uppercase">Floor · next game</div><div style="display: grid; grid-template-columns: 44px 1fr 1fr 44px; gap: 4px; align-items: center"><b class="num">12.2</b><div style="display: flex; justify-content: flex-end"><i style="display: block; height: 14px; border-radius: 4px; width: 100%; background: #8C2F39"></i></div><div><i style="display: block; height: 14px; border-radius: 4px; width: 79%; background: #1F7A6D"></i></div><span class="num" style="text-align: right">9.6</span></div></div><div><div class="q" style="text-align: center; font-weight: 700; font-size: 12px; text-transform: uppercase">Ceiling · next game</div><div style="display: grid; grid-template-columns: 44px 1fr 1fr 44px; gap: 4px; align-items: center"><b class="num">22.8</b><div style="display: flex; justify-content: flex-end"><i style="display: block; height: 14px; border-radius: 4px; width: 100%; background: #8C2F39"></i></div><div><i style="display: block; height: 14px; border-radius: 4px; width: 86%; background: #1F7A6D"></i></div><span class="num" style="text-align: right">19.6</span></div></div></div>
+        <div style="padding: 10px 16px 18px; border-top: 2px solid var(--ink)"><span class="btn pri">Take both to the trade room</span></div>
+      </div>
+    </div>
+    <p class="note">Versus opens as a sheet with the two players across the top and mirrored bars beneath. The swap button replaces the arrow keys. Floor and ceiling are added to the comparison rows.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">12 · Add players to a trade</span>
+    <div class="dev">
+      <div class="scrim"></div>
+      <div class="sheet" style="top: 60px">
+        <div class="grab"></div><div style="display: flex; align-items: center; padding: 4px 16px 10px; border-bottom: 2px solid var(--ink)"><b class="cap" style="flex: 1">You receive</b><span class="q">Done</span></div>
+        <div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; flex: 1; overflow: hidden">
+          <div class="pill" style="justify-content: flex-start; color: var(--mu); border-color: var(--ed)">Search league players</div>
+          <div class="hs"><span class="pill on">Blitz Bandits</span><span class="pill">Fourth &amp; Long</span><span class="pill">Red Zone</span></div>
+          <span class="q">Receiving 1 of up to 5</span>
+          <div class="chk" style="min-height: 56px; border-bottom: 1px solid var(--ln)"><span class="bx on">✓</span><span class="av" style="background: #8C2F39">IC</span><span><b>Isaiah Crane</b><br><span class="q">WR · EPPG 17.5</span></span><span class="q" style="margin-left: auto">card ›</span></div><div class="chk" style="min-height: 56px; border-bottom: 1px solid var(--ln)"><span class="bx">✓</span><span class="av" style="background: #B23A0B">MB</span><span><b>Marcus Bell</b><br><span class="q">RB · EPPG 18.4 · Questionable</span></span><span class="q" style="margin-left: auto">card ›</span></div><div class="chk" style="min-height: 56px; border-bottom: 1px solid var(--ln)"><span class="bx">✓</span><span class="av" style="background: #7A1F1F">TL</span><span><b>Theo Lindqvist</b><br><span class="q">QB · EPPG 18.9</span></span><span class="q" style="margin-left: auto">card ›</span></div><div class="chk" style="min-height: 56px; border-bottom: 1px solid var(--ln)"><span class="bx">✓</span><span class="av" style="background: #00636E">OB</span><span><b>Owen Baptiste</b><br><span class="q">TE · EPPG 7.8</span></span><span class="q" style="margin-left: auto">card ›</span></div>
+        </div>
+        <div class="vb"><div><small>Surplus</small><b>Gain</b></div><div><small>Lineup</small><b style="color: var(--fa)">+2.0</b></div><div><small>Legality</small><b style="color: var(--fa)">Legal</b></div><div style="border: 0"><small>Uncertain</small><b>Low</b></div></div>
+      </div>
+    </div>
+    <p class="note">Adding players uses a picker sheet with search, a team switch and up to five per side, as on desktop. The four verdicts update live at the bottom while you tick players, so you see the effect before closing.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">13 · Find trades · full controls</span>
+    <div class="dev">
+      <div class="scrim"></div>
+      <div class="sheet" style="top: 40px">
+        <div class="grab"></div><div style="display: flex; align-items: center; padding: 4px 16px 10px; border-bottom: 2px solid var(--ink)"><b class="cap" style="flex: 1">Search controls</b><span class="q">Reset</span></div>
+        <div style="padding: 10px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow: hidden">
+          <div class="card" style="gap: 2px; padding: 4px 12px 8px"><div style="display: flex; align-items: center; min-height: 44px"><span class="kick" style="flex: 1; color: var(--ink)">Players &amp; packages</span><span style="font-size: 18px; width: 44px; text-align: center" aria-label="Collapse">⌃</span></div><div style="display: flex; align-items: center; gap: 10px; min-height: 48px"><span style="flex: 1">You offer, at least</span><span class="ib">−</span><b class="num" style="width: 28px; text-align: center; font-size: 18px">1</b><span class="ib">+</span></div><div style="display: flex; align-items: center; gap: 10px; min-height: 48px"><span style="flex: 1">You offer, at most</span><span class="ib">−</span><b class="num" style="width: 28px; text-align: center; font-size: 18px">2</b><span class="ib">+</span></div><div style="display: flex; align-items: center; gap: 10px; min-height: 48px"><span style="flex: 1">You receive, at most</span><span class="ib">−</span><b class="num" style="width: 28px; text-align: center; font-size: 18px">3</b><span class="ib">+</span></div></div>
+          <div class="card" style="gap: 0; padding: 4px 12px 10px"><div style="display: flex; align-items: center; min-height: 44px"><span class="kick" style="flex: 1; color: var(--ink)">Teams to search</span><span style="font-size: 18px; width: 44px; text-align: center" aria-label="Expand">⌄</span></div><span class="q">All 3 teams</span></div>
+          <div class="card" style="gap: 0; padding: 4px 12px 10px"><div style="display: flex; align-items: center; min-height: 44px"><span class="kick" style="flex: 1; color: var(--ink)">Team needs</span><span style="font-size: 18px; width: 44px; text-align: center" aria-label="Expand">⌄</span></div><span class="q">Protect their weak positions</span></div>
+          <div class="card" style="gap: 0; padding: 4px 12px 10px"><div style="display: flex; align-items: center; min-height: 44px"><span class="kick" style="flex: 1; color: var(--ink)">Lineup basis</span><span style="font-size: 18px; width: 44px; text-align: center" aria-label="Expand">⌄</span></div><span class="q">Best available lineup</span></div>
+          <div class="card" style="gap: 0; padding: 4px 12px 10px"><div style="display: flex; align-items: center; min-height: 44px"><span class="kick" style="flex: 1; color: var(--ink)">Search limits · shared with chains <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ed)"></span></span><span style="font-size: 18px; width: 44px; text-align: center" aria-label="Expand">⌄</span></div><span class="q">Temporary loss 3.0 EPPG (edited) · index ±10 · 2 at default</span></div>
+          <div class="card" style="gap: 0; padding: 4px 12px 10px"><div style="display: flex; align-items: center; min-height: 44px"><span class="kick" style="flex: 1; color: var(--ink)">Protected players</span><span style="font-size: 18px; width: 44px; text-align: center" aria-label="Expand">⌄</span></div><span class="q">2 protected</span></div>
+          <div class="card" style="gap: 0; padding: 4px 12px 10px"><div style="display: flex; align-items: center; min-height: 44px"><span class="kick" style="flex: 1; color: var(--ink)">Manager profiles &amp; acceptance</span><span style="font-size: 18px; width: 44px; text-align: center" aria-label="Expand">⌄</span></div><span class="q">League baseline</span></div>
+        </div>
+        <div style="padding: 10px 16px 18px; border-top: 2px solid var(--ink)"><span class="btn pri">Search trades across the league</span></div>
+      </div>
+    </div>
+    <p class="note">Every desktop control is here, in seven folding groups. A folded group shows a one-line summary of its settings, so the whole search setup reads at a glance; the purple dot marks edited limits. The app remembers which groups you left open.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">14 · Grade goal picker</span>
+    <div class="dev">
+      <div class="scrim"></div>
+      <div class="sheet" style="top: 330px">
+        <div class="grab"></div><div style="display: flex; align-items: center; padding: 4px 16px 10px; border-bottom: 2px solid var(--ink)"><b class="cap" style="flex: 1">Positional grade goal</b><span class="q">Remove</span></div>
+        <div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; flex: 1">
+          <div><span class="kick">Team</span><div class="seg" style="grid-template-columns: 1fr 1fr; margin-top: 6px"><span class="on">Your team</span><span>The other team</span></div></div>
+          <div><span class="kick">Position</span><div class="hs" style="margin-top: 6px"><span class="pill">QB</span><span class="pill">RB</span><span class="pill on">WR</span><span class="pill">TE</span><span class="pill">FLEX</span><span class="pill">Overall</span></div></div>
+          <div><span class="kick">Grade steps</span><div class="seg" style="grid-template-columns: 1fr 1fr; margin-top: 6px"><span class="on">Upgrade at least</span><span>Drop at most</span></div><div style="display: flex; align-items: center; gap: 12px; justify-content: center; margin-top: 10px"><span class="ib">−</span><b class="big num" style="font-size: 44px">2</b><span class="q">steps</span><span class="ib">+</span></div></div>
+          <div class="q" style="text-align: center">Your WR is D+ today. +2 steps means C or better.</div>
+        </div>
+        <div style="padding: 10px 16px 18px; border-top: 2px solid var(--ink)"><span class="btn pri">Save goal</span></div>
+      </div>
+    </div>
+    <p class="note">A goal is edited in a half-height sheet: team, position, then upgrade or drop with a stepper from 0 to 5. The plain-language line translates the steps into an actual grade, which the desktop dropdown does not do.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">15 · Chain planner · per-trade controls</span>
+    <div class="dev">
+      <div class="top"><div class="mark">Trade room</div></div>
+      <div class="scr" style="gap: 10px">
+        <div class="seg" style="grid-template-columns: repeat(3, 1fr)"><span>Manual</span><span>Find</span><span class="on">Chains</span></div>
+        <div class="q"><b style="color: var(--ink)">Preset:</b> Acquire a star · <b style="color: var(--ink)">Limits:</b> default</div>
+        <div class="seg" style="grid-template-columns: 1fr 1fr"><span class="on">Trade 1 settings</span><span>Trade 2 settings</span></div>
+        <div class="card" style="gap: 4px">
+          <div style="display: flex; align-items: center; min-height: 44px"><span class="kick" style="flex: 1; color: var(--ink)">First trade · acquire your next move</span><span style="font-size: 18px; width: 44px; text-align: center" aria-label="Collapse">⌃</span></div>
+          <div style="display: flex; align-items: center; gap: 10px; min-height: 48px"><span style="flex: 1">You offer, at least</span><span class="ib">−</span><b class="num" style="width: 28px; text-align: center; font-size: 18px">2</b><span class="ib">+</span></div><div style="display: flex; align-items: center; gap: 10px; min-height: 48px"><span style="flex: 1">You receive, at most</span><span class="ib">−</span><b class="num" style="width: 28px; text-align: center; font-size: 18px">2</b><span class="ib">+</span></div>
+          <div class="chk" style="border-top: 1px solid var(--ln)"><span style="flex: 1">Teams</span><b>All 3 ›</b></div>
+          <div class="chk" style="border-top: 1px solid var(--ln)"><span style="flex: 1">Must receive position</span><b>Any ›</b></div>
+          <div class="chk" style="border-top: 1px solid var(--ln)"><span style="flex: 1">Grade goals</span><b>WR +2 ›</b></div>
+          <div class="chk" style="border-top: 1px solid var(--ln)"><span style="flex: 1">Protected players</span><b>2 ›</b></div>
+        </div>
+        <div class="card" style="gap: 2px"><div style="display: flex; align-items: center; min-height: 44px"><span class="kick" style="flex: 1; color: var(--ink)">Whole chain</span><span style="font-size: 18px; width: 44px; text-align: center" aria-label="Expand">⌄</span></div><span class="q">Target Isaiah Crane · Standard depth · Either route</span>
+        </div>
+      </div>
+      <div class="foot"><span class="btn pri">Run chain trade search</span></div>
+      <div class="tabbar"><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3z"></path></svg>Week</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>Roster</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>Scout</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>League</span><span class="tb on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-4-4M17 17H4l4 4"></path></svg>Trades</span></div>
+    </div>
+    <p class="note">This is a normal full screen, not a popover. Each settings group folds to one line that summarises it: “First trade” is shown open, “Whole chain” folded, and the app remembers which you left open. The two-way control switches between Trade 1 and Trade 2. The search button stays pinned above the tab bar. Rows with › open the same pickers used in Find trades. Nothing from the desktop chain controls is dropped.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">16 · Verdict detail</span>
+    <div class="dev">
+      <div class="scrim"></div>
+      <div class="sheet" style="top: 250px">
+        <div class="grab"></div><div style="display: flex; align-items: center; padding: 4px 16px 10px; border-bottom: 2px solid var(--ink)"><b class="cap" style="flex: 1">Lineup impact</b><span class="q">✕</span></div>
+        <div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; flex: 1">
+          <div style="display: flex; align-items: baseline; gap: 10px"><b class="big num" style="font-size: 52px; color: var(--fa)">+2.0</b><span class="q">EPPG per remaining week</span></div>
+          <span class="q">Expected PPG gain for the Value PPG-selected lineup. Not a weekly guarantee.</span>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px"><span class="lab ok" style="height: 40px; flex-direction: column; justify-content: center"><span style="font-size: 10px">W10</span>+2.6</span><span class="lab ok" style="height: 40px; flex-direction: column; justify-content: center"><span style="font-size: 10px">W11</span>+2.3</span><span class="lab ok" style="height: 40px; flex-direction: column; justify-content: center"><span style="font-size: 10px">W12</span>+3.3</span><span class="lab ok" style="height: 40px; flex-direction: column; justify-content: center"><span style="font-size: 10px">W13</span>+0.9</span><span class="lab ok" style="height: 40px; flex-direction: column; justify-content: center"><span style="font-size: 10px">W14</span>+2.4</span><span class="lab ok" style="height: 40px; flex-direction: column; justify-content: center"><span style="font-size: 10px">W15</span>+1.8</span><span class="lab ok" style="height: 40px; flex-direction: column; justify-content: center"><span style="font-size: 10px">W16</span>+2.0</span><span class="lab ok" style="height: 40px; flex-direction: column; justify-content: center"><span style="font-size: 10px">W17</span>+1.5</span></div>
+          <div style="display: flex; justify-content: space-between; font-weight: 700"><span>Lineup gain ± spread</span><span class="num">+2.0 ± 8.5</span></div>
+          <div class="wh" style="height: 12px"><i style="left: 28%; width: 56%"></i><b style="left: 57%"></b></div>
+          <div class="q" style="display: flex; justify-content: space-between"><span>Floor −6.5</span><span>● expected +2.0</span><span>Ceiling +10.5</span></div>
+          <div class="hs"><span class="pill">‹ Surplus</span><span class="pill on">Lineup</span><span class="pill">Legality ›</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="note">Tapping a verdict cell opens its detail as a sheet, one verdict at a time, with a row to step to the next. The four are never merged. The range is the gain plus and minus the combined spread of the players whose lineup spots change, the same on desktop.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">17 · Menu · Lab and Feel</span>
+    <div class="dev">
+      <div class="scrim"></div>
+      <div class="sheet" style="top: 60px">
+        <div class="grab"></div><div style="display: flex; align-items: center; padding: 4px 16px 10px; border-bottom: 2px solid var(--ink)"><b class="cap" style="flex: 1">Menu</b><span class="q">✕</span></div>
+        <div style="padding: 10px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow: hidden">
+          <div class="chk"><span class="lab ok">● Source 2h ago</span><span class="q" style="margin-left: auto">Import workbook ›</span></div>
+          <span class="kick">Theme</span>
+          <div class="seg" style="grid-template-columns: repeat(3, 1fr)"><span class="on">System</span><span>Light</span><span>Dark</span></div>
+          <span class="kick">Animation</span>
+          <div class="seg" style="grid-template-columns: repeat(4, 1fr)"><span class="on">System</span><span>Full</span><span>Reduced</span><span>Off</span></div>
+          <div class="chk"><span style="flex: 1">Sound</span><span style="width: 52px; height: 30px; border-radius: 15px; border: 2px solid var(--ink); position: relative"><i style="position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--ink)"></i></span></div>
+          <div class="chk"><span style="flex: 1">Haptics</span><span style="width: 52px; height: 30px; border-radius: 15px; border: 2px solid var(--ink); background: var(--hi); position: relative"><i style="position: absolute; top: 3px; left: 25px; width: 20px; height: 20px; border-radius: 50%; background: #0F1115"></i></span></div>
+          <span class="kick" style="margin-top: 4px">Lab</span>
+          <div class="chk" style="border-top: 1px solid var(--ln)"><span style="flex: 1">Model settings</span><span class="q">›</span></div><div class="chk" style="border-top: 1px solid var(--ln)"><span style="flex: 1">Evidence sources</span><span class="q">›</span></div><div class="chk" style="border-top: 1px solid var(--ln)"><span style="flex: 1">Audits</span><span class="q">›</span></div><div class="chk" style="border-top: 1px solid var(--ln)"><span style="flex: 1">Data &amp; account</span><span class="q">›</span></div><div class="chk" style="border-top: 1px solid var(--ln)"><span style="flex: 1">Saved trades</span><span class="q">›</span></div><div class="chk" style="border-top: 1px solid var(--ln)"><span style="flex: 1">Trade journal</span><span class="q">›</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="note">The header menu holds Feel first, because theme and haptics are the settings most likely to be changed on a phone, then the Lab sections and the trade history. Freshness and import sit at the top.</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":3550,"height":1060}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { rootClass: 'ph' + (this.props.dark ? ' dark' : '') };
+  }
+}
+</script>
+</body>
+</html>

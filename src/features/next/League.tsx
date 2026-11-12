@@ -295,7 +295,7 @@ export function League({
               </tr>
             </thead>
             <tbody>
-              {grid.map((row) => (
+              {grid.map((row, line) => (
                 <tr
                   key={row.teamId}
                   data-mine={row.teamId === mine || undefined}
@@ -333,6 +333,8 @@ export function League({
                         type="button"
                         className="gd-grade gd-grade-btn"
                         data-tone={cell.tone ?? "na"}
+                        // Let the grade grid arrive row by row instead of all at once.
+                        style={{ animationDelay: `${Math.min(line, 5) * 40}ms` }}
                         aria-label={`${row.name} ${cell.position} grade ${cell.grade === "n.a." ? "unavailable" : cell.grade}`}
                         title={cell.reason || `Grade ${cell.grade}`}
                         onClick={() =>

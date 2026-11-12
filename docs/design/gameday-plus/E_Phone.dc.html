@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Direction D · Phone layouts</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=Barlow+Condensed:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#E9EBEF}
+a{color:#1F5FD1}a:hover{color:#163F8C}
+.ph{--ink:#0F1115;--mu:#555C68;--ln:#E3E5EA;--bg:#FFFFFF;--card:#FFFFFF;--soft:#F3F4F6;--fa:#11805B;--es:#1F5FD1;--mo:#C2185B;--ed:#6A3FCF;--hi:#FFD60A;--bad:#C2410C;--okbg:#E7F6EE;--okfg:#0B5B40;--badbg:#FDE6DF;--badfg:#9A2E0A;--wbg:#FFF0D6;--wfg:#7A4300;--infobg:#DDE6FF;--infofg:#163F8C;--desk:#E9EBEF;font-family:Barlow,system-ui,sans-serif;color:var(--ink);background:var(--desk);padding:36px;display:flex;gap:40px;align-items:flex-start;box-sizing:border-box}
+.ph.dark{--ink:#EEF0F4;--mu:#A3ABB9;--ln:#2B313C;--bg:#111419;--card:#181C24;--soft:#222834;--fa:#4CC79A;--es:#7FAEFF;--mo:#F27DAE;--ed:#B79CFF;--bad:#FF9466;--okbg:rgba(76,199,154,.18);--okfg:#9BE6C6;--badbg:rgba(255,148,102,.18);--badfg:#FFB79A;--wbg:rgba(255,200,90,.18);--wfg:#FFD591;--infobg:rgba(127,174,255,.2);--infofg:#B7D0FF;--desk:#07090C}
+.ph *{box-sizing:border-box}
+.col{display:flex;flex-direction:column;gap:12px;flex:none}
+.cap{font-family:'Barlow Condensed';font-weight:800;font-size:22px;text-transform:uppercase}
+.note{font-size:14px;color:var(--mu);width:390px;line-height:1.45}
+.dev{width:390px;height:844px;background:var(--bg);border-radius:36px;border:2px solid var(--ink);overflow:hidden;display:flex;flex-direction:column;position:relative;font-size:15px}
+.top{display:flex;align-items:center;gap:10px;padding:14px 16px 10px;border-bottom:2px solid var(--ink)}
+.mark{font-family:'Barlow Condensed';font-weight:800;font-size:22px;flex:1;display:flex;align-items:center;gap:6px;text-transform:uppercase}
+.mark i{width:10px;height:20px;background:var(--hi);transform:skewX(-14deg);display:inline-block}
+.ib{width:44px;height:44px;border-radius:22px;border:2px solid var(--ink);background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--ink)}
+.ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.scr{flex:1;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:14px}
+.scr>*{flex:none}
+.foot{padding:10px 16px;border-top:2px solid var(--ink);background:var(--card)}
+.tabbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-top:2px solid var(--ink);background:var(--card);padding:6px 4px 14px}
+.tb{display:flex;flex-direction:column;align-items:center;gap:3px;min-height:48px;justify-content:center;font-size:11.5px;font-weight:600;color:var(--mu);border-radius:12px}
+.tb.on{color:var(--ink);background:var(--hi);color:#0F1115}
+.kick{font-family:'Barlow Condensed';font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+.h1{font-family:'Barlow Condensed';font-weight:800;font-size:34px;line-height:.95;text-transform:uppercase;margin:0}
+.card{border:2px solid var(--ink);border-radius:16px;background:var(--card);padding:12px;display:flex;flex-direction:column;gap:8px}
+.big{font-family:'Barlow Condensed';font-weight:800;line-height:.9}
+.q{color:var(--mu);font-size:13px}
+.num{font-variant-numeric:tabular-nums}
+.pill{height:44px;padding:0 14px;border-radius:22px;border:2px solid var(--ink);background:var(--card);font-weight:700;font-size:14px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex:none}
+.pill.on{background:var(--hi);color:#0F1115}
+.hs{display:flex;gap:8px;overflow:hidden;margin:0 -16px;padding:0 16px}
+.lab{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap}
+.ok{background:var(--okbg);color:var(--okfg)}.wn{background:var(--wbg);color:var(--wfg)}.bd{background:var(--badbg);color:var(--badfg)}.inf{background:var(--infobg);color:var(--infofg)}.nw{background:var(--hi);color:#0F1115}
+.row{display:grid;grid-template-columns:6px minmax(0,1fr) auto;gap:10px;align-items:center;border:2px solid var(--ink);border-radius:14px;overflow:hidden;background:var(--card);min-height:76px}
+.row .st{align-self:stretch}
+.row .mid{padding:8px 0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.row .rt{padding:8px 12px 8px 0;text-align:right}
+.wh{position:relative;height:8px;border-radius:4px;background:var(--soft)}
+.wh i{position:absolute;top:0;bottom:0;border-radius:4px;background:var(--mo);opacity:.3}
+.wh b{position:absolute;top:-3px;bottom:-3px;width:4px;border-radius:2px;background:var(--mo)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-top:2px solid var(--ink);border-radius:24px 24px 0 0;display:flex;flex-direction:column;box-shadow:0 -20px 50px rgba(0,0,0,.25)}
+.grab{width:44px;height:5px;border-radius:3px;background:var(--mu);margin:8px auto 4px;opacity:.6}
+.scrim{position:absolute;inset:0;background:rgba(15,17,21,.5)}
+.chk{display:flex;align-items:center;gap:10px;min-height:44px;font-size:15px}
+.bx{width:22px;height:22px;border:2px solid var(--ink);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;color:transparent;flex:none}
+.bx.on{background:var(--ed);border-color:var(--ed);color:#fff}
+.sl{position:relative;height:6px;border-radius:3px;background:var(--soft);margin:14px 0}
+.sl i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--ed)}
+.sl b{position:absolute;top:-11px;width:28px;height:28px;border-radius:50%;background:var(--card);border:2px solid var(--ed);transform:translateX(-50%)}
+.btn{min-height:48px;border-radius:24px;border:2px solid var(--ink);background:var(--card);font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 16px;font-size:15px}
+.btn.pri{background:var(--hi);color:#0F1115}
+.seg{display:grid;border:2px solid var(--ink);border-radius:14px;overflow:hidden}
+.seg span{min-height:44px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;background:var(--card)}
+.seg span.on{background:var(--hi);color:#0F1115}
+.tabs{display:flex;gap:4px;overflow:hidden;border-bottom:2px solid var(--ink);margin:0 -16px;padding:0 16px}
+.tabs span{font-family:'Barlow Condensed';font-weight:800;font-size:17px;text-transform:uppercase;padding:0 12px;min-height:44px;display:flex;align-items:center;color:var(--mu);border-radius:10px 10px 0 0;white-space:nowrap}
+.tabs span.on{background:var(--hi);color:#0F1115}
+.tr{display:grid;gap:8px;padding:8px 0;border-bottom:1px solid var(--ln);font-size:14px;align-items:center}
+.av{width:40px;height:40px;border-radius:50%;color:#fff;font-family:'Barlow Condensed';font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;flex:none}
+.g{width:38px;height:38px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:18px}
+.gA{background:#2E5E4E;color:#fff}.gB{background:#5B8A78;color:#fff}.gBm{background:#A9C0B2;color:#1B2A24}.gC{background:#D9CBA3;color:#3A3219}.gD{background:#C39B80;color:#35200F}.gF{background:#96524A;color:#fff}.gN{background:var(--soft);color:var(--mu);font-size:12px}
+.side{border-radius:16px;padding:12px;color:#fff;display:flex;flex-direction:column;gap:8px}
+.tp{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.14);border-radius:10px;padding:8px 10px;min-height:44px;font-family:'Barlow Condensed';font-weight:800;font-size:19px;text-transform:uppercase}
+.gsm{display:flex;gap:4px;flex-wrap:wrap}
+.gsm span{font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px}
+.vb{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:2px solid var(--ink);background:var(--card)}
+.vb div{padding:8px 6px;text-align:center;border-right:1px solid var(--ln)}
+.vb small{display:block;font-size:10.5px;color:var(--mu);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.vb b{font-family:'Barlow Condensed';font-size:19px;font-weight:800}
+.tick{background:var(--soft);border-bottom:1px solid var(--ln);height:34px;display:flex;align-items:center;gap:20px;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden}
+.tick em{font-style:normal;background:var(--hi);color:#0F1115;align-self:stretch;display:flex;align-items:center;padding:0 10px;font-family:'Barlow Condensed';font-weight:800;text-transform:uppercase}
+.ch path{fill:none}
+</style>
+</helmet>
+<div class="{{rootClass}}">
+
+  <div class="col">
+    <span class="cap">1 · This week</span>
+    <div class="dev">
+      <div class="top"><div class="mark"><i></i>FFL Gameday</div><span class="ib" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg></span><span class="ib" aria-label="Menu"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></span></div>
+      <div class="tick"><em>Signals</em><span><b style="color: var(--mo)">▲</b> Nico Ferreira · Gem</span><span><b style="color: var(--mo)">▼</b> Cole Brannigan · Reduced workload</span></div>
+      <div class="scr">
+        <span class="kick">Week 10 · Sunday Syndicate · source 2h ago</span>
+        <h1 class="h1">WR is your weak spot. One deal fixes it.</h1>
+        <div class="card">
+          <span class="kick" style="color: var(--mo)">▲ Starting score outlook</span>
+          <div style="display: flex; gap: 16px; align-items: flex-end"><div><div class="big num" style="font-size: 52px; color: var(--mo)">119.2</div><div class="q">avg modeled pts / week</div></div><div><div class="big num" style="font-size: 26px; color: var(--fa)">+7.5</div><div class="q">vs median 111.7</div></div></div>
+          <svg class="ch" viewBox="0 0 340 90" role="img" aria-label="Modeled starters versus league median, weeks 10 to 17"><path d="M0 60H340" style="stroke: var(--mu); stroke-width: 1.5; stroke-dasharray: 5 5"></path><path d="M5 28 L52 36 L99 62 L146 22 L193 32 L240 42 L287 18 L335 30" style="stroke: var(--mo); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round"></path></svg>
+          <div class="q" style="display: flex; justify-content: space-between"><span>W10</span><span>W12 dip</span><span>W17</span></div>
+        </div>
+        <span class="kick">Three moves · swipe</span>
+        <div class="hs">
+          <div class="side" style="background: #8C2F39; width: 250px; flex: none"><span class="lab" style="background: rgba(255,255,255,.2); align-self: flex-start">TRADE</span><b style="font-family: 'Barlow Condensed'; font-size: 22px; text-transform: uppercase; line-height: 1">Whitfield for Crane</b><span class="big num" style="font-size: 34px">+2.0 <span style="font-size: 15px">EPPG/wk</span></span><span class="btn" style="background: #fff; color: #0F1115; border-color: #fff">Review the deal</span></div>
+          <div class="side" style="background: #4A4E73; width: 250px; flex: none"><span class="lab" style="background: rgba(255,255,255,.2); align-self: flex-start">WAIVER</span><b style="font-family: 'Barlow Condensed'; font-size: 22px; text-transform: uppercase; line-height: 1">Claim Nico Ferreira</b><span class="big num" style="font-size: 34px">12.6</span></div>
+        </div>
+      </div>
+      <div class="tabbar"><span class="tb on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3z"></path></svg>Week</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>Roster</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>Scout</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>League</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-4-4M17 17H4l4 4"></path></svg>Trades</span></div>
+    </div>
+    <p class="note">Bottom bar holds the five sections used weekly. Lab, Feel and theme sit behind the menu button. Move cards scroll sideways; everything else is one column.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">2 · Scouting</span>
+    <div class="dev">
+      <div class="top"><div class="mark">Scouting</div><span class="ib" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg></span></div>
+      <div class="scr">
+        <div class="hs"><span class="pill">All</span><span class="pill on">Gem screener</span><span class="pill">Rising targets</span><span class="pill">Buy low</span></div>
+        <div style="display: flex; gap: 8px"><span class="pill" style="flex: 1; justify-content: center">Filters <span class="lab" style="background: var(--ed); color: #fff">3</span></span><span class="pill" style="flex: 1; justify-content: center">Sort: EPPG ▾</span></div>
+        <div class="q"><b style="color: var(--ink)">3 confirmed matches</b> · Available · RB / WR / TE · Active</div>
+        <div class="row"><span class="st" style="background: #4A4E73"></span><div class="mid"><b>Nico Ferreira <span class="q">WR · IRN</span></b><div style="display: flex; gap: 4px; flex-wrap: wrap"><span class="lab ok">Gem</span><span class="lab ok">Role-growth</span><span class="lab ok">+1.4 MA</span></div><div class="wh" style="margin-top: 4px"><i style="left: 16%; width: 30%"></i><b style="left: 31%"></b></div><span class="q" style="font-size: 12px">Floor 5.1 · ceiling 14.7</span></div><div class="rt"><div class="q" style="font-size: 11px; color: var(--mo)">▲ EPPG</div><div class="big num" style="font-size: 32px; color: var(--mo)">9.9</div></div></div>
+        <div class="row"><span class="st" style="background: #7A1F1F"></span><div class="mid"><b>Jordan Pike <span class="q">RB · CAP</span></b><div style="display: flex; gap: 4px; flex-wrap: wrap"><span class="lab ok">Pre-gem</span><span class="lab ok">Scoring breakout</span></div><div class="wh" style="margin-top: 4px"><i style="left: 9%; width: 28%"></i><b style="left: 23%"></b></div><span class="q" style="font-size: 12px">Floor 2.9 · ceiling 11.9</span></div><div class="rt"><div class="q" style="font-size: 11px; color: var(--mo)">▲ EPPG</div><div class="big num" style="font-size: 32px; color: var(--mo)">7.4</div></div></div>
+        <div class="row"><span class="st" style="background: #B23A0B"></span><div class="mid"><b>Sam Whitaker <span class="q">TE · RIV</span></b><div style="display: flex; gap: 4px; flex-wrap: wrap"><span class="lab ok">Projection-gap</span><span class="lab ok">Role-growth</span></div><div class="wh" style="margin-top: 4px"><i style="left: 10%; width: 24%"></i><b style="left: 22%"></b></div><span class="q" style="font-size: 12px">Floor 3.2 · ceiling 10.8</span></div><div class="rt"><div class="q" style="font-size: 11px; color: var(--mo)">▲ EPPG</div><div class="big num" style="font-size: 32px; color: var(--mo)">7.0</div></div></div>
+        <div class="q" style="background: var(--wbg); color: var(--ink); border-radius: 10px; padding: 10px">2 more players match but are hidden by the selected signals. <b>Search all signals</b></div>
+      </div>
+      <div class="tabbar"><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3z"></path></svg>Week</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>Roster</span><span class="tb on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>Scout</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>League</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-4-4M17 17H4l4 4"></path></svg>Trades</span></div>
+    </div>
+    <p class="note">Tables become rows: one player per row with EPPG large on the right, badges and the floor-to-ceiling bar beneath the name. Tapping a row opens the player card.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">3 · Filters sheet</span>
+    <div class="dev">
+      <div class="scrim"></div>
+      <div class="sheet" style="top: 60px">
+        <div class="grab"></div>
+        <div style="display: flex; align-items: center; padding: 4px 16px 10px; border-bottom: 2px solid var(--ink)"><b class="cap" style="flex: 1">Filters</b><span class="q">Reset</span></div>
+        <div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; overflow: hidden">
+          <div><span class="kick">Player pool</span><div class="hs" style="margin-top: 6px"><span class="pill on">Available 6</span><span class="pill">My team 10</span><span class="pill">Other 15</span></div></div>
+          <div><span class="kick">Position</span><div class="hs" style="margin-top: 6px"><span class="pill">QB</span><span class="pill on">RB</span><span class="pill on">WR</span><span class="pill on">TE</span><span class="pill">K</span></div></div>
+          <div><div style="display: flex; align-items: center; gap: 10px"><span class="kick" style="flex: 1">Signals (badges)</span><div class="seg" style="grid-template-columns: repeat(2, auto)"><span class="on" style="padding: 0 10px">All</span><span style="padding: 0 10px">Any</span></div></div>
+            <div class="chk"><span class="bx on">✓</span><span class="lab ok">Gem</span><span class="q" style="margin-left: auto">1</span></div>
+            <div class="chk"><span class="bx"></span><span class="lab ok">Pre-gem</span><span class="q" style="margin-left: auto">1</span></div>
+            <div class="chk"><span class="bx"></span><span class="lab ok">Role-growth watch</span><span class="q" style="margin-left: auto">2</span></div>
+            <div class="chk"><span class="bx"></span><span class="lab wn">BUY LOW</span><span class="q" style="margin-left: auto">0</span></div>
+            <span class="q">+ 6 more signals ▾</span>
+          </div>
+          <div><span class="kick">Surplus index ≥ <b style="color: var(--ed)">20</b></span><div class="sl"><i style="width: 25%"></i><b style="left: 25%"></b></div></div>
+          <div class="chk"><span class="bx"></span>Golden cross only<span class="q" style="margin-left: auto">2</span></div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; padding: 10px 16px 18px; border-top: 2px solid var(--ink)"><span class="btn">Save search</span><span class="btn pri">Show 3 players</span></div>
+      </div>
+    </div>
+    <p class="note">Filters open as a sheet over the results. Counts update live and the button states how many players will show, so there is still no blind Apply. Signals show the most used first, the rest behind “more”.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">4 · Player card sheet</span>
+    <div class="dev">
+      <div class="scrim"></div>
+      <div class="sheet" style="top: 24px">
+        <div style="background: #4A4E73; color: #fff; border-radius: 22px 22px 0 0; padding: 0 16px 12px">
+          <div class="grab" style="background: #fff"></div>
+          <div style="display: flex; align-items: center; gap: 8px"><span class="q" style="color: rgba(255,255,255,.85); flex: 1">Ironvale Rams · WR · Free agent</span><span style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 20px">‹</span><span style="font-size: 13px">2 / 9</span><span style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 20px">›</span><span style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 18px">✕</span></div>
+          <div style="display: flex; align-items: flex-end; gap: 12px"><div style="flex: 1"><div class="big" style="font-size: 38px; text-transform: uppercase">Nico Ferreira</div><div style="display: flex; gap: 4px; margin-top: 6px"><span class="lab ok">Gem</span><span class="lab ok">Role-growth</span></div></div><div style="text-align: right"><div style="font-size: 12px; opacity: .85">▲ EXPECTED PPG</div><div class="big num" style="font-size: 54px">9.9</div><div style="font-size: 12px">Floor 5.1 · ceiling 14.7</div></div></div>
+        </div>
+        <div style="padding: 0 16px; flex: 1; display: flex; flex-direction: column; gap: 10px; overflow: hidden">
+          <div class="tabs"><span class="on">Story</span><span>Numbers</span><span>Why</span><span>Calc</span></div>
+          <span class="kick" style="color: var(--mo)">▲ Next-refresh EPPG scenarios</span>
+          <div class="tr" style="grid-template-columns: 1.4fr 1fr 1fr 1fr; font-size: 11.5px; font-weight: 700; color: var(--mu); text-transform: uppercase"><span>If he scores</span><span>Points</span><span>Next EPPG</span><span>Change</span></div>
+          <div class="tr" style="grid-template-columns: 1.4fr 1fr 1fr 1fr"><span>Floor</span><span class="num">5.1</span><b class="num" style="color: var(--mo)">9.19</b><b class="num" style="color: var(--bad)">−0.70</b></div>
+          <div class="tr" style="grid-template-columns: 1.4fr 1fr 1fr 1fr"><span>On expectation</span><span class="num">9.9</span><b class="num" style="color: var(--mo)">9.77</b><b class="num" style="color: var(--bad)">−0.12</b></div>
+          <div class="tr" style="grid-template-columns: 1.4fr 1fr 1fr 1fr"><span>Ceiling</span><span class="num">14.7</span><b class="num" style="color: var(--mo)">10.35</b><b class="num" style="color: var(--fa)">+0.46</b></div>
+          <div style="display: flex; justify-content: space-between; align-items: center"><span class="kick">Moving averages</span><span class="lab ok">+1.4 MA · Above slow MA</span></div>
+          <svg class="ch" viewBox="0 0 340 120" role="img" aria-label="Fast and slow moving averages with weekly touches"><path d="M10 70 L50 64 L90 58 L130 44 L210 38 L250 30 L290 32 L330 22" style="stroke: var(--ink); stroke-width: 3; stroke-linejoin: round"></path><path d="M10 70 L50 66 L90 62 L130 54 L210 48 L250 40 L290 38 L330 32" style="stroke: var(--ink); stroke-width: 2; stroke-dasharray: 6 5"></path><path d="M250 0V118" style="stroke: var(--mu); stroke-width: 1; stroke-dasharray: 3 4"></path><path d="M2 118V104H18V118M42 118V100H58V118M82 118V98H98V118M122 118V92H138V118M202 118V90H218V118M242 118V88H258V118M282 118V89H298V118M322 118V86H338V118" style="stroke: var(--mu); stroke-width: 1.5"></path></svg>
+          <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; background: var(--soft); border-radius: 10px; padding: 8px; font-size: 12px; text-align: center"><span><b>W7</b><br><span class="q" style="font-size: 11px">tapped</span></span><span><b class="num" style="color: var(--fa)">12.2</b><br><span class="q" style="font-size: 11px">FPTS</span></span><span><b class="num">11.7</b><br><span class="q" style="font-size: 11px">Fast MA</span></span><span><b class="num">10.3</b><br><span class="q" style="font-size: 11px">Slow MA</span></span><span><b class="num">8.2</b><br><span class="q" style="font-size: 11px">Touches</span></span></div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 16px 18px; border-top: 2px solid var(--ink)"><span class="btn">+ Versus</span><span class="btn pri">Take to trade room</span></div>
+      </div>
+    </div>
+    <p class="note">The player card is a full-height sheet: swipe down or tap ✕ to close, swipe sideways or use ‹ › for the next player. There is no hover on a phone, so tapping a week pins its values in the strip under the chart.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">5 · Roster</span>
+    <div class="dev">
+      <div class="top"><div class="mark">Roster</div><span class="lab" style="background: var(--ed); color: #fff; height: 30px">Hypothetical: After Crane deal •</span></div>
+      <div class="scr">
+        <div class="hs"><span class="pill">Live roster</span><span class="pill on">After Crane deal •</span><span class="pill">+ New</span></div>
+        <div style="display: flex; gap: 8px"><span class="btn" style="flex: 1">+ Add a league player</span><span class="btn">Save slot</span></div>
+        <span class="kick" style="border-bottom: 2px solid var(--ink); padding-bottom: 4px; color: var(--ink)">RB · grade C</span>
+        <div class="row" style="box-shadow: inset 5px 0 0 var(--hi); grid-template-columns: minmax(0,1fr) auto; padding-left: 14px; min-height: 60px"><div class="mid"><b>Tyrese Lamb</b><span class="q">Starts at RB · Gem</span></div><div class="rt"><span class="big num" style="font-size: 26px; color: var(--mo)">12.3</span></div></div>
+        <div class="row" style="box-shadow: inset 5px 0 0 var(--hi); grid-template-columns: minmax(0,1fr) auto; padding-left: 14px; min-height: 60px"><div class="mid"><b>Marquise Dunn</b><span class="q">Starts at RB · up from bench</span></div><div class="rt"><span class="big num" style="font-size: 26px; color: var(--mo)">8.7</span></div></div>
+        <span class="kick" style="border-bottom: 2px solid var(--ink); padding-bottom: 4px; color: var(--ink)">WR · grade B−</span>
+        <div class="row" style="box-shadow: inset 5px 0 0 var(--hi); grid-template-columns: minmax(0,1fr) auto auto; padding-left: 14px; min-height: 60px"><div class="mid"><b>Isaiah Crane <span class="lab nw">ADDED</span></b><span class="q">Starts at WR</span></div><div class="rt" style="padding-right: 6px"><span class="big num" style="font-size: 26px; color: var(--mo)">17.5</span></div><span style="background: var(--badbg); color: var(--badfg); align-self: stretch; display: flex; align-items: center; padding: 0 14px; font-weight: 700">Cut</span></div>
+        <div class="row" style="box-shadow: inset 5px 0 0 var(--hi); grid-template-columns: minmax(0,1fr) auto; padding-left: 14px; min-height: 60px"><div class="mid"><b>Dante Okafor</b><span class="q">Starts at WR · TD caution</span></div><div class="rt"><span class="big num" style="font-size: 26px; color: var(--mo)">12.2</span></div></div>
+        <div class="row" style="border-color: var(--ln); grid-template-columns: minmax(0,1fr) auto; padding-left: 14px; min-height: 60px"><div class="mid"><b>Cole Brannigan</b><span class="q">Bench · Reduced workload</span></div><div class="rt"><span class="big num" style="font-size: 26px; color: var(--mo)">9.3</span></div></div>
+      </div>
+      <div class="tabbar"><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3z"></path></svg>Week</span><span class="tb on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>Roster</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>Scout</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>League</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-4-4M17 17H4l4 4"></path></svg>Trades</span></div>
+    </div>
+    <p class="note">The depth chart becomes one list grouped by position, each group headed by its grade. Swiping a row left reveals Cut while a simulation is active (shown on Crane). The active simulation stays visible in the header.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">6 · League</span>
+    <div class="dev">
+      <div class="top"><div class="mark">League</div></div>
+      <div class="scr">
+        <div style="display: grid; grid-template-columns: repeat(7, 38px); gap: 6px; justify-content: end; font-size: 11px; font-weight: 700; color: var(--mu); text-align: center"><span>QB</span><span>RB</span><span>WR</span><span>TE</span><span>FLX</span><span>K</span><span>DST</span></div>
+        <div><b class="cap" style="font-size: 17px">Sunday Syndicate <span class="q" style="font-family: Barlow; text-transform: none">· you</span></b><div style="display: grid; grid-template-columns: repeat(7, 38px); gap: 6px; justify-content: end; margin-top: 4px"><span class="g gB">B</span><span class="g gB">B</span><span class="g gD">D+</span><span class="g gBm">C+</span><span class="g gC">C−</span><span class="g gBm">B−</span><span class="g gN">N/A</span></div></div>
+        <div><b class="cap" style="font-size: 17px">Blitz Bandits</b><div style="display: grid; grid-template-columns: repeat(7, 38px); gap: 6px; justify-content: end; margin-top: 4px"><span class="g gBm">B−</span><span class="g gD">D+</span><span class="g gD" style="outline: 3px solid var(--ink); outline-offset: 2px">D−</span><span class="g gC">C−</span><span class="g gF">F</span><span class="g gC">C</span><span class="g gBm">B−</span></div></div>
+        <div><b class="cap" style="font-size: 17px">Fourth &amp; Long</b><div style="display: grid; grid-template-columns: repeat(7, 38px); gap: 6px; justify-content: end; margin-top: 4px"><span class="g gC">C</span><span class="g gF">F</span><span class="g gD">D−</span><span class="g gA">A+</span><span class="g gF">F</span><span class="g gC">C</span><span class="g gC">C−</span></div></div>
+        <div class="card" style="margin-top: auto; border-radius: 20px 20px 0 0; border-bottom: 0; margin-left: -16px; margin-right: -16px; margin-bottom: -14px; box-shadow: 0 -16px 40px rgba(0,0,0,.2)">
+          <div class="grab"></div>
+          <div style="display: flex; align-items: center; gap: 10px"><span class="g gD">D−</span><b class="cap" style="font-size: 20px; flex: 1">Blitz Bandits · WR</b><span style="font-size: 18px; width: 44px; text-align: center">✕</span></div>
+          <div class="tr" style="grid-template-columns: 40px minmax(0,1fr) auto"><span class="av" style="background: #8C2F39">IC</span><span><b>Isaiah Crane</b><br><span class="q">starts at WR</span></span><b class="big num" style="font-size: 24px; color: var(--mo)">17.5</b></div>
+          <div class="q">Tap a player for the card. Swipe down to close.</div>
+        </div>
+      </div>
+      <div class="tabbar"><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3z"></path></svg>Week</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>Roster</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>Scout</span><span class="tb on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>League</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-4-4M17 17H4l4 4"></path></svg>Trades</span></div>
+    </div>
+    <p class="note">Seven 38px grade squares fit across a phone, so the grid survives with the team name above each row. Tapping a grade raises a half-height sheet with that position group; a player card opens above it.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">7 · Trade · Manual analyzer</span>
+    <div class="dev">
+      <div class="top"><div class="mark">Trade room</div></div>
+      <div class="scr" style="gap: 10px">
+        <div class="seg" style="grid-template-columns: repeat(3, 1fr)"><span class="on">Manual</span><span>Find</span><span>Chains</span></div>
+        <div class="side" style="background: #3B2F8F"><span style="font-size: 12px; opacity: .85">YOU SEND · SUNDAY SYNDICATE</span><div class="tp">Andre Whitfield<span style="margin-left: auto; font-size: 15px">✕</span></div></div>
+        <div class="gsm"><span class="bd">RB B→C −3</span><span class="ok">WR D+→B− +4</span><span class="ok">FLEX C−→C +1</span></div>
+        <div class="side" style="background: #8C2F39"><span style="font-size: 12px; opacity: .85">YOU RECEIVE · BLITZ BANDITS ▾</span><div class="tp">Isaiah Crane<span style="margin-left: auto; font-size: 15px">✕</span></div></div>
+        <div class="gsm"><span class="ok">RB D+→A+ +9</span><span class="bd">WR D−→F −1</span></div>
+        <span class="btn" style="border-color: var(--ed); color: var(--ed)">■ Force into a hypothetical roster</span>
+        <div style="display: flex; gap: 8px"><div class="seg" style="grid-template-columns: repeat(2, 1fr); flex: 1"><span class="on">You</span><span>Them</span></div><div class="seg" style="grid-template-columns: repeat(2, 1fr); flex: 1"><span>Before</span><span class="on">After</span></div></div>
+        <div class="tr" style="grid-template-columns: 44px 40px minmax(0,1fr) auto"><b class="kick">RB</b><span class="av" style="background: #7A8">MD</span><span><b>Marquise Dunn</b><br><span class="lab ok">UP FROM BENCH</span></span><b class="num" style="color: var(--mo)">8.7</b></div>
+        <div class="tr" style="grid-template-columns: 44px 40px minmax(0,1fr) auto"><b class="kick">WR</b><span class="av" style="background: #8C2F39">IC</span><span><b>Isaiah Crane</b><br><span class="lab nw">NEW</span></span><b class="num" style="color: var(--mo)">17.5</b></div>
+        <div class="tr" style="grid-template-columns: 44px 40px minmax(0,1fr) auto"><b class="kick">FLEX</b><span class="av" style="background: #7A1F1F">RV</span><span><b>Rico Vance</b><br><span class="lab inf">SHIFTED FROM WR</span></span><b class="num" style="color: var(--mo)">10.0</b></div>
+      </div>
+      <div class="vb"><div><small>Surplus</small><b>Gain</b></div><div><small>Lineup</small><b style="color: var(--fa)">+2.0</b></div><div><small>Legality</small><b style="color: var(--fa)">Legal</b></div><div style="border: 0"><small>Uncertain</small><b>Low</b></div></div>
+      <div class="tabbar"><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3z"></path></svg>Week</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>Roster</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>Scout</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>League</span><span class="tb on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-4-4M17 17H4l4 4"></path></svg>Trades</span></div>
+    </div>
+    <p class="note">The two sides stack, with impacted grade steps directly under each. The lineup field becomes a slot list with the same tags. The four verdicts stay pinned above the tab bar as separate cells; tapping one opens its detail.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">8 · Trade · Find trades</span>
+    <div class="dev">
+      <div class="top"><div class="mark">Trade room</div></div>
+      <div class="scr" style="gap: 10px">
+        <div class="seg" style="grid-template-columns: repeat(3, 1fr)"><span>Manual</span><span class="on">Find</span><span>Chains</span></div>
+        <div class="card"><div style="display: flex; align-items: center"><b class="cap" style="font-size: 18px; flex: 1">Positional grade goals</b><span class="q">+ Add</span></div>
+          <div class="tr" style="grid-template-columns: minmax(0,1fr) 44px"><span><b>Your team · WR</b><br><span class="q">Upgrade ≥ 2 steps</span></span><span style="text-align: center">✕</span></div>
+          <div class="tr" style="grid-template-columns: minmax(0,1fr) 44px; border: 0"><span><b>Your team · RB</b><br><span class="q">Drop at most 3 steps</span></span><span style="text-align: center">✕</span></div>
+        </div>
+        <div style="display: flex; gap: 8px"><span class="pill" style="flex: 1; justify-content: center">Teams: all 3</span><span class="pill" style="flex: 1; justify-content: center">Limits <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--ed)"></span></span></div>
+        <span class="btn pri">Search trades across the league</span>
+        <div class="q"><b style="color: var(--ink)">24 trades meet every goal</b> · 96 combinations examined</div>
+        <div class="card" style="gap: 6px"><div><span class="q">Give</span> <b>Cole Brannigan</b> <span class="q">· get</span> <b>Isaiah Crane</b></div><span class="q">Blitz Bandits</span><div class="gsm"><span class="q" style="padding: 0">You</span><span class="ok">WR +4</span><span class="ok">FLEX +1</span><span class="q" style="padding: 0 0 0 6px">Them</span><span class="bd">WR −1</span></div><div style="display: flex; align-items: center; gap: 10px"><b class="big num" style="font-size: 24px; color: var(--fa)">+8.1</b><span class="q">EPPG/wk · surplus Gain</span><span class="btn" style="margin-left: auto; min-height: 44px">Analyze</span></div></div>
+        <div class="card" style="gap: 6px"><div><span class="q">Give</span> <b>Marquise Dunn</b> <span class="q">· get</span> <b>Kendrick Shaw</b></div><span class="q">Fourth &amp; Long</span><div class="gsm"><span class="q" style="padding: 0">You</span><span class="ok">WR +4</span><span class="ok">FLEX +1</span><span class="q" style="padding: 0 0 0 6px">Them</span><span class="ok">RB +5</span><span class="bd">WR −1</span></div></div>
+      </div>
+      <div class="tabbar"><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3z"></path></svg>Week</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>Roster</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>Scout</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>League</span><span class="tb on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-4-4M17 17H4l4 4"></path></svg>Trades</span></div>
+    </div>
+    <p class="note">Goals show as readable rows; tapping one opens pickers for team, position and steps. Teams and the shared search limits open as sheets; the purple dot marks edited limits. Each result is a card with both sides' grade steps.</p>
+  </div>
+
+  <div class="col">
+    <span class="cap">9 · Trade · Chain planner</span>
+    <div class="dev">
+      <div class="top"><div class="mark">Trade room</div></div>
+      <div class="scr" style="gap: 10px">
+        <div class="seg" style="grid-template-columns: repeat(3, 1fr)"><span>Manual</span><span>Find</span><span class="on">Chains</span></div>
+        <span class="kick">Preset · swipe</span>
+        <div class="hs">
+          <div class="card" style="width: 210px; flex: none; box-shadow: inset 0 0 0 2px var(--ink)"><b>Fix my weakest position</b><span class="q">Aims both trades at your lowest grade.</span><span class="kick" style="color: var(--ed)">Auto-sets a grade goal</span></div>
+          <div class="card" style="width: 210px; flex: none; border-color: var(--ln)"><b>Mutual benefit</b><span class="q">Both managers gain.</span><span class="kick" style="color: var(--ed)">Recipient loss capped at 0</span></div>
+        </div>
+        <span class="btn pri">Run chain trade search</span>
+        <div class="card" style="gap: 6px"><span class="kick">First trade · acquire your next move</span><div>Dante Okafor <span class="q">→</span> <b>Malik Osei</b> <span class="q">· Red Zone Rascals</span></div><div class="gsm"><span class="ok">WR +2</span></div><span class="q">Lineup <b style="color: var(--ink)">+2.2</b> ± 7.2 EPPG/wk · surplus Gain</span></div>
+        <div style="width: 2px; height: 14px; background: var(--ink); margin: -10px auto"></div>
+        <div class="card" style="gap: 6px"><span class="kick">Second trade · final target</span><div>Andre Whitfield <span class="q">→</span> <b>Isaiah Crane</b> <span class="q">· Blitz Bandits</span></div><div class="gsm"><span class="bd">RB −3</span><span class="ok">WR +4</span><span class="ok">FLEX +1</span></div><span class="q">Lineup <b style="color: var(--ink)">+2.0</b> ± 8.5 EPPG/wk · surplus Gain</span></div>
+        <div class="card" style="box-shadow: inset 6px 0 0 var(--hi); padding-left: 18px"><span class="kick">Connected chain result</span><div style="display: flex; align-items: baseline; gap: 10px"><b class="big num" style="font-size: 36px">+4.2</b><span class="q">± 11.1 EPPG/wk</span><span class="lab ok" style="margin-left: auto">PASSES EVERY PRICE TEST</span></div><div class="gsm"><span class="bd">RB −3</span><span class="ok">WR +6</span><span class="ok">FLEX +1</span></div></div>
+      </div>
+      <div class="tabbar"><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3z"></path></svg>Week</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>Roster</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>Scout</span><span class="tb"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>League</span><span class="tb on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-4-4M17 17H4l4 4"></path></svg>Trades</span></div>
+    </div>
+    <p class="note">Presets become a swipeable row of cards. The two trades stack with a connector, and the chain result sits last with its price-test status. “Inspect this step” is a tap on either trade card.</p>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":3980,"height":1060}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { rootClass: 'ph' + (this.props.dark ? ' dark' : '') };
+  }
+}
+</script>
+</body>
+</html>
