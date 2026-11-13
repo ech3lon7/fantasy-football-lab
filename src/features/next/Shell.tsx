@@ -30,6 +30,7 @@ export interface FeelValues {
   animation: AnimationPref;
   sound: boolean;
   haptics: boolean;
+  cardEntrances?: boolean;
   // Haptics report "not supported" where the Vibration API is missing.
   hapticsSupported: boolean;
 }
@@ -124,7 +125,7 @@ export function FeelSettings({
 }: {
   feel: FeelValues;
   change: (
-    key: "theme" | "animation" | "sound" | "haptics",
+    key: "theme" | "animation" | "sound" | "haptics" | "cardEntrances",
     value: string,
   ) => void;
 }) {
@@ -167,6 +168,14 @@ export function FeelSettings({
         Haptics
         {!feel.hapticsSupported && <small> Not supported on this device</small>}
       </label>
+      <label className="gd-check">
+        <input
+          type="checkbox"
+          checked={feel.cardEntrances !== false}
+          onChange={(e) => change("cardEntrances", e.target.checked ? "" : "off")}
+        />
+        Player card entrances
+      </label>
     </>
   );
 }
@@ -208,7 +217,7 @@ function FeelMenu({
 }: {
   feel: FeelValues;
   change: (
-    key: "theme" | "animation" | "sound" | "haptics",
+    key: "theme" | "animation" | "sound" | "haptics" | "cardEntrances",
     value: string,
   ) => void;
 }) {
@@ -269,7 +278,7 @@ function MoreMenu({
   onImport: () => void;
   feel: FeelValues;
   changeFeel: (
-    key: "theme" | "animation" | "sound" | "haptics",
+    key: "theme" | "animation" | "sound" | "haptics" | "cardEntrances",
     value: string,
   ) => void;
 }) {
@@ -380,7 +389,7 @@ export function GamedayHeader({
   onImport: () => void;
   feel: FeelValues;
   changeFeel: (
-    key: "theme" | "animation" | "sound" | "haptics",
+    key: "theme" | "animation" | "sound" | "haptics" | "cardEntrances",
     value: string,
   ) => void;
   onApplyDrop?: (team: string, playerId: string) => void;

@@ -12,6 +12,8 @@ import {
   readAnimationPref,
   readFlag,
   soundKey,
+  cardEntrancesKey,
+  readFlagDefaultOn,
   useAnimationRoot,
 } from "../ui/feel/settings";
 import { BottomBar, GamedayHeader } from "../features/next/Shell";
@@ -1234,11 +1236,12 @@ export default function App() {
     animation: readAnimationPref(feelFilters[animationKey]),
     sound: readFlag(feelFilters[soundKey]),
     haptics: readFlag(feelFilters[hapticsKey]),
+    cardEntrances: readFlagDefaultOn(feelFilters[cardEntrancesKey]),
     hapticsSupported: hapticsSupported(),
   };
   // Merge only the changed Feel key against the latest workspace, preserving unrelated filters; without one, keep it on this device.
   const changeFeelSetting = (
-    key: "theme" | "animation" | "sound" | "haptics",
+    key: "theme" | "animation" | "sound" | "haptics" | "cardEntrances",
     value: string,
   ) => {
     const [filterKey, stored] = feelEntry(key, value);

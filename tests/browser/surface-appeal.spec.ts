@@ -76,12 +76,7 @@ async function seed(page: Page, missing = false) {
   await openLegacyTrades(page);
   await openTradeDetails(page);
   await openTradeFilters(page);
-  const panel = page.locator("section.panel").filter({
-    has: page.getByRole("heading", {
-      name: "Find matching trades",
-      exact: true,
-    }),
-  });
+  const panel = page.locator(".gd-find");
   // Filter categories are already expanded by openTradeFilters.
   await panel
     .getByRole("checkbox", { name: "Create package", exact: true })
@@ -135,12 +130,10 @@ test("retires legacy surface restrictions from preferences and saved trades", as
       exact: true,
     }),
   ).toHaveCount(0);
-  await panel.getByRole("button", { name: "Run standard trade search", exact: true }).click();
-  await expect(panel.getByText(/1 index matches/)).toBeVisible();
-  // Saving an offer now follows the same explicit team-group expansion used in the regular finder.
-  await panel.locator('tbody > tr > th button[aria-expanded="false"]').first().click();
-  const row = panel.locator("tr[data-trade-result]");
-  await row.getByRole("button", { name: "Save trade", exact: true }).click();
+  await panel.getByRole("button", { name: "Search trades across the league", exact: true }).click();
+  await expect(panel.getByText(/1 trade meets every goal/)).toBeVisible();
+  const row = panel.locator(".gd-res-row");
+  await row.getByRole("button", { name: /^Save trade/ }).click();
   await expect
     .poll(
       async () =>
@@ -189,8 +182,8 @@ test("retires legacy surface restrictions from preferences and saved trades", as
     .getByRole("button", { name: "Load saved trade", exact: true })
     .click();
   await expect(toggle).not.toBeChecked();
-  await panel.getByRole("button", { name: "Run standard trade search", exact: true }).click();
-  await expect(panel.getByText(/1 index matches/)).toBeVisible();
+  await panel.getByRole("button", { name: "Search trades across the league", exact: true }).click();
+  await expect(panel.getByText(/1 trade meets every goal/)).toBeVisible();
   workspace = await stored(page);
   expect(workspace.dataset).toEqual(original.dataset);
   expect(
@@ -228,8 +221,8 @@ test("uses one optional Surface Trading control per tool and per chain stage", a
     )
     .toBe(1);
   await toggle.uncheck();
-  await panel.getByRole("button", { name: "Run standard trade search", exact: true }).click();
-  await expect(panel.getByText(/1 index matches/)).toBeVisible();
+  await panel.getByRole("button", { name: "Search trades across the league", exact: true }).click();
+  await expect(panel.getByText(/1 trade meets every goal/)).toBeVisible();
   await page
     .getByRole("tab", { name: "Chain planner" })
     .or(page.getByRole("button", { name: "Two-trade chain planner", exact: true }))
@@ -241,6 +234,9 @@ test("uses one optional Surface Trading control per tool and per chain stage", a
       exact: true,
     }),
   ).not.toBeChecked();
+  // Each trade's settings show one at a time; switch to the second before looking for its control.
+  await page.getByRole("button", { name: "Trade 2 settings" }).click();
+  await openTradeFilters(page, "Chain");
   await expect(
     page.getByRole("checkbox", {
       name: "Second trade: Enable Surface Trading",

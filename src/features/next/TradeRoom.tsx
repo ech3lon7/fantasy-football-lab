@@ -33,27 +33,12 @@ import { useNegotiations, DirectManagerAssessment } from "../Negotiations";
 import { newJournalOffer } from "../../domain/trade-journal";
 import { counterOffers, type CounterResults } from "../../domain/view/counter";
 import { SimulationNote } from "./SimulationIssuePopover";
-import { FoldingGroup, RangeSlider } from "../../ui/primitives";
 import {
   defaultSearchLimits,
-  editedLimits,
   readSearchLimits,
   searchLimitsKey,
   writeSearchLimits,
-  type SearchLimits,
 } from "../../domain/search-limits";
-import {
-  foldedGroupsKey,
-  readOpenGroups,
-  setGroupOpen,
-} from "../../domain/view/primitives";
-import {
-  FoldMemoryContext,
-  GradeGoalContext,
-  SearchLimitsContext,
-} from "./limitsContext";
-import { gradeGoalSentence } from "../../domain/view/trade-room";
-import { teamsAssessment } from "../../domain/lineups";
 import {
   saveTrade,
   savedTradesKey,
@@ -64,7 +49,14 @@ import type { TradeSearchQuery } from "../../domain/trade-search";
 import type { StressRecipe } from "../../domain/trade-stress";
 import { surfaceAppeal } from "../../domain/surface-appeal";
 import { SurfaceAppealView } from "../SurfaceAppeal";
-import { TradeSearch } from "../TradeSearch";
+import { FindTrades } from "./trade/FindTrades";
+import { FoldMemoryContext, type FoldMemory } from "./limitsContext";
+import {
+  foldedGroupsKey,
+  readOpenGroups,
+  setGroupOpen,
+} from "../../domain/view/primitives";
+import { ChainPlanner } from "./trade/ChainPlanner";
 import { SavedTrades } from "../SavedTrades";
 import {
   TradeScoreStrip,
@@ -1338,91 +1330,6 @@ function ManualAnalyzer({
   );
 }
 
-// The shared Search limits: one editable section used by Find trades and the Chain planner.
-function SearchLimitsSection({
-  limits,
-  open,
-  setOpen,
-  change,
-}: {
-  limits: SearchLimits;
-  open: boolean;
-  setOpen: (open: boolean) => void;
-  change: (next: SearchLimits) => void;
-}) {
-  const edited = editedLimits(limits);
-  const d = defaultSearchLimits;
-  return (
-    <FoldingGroup
-      title="Search limits · shared with chains"
-      summary={`Final gain ≥ ${limits.minimumFinalGain.toFixed(1)} · temporary loss ≤ ${limits.maximumTemporaryLoss.toFixed(1)} · recipient loss ≤ ${(limits.maximumRecipientValueLoss * 100).toFixed(0)}% · window ${limits.indexWindow === null ? "Off" : `±${limits.indexWindow}`}`}
-      open={open}
-      onToggle={setOpen}
-      edited={edited.length > 0}
-    >
-      <div className="gd-limits">
-        <RangeSlider
-          label="Minimum final gain (EPPG per week)"
-          value={limits.minimumFinalGain}
-          fallback={d.minimumFinalGain}
-          min={0}
-          max={10}
-          step={0.5}
-          onChange={(v) => change({ ...limits, minimumFinalGain: v })}
-        />
-        <RangeSlider
-          label="Maximum temporary loss (EPPG)"
-          value={limits.maximumTemporaryLoss}
-          fallback={d.maximumTemporaryLoss}
-          min={0}
-          max={10}
-          step={0.5}
-          onChange={(v) => change({ ...limits, maximumTemporaryLoss: v })}
-        />
-        <RangeSlider
-          label="Maximum recipient value loss (%)"
-          value={Math.round(limits.maximumRecipientValueLoss * 100)}
-          fallback={Math.round(d.maximumRecipientValueLoss * 100)}
-          min={0}
-          max={50}
-          step={1}
-          format={(v) => `${v}%`}
-          onChange={(v) =>
-            change({ ...limits, maximumRecipientValueLoss: v / 100 })
-          }
-        />
-        <RangeSlider
-          label="Index window (± points)"
-          value={limits.indexWindow ?? 0}
-          fallback={0}
-          min={0}
-          max={30}
-          step={1}
-          format={(v) => (v === 0 ? "Off" : `±${v}`)}
-          onChange={(v) =>
-            change({ ...limits, indexWindow: v === 0 ? null : v })
-          }
-        />
-        <p className="gd-muted">
-          Every search uses these Balanced limits. If a search finds nothing,
-          they loosen step by step from your values, and each widened result
-          says which limit moved. Price tests never hide a result: results that
-          pass every test come first, then price warnings, then widened ones.
-          Presets never change these limits.
-        </p>
-        <button
-          type="button"
-          className="gd-pill"
-          disabled={edited.length === 0}
-          onClick={() => change({ ...d })}
-        >
-          Reset to defaults
-        </button>
-      </div>
-    </FoldingGroup>
-  );
-}
-
 // Counter-offers: alternatives one swap or one added player away from the offer that still help you, both lineups' change shown.
 function CounterOffers({
   m,
@@ -1661,32 +1568,7 @@ export function TradeRoom({
   const [manualFiltersOpen, setManualFiltersOpen] = useState(false);
   const [restoredStress, setRestoredStress] = useState<StressRecipe | undefined>(undefined);
   const [stressRestoreKey, setStressRestoreKey] = useState(0);
-  const limits = readSearchLimits(filters[searchLimitsKey]),
-    open = readOpenGroups(filters[foldedGroupsKey]);
-  // Your current grades, so a goal can say which grade it reaches; goals about their team are described without one.
-  const myGrades = useMemo(
-    () => teamsAssessment(m).get(draft.teamA) ?? [],
-    [m, draft.teamA],
-  );
-  const goalSentence = (rule: Parameters<typeof gradeGoalSentence>[0]) =>
-    gradeGoalSentence(
-      rule,
-      myGrades.find((g) => g.position === rule.position)?.grade ?? null,
-    );
-  // Filter groups remember being open, separately for each tool.
-  const foldMemory = {
-    isOpen: (title: string) => !!open[`trade-${tab}:${title}`],
-    set: (title: string, next: boolean) => {
-      if (!!open[`trade-${tab}:${title}`] === next) return;
-      onFilters({
-        [foldedGroupsKey]: setGroupOpen(
-          filters[foldedGroupsKey],
-          `trade-${tab}:${title}`,
-          next,
-        ),
-      });
-    },
-  };
+  const limits = readSearchLimits(filters[searchLimitsKey]);
 
   const saveSelection = (
     selected: Draft,
@@ -1712,6 +1594,18 @@ export function TradeRoom({
     }
   };
 
+  // A saved search that is loaded restores its controls in Find trades.
+  const [restore, setRestore] = useState<
+    { id: string; query: TradeSearchQuery } | undefined
+  >();
+  // Remember which folding groups were left open, in the saved filter record.
+  const foldMemory: FoldMemory = {
+    isOpen: (title) => readOpenGroups(filters[foldedGroupsKey])[title] ?? false,
+    set: (title, open) =>
+      onFilters({
+        [foldedGroupsKey]: setGroupOpen(filters[foldedGroupsKey], title, open),
+      }),
+  };
   const [savedOpen, setSavedOpen] = useState(false);
   const openSaved = () => {
     setSavedOpen((o) => !o);
@@ -1797,85 +1691,104 @@ export function TradeRoom({
             change(trade.draft);
             setRestoredStress(trade.stressTest ?? undefined);
             setStressRestoreKey((k) => k + 1);
+            if (trade.query)
+              setRestore({ id: crypto.randomUUID(), query: trade.query });
             setTab(trade.query ? "find" : "manual");
             setSavedOpen(false);
           }}
         />
       </details>
 
-      {tab === "counters" ? (
-        <CounterOffers
-          m={m}
-          draft={draft}
-          basis={readLineupBasis(basisRaw)}
-          lineupsRaw={lineupsRaw}
-          use={(next) => {
-            change(next);
-            setTab("manual");
-          }}
-        />
-      ) : tab === "manual" ? (
-        <ManualAnalyzer
-          m={m}
-          draft={draft}
-          lineupsRaw={lineupsRaw}
-          basis={readLineupBasis(basisRaw)}
-          change={change}
-          changeBasis={changeBasis}
-          forceTrade={forceTrade}
-          onApplyDrop={onApplyDrop}
-          onSwitchToLive={onSwitchToLive}
-          state={state}
-          onFilters={onFilters}
-          onSaveTrade={(d, s, recipe) => saveSelection(d, s, undefined, m, recipe)}
-          initialStress={restoredStress}
-          stressRestoreKey={stressRestoreKey}
-          manualFiltersOpen={manualFiltersOpen}
-          setManualFiltersOpen={setManualFiltersOpen}
-        />
-      ) : (
-        <SearchLimitsContext.Provider value={limits}>
-          <GradeGoalContext.Provider value={goalSentence}>
-            <FoldMemoryContext.Provider value={foldMemory}>
-              <SearchLimitsSection
-                limits={limits}
-                open={!!open.limits}
-                setOpen={(next) =>
-                  onFilters({
-                    [foldedGroupsKey]: setGroupOpen(
-                      filters[foldedGroupsKey],
-                      "limits",
-                      next,
-                    ),
-                  })
-                }
-                change={(next) =>
-                  onFilters({ [searchLimitsKey]: writeSearchLimits(next) })
-                }
-              />
-              <div className="trade-workspace">
-                <TradeSearch
-                  key={`${m.dataset.hash}/${tab}`}
-                  m={m}
-                  draft={draft}
-                  lineupsRaw={lineupsRaw}
-                  change={change}
-                  save={saveSelection}
-                  lineupBasis={readLineupBasis(basisRaw)}
-                  onLineupBasisChange={changeBasis}
-                  saveSettings={(raw: string) => onFilters({ tradeSearchSettings: raw })}
-                  settingsRaw={filters.tradeSearchSettings}
-                  workspaceMode={tab === "chains" ? "chain" : "standard"}
-                  onAnalyze={(targetDraft) => {
-                    change(targetDraft);
-                    setTab("manual");
-                  }}
-                />
-              </div>
-            </FoldMemoryContext.Provider>
-          </GradeGoalContext.Provider>
-        </SearchLimitsContext.Provider>
-      )}
+      <FoldMemoryContext.Provider value={foldMemory}>
+        <div role="tabpanel" aria-label={tabLabel[tab]} style={{ minWidth: 0 }}>
+          {tab === "counters" ? (
+            <CounterOffers
+              m={m}
+              draft={draft}
+              basis={readLineupBasis(basisRaw)}
+              lineupsRaw={lineupsRaw}
+              use={(next) => {
+                change(next);
+                setTab("manual");
+              }}
+            />
+          ) : tab === "manual" ? (
+            <ManualAnalyzer
+              m={m}
+              draft={draft}
+              lineupsRaw={lineupsRaw}
+              basis={readLineupBasis(basisRaw)}
+              change={change}
+              changeBasis={changeBasis}
+              forceTrade={forceTrade}
+              onApplyDrop={onApplyDrop}
+              onSwitchToLive={onSwitchToLive}
+              state={state}
+              onFilters={onFilters}
+              onSaveTrade={(d, s, recipe) =>
+                saveSelection(d, s, undefined, m, recipe)
+              }
+              initialStress={restoredStress}
+              stressRestoreKey={stressRestoreKey}
+              manualFiltersOpen={manualFiltersOpen}
+              setManualFiltersOpen={setManualFiltersOpen}
+            />
+          ) : tab === "find" ? (
+            <FindTrades
+              key={`${m.dataset.hash}/find`}
+              model={m}
+              draft={draft}
+              lineupsRaw={lineupsRaw}
+              change={change}
+              save={(d, summary, query, context) =>
+                saveSelection(d, summary, query, context)
+              }
+              limits={limits}
+              updateLimits={(next) =>
+                onFilters({ [searchLimitsKey]: writeSearchLimits(next) })
+              }
+              resetLimits={() =>
+                onFilters({
+                  [searchLimitsKey]: writeSearchLimits(defaultSearchLimits),
+                })
+              }
+              basis={readLineupBasis(basisRaw)}
+              onBasisChange={changeBasis}
+              settingsRaw={filters.tradeSearchSettings}
+              saveSettings={(raw) => onFilters({ tradeSearchSettings: raw })}
+              restore={restore}
+              onAnalyze={() => setTab("manual")}
+            />
+          ) : tab === "chains" ? (
+            <ChainPlanner
+              key={`${m.dataset.hash}/chains`}
+              model={m}
+              draft={draft}
+              lineupsRaw={lineupsRaw}
+              basis={readLineupBasis(basisRaw)}
+              limits={limits}
+              updateLimits={(next) =>
+                onFilters({ [searchLimitsKey]: writeSearchLimits(next) })
+              }
+              resetLimits={() =>
+                onFilters({
+                  [searchLimitsKey]: writeSearchLimits(defaultSearchLimits),
+                })
+              }
+              settingsRaw={filters.tradeSearchSettings}
+              legacySettingsRaw={filters.chainSettings}
+              saveSettings={(raw) => onFilters({ tradeSearchSettings: raw })}
+              save={(d, summary, query, context) =>
+                saveSelection(d, summary, query, context)
+              }
+              onAnalyze={(targetDraft) => {
+                change(targetDraft);
+                setTab("manual");
+              }}
+            />
+          ) : null}
+        </div>
+      </FoldMemoryContext.Provider>
     </div>
   );
 }

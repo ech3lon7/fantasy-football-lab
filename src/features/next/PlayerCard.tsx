@@ -24,7 +24,9 @@ import { VersusView } from "./Versus";
 import { addToVersus } from "../../domain/view/versus";
 import { MPPG_METHOD_NOTE } from "../../domain/mppg";
 import { useFeedback } from "../../ui/feel/feedback";
-import { PlayerPhoto } from "../../ui/PlayerPhoto";
+import { PlayerHero } from "./PlayerHero";
+import { calculatePlayerTiers } from "../../domain/player-tier";
+import { heroShade } from "../../domain/view/player-hero";
 
 export const tabs = ["story", "numbers", "why", "calc"] as const;
 export type CardTab = (typeof tabs)[number];
@@ -95,6 +97,8 @@ function CardView({
   const card = useMemo(() => playerCard(m, id), [m, id]),
     p = m.byId.get(id),
     at = list ? list.indexOf(id) : -1;
+  // Tiers are display only; they rank every player once per snapshot.
+  const tiers = useMemo(() => calculatePlayerTiers(m), [m]);
   const step = useCallback(
     (by: number) => {
       if (!list || at < 0) return;
@@ -151,20 +155,20 @@ function CardView({
       }}
     >
       <header
-        className="gd-card-head"
-        style={{ backgroundColor: h.colors.background, color: h.colors.ink }}
+        className="gd-card-head gd-hx"
+        style={
+          {
+            "--tc": h.colors.background,
+            "--hx-mid": `${Math.round(heroShade(h.colors.background) * 1000) / 10}%`,
+          } as React.CSSProperties
+        }
       >
-        <span className="gd-card-big" aria-hidden="true">
-          {h.nfl}
-        </span>
-        <div className="gd-card-id">
-          <PlayerPhoto player={p} size={72} className="gd-card-photo" />
-          <div className="gd-card-id-text">
-            <span className="gd-card-kicker">
-              {h.pos} · {h.nfl} · {h.owner}
-            </span>
-            <h2>{h.name}</h2>
-            <div className="gd-card-labels">
+        <PlayerHero
+          p={p}
+          h={h}
+          info={tiers.get(id)}
+          chips={
+            <>
               {h.injury && h.injury.toUpperCase() !== "ACTIVE" && (
                 <Chip tone="warning">{h.injury}</Chip>
               )}
@@ -173,9 +177,9 @@ function CardView({
                   {label}
                 </Chip>
               ))}
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
         <div className="gd-card-nums">
           {/* 3.2 ▲ MPPG · Week N leads */}
           <div

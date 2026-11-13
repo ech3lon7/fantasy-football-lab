@@ -63,6 +63,16 @@ const leaguePopover = async (page: Page) => {
   await settle(page);
 };
 
+// The Find trades tab after a real search, so the sweep covers result rows, grade chips and status tags in both themes.
+const findResults = async (page: Page) => {
+  await tradeTab("Find trades")(page);
+  await page
+    .getByRole("button", { name: "Search trades across the league" })
+    .click();
+  await page.locator(".gd-res-row").first().waitFor({ timeout: 30000 });
+  await settle(page);
+};
+
 export const screens: Screen[] = [
   { name: "this-week", go: route("#/overview") },
   { name: "roster", go: route("#/roster") },
@@ -72,6 +82,7 @@ export const screens: Screen[] = [
   { name: "league-popover", go: leaguePopover },
   { name: "trade-manual", go: tradeTab("Manual analyzer") },
   { name: "trade-find", go: tradeTab("Find trades") },
+  { name: "trade-find-results", go: findResults },
   { name: "trade-chains", go: tradeTab("Chain planner") },
   { name: "trade-counters", go: tradeTab("Counter-offers") },
   { name: "journal", go: route("#/journal") },

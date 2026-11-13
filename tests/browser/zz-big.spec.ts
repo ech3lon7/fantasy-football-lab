@@ -37,9 +37,9 @@ test("big find", async ({ page }) => {
   await openTradeFilters(page);
   await page.waitForTimeout(400);
   await page.screenshot({ path: test.info().outputPath("find-open.png"), fullPage: true });
-  await page.getByRole("button", { name: "Run standard trade search" }).click();
+  await page.getByRole("button", { name: "Search trades across the league" }).click();
   await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Download search debug", exact: true })).toBeVisible();
+  await expect(page.locator(".gd-find .gd-applied")).toContainText(/trades? meet every goal/, { timeout: 30000 });
   await page.screenshot({ path: test.info().outputPath("find-results.png"), fullPage: true });
   await page.goto("./#/roster");
   await page.waitForTimeout(500);

@@ -3,7 +3,9 @@ import { createRoot } from "react-dom/client";
 import App from "./app/App";
 import "./ui/tokens.css";
 import "./ui/components.css";
+import "./ui/trade-tabs.css";
 import "./ui/gameday.css";
+import "./ui/player-hero.css";
 // Notify the independent HTML startup guard only after the application actually mounts.
 function Startup() {
   useEffect(() => {

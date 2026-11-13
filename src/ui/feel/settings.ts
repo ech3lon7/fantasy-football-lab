@@ -5,6 +5,9 @@ import { readThemePref, themeKey, writeThemePref } from "./theme";
 export const animationKey = "feelAnimation";
 export const soundKey = "feelSound";
 export const hapticsKey = "feelHaptics";
+export const cardEntrancesKey = "feelCardEntrances";
+
+export const readFlagDefaultOn = (raw?: string): boolean => raw !== "off";
 
 export const animationPrefs = ["system", "full", "reduced", "off"] as const;
 export type AnimationPref = (typeof animationPrefs)[number];
@@ -120,18 +123,19 @@ export function useAnimationRoot(pref: AnimationPref) {
 
 // Translate a Feel menu change into the filter key and stored string it saves, so the shell stays free of storage details.
 export function feelEntry(
-  key: "theme" | "animation" | "sound" | "haptics",
+  key: "theme" | "animation" | "sound" | "haptics" | "cardEntrances",
   value: string,
 ): [string, string] {
   if (key === "theme") return [themeKey, writeThemePref(readThemePref(value))];
   if (key === "animation")
     return [animationKey, writeAnimationPref(readAnimationPref(value))];
+  if (key === "cardEntrances") return [cardEntrancesKey, value === "off" ? "off" : ""];
   return [key === "sound" ? soundKey : hapticsKey, writeFlag(readFlag(value))];
 }
 
 // Feel choices made before the first import (there is no workspace to hold them yet) live on this device.
 const localFeelKey = "fantasy-lab-feel";
-const feelFilterKeys = [animationKey, themeKey, soundKey, hapticsKey];
+const feelFilterKeys = [animationKey, themeKey, soundKey, hapticsKey, cardEntrancesKey];
 export function readLocalFeel(): Record<string, string> {
   try {
     const parsed = JSON.parse(localStorage.getItem(localFeelKey) ?? "{}");

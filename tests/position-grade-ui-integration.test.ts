@@ -1,121 +1,13 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  ChainGradeLimitControls,
-  ChainRequirementChips,
-} from "../src/features/ChainLegControls";
 import { PositionGradeChips, TradeLineupField } from "../src/features/TradeWorkspace";
 import { starterFixture } from "./fixtures";
 import { evaluate } from "../src/domain/valuation";
-import type { ChainStep } from "../src/domain/trade-chains";
 import type {
   ChainPositionImpact,
   PositionalGradeImpactRule,
 } from "../src/domain/chain-position-impact";
-
-describe("UI Integration: Positional Grade Impact in ChainLegControls", () => {
-  it("renders PositionalGradeImpactControls inside ChainGradeLimitControls", () => {
-    const rules: PositionalGradeImpactRule[] = [
-      { id: "r1", side: "own", position: "WR", steps: 2 },
-    ];
-    const value: ChainStep = {
-      offer: { minimum: 1, maximum: 2 },
-      receive: { minimum: 1, maximum: 2 },
-      gradeImpacts: rules,
-    };
-    const change = vi.fn();
-
-    const html = renderToStaticMarkup(
-      React.createElement(ChainGradeLimitControls, {
-        label: "First trade",
-        value,
-        change,
-      })
-    );
-
-    // Should render the grade impact container from PositionalGradeImpactControls
-    expect(html).toContain("grade-impact-container");
-    expect(html).toContain("Positional Grade Goals");
-    // Should have aria-label prefix with the leg label
-    expect(html).toContain('aria-label="First trade grade goal 1 team"');
-    expect(html).toContain('aria-label="First trade grade goal 1 position"');
-    expect(html).toContain('aria-label="First trade grade goal 1 target"');
-  });
-
-  it("threads custom positions into PositionalGradeImpactControls inside ChainGradeLimitControls", () => {
-    const rules: PositionalGradeImpactRule[] = [
-      { id: "r1", side: "own", position: "WR", steps: 2 },
-    ];
-    const value: ChainStep = {
-      offer: { minimum: 1, maximum: 2 },
-      receive: { minimum: 1, maximum: 2 },
-      gradeImpacts: rules,
-    };
-    const change = vi.fn();
-
-    const html = renderToStaticMarkup(
-      React.createElement(ChainGradeLimitControls, {
-        label: "First trade",
-        value,
-        change,
-        positions: ["RB", "WR", "TE"],
-      })
-    );
-
-    expect(html).toContain('value="RB"');
-    expect(html).toContain('value="WR"');
-    expect(html).toContain('value="TE"');
-    expect(html).not.toContain('value="QB"');
-  });
-
-  it("renders clear chip in ChainRequirementChips when value.gradeImpacts has rules", () => {
-    const rules: PositionalGradeImpactRule[] = [
-      { id: "r1", side: "own", position: "WR", steps: 2 },
-      { id: "r2", side: "other", position: "RB", steps: -1 },
-    ];
-    const value: ChainStep = {
-      offer: { minimum: 1, maximum: 2 },
-      receive: { minimum: 1, maximum: 2 },
-      gradeImpacts: rules,
-    };
-    const change = vi.fn();
-    const mockModel: any = { byId: new Map() };
-
-    const html = renderToStaticMarkup(
-      React.createElement(ChainRequirementChips, {
-        m: mockModel,
-        label: "First trade",
-        value,
-        change,
-      })
-    );
-
-    // Should display a chip indicating the active grade goals
-    expect(html).toContain("First trade: 2 grade goals");
-    expect(html).toContain('aria-label="Clear First trade grade goals"');
-  });
-
-  it("does not render grade impact chip in ChainRequirementChips when gradeImpacts is empty", () => {
-    const value: ChainStep = {
-      offer: { minimum: 1, maximum: 2 },
-      receive: { minimum: 1, maximum: 2 },
-    };
-    const change = vi.fn();
-    const mockModel: any = { byId: new Map() };
-
-    const html = renderToStaticMarkup(
-      React.createElement(ChainRequirementChips, {
-        m: mockModel,
-        label: "First trade",
-        value,
-        change,
-      })
-    );
-
-    expect(html).not.toContain("grade goal");
-  });
-});
 
 describe("UI Integration: PositionGradeChips in TradeWorkspace", () => {
   it("renders good, bad, and neutral chips for positional grade transitions", () => {

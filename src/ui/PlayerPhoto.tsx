@@ -8,9 +8,10 @@ export interface PlayerLike {
   nfl?: string;
 }
 
-export type PhotoSize = number | "sm" | "md" | "lg" | "xl";
+// "fill" takes the size, shape and colours of its frame (the player card hero).
+export type PhotoSize = number | "sm" | "md" | "lg" | "xl" | "fill";
 
-const sizeMap: Record<"sm" | "md" | "lg" | "xl", number> = {
+const sizeMap: Record<Exclude<PhotoSize, number | "fill">, number> = {
   sm: 24,
   md: 32,
   lg: 48,
@@ -38,29 +39,42 @@ export function PlayerPhoto({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  const px = typeof size === "number" ? size : sizeMap[size] ?? 32;
+  const fill = size === "fill";
+  const px = typeof size === "number" ? size : fill ? 0 : sizeMap[size] ?? 32;
   const colors = teamColors(player.nfl ?? "");
   const numericId = Number(player.id);
   const canHaveHeadshot = !isNaN(numericId) && numericId > 0 && player.pos !== "D/ST";
   const initials = playerInitials(player.name, player.pos, player.nfl);
 
-  const style: CSSProperties = {
-    width: `${px}px`,
-    height: `${px}px`,
-    minWidth: `${px}px`,
-    maxWidth: `${px}px`,
-    borderRadius: "999px",
-    background: colors.background,
-    color: colors.ink,
-    fontSize: `${Math.max(10, Math.round(px * 0.4))}px`,
-    lineHeight: 1,
-    fontWeight: 700,
-    display: "inline-grid",
-    placeItems: "center",
-    overflow: "hidden",
-    flexShrink: 0,
-    userSelect: "none",
-  };
+  const style: CSSProperties = fill
+    ? {
+        width: "100%",
+        height: "100%",
+        color: "inherit",
+        lineHeight: 1,
+        fontWeight: 700,
+        display: "inline-grid",
+        placeItems: "center",
+        overflow: "hidden",
+        userSelect: "none",
+      }
+    : {
+        width: `${px}px`,
+        height: `${px}px`,
+        minWidth: `${px}px`,
+        maxWidth: `${px}px`,
+        borderRadius: "999px",
+        background: colors.background,
+        color: colors.ink,
+        fontSize: `${Math.max(10, Math.round(px * 0.4))}px`,
+        lineHeight: 1,
+        fontWeight: 700,
+        display: "inline-grid",
+        placeItems: "center",
+        overflow: "hidden",
+        flexShrink: 0,
+        userSelect: "none",
+      };
 
   return (
     <span

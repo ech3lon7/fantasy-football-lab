@@ -1,0 +1,460 @@
+/* Player card hero: a team-coloured header after a sports-game player screen, and the three tier entrances.
+   The header is on the team colour with white text in both themes, so these tokens do not change with the theme. */
+:root[data-gameday] {
+  --gd-hero-ink: #fff;
+  --gd-hero-shade: #000;
+  --gd-hero-glass: #0a0c12;
+  --gd-hx-hot: #3dba6f;
+  --gd-hx-cold: #e25444;
+  --gd-hx-steady: #d9b77e;
+  --gd-foil-gold: linear-gradient(120deg, #b8901a, #f7e7a1 35%, #fff6d2 50%, #c9a227 65%, #8c6a10);
+  --gd-foil-gold-ink: #2a2005;
+  --gd-foil-silver: linear-gradient(120deg, #8e97a5, #e9edf3 35%, #fff 50%, #aeb6c2 65%, #6f7887);
+  --gd-foil-silver-ink: #1b1f26;
+  --gd-foil-bronze: linear-gradient(120deg, #9a6a44, #e3c2a0 45%, #b07a4f);
+  --gd-foil-bronze-ink: #2b1a0c;
+}
+
+:root[data-gameday] .gd-hx {
+  --hx-line: color-mix(in srgb, var(--gd-hero-ink) 28%, transparent);
+  position: relative;
+  isolation: isolate;
+  min-height: 330px;
+  padding: 46px 64px 20px 28px;
+  color: var(--gd-hero-ink);
+  background:
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--gd-hero-shade) 55%, transparent) 0%,
+      color-mix(in srgb, var(--gd-hero-shade) var(--hx-mid, 8%), transparent) 46%,
+      color-mix(in srgb, var(--gd-hero-shade) 42%, transparent) 100%
+    ),
+    var(--tc);
+}
+:root[data-gameday] .gd-hx-dots {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--gd-hero-ink) 28%, transparent) 1.2px,
+    transparent 1.7px
+  );
+  background-size: 7px 7px;
+  -webkit-mask-image: linear-gradient(100deg, transparent 22%, var(--gd-hero-shade) 58%, color-mix(in srgb, var(--gd-hero-shade) 40%, transparent) 82%, transparent 100%);
+  mask-image: linear-gradient(100deg, transparent 22%, var(--gd-hero-shade) 58%, color-mix(in srgb, var(--gd-hero-shade) 40%, transparent) 82%, transparent 100%);
+}
+:root[data-gameday] .gd-hx-num {
+  position: absolute;
+  right: 330px;
+  top: -18px;
+  z-index: -1;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 250px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: transparent;
+  background-image: radial-gradient(var(--gd-hero-ink) 1.5px, transparent 1.9px);
+  background-size: 6px 6px;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-stroke: 2px color-mix(in srgb, var(--gd-hero-ink) 55%, transparent);
+  opacity: 0.75;
+  pointer-events: none;
+  user-select: none;
+}
+:root[data-gameday] .gd-hx-crumb {
+  position: absolute;
+  left: 28px;
+  top: 16px;
+  font-family: var(--gd-font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.82;
+}
+:root[data-gameday] .gd-hx-id {
+  position: relative;
+  flex: 1 1 560px;
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  padding-right: 250px;
+}
+:root[data-gameday] .gd-hx-photo {
+  flex: none;
+  width: 140px;
+  height: 164px;
+  overflow: hidden;
+  border-radius: 14px 14px 4px 4px;
+  background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--gd-hero-ink) 22%, transparent),
+      color-mix(in srgb, var(--gd-hero-shade) 35%, transparent)
+    ),
+    var(--ta, var(--tc));
+  box-shadow:
+    0 0 0 3px var(--gd-hero-ink),
+    0 14px 30px color-mix(in srgb, var(--gd-hero-shade) 35%, transparent);
+}
+/* The headshot is a landscape image: crop to head and shoulders, with no upscaling filter. */
+:root[data-gameday] .gd-hx-photo img,
+:root[data-gameday] .gd-hx-photo .gd-photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 15%;
+  border-radius: 0;
+  font-size: 56px;
+}
+:root[data-gameday] .gd-hx-name {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+:root[data-gameday] .gd-hx-first {
+  font-family: var(--gd-font-display);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  opacity: 0.88;
+}
+:root[data-gameday] .gd-hx h2 {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  color: inherit;
+}
+:root[data-gameday] .gd-hx-last {
+  font-size: 78px;
+  line-height: 0.9;
+  letter-spacing: 0.01em;
+  text-shadow: 0 3px 0 color-mix(in srgb, var(--gd-hero-shade) 25%, transparent);
+}
+:root[data-gameday] .gd-hx-meta {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.92;
+}
+:root[data-gameday] .gd-hx-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--gd-font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+:root[data-gameday] .gd-hx-form i {
+  width: 150px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--gd-hero-shade) 35%, transparent);
+  box-shadow: inset 0 0 0 1px var(--hx-line);
+}
+:root[data-gameday] .gd-hx-form b {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+:root[data-gameday] .gd-hx-form[data-kind="hot"] b {
+  background: var(--gd-hx-hot);
+}
+:root[data-gameday] .gd-hx-form[data-kind="cold"] b {
+  background: var(--gd-hx-cold);
+}
+:root[data-gameday] .gd-hx-form[data-kind="steady"] b {
+  background: var(--gd-hx-steady);
+}
+:root[data-gameday] .gd-hx-form[data-kind="unknown"] i {
+  opacity: 0.5;
+}
+:root[data-gameday] .gd-hx-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+:root[data-gameday] .gd-tier {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 6px;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--gd-hero-shade) 30%, transparent);
+}
+:root[data-gameday] .gd-tier[data-tier="superstar"] {
+  color: var(--gd-foil-gold-ink);
+  background: var(--gd-foil-gold);
+}
+:root[data-gameday] .gd-tier[data-tier="star"] {
+  color: var(--gd-foil-silver-ink);
+  background: var(--gd-foil-silver);
+}
+:root[data-gameday] .gd-tier[data-tier="good"] {
+  color: var(--gd-foil-bronze-ink);
+  background: var(--gd-foil-bronze);
+}
+:root[data-gameday] .gd-tier:focus-visible {
+  outline: 3px solid var(--gd-hero-ink);
+  outline-offset: 2px;
+}
+:root[data-gameday] .gd-hx-bio {
+  position: absolute;
+  right: 64px;
+  top: 52px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 232px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--gd-hero-glass) 58%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--hx-line);
+  border-radius: 10px;
+}
+:root[data-gameday] .gd-hx-bio-h {
+  margin-bottom: 2px;
+  padding-bottom: 4px;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--hx-line);
+}
+:root[data-gameday] .gd-hx-bio-r {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 12.5px;
+}
+:root[data-gameday] .gd-hx-bio-r span {
+  font-family: var(--gd-font-display);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+:root[data-gameday] .gd-hx-posname {
+  margin-top: 4px;
+  padding-top: 6px;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  text-align: right;
+  text-transform: uppercase;
+  border-top: 1px solid var(--hx-line);
+}
+
+/* Entrances: overlays inside the header. They never take pointer events, never move the content and end by themselves. */
+:root[data-gameday] .gd-hx .fx {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: none;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+}
+:root[data-gameday][data-animation="full"] .gd-hx .fx {
+  display: block;
+}
+:root[data-gameday] .gd-hx .fx-pap b {
+  position: absolute;
+  inset: 0;
+  background: var(--gd-hero-ink);
+  opacity: 0;
+  animation: bloom 1.6s 0.05s linear both;
+}
+:root[data-gameday] .gd-hx .fx-pap i {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.4);
+  background: radial-gradient(
+    circle,
+    var(--gd-hero-ink) 0%,
+    color-mix(in srgb, var(--gd-hero-ink) 95%, transparent) 10%,
+    color-mix(in srgb, var(--gd-hero-ink) 45%, transparent) 30%,
+    transparent 64%
+  );
+  animation: pap 0.55s ease-out both;
+}
+:root[data-gameday] .gd-hx .fx-pap i::before,
+:root[data-gameday] .gd-hx .fx-pap i::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 180%;
+  height: 2px;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(90deg, transparent, var(--gd-hero-ink), transparent);
+}
+:root[data-gameday] .gd-hx .fx-pap i::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+:root[data-gameday] .gd-hx .fx-shine i {
+  position: absolute;
+  top: -60%;
+  left: -30%;
+  width: 9%;
+  height: 220%;
+  transform: rotate(22deg);
+  mix-blend-mode: screen;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--gd-hero-ink) 55%, transparent) 35%,
+    color-mix(in srgb, var(--gd-hero-ink) 92%, transparent) 50%,
+    color-mix(in srgb, var(--gd-hero-ink) 55%, transparent) 65%,
+    transparent
+  );
+  animation: sweep 1.15s 0.25s cubic-bezier(0.45, 0, 0.2, 1) both;
+}
+:root[data-gameday] .gd-hx .fx-shine i.thin {
+  width: 2%;
+  opacity: 0.7;
+  animation-delay: 0.36s;
+}
+:root[data-gameday] .gd-hx .fx-glint i {
+  position: absolute;
+  left: 148px;
+  top: 96px;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  opacity: 0;
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--gd-hero-ink) 90%, transparent) 0%, color-mix(in srgb, var(--gd-hero-ink) 35%, transparent) 18%, transparent 50%),
+    linear-gradient(90deg, transparent 46%, color-mix(in srgb, var(--gd-hero-ink) 90%, transparent) 50%, transparent 54%),
+    linear-gradient(0deg, transparent 46%, color-mix(in srgb, var(--gd-hero-ink) 90%, transparent) 50%, transparent 54%);
+  animation: glint 0.9s 0.3s ease-in-out both;
+}
+
+@keyframes pap {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  10% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  35% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.25);
+  }
+}
+/* The only whole-card brightening: two washes, below 30% opacity and 0.5 s apart. A test reads these frames. */
+@keyframes bloom {
+  0% {
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.26;
+  }
+  12% {
+    opacity: 0;
+  }
+  52% {
+    opacity: 0;
+  }
+  57% {
+    opacity: 0.18;
+  }
+  64% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes sweep {
+  from {
+    left: -30%;
+  }
+  to {
+    left: 125%;
+  }
+}
+@keyframes glint {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) rotate(0);
+  }
+  45% {
+    opacity: 0.75;
+    transform: scale(1) rotate(45deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.5) rotate(90deg);
+  }
+}
+
+/* Phones: the numeral shrinks, the photo and last name get smaller and the profile panel drops below the name. Nothing is hidden. */
+@media (max-width: 720px) {
+  :root[data-gameday] .gd-hx {
+    padding: 40px 56px 14px 16px;
+    min-height: 0;
+  }
+  :root[data-gameday] .gd-hx-num {
+    right: 10px;
+    top: 20px;
+    font-size: 150px;
+  }
+  :root[data-gameday] .gd-hx-id {
+    flex-basis: 100%;
+    gap: 14px;
+    padding-right: 0;
+  }
+  :root[data-gameday] .gd-hx-photo {
+    width: 92px;
+    height: 108px;
+  }
+  :root[data-gameday] .gd-hx-photo .gd-photo {
+    font-size: 36px;
+  }
+  :root[data-gameday] .gd-hx-last {
+    font-size: 46px;
+  }
+  :root[data-gameday] .gd-hx-bio {
+    position: relative;
+    right: auto;
+    top: auto;
+    order: 3;
+    width: 100%;
+  }
+  :root[data-gameday] .gd-hx .fx-glint i {
+    left: 96px;
+    top: 110px;
+  }
+}

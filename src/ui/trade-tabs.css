@@ -1,0 +1,521 @@
+/* Find trades and Chain planner (docs/design/gameday-plus/D_GamedayPlus.dc.html: .scout .fac .fg .res .leg .presets .pre).
+   Every colour comes from the theme tokens; the design's names are used with the gd- prefix. */
+
+:root[data-gameday] .gd-find,
+:root[data-gameday] .gd-chain {
+  min-width: 0;
+  color: var(--gd-ink);
+}
+
+/* Two columns at desktop width: the controls panel and the goals, summary and results. */
+:root[data-gameday] .gd-find {
+  display: grid;
+  grid-template-columns: 290px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+:root[data-gameday] .gd-fac {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-ink);
+  border-radius: 18px;
+  min-width: 0;
+}
+:root[data-gameday] .gd-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+:root[data-gameday] .gd-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-ink);
+  border-radius: 18px;
+  min-width: 0;
+}
+:root[data-gameday] .gd-card h3 {
+  margin: 0;
+  font-family: var(--gd-font-display);
+  font-size: 24px;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+:root[data-gameday] .gd-kick {
+  font-family: var(--gd-font-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-quiet {
+  margin: 0;
+  color: var(--gd-muted);
+  font-size: 13.5px;
+}
+
+/* Folding groups: the title on one line, its one-line summary on the line below. */
+:root[data-gameday] .gd-fg {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--gd-line);
+}
+:root[data-gameday] .gd-fg > summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 36px;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-fg-title {
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 17px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+:root[data-gameday] .gd-fs {
+  display: block;
+  font-family: var(--gd-font-body);
+  font-weight: 500;
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-fg[open] > summary {
+  margin-bottom: 8px;
+}
+:root[data-gameday] .gd-fg-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+:root[data-gameday] .gd-edot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin: 0 5px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--gd-edit);
+}
+
+/* Fields: a label above its control, with the control at least 40px tall. */
+:root[data-gameday] .gd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 14px;
+}
+:root[data-gameday] .gd-field > span {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-field :is(select, input[type="text"], input[type="number"], input[type="search"]),
+:root[data-gameday] .gd-sel {
+  box-sizing: border-box;
+  min-height: 40px;
+  max-width: 100%;
+  padding: 0 10px;
+  font: inherit;
+  color: var(--gd-ink);
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-line);
+  border-radius: 10px;
+}
+:root[data-gameday] .gd-row2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+:root[data-gameday] .gd-limit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+:root[data-gameday] .gd-limit input[type="range"] {
+  width: 100%;
+  accent-color: var(--gd-edit);
+}
+:root[data-gameday] .gd-limit b {
+  color: var(--gd-edit);
+}
+
+/* A check row: a box, the text, and an optional count on the right. */
+:root[data-gameday] .gd-chk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 2px 4px;
+  font-size: 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-chk:hover {
+  background: var(--gd-surface-2);
+}
+:root[data-gameday] .gd-chk input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--gd-edit);
+}
+:root[data-gameday] .gd-chk .gd-ct {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--gd-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Player picker with photos: a search box over a short list of buttons. */
+:root[data-gameday] .gd-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+:root[data-gameday] .gd-pick-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 210px;
+  overflow: auto;
+  border: 1px solid var(--gd-line);
+  border-radius: 10px;
+}
+:root[data-gameday] .gd-pick-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 8px;
+  text-align: left;
+  background: transparent;
+  color: var(--gd-ink);
+  border: 0;
+  border-bottom: 1px solid var(--gd-line);
+  cursor: pointer;
+}
+:root[data-gameday] .gd-pick-item:last-child {
+  border-bottom: 0;
+}
+:root[data-gameday] .gd-pick-item[aria-pressed="true"] {
+  background: var(--gd-selected);
+  color: var(--gd-selected-ink);
+}
+:root[data-gameday] .gd-pick-item small {
+  margin-left: auto;
+  color: inherit;
+  opacity: 0.75;
+}
+:root[data-gameday] .gd-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Buttons used by both tabs. */
+:root[data-gameday] .gd-cbtn {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gd-ink);
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-ink);
+  border-radius: 17px;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-cbtn:hover {
+  background: var(--gd-surface-2);
+}
+:root[data-gameday] .gd-cbtn[aria-pressed="true"] {
+  background: var(--gd-selected);
+  color: var(--gd-selected-ink);
+}
+:root[data-gameday] .gd-primary {
+  height: 44px;
+  padding: 0 18px;
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--gd-selected-ink);
+  background: var(--gd-selected);
+  border: 2px solid var(--gd-ink);
+  border-radius: 22px;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Positional grade goals: one row per goal with its plain-language sentence beneath. */
+:root[data-gameday] .gd-rule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--gd-line);
+}
+:root[data-gameday] .gd-rule .gd-quiet {
+  flex-basis: 100%;
+}
+
+/* Summary line and results table. */
+:root[data-gameday] .gd-applied {
+  padding: 10px 14px;
+  font-size: 14px;
+  background: var(--gd-surface-2);
+  border-radius: 12px;
+}
+:root[data-gameday] .gd-status {
+  padding: 10px 14px;
+  font-size: 14px;
+  background: var(--gd-surface-2);
+  border-radius: 12px;
+}
+:root[data-gameday] .gd-gradepill {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  border-radius: 6px;
+  color: var(--gd-ink);
+  background: var(--gd-surface-2);
+}
+:root[data-gameday] .gd-res {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow-x: auto;
+  gap: 0;
+}
+:root[data-gameday] .gd-res-grid {
+  display: grid;
+  grid-template-columns: minmax(230px, 1.5fr) minmax(130px, 1fr) minmax(130px, 1fr) 110px 120px 130px 90px;
+  gap: 10px;
+  align-items: center;
+  min-width: 960px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--gd-line);
+  font-size: 14px;
+}
+:root[data-gameday] .gd-res-head {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gd-muted);
+  background: var(--gd-surface-2);
+}
+:root[data-gameday] .gd-who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+:root[data-gameday] .gd-photos {
+  display: flex;
+  flex: none;
+}
+:root[data-gameday] .gd-photos > * + * {
+  margin-left: -8px;
+}
+:root[data-gameday] .gd-photo {
+  border-radius: 50%;
+  border: 2px solid var(--gd-surface);
+}
+:root[data-gameday] .gd-gain {
+  font-variant-numeric: tabular-nums;
+}
+:root[data-gameday] .gd-gain b {
+  font-size: 15px;
+}
+:root[data-gameday] .gd-gain small {
+  display: block;
+  color: var(--gd-muted);
+  font-size: 12px;
+}
+:root[data-gameday] .gd-chipg {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  border-radius: 6px;
+}
+:root[data-gameday] .gd-chipg[data-tone="positive"] {
+  color: var(--gd-positive-ink);
+  background: var(--gd-positive-bg);
+}
+:root[data-gameday] .gd-chipg[data-tone="negative"] {
+  color: var(--gd-negative-ink);
+  background: var(--gd-negative-bg);
+}
+:root[data-gameday] .gd-stag {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border-radius: 5px;
+}
+:root[data-gameday] .gd-stag[data-kind="pass"] {
+  color: var(--gd-positive-ink);
+  background: var(--gd-positive-bg);
+}
+:root[data-gameday] .gd-stag[data-kind="warning"] {
+  color: var(--gd-warning-ink);
+  background: var(--gd-warning-bg);
+}
+:root[data-gameday] .gd-stag[data-kind="widened"] {
+  color: var(--gd-negative-ink);
+  background: var(--gd-negative-bg);
+}
+:root[data-gameday] .gd-empty {
+  padding: 16px;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-nm,
+:root[data-gameday] .gd-diag {
+  padding: 12px 16px;
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-line);
+  border-radius: 14px;
+}
+:root[data-gameday] .gd-nm > summary,
+:root[data-gameday] .gd-diag > summary {
+  font-weight: 700;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-nm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* Chain planner: header card, preset cards, per-trade settings, step cards joined by a connector. */
+:root[data-gameday] .gd-chain {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+:root[data-gameday] .gd-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+}
+:root[data-gameday] .gd-pre {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  text-align: left;
+  color: var(--gd-ink);
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-line);
+  border-radius: 12px;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-pre:hover {
+  border-color: var(--gd-ink);
+}
+:root[data-gameday] .gd-pre[aria-checked="true"] {
+  border-color: var(--gd-ink);
+  box-shadow: inset 0 0 0 2px var(--gd-ink);
+}
+:root[data-gameday] .gd-pre[data-new="true"] {
+  border-style: dashed;
+}
+:root[data-gameday] .gd-pre-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+:root[data-gameday] .gd-pre-desc {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--gd-muted);
+}
+:root[data-gameday] .gd-pre-sets {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gd-edit);
+}
+:root[data-gameday] .gd-legs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 14px;
+}
+:root[data-gameday] .gd-leg {
+  display: flex;
+  flex: 1 1 280px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: var(--gd-surface);
+  border: 2px solid var(--gd-ink);
+  border-radius: 16px;
+}
+:root[data-gameday] .gd-leg[data-kind="chain"] {
+  padding-left: 20px;
+  box-shadow: inset 6px 0 0 var(--gd-selected);
+}
+:root[data-gameday] .gd-leg-total {
+  font-family: var(--gd-font-display);
+  font-size: 44px;
+  line-height: 1;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-gameday] .gd-leg-total small {
+  font-size: 18px;
+}
+:root[data-gameday] .gd-switch {
+  display: inline-flex;
+  border: 2px solid var(--gd-ink);
+  border-radius: 12px;
+  overflow: hidden;
+}
+:root[data-gameday] .gd-switch button {
+  min-height: 40px;
+  padding: 0 16px;
+  font-weight: 700;
+  color: var(--gd-ink);
+  background: var(--gd-surface);
+  border: 0;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-switch button[aria-pressed="true"] {
+  color: var(--gd-selected-ink);
+  background: var(--gd-selected);
+}
+
+/* Phones: one column, the controls panel first, results scroll sideways inside their card. */
+@media (max-width: 900px) {
+  :root[data-gameday] .gd-find {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :root[data-gameday] .gd-row2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

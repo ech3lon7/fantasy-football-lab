@@ -104,115 +104,49 @@ test.describe("Positional Grade Search E2E", () => {
   }) => {
     // Seed standard starter fixture where all standard positions are active
     await seedWorkspace(page, "starter");
+    await expect(page.locator(".gd-find")).toBeVisible();
 
-    // Verify Find matching trades heading is visible
-    await expect(
-      page.getByRole("heading", { name: "Find matching trades", exact: true }),
-    ).toBeVisible();
-
-    // Locate the "Team needs" filter group within standard trade filters and ensure it is expanded
-    const teamNeedsGroup = page.locator(
-      '#standard-trade-filters details.trade-filter-category[data-category="Team needs"]',
-    );
-    await expect(teamNeedsGroup).toBeVisible();
-
-    if ((await teamNeedsGroup.getAttribute("open")) === null) {
-      await teamNeedsGroup.locator(":scope > summary").click();
-    }
+    // The Team needs group previews every starting position's grade.
+    const teamNeedsGroup = page.locator(".gd-find details.gd-fg").filter({
+      has: page.locator(".gd-fg-title", { hasText: /^Team needs$/ }),
+    });
     await expect(teamNeedsGroup).toHaveAttribute("open", "");
+    const tiles = teamNeedsGroup.locator(".gd-gradepill");
+    await expect(tiles).toHaveCount(7);
+    for (const pos of ["QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"])
+      // Each tile starts with its position name.
+      await expect(tiles.filter({ hasText: pos })).not.toHaveCount(0);
 
-    // Verify Team needs preview displays all 7 positional grade tiles
-    const previewTiles = teamNeedsGroup.locator(".trade-grade-tiles .trade-grade-tile");
-    await expect(previewTiles).toHaveCount(7);
-    for (const pos of ["QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"]) {
-      await expect(teamNeedsGroup.locator(".trade-grade-tiles").getByText(pos, { exact: true })).toBeVisible();
-    }
+    // The goals card starts empty.
+    const goals = page.locator(".gd-find .gd-goals");
+    await expect(goals).toContainText("No positional grade goals configured.");
+    await goals.getByRole("button", { name: "+ Add goal", exact: true }).click();
 
-    // Verify Positional Grade Goals controls container renders inside Team needs
-    const gradeImpactControls = teamNeedsGroup.locator(
-      ".grade-impact-container",
-    );
-    await expect(gradeImpactControls).toBeVisible();
-    await expect(
-      gradeImpactControls.getByText("Positional Grade Goals", { exact: true }),
-    ).toBeVisible();
+    // Configure the rule: Your team -> WR -> Upgrade >= 1 step
+    const team = goals.getByRole("combobox", { name: "Team", exact: true });
+    const position = goals.getByRole("combobox", { name: "Position", exact: true });
+    const steps = goals.getByRole("combobox", { name: "Grade steps", exact: true });
+    await team.selectOption("own");
+    await expect(position.locator('option[value="OVERALL"]')).toHaveText("Overall (net steps)");
+    await position.selectOption("WR");
+    await steps.selectOption("1");
+    await expect(goals.locator(".gd-goal-line")).toContainText(/^Your WR/);
 
-    // Empty state should be visible before adding any goals
-    await expect(
-      gradeImpactControls.locator(".grade-impact-empty"),
-    ).toBeVisible();
-    await expect(
-      gradeImpactControls.locator(".grade-impact-empty"),
-    ).toContainText("No positional grade goals configured.");
-
-    // Click "+ Add Positional Goal" button
-    const addGoalBtn = gradeImpactControls.getByRole("button", {
-      name: "+ Add Positional Goal",
+    // The goal is part of the next search.
+    const run = page.getByRole("button", {
+      name: "Search trades across the league",
       exact: true,
     });
-    await expect(addGoalBtn).toBeVisible();
-    await addGoalBtn.click();
+    await expect(run).toBeEnabled();
+    await run.click();
+    const row = page.locator(".gd-res-row").first();
+    await expect(row).toBeVisible({ timeout: 20000 });
 
-    // Locate the added rule row
-    const ruleRow = gradeImpactControls.locator(".grade-impact-row").first();
-    await expect(ruleRow).toBeVisible();
+    // The candidate row shows the WR upgrade as a grade-step chip.
+    const chip = row.locator('.gd-chipg[data-tone="positive"]').filter({ hasText: "WR" }).first();
+    await expect(chip).toBeVisible();
+    await expect(chip).toContainText("→");
 
-    // Configure the rule: Your team -> WR -> Upgrade ≥ 1 step
-    const teamSelect = ruleRow.locator(
-      'select[aria-label="Standard search grade goal 1 team"]',
-    );
-    const posSelect = ruleRow.locator(
-      'select[aria-label="Standard search grade goal 1 position"]',
-    );
-    const targetSelect = ruleRow.locator(
-      'select[aria-label="Standard search grade goal 1 target"]',
-    );
-
-    await expect(teamSelect).toBeVisible();
-    await teamSelect.selectOption("own");
-
-    await expect(posSelect).toBeVisible();
-    await expect(posSelect.locator('option[value="OVERALL"]')).toHaveText("Overall (Net)");
-    await posSelect.selectOption("WR");
-
-    await expect(targetSelect).toBeVisible();
-    // Value 1 corresponds to "Upgrade ≥ 1 step"
-    await targetSelect.selectOption("1");
-
-    // Verify active filter chip appears with expected text
-    const activeChip = page.locator(
-      '.active-filter-chips button[aria-label="Remove Grade goal: Your WR (upgrade ≥ 1 step)"]',
-    );
-    await expect(activeChip).toBeVisible();
-    await expect(activeChip).toContainText("Grade goal: Your WR (upgrade ≥ 1 step)");
-
-    // Verify standard search execution button is enabled and click to run search
-    const runSearchBtn = page.getByRole("button", {
-      name: "Run standard trade search",
-      exact: true,
-    });
-    await expect(runSearchBtn).toBeEnabled();
-    await runSearchBtn.click();
-
-    // Await search results: team header toggle button
-    const teamHeaderBtn = page.locator("tbody > tr > th button").first();
-    await expect(teamHeaderBtn).toBeVisible({ timeout: 20000 });
-    // Expand team results if collapsed
-    if ((await teamHeaderBtn.getAttribute("aria-expanded")) !== "true") {
-      await teamHeaderBtn.click();
-    }
-
-    // Verify candidate trade result row is rendered
-    const resultRow = page.locator("tr[data-trade-result]").first();
-    await expect(resultRow).toBeVisible();
-
-    // Verify that the candidate row displays the position grade chip with WR upgrade transition
-    const gradeChip = page.locator(".position-grade-chip.good").first();
-    await expect(gradeChip).toBeVisible();
-    await expect(gradeChip).toContainText("WR");
-    await expect(gradeChip.locator(".pos-grades")).toContainText("→");
-
-    // Capture screenshot of the configured Find Trades positional grade goals and matching result row
     await captureScreenshot(page, "find-trades-grade-goals.png");
   });
 
@@ -222,154 +156,52 @@ test.describe("Positional Grade Search E2E", () => {
   }) => {
     // Seed fair chain fixture where starter slots are restricted to RB, WR, TE (QBSlots = 0, FlexSlots = 0)
     await seedWorkspace(page, "chain");
-
-    // Switch to Chain Planner mode in the Trade Analyzer workspace
-    const chainTabBtn = page
-      .getByRole("tab", { name: "Chain planner" })
-      .or(
-        page.getByRole("button", {
-          name: "Two-trade chain planner",
-          exact: true,
-        }),
-      );
-    await expect(chainTabBtn).toBeVisible();
-    await chainTabBtn.click();
-
-    // Verify Chain Planner heading is visible
+    await page.getByRole("tab", { name: "Chain planner", exact: true }).click();
+    await expect(page.locator(".gd-chain")).toBeVisible();
     await expect(
-      page.getByRole("heading", {
-        name: "Two-trade chain planner",
-        exact: true,
-      }),
+      page.getByRole("heading", { name: "Two-trade chain planner", exact: true }),
     ).toBeVisible();
 
-    // Open Chain filter drawer
-    await openTradeFilters(page, "Chain");
+    const legs = page.getByRole("region", { name: "Per-trade settings" });
+    const expectedPositions = ["RB", "WR", "TE", "Overall (net steps)"];
 
-    // Locate Leg 1 ("First trade") and Leg 2 ("Second trade") control sections
-    const leg1 = page
-      .locator("details.trade-chain-leg")
-      .filter({ hasText: "First trade" });
-    const leg2 = page
-      .locator("details.trade-chain-leg")
-      .filter({ hasText: "Second trade" });
+    // Each trade has its own goals: configure Trade 1, then Trade 2.
+    for (const [name, button, pick, steps] of [
+      ["First trade", "Trade 1 settings", "TE", "0"],
+      ["Second trade", "Trade 2 settings", "WR", "1"],
+    ] as const) {
+      await legs.getByRole("button", { name: button }).click();
+      await openTradeFilters(page, "Chain");
+      const goals = legs.getByRole("region", { name: `${name} positional grade goals` });
+      await goals.getByRole("button", { name: "+ Add goal", exact: true }).click();
+      // Positions are limited to the starter positions this league uses.
+      const position = goals.getByRole("combobox", { name: `${name}: Position`, exact: true });
+      expect(await position.locator("option").allTextContents()).toEqual(expectedPositions);
+      await position.selectOption(pick);
+      await goals.getByRole("combobox", { name: `${name}: Grade steps`, exact: true }).selectOption(steps);
+      // The group's summary counts the goal.
+      await expect(
+        legs.locator("details.gd-fg").filter({
+          has: page.locator(".gd-fg-title", { hasText: /^Positional grade goals$/ }),
+        }).locator("> summary .gd-fs"),
+      ).toContainText("1 on");
 
-    await expect(leg1).toBeVisible();
-    await expect(leg2).toBeVisible();
-
-    // Ensure Leg 1 and Leg 2 disclosures are open
-    if ((await leg1.getAttribute("open")) === null) {
-      await leg1.locator(":scope > summary").click();
-    }
-    if ((await leg2.getAttribute("open")) === null) {
-      await leg2.locator(":scope > summary").click();
-    }
-    await expect(leg1).toHaveAttribute("open", "");
-    await expect(leg2).toHaveAttribute("open", "");
-
-    // Verify Positional Grade Goals controls render in Leg 1
-    const leg1GradeControls = leg1.locator(".grade-impact-container");
-    await expect(leg1GradeControls).toBeVisible();
-    await expect(
-      leg1GradeControls.getByText("Positional Grade Goals", { exact: true }),
-    ).toBeVisible();
-
-    // Click "+ Add Positional Goal" on Leg 1
-    const leg1AddBtn = leg1GradeControls.getByRole("button", {
-      name: "+ Add Positional Goal",
-      exact: true,
-    });
-    await expect(leg1AddBtn).toBeVisible();
-    await leg1AddBtn.click();
-
-    // Verify positions in dropdown are filtered to available starter positions (RB, WR, TE)
-    const leg1PosSelect = leg1.locator(
-      'select[aria-label="First trade grade goal 1 position"]',
-    );
-    await expect(leg1PosSelect).toBeVisible();
-    const availableOptions = await leg1PosSelect
-      .locator("option")
-      .allTextContents();
-    expect(availableOptions).toEqual(["RB", "WR", "TE", "Overall (Net)"]);
-    // Confirm unstarted positions are excluded
-    expect(availableOptions).not.toContain("QB");
-    expect(availableOptions).not.toContain("K");
-    expect(availableOptions).not.toContain("D/ST");
-    expect(availableOptions).not.toContain("FLEX");
-
-    // Configure grade goal on Leg 1: TE No drop (≥ 0)
-    await leg1PosSelect.selectOption("TE");
-    const leg1TargetSelect = leg1.locator(
-      'select[aria-label="First trade grade goal 1 target"]',
-    );
-    await leg1TargetSelect.selectOption("0");
-
-    // Verify chain requirement chip displays the active grade goal for Leg 1
-    const leg1Chip = page.locator(
-      '.active-filter-chips button[aria-label="Clear First trade grade goals"]',
-    );
-    await expect(leg1Chip).toBeVisible();
-    await expect(leg1Chip).toContainText("First trade: 1 grade goal");
-
-    // Configure a grade goal on Leg 2 as well to verify multi-leg goal support
-    const leg2GradeControls = leg2.locator(".grade-impact-container");
-    await expect(leg2GradeControls).toBeVisible();
-    const leg2AddBtn = leg2GradeControls.getByRole("button", {
-      name: "+ Add Positional Goal",
-      exact: true,
-    });
-    await expect(leg2AddBtn).toBeVisible();
-    await leg2AddBtn.click();
-
-    // Verify Leg 2 position selector also reflects available starter positions
-    const leg2PosSelect = leg2.locator(
-      'select[aria-label="Second trade grade goal 1 position"]',
-    );
-    await expect(leg2PosSelect).toBeVisible();
-    const leg2Options = await leg2PosSelect
-      .locator("option")
-      .allTextContents();
-    expect(leg2Options).toEqual(["RB", "WR", "TE", "Overall (Net)"]);
-
-    // Configure Leg 2 goal for WR Upgrade >= 1 step
-    await leg2PosSelect.selectOption("WR");
-    const leg2TargetSelect = leg2.locator(
-      'select[aria-label="Second trade grade goal 1 target"]',
-    );
-    await leg2TargetSelect.selectOption("1");
-
-    // Verify chain requirement chip displays the active grade goal for Leg 2
-    const leg2Chip = page.locator(
-      '.active-filter-chips button[aria-label="Clear Second trade grade goals"]',
-    );
-    await expect(leg2Chip).toBeVisible();
-    await expect(leg2Chip).toContainText("Second trade: 1 grade goal");
-
-    // Configure offer/receive and team bounds to quickly execute search with real solutions
-    for (const name of ["First trade", "Second trade"]) {
-      const group = page.getByRole("group", { name, exact: true });
-      await group
+      // Bound the sizes and teams so the search is quick and real.
+      await legs
         .getByRole("combobox", { name: `${name} offer maximum`, exact: true })
         .selectOption(name === "Second trade" ? "2" : "1");
-      if (name === "Second trade") {
-        await group
+      if (name === "Second trade")
+        await legs
           .getByRole("combobox", { name: `${name} offer minimum`, exact: true })
           .selectOption("2");
-      }
-      await group
+      await legs
         .getByRole("combobox", { name: `${name} receive maximum`, exact: true })
         .selectOption("1");
-      await group.locator("summary").filter({ hasText: new RegExp(`^${name} teams`) }).click();
-      await group
-        .getByRole("checkbox", {
-          name: `Override ${name.toLowerCase()} teams`,
-          exact: true,
-        })
+      await legs
+        .getByRole("checkbox", { name: `Override ${name.toLowerCase()} teams`, exact: true })
         .check();
-      await group
-        .getByRole("button", { name: "Clear selection", exact: true })
-        .click();
-      await group
+      await legs.getByRole("button", { name: "Clear selection", exact: true }).click();
+      await legs
         .getByRole("checkbox", {
           name: `${name} team: ${name === "First trade" ? "Chain B" : "Chain C"}`,
           exact: true,
@@ -377,20 +209,13 @@ test.describe("Positional Grade Search E2E", () => {
         .check();
     }
 
-    // Run chain trade search
-    const runChainSearchBtn = page.getByRole("button", {
-      name: "Search trade chains",
-      exact: true,
+    const run = page.getByRole("button", { name: "Run chain trade search", exact: true });
+    await expect(run).toBeEnabled();
+    await run.click();
+    await expect(page.getByText(/[1-9][0-9]* qualifying chains? found/)).toBeVisible({
+      timeout: 25000,
     });
-    await expect(runChainSearchBtn).toBeEnabled();
-    await runChainSearchBtn.click();
 
-    // Verify qualifying chains found message
-    await expect(
-      page.getByText(/[1-9][0-9]* qualifying chains found/),
-    ).toBeVisible({ timeout: 25000 });
-
-    // Capture screenshot of the configured Chain Planner positional grade goals and active chips
     await captureScreenshot(page, "chain-planner-grade-goals.png");
   });
 });

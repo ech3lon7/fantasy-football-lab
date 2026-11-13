@@ -62,6 +62,9 @@ const alias: Record<string, string> = {
   MAIN: "DET",
 };
 
+// Every team code with a colour, for checks that must cover each one.
+export const nflTeamCodes = Object.keys(primary);
+
 // Neutral grey used for free agents, unknown teams and synthetic data.
 const neutral = "#4a5060";
 

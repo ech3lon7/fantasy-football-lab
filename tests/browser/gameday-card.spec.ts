@@ -143,16 +143,14 @@ test("story body is two columns at 1040 and one on a phone", async ({ page }) =>
   expect(await columns()).toBe(1);
 });
 
-// The hero carries the large team-code watermark and three big numbers, EPPG largest.
-test("hero shows the team code watermark and the three lead numbers", async ({
+// The hero carries the halftone background and the four lead numbers, MPPG largest. The team code watermark became the rank numeral.
+test("hero shows the halftone background and the lead numbers", async ({
   page,
 }) => {
   await open(page, "#/player/2");
   const card = page.getByRole("dialog");
-  const big = card.locator(".gd-card-big");
-  await expect(big).toBeVisible();
-  await expect(big).toHaveAttribute("aria-hidden", "true");
-  expect(await big.textContent()).toMatch(/^[A-Z]{2,4}$/);
+  await expect(card.locator(".gd-hx-dots")).toBeAttached();
+  await expect(card.locator(".gd-card-big")).toHaveCount(0);
   const stats = card.locator(".gd-card-stat");
   await expect(stats).toHaveCount(4);
   await expect(stats.nth(0)).toContainText("MPPG");
@@ -196,8 +194,10 @@ test("card has no white fills in dark and team colours stay the same", async ({
   await page.screenshot({ path: "test-results/card-why-dark.png" });
   await card.getByRole("tab", { name: "Numbers" }).click();
   await page.screenshot({ path: "test-results/card-numbers-dark.png" });
+  // The entrance overlays are transient, hidden-from-assistive-technology layers; every other element must be free of white.
   const white = await card.evaluate((root) =>
     [root, ...root.querySelectorAll("*")]
+      .filter((el) => !el.closest(".fx"))
       .filter(
         (el) => getComputedStyle(el).backgroundColor === "rgb(255, 255, 255)",
       )

@@ -21,7 +21,7 @@ export function Lab({
   account: ReactNode;
   feel: FeelValues;
   changeFeel: (
-    key: "theme" | "animation" | "sound" | "haptics",
+    key: "theme" | "animation" | "sound" | "haptics" | "cardEntrances",
     value: string,
   ) => void;
 }) {
