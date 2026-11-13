@@ -89,20 +89,15 @@
   padding-right: 250px;
 }
 :root[data-gameday] .gd-hx-photo {
-  flex: none;
-  width: 140px;
-  height: 164px;
+  /* Match the roster card: translucent image across the whole header behind its content. */
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
-  border-radius: 14px 14px 4px 4px;
-  background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--gd-hero-ink) 22%, transparent),
-      color-mix(in srgb, var(--gd-hero-shade) 35%, transparent)
-    ),
-    var(--ta, var(--tc));
-  box-shadow:
-    0 0 0 3px var(--gd-hero-ink),
-    0 14px 30px color-mix(in srgb, var(--gd-hero-shade) 35%, transparent);
+  opacity: 0.68;
+  pointer-events: none;
 }
 /* The headshot is a landscape image: crop to head and shoulders, with no upscaling filter. */
 :root[data-gameday] .gd-hx-photo img,
@@ -112,6 +107,7 @@
   height: 100%;
   object-fit: cover;
   object-position: 50% 15%;
+  border: 0;
   border-radius: 0;
   font-size: 56px;
 }
@@ -440,10 +436,6 @@
     flex-basis: 100%;
     gap: 14px;
     padding-right: 0;
-  }
-  :root[data-gameday] .gd-hx-photo {
-    width: 92px;
-    height: 108px;
   }
   :root[data-gameday] .gd-hx-photo .gd-photo {
     font-size: 36px;

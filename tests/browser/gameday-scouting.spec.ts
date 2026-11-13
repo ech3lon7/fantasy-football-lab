@@ -81,6 +81,9 @@ test("cards and table show the same players and sort by Expected PPG by default"
   await open(page, "#/scouting");
   const cards = page.locator(".gd-pcard");
   await expect(cards.first()).toBeVisible();
+  // Scouting portraits fill their card headers while player links remain available.
+  await expect(cards.first().locator(".gd-pcard-photo")).toHaveCSS("opacity", "0.68");
+  await expect(cards.first().locator(".gd-pcard-name")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Sort by" })).toHaveValue(
     "expected",
   );

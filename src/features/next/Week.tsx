@@ -455,6 +455,8 @@ export function Week({
                   className={`gd-move gd-move-${move.kind}`}
                   href={move.href}
                 >
+                  {/* Move recommendations use the player's photo as a translucent card background. */}
+                  {p && <span className="gd-move-photo"><PlayerPhoto player={p} size="fill" /></span>}
                   <div
                     style={{
                       display: "flex",
@@ -470,7 +472,6 @@ export function Week({
                           ? "Waiver"
                           : "Lineup"}
                     </small>
-                    {p && <PlayerPhoto player={p} size={36} />}
                   </div>
                   <h3>{move.title}</h3>
                   {move.big && (

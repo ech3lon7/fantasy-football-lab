@@ -95,10 +95,8 @@ export function VersusView({
             className="gd-versus-side"
             style={{ background: s.colors.background, color: s.colors.ink }}
           >
-            <PlayerPhoto
-              player={{ id: s.id, name: s.name, pos: s.pos, nfl: s.nfl }}
-              size={48}
-            />
+            {/* Each comparison side uses the same translucent full-size portrait. */}
+            <span className="gd-versus-photo"><PlayerPhoto player={{ id: s.id, name: s.name, pos: s.pos, nfl: s.nfl }} size="fill" /></span>
             <div className="gd-versus-side-text">
               <small>
                 {s.pos} · {s.nfl}

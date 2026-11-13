@@ -70,8 +70,9 @@ export function PlayerTile({
 }) {
   return (
     <article className="gd-tile" data-role={tile.role} data-player-row="">
+      {/* League roster tiles use a soft full-card portrait behind their statistics. */}
+      <span className="gd-tile-photo"><PlayerPhoto player={player} size="fill" /></span>
       <div className="gd-tile-ident">
-        <PlayerPhoto player={player} size={32} />
         <PlayerName
           p={player}
           className="player-link gd-tile-name"

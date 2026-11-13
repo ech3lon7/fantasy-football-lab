@@ -34,6 +34,15 @@ test.describe("hero header", () => {
   }) => {
     const card = await openCard(page, ids.superstar);
     const hero = card.locator(".gd-hx");
+    // The full-size translucent photo remains behind the hero's readable controls.
+    const photo = hero.locator(".gd-hx-photo");
+    const geometry = await photo.evaluate((el) => {
+      const a = el.getBoundingClientRect(), b = el.closest(".gd-hx")!.getBoundingClientRect();
+      return { width: a.width / b.width, height: a.height / b.height, opacity: Number(getComputedStyle(el).opacity) };
+    });
+    expect(geometry.width).toBeCloseTo(1, 1);
+    expect(geometry.height).toBeCloseTo(1, 1);
+    expect(geometry.opacity).toBeCloseTo(0.68, 2);
     await expect(hero.locator(".gd-hx-dots")).toBeAttached();
     await expect(hero.locator(".gd-hx-num")).toHaveText("1");
     await expect(hero.locator(".gd-hx-num")).toHaveAttribute(

@@ -67,6 +67,8 @@ export function PlayerHero({
 
   return (
     <>
+      {/* Fill the entire player-card hero with the same translucent portrait used on roster cards. */}
+      <div className="gd-hx-photo"><PlayerPhoto player={p} size="fill" /></div>
       <div className="gd-hx-dots" aria-hidden="true" />
       {info?.rank != null && (
         <span className="gd-hx-num" aria-hidden="true">
@@ -99,9 +101,6 @@ export function PlayerHero({
         <div className="gd-hx-posname">{positionName(h.pos)}</div>
       </aside>
       <div className="gd-hx-id">
-        <div className="gd-hx-photo">
-          <PlayerPhoto player={p} size="fill" />
-        </div>
         <div className="gd-hx-name">
           <h2>
             {name.first && <span className="gd-hx-first">{name.first} </span>}

@@ -1212,6 +1212,21 @@
   height: 96px;
   color: #fff;
 }
+/* Fill scouting card headers with a translucent portrait and leave controls above it. */
+:root[data-gameday] .gd-pcard-photo, :root[data-gameday] .gd-versus-photo {
+  position: absolute;
+  inset: 0;
+  opacity: 0.68;
+  overflow: hidden;
+  pointer-events: none;
+}
+:root[data-gameday] .gd-pcard-photo .gd-photo, :root[data-gameday] .gd-versus-photo .gd-photo {
+  border: 0;
+  border-radius: 0;
+}
+:root[data-gameday] .gd-pcard-photo img, :root[data-gameday] .gd-versus-photo img {
+  object-position: 50% 20%;
+}
 :root[data-gameday] .gd-pcard-wm {
   position: absolute;
   right: -6px;
@@ -1493,12 +1508,15 @@
   grid-template-columns: 1fr 1fr;
 }
 :root[data-gameday] .gd-versus-side {
+  position: relative;
+  overflow: hidden;
   padding: 24px 56px 16px 20px;
   display: flex;
   align-items: center;
   gap: 16px;
 }
 :root[data-gameday] .gd-versus-side-text {
+  position: relative;
   min-width: 0;
 }
 :root[data-gameday] .gd-versus-side h2 {
@@ -2488,6 +2506,9 @@
   gap: 10px;
 }
 :root[data-gameday] .gd-tile {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 6px 10px;
@@ -2496,6 +2517,20 @@
   border: 2px solid var(--gd-line);
   border-radius: var(--gd-radius);
 }
+/* League tiles keep a lighter image layer so text stays readable on both themes. */
+:root[data-gameday] .gd-tile-photo, :root[data-gameday] .gd-move-photo {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.24;
+  pointer-events: none;
+  overflow: hidden;
+}
+:root[data-gameday] .gd-tile-photo .gd-photo, :root[data-gameday] .gd-move-photo .gd-photo {
+  border: 0;
+  border-radius: 0;
+}
+:root[data-gameday] .gd-tile-photo img, :root[data-gameday] .gd-move-photo img { object-position: 50% 20%; }
 :root[data-gameday] .gd-tile[data-role="Starter"] {
   border-color: var(--gd-ink);
   border-left: 8px solid var(--gd-selected);
@@ -3105,6 +3140,9 @@
   gap: 14px;
 }
 :root[data-gameday] .gd-move {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 10px;

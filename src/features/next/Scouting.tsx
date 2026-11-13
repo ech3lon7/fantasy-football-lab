@@ -690,11 +690,12 @@ export function Scouting({
                               color: c.colors.ink,
                             }}
                           >
+                            {/* The card header uses the roster's full-size translucent portrait. */}
+                            <span className="gd-pcard-photo"><PlayerPhoto player={p} size="fill" /></span>
                             <span className="gd-pcard-wm" aria-hidden="true">
                               {c.nfl}
                             </span>
                             <div className="gd-pcard-ident">
-                              <PlayerPhoto player={p} size={36} />
                               <PlayerName
                                 p={p}
                                 className="player-link gd-pcard-name"
