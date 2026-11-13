@@ -3,6 +3,7 @@ import { evaluate } from "../src/domain/valuation";
 import { readStarterLineup, starterTemplate } from "../src/domain/starter-lineups";
 import {
   optimizeLineup,
+  moveFormationPlayer,
   pinBlocker,
   type FormationSlot,
 } from "../src/domain/lineup-optimizer";
@@ -25,6 +26,18 @@ async function setup(options: { byeStarter?: boolean; optimal?: boolean } = {}) 
   }));
   return { m, team, current };
 }
+
+// Manual moves keep the selected slot, swap only legal starters and reject invalid positions.
+describe("manual formation moves", () => {
+  it("starts a backup in FLEX without moving other starters", async () => {
+    const { m, team, current } = await setup();
+    const flex = current.find((slot) => slot.slot === "FLEX")!;
+    const moved = moveFormationPlayer(m, team, current, "10", flex.index);
+    expect(moved.find((slot) => slot.index === flex.index)?.playerId).toBe("10");
+    expect(moved.filter((slot) => slot.index !== flex.index)).toEqual(current.filter((slot) => slot.index !== flex.index));
+    expect(() => moveFormationPlayer(m, team, current, "10", 0)).toThrow(/not eligible/);
+  });
+});
 
 describe("optimizer: maximum-MPPG lineup", () => {
   it("starts a bench RB over the starting FLEX WR and only that slot moves", async () => {

@@ -8,7 +8,9 @@ import {
 } from "../../domain/view/formation";
 import {
   optimizeLineup,
+  moveFormationPlayer,
   pinBlocker,
+  type FormationSlot,
   type OptimizeResult,
 } from "../../domain/lineup-optimizer";
 import { clearPins, lineupPinsKey, pinsFor, setPin } from "../../domain/lineup-pins";
@@ -61,20 +63,26 @@ function BackupRow({
   player,
   pinned,
   onPin,
+  onMove,
 }: {
   backup: BackupView;
   player: Player | null;
   pinned: boolean;
   onPin: (id: string) => void;
+  onMove: (id: string) => void;
 }) {
   return (
     <div
       className={`gd-fc-bk gd-fb-${backup.tone}${backup.empty ? " gd-fb-none" : ""}`}
+      draggable={!!player}
+      onDragStart={(event) => { event.stopPropagation(); if (player) event.dataTransfer.setData("text/plain", player.id); }}
     >
       {backup.empty || !player ? (
         <span className="gd-fc-bkn">No backup</span>
       ) : (
         <>
+          {/* A dedicated handle keeps the dragged player unambiguous beside links and controls. */}
+          <button type="button" className="gd-fc-move" draggable aria-label={`Drag ${player.name}`} onDragStart={(event) => { event.stopPropagation(); event.dataTransfer.setData("text/plain", player.id); }}>⋮⋮</button>
           <PinButton player={player} pinned={pinned} onToggle={onPin} backup />
           <PlayerName
             p={player}
@@ -86,6 +94,7 @@ function BackupRow({
             <span className="gd-fc-bkn-last">{backup.lastName}</span>
           </PlayerName>
           <b>{backup.mppgText}</b>
+          <button type="button" className="gd-fc-move" aria-label={`Start ${player.name} in this slot`} onClick={() => onMove(player.id)}>Start</button>
         </>
       )}
     </div>
@@ -99,6 +108,9 @@ function SlotCard({
   onCut,
   pins,
   onPin,
+  onMove,
+  selected,
+  onSelect,
 }: {
   card: SlotCardView;
   m: Model;
@@ -106,10 +118,13 @@ function SlotCard({
   onCut?: (id: string) => void;
   pins: string[];
   onPin: (id: string) => void;
+  onMove: (id: string) => void;
+  selected: string | null;
+  onSelect: (id: string | null) => void;
 }) {
   const player = card.playerId ? (m.byId.get(card.playerId) ?? null) : null;
   return (
-    <article className={`gd-fc gd-fc-${card.tone}${isNew ? " gd-fc-new" : ""}`}>
+    <article className={`gd-fc gd-fc-${card.tone}${isNew ? " gd-fc-new" : ""}`} draggable={!!player} onDragStart={(event) => { if (player) event.dataTransfer.setData("text/plain", player.id); }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onMove(event.dataTransfer.getData("text/plain")); }}>
       <div className="gd-fc-ph">
         {player && <PinButton player={player} pinned={pins.includes(player.id)} onToggle={onPin} />}
         <span className="gd-fc-badge" title={card.buildLine || undefined}>
@@ -118,34 +133,26 @@ function SlotCard({
         </span>
         {card.flexPos && <span className="gd-fc-flex">{card.flexPos}</span>}
         {player ? (
-          <FieldPhoto player={player} />
+          <span draggable onDragStart={(event) => event.dataTransfer.setData("text/plain", player.id)}><FieldPhoto player={player} /></span>
         ) : (
           <span className="gd-fc-av gd-fc-av-empty">—</span>
         )}
+        {/* The portrait and bold player identity mirror the larger player profile. */}
+        {player ? <PlayerName p={player} className="gd-fc-nm" ariaLabel={card.accessibleName}><span>{player.name.split(" ").slice(0, -1).join(" ")}</span><b>{player.name.split(" ").slice(-1)[0]}</b><small>{player.pos} · {player.nfl}</small></PlayerName> : <span className="gd-fc-nm" aria-label={card.accessibleName}>{card.shortName}</span>}
         {card.matchupLine && (
           <span className="gd-fc-mu">{card.matchupLine}</span>
         )}
         {isNew && <span className="gd-fc-newtag">▲ In</span>}
       </div>
-      {player ? (
-        <PlayerName
-          p={player}
-          className="gd-fc-nm"
-          ariaLabel={card.accessibleName}
-        >
-          {card.shortName}
-        </PlayerName>
-      ) : (
-        <span className="gd-fc-nm" aria-label={card.accessibleName}>
-          {card.shortName}
-        </span>
-      )}
+      {player && <button type="button" className="gd-fc-move" onClick={() => onSelect(selected === player.id ? null : player.id)}>{selected === player.id ? "Cancel move" : "Move"}</button>}
+      {selected && selected !== player?.id && <button type="button" className="gd-fc-move" onClick={() => onMove(selected)}>Place here</button>}
       {card.backups.map((backup, index) => (
         <BackupRow
           key={index}
           backup={backup}
           pinned={!!backup.playerId && pins.includes(backup.playerId)}
           onPin={onPin}
+          onMove={onMove}
           player={
             backup.playerId ? (m.byId.get(backup.playerId) ?? null) : null
           }
@@ -175,6 +182,9 @@ function Slot({
   onCut,
   pins,
   onPin,
+  onMove,
+  selected,
+  onSelect,
 }: {
   card: SlotCardView;
   m: Model;
@@ -183,6 +193,9 @@ function Slot({
   onCut?: (id: string) => void;
   pins: string[];
   onPin: (id: string) => void;
+  onMove: (id: string, index: number) => void;
+  selected: string | null;
+  onSelect: (id: string | null) => void;
 }) {
   return (
     <div
@@ -196,7 +209,7 @@ function Slot({
         } as CSSProperties
       }
     >
-      <SlotCard card={card} m={m} isNew={isNew} onCut={onCut} pins={pins} onPin={onPin} />
+      <SlotCard card={card} m={m} isNew={isNew} onCut={onCut} pins={pins} onPin={onPin} onMove={(id) => onMove(id, card.index)} selected={selected} onSelect={onSelect} />
       <div className="gd-fs-lab">
         <b>{card.label}</b>
         <GradeBadge grade={card.grade} tone={card.gradeTone} />
@@ -252,6 +265,7 @@ function changeLine(
 function FormationBar({
   view,
   optimized,
+  manual,
   preview,
   labels,
   onOptimize,
@@ -265,6 +279,7 @@ function FormationBar({
 }: {
   view: FormationView;
   optimized: OptimizeResult | null;
+  manual: boolean;
   preview: OptimizeResult;
   labels: Map<number, string>;
   onOptimize: () => void;
@@ -277,7 +292,7 @@ function FormationBar({
   onClearPins: () => void;
 }) {
   const canOptimize = preview.changes.length > 0 && preview.conflicts.length === 0;
-  const label = optimized ? "Optimized lineup" : view.source;
+  const label = manual ? "Unsaved lineup" : optimized ? "Optimized lineup" : view.source;
   return (
     <div className="gd-fm-bar">
       <div className="gd-fm-tot">
@@ -285,7 +300,9 @@ function FormationBar({
         <b>{view.total.toFixed(1)}</b>
         <span>± {view.spread.toFixed(1)}</span>
       </div>
-      {optimized ? (
+      {manual ? (
+        <><span className="gd-fm-hint">Save these lineup changes in the app. ESPN is unchanged.</span><div className="gd-fm-acts"><button type="button" className="gd-fm-opt" onClick={onSave}>Save lineup</button><button type="button" className="gd-fm-opt gd-fm-ghost" onClick={onUndo}>Undo</button></div></>
+      ) : optimized ? (
         <>
           <div className="gd-fm-res">
             <b>
@@ -386,8 +403,11 @@ export function Formation({
   );
   // The optimized result is view state only; the component's key resets it on a new import or simulation.
   const [optimized, setOptimized] = useState<OptimizeResult | null>(null);
+  // Manual rearrangements stay as a draft until the user saves the exact slots.
+  const [manual, setManual] = useState<FormationSlot[] | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
   const [toast, setToast] = useState("");
-  const lineup = optimized ? optimized.slots : base.lineup;
+  const lineup = manual ?? optimized?.slots ?? base.lineup;
   const view = useMemo(
     () => formationView(m, team, grades, lineup, base.source),
     [m, team, grades, lineup, base.source],
@@ -416,6 +436,7 @@ export function Formation({
     );
 
   function optimize() {
+    setManual(null);
     setOptimized(preview);
     setToast("");
     notify("success");
@@ -436,14 +457,17 @@ export function Formation({
   }
 
   function undo() {
+    setManual(null);
+    setSelected(null);
     setOptimized(null);
     setToast("");
   }
 
   // Persist the exact optimized slot assignments without changing the imported ESPN roster.
   function save() {
-    if (!optimized) return;
-    const assignments = [...optimized.slots].sort((a, b) => a.index - b.index).map((slot) => slot.playerId);
+    const pending = manual ?? optimized?.slots;
+    if (!pending) return;
+    const assignments = [...pending].sort((a, b) => a.index - b.index).map((slot) => slot.playerId);
     const ids = assignments.filter((id): id is string => id !== null);
     try {
       if (m.simulation) {
@@ -452,11 +476,24 @@ export function Formation({
         onFilters({ [starterLineupsKey]: saveStarterLineup(m, team, ids, raw, assignments) });
       }
       setOptimized(null);
+      setManual(null);
       setToast("Lineup saved in the app. ESPN is unchanged.");
       notify("success");
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Could not save lineup.");
       notify("caution");
+    }
+  }
+
+  // All drag, click and keyboard actions share the same position-safe move rule.
+  function move(id: string, index: number) {
+    try {
+      setManual(moveFormationPlayer(m, team, lineup, id, index));
+      setOptimized(null);
+      setSelected(null);
+      setToast("Lineup changed. Save lineup to keep it.");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Could not move player.");
     }
   }
 
@@ -494,6 +531,7 @@ export function Formation({
           <FormationBar
             view={view}
             optimized={optimized}
+            manual={manual !== null}
             preview={preview}
             labels={labels}
             onOptimize={optimize}
@@ -526,6 +564,9 @@ export function Formation({
               onCut={onCut}
               pins={pins}
               onPin={togglePin}
+              onMove={move}
+              selected={selected}
+              onSelect={setSelected}
             />
           ))}
         </div>
@@ -542,6 +583,9 @@ export function Formation({
               onCut={onCut}
               pins={pins}
               onPin={togglePin}
+              onMove={move}
+              selected={selected}
+              onSelect={setSelected}
             />
           ))}
           <div className="gd-fm-st">
@@ -557,6 +601,9 @@ export function Formation({
                   onCut={onCut}
                   pins={pins}
                   onPin={togglePin}
+                  onMove={move}
+                  selected={selected}
+                  onSelect={setSelected}
                 />
               ))}
             </div>

@@ -1943,8 +1943,10 @@
   position: relative;
   height: 132px;
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 22px 7px 20px;
   background: linear-gradient(180deg, var(--fc1) 0%, var(--fc2) 100%);
 }
 :root[data-gameday] .gd-fc-good {
@@ -1972,10 +1974,11 @@
   background: linear-gradient(180deg, var(--fc1), var(--fc2));
 }
 :root[data-gameday] .gd-fc-av {
-  width: 84px;
-  height: 96px;
+  width: 65px;
+  height: 85px;
   /* Match the profile's framed portrait while leaving the matchup gradient visible. */
   border-radius: 8px;
+  border: 2px solid white;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1990,10 +1993,12 @@
   background: rgba(0, 0, 0, 0.25);
   color: rgba(255, 255, 255, 0.6);
 }
-:root[data-gameday] .gd-fc-photo {
+:root[data-gameday] .gd-fc-av .gd-fc-photo {
   display: block;
   width: 100%;
   height: 100%;
+  border: 0;
+  border-radius: 0;
 }
 :root[data-gameday] .gd-fc-photo img {
   object-fit: cover !important;
@@ -2059,9 +2064,10 @@
   text-overflow: ellipsis;
 }
 :root[data-gameday] .gd-fc-nm {
-  display: block;
+  display: flex;
+  flex-direction: column;
   border: 0;
-  background: #232a35;
+  background: transparent;
   color: #fff;
   font-family: var(--gd-font-display);
   font-weight: 800;
@@ -2070,12 +2076,28 @@
   text-transform: uppercase;
   text-align: left;
   text-decoration: none;
-  padding: 6px 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  padding: 0;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
   cursor: pointer;
-  border-bottom: 3px solid var(--fc1);
+  border-bottom: 0;
+}
+/* Match the profile's separated first name, bold surname and compact position line. */
+:root[data-gameday] .gd-fc-nm span { font-size: 10px; }
+:root[data-gameday] .gd-fc-nm b { font-size: 16px; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-gameday] .gd-fc-nm small { font-size: 9px; }
+:root[data-gameday] .gd-fc-move { background: #263444; color: white; border: 0; padding: 3px 6px; cursor: pointer; font-size: 10px; }
+/* Compact phone cards retain readable identity and touch controls without vertical letter wrapping. */
+@media (max-width: 719px) {
+  :root[data-gameday] .gd-fm .gd-fc-ph { gap: 3px; padding: 20px 4px; }
+  :root[data-gameday] .gd-fm .gd-fc-av { width: 38px; height: 56px; }
+  :root[data-gameday] .gd-fm .gd-fc-nm { padding: 0; }
+  :root[data-gameday] .gd-fc-nm span, :root[data-gameday] .gd-fc-nm small { font-size: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :root[data-gameday] .gd-fc-nm b { font-size: 10px; }
+  :root[data-gameday] .gd-fm .gd-fc-bk { gap: 2px; padding: 3px; }
+  :root[data-gameday] .gd-fc-bk [draggable="true"] { display: none; }
+  :root[data-gameday] .gd-fc-bk .gd-fc-move { padding: 2px; font-size: 9px; }
 }
 :root[data-gameday] .gd-fc-nm:hover {
   text-decoration: underline;

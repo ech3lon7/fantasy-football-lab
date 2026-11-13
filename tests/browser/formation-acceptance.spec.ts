@@ -2,14 +2,35 @@ import { expect, test } from "@playwright/test";
 import { seedFormation } from "./formation-seed";
 import { openRosterTools } from "./roster-workspace-helpers";
 
+// A backup can be dragged into FLEX and the exact slot persists after saving.
+test("drag a backup into the selected slot and save it", async ({ page }) => {
+  await seedFormation(page);
+  const flex = page.locator('.gd-fs[data-slot="FLEX"]');
+  await flex.getByRole("button", { name: "Drag Marquise Dunn" }).dragTo(flex.locator(".gd-fc-ph"));
+  await expect(flex.locator(".gd-fc-nm")).toContainText("Dunn");
+  await page.getByRole("button", { name: "Save lineup", exact: true }).first().click();
+  await page.reload();
+  await expect(flex.locator(".gd-fc-nm")).toContainText("Dunn");
+});
+
+// The touch-friendly Start button performs the same exact-slot move on a phone.
+test("start a backup without dragging on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await seedFormation(page);
+  const flex = page.locator('.gd-fs[data-slot="FLEX"]');
+  await flex.getByRole("button", { name: "Start Marquise Dunn in this slot" }).click();
+  await expect(flex.locator(".gd-fc-nm")).toContainText("Dunn");
+  await expect(page.getByRole("button", { name: "Save lineup", exact: true }).first()).toBeVisible();
+});
+
 // An optimized live lineup is explicitly saved in app settings and survives a reload.
 test("save optimized formation to the live lineup", async ({ page }) => {
   await seedFormation(page);
   await page.getByRole("button", { name: /Optimize lineup/ }).click();
   await page.getByRole("button", { name: "Save lineup", exact: true }).first().click();
-  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("M.DUNN");
+  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("Dunn");
   await page.reload();
-  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("M.DUNN");
+  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("Dunn");
   await expect(page.locator(".gd-fm-tot small")).toHaveText("Your saved lineup · MPPG");
   await expect(page.getByText("Show depth-only pickups")).toHaveCount(0);
 });
@@ -21,12 +42,12 @@ test("save a simulated lineup and select another team", async ({ page }) => {
   await page.getByRole("button", { name: "New simulation", exact: true }).click();
   await page.getByRole("button", { name: /Optimize lineup/ }).click();
   await page.getByRole("button", { name: "Save lineup", exact: true }).first().click();
-  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("M.DUNN");
+  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("Dunn");
   await page.reload();
-  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("M.DUNN");
+  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("Dunn");
   await openRosterTools(page);
   await page.getByLabel("Simulated team to edit").selectOption("2");
-  await expect(page.locator('.gd-fs[data-slot="QB"] .gd-fc-nm')).not.toContainText("J.MERCER");
+  await expect(page.locator('.gd-fs[data-slot="QB"] .gd-fc-nm')).not.toContainText("Mercer");
 });
 
 // The initial ESPN lineup and a subsequently saved app lineup must both drive the formation.
@@ -34,7 +55,7 @@ test("formation uses the saved lineup when the starter editor saves one", async 
   await page.setViewportSize({ width: 1320, height: 1000 });
   await seedFormation(page);
   await expect(page.locator(".gd-fm-tot small")).toHaveText("Your ESPN lineup · MPPG");
-  await expect(page.locator('.gd-fs[data-slot="QB"] .gd-fc-nm')).toContainText("J.MERCER");
+  await expect(page.locator('.gd-fs[data-slot="QB"] .gd-fc-nm')).toContainText("Mercer");
   // The starter name itself remains a keyboard-accessible player-card trigger.
   const starter = page.locator('.gd-fs[data-slot="QB"] a.gd-fc-nm');
   await starter.focus();
@@ -46,10 +67,10 @@ test("formation uses the saved lineup when the starter editor saves one", async 
   await page.getByRole("combobox", { name: "Lineup status: Nico Reyes" }).selectOption("Starter");
   await page.getByRole("button", { name: "Save lineup", exact: true }).click();
   await expect(page.locator(".gd-fm-tot small")).toHaveText("Your saved lineup · MPPG");
-  await expect(page.locator('.gd-fs[data-slot="QB"] .gd-fc-nm')).toContainText("N.REYES");
+  await expect(page.locator('.gd-fs[data-slot="QB"] .gd-fc-nm')).toContainText("Reyes");
   await page.getByRole("button", { name: /Optimize lineup/ }).click();
   await page.getByRole("button", { name: "Undo", exact: true }).click();
-  await expect(page.locator('.gd-fs[data-slot="QB"] .gd-fc-nm')).toContainText("N.REYES");
+  await expect(page.locator('.gd-fs[data-slot="QB"] .gd-fc-nm')).toContainText("Reyes");
 });
 
 // Matchup colors, text, two backups, and the approved desktop height are all visible on real cards.

@@ -17,7 +17,7 @@ test("pin a backup, optimize, reload and clear pins", async ({ page }) => {
   await page.getByRole("button", { name: /Optimize lineup/ }).click();
   await expect(page.locator(".gd-fm-ch").filter({ hasText: "Kofi Osei" })).toContainText("(pinned)");
   await expect(page.locator(".gd-fm-ch").filter({ hasText: "Marquise Dunn" })).toBeVisible();
-  await expect(page.locator(".gd-fc-nm").filter({ hasText: "K.OSEI" })).toBeVisible();
+  await expect(page.locator(".gd-fc-nm").filter({ hasText: "Osei" })).toBeVisible();
   await page.locator(".gd-fm").screenshot({ path: test.info().outputPath("pins-after-dark-1320.png"), animations: "disabled" });
   await hiddenNavigation.evaluate((style) => style.parentNode?.removeChild(style));
   await page.setViewportSize({ width: 390, height: 1000 });

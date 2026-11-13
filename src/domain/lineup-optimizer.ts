@@ -16,6 +16,21 @@ export interface FormationSlot {
   playerId: string | null;
 }
 
+// Move a roster player into the chosen slot, swapping starters only when both positions fit.
+export function moveFormationPlayer(m: Model, team: string, slots: FormationSlot[], id: string, targetIndex: number): FormationSlot[] {
+  const player = m.byId.get(id);
+  const target = slots.find((slot) => slot.index === targetIndex);
+  const source = slots.find((slot) => slot.playerId === id);
+  const accepts = (slot: SlotKind, pos: string) => slot === "FLEX" ? ["RB", "WR", "TE"].includes(pos) : slot === pos;
+  if (!player || player.owner !== team || irAssignments(m, roster(m, team)).includes(id)) throw Error("Select a player on this roster who is not on IR.");
+  if (!target || !accepts(target.slot, player.pos)) throw Error(`${player.name} is not eligible for that slot.`);
+  if (source && source.index !== target.index && target.playerId) {
+    const displaced = m.byId.get(target.playerId);
+    if (!displaced || !accepts(source.slot, displaced.pos)) throw Error("These starters cannot swap because their positions do not fit both slots.");
+  }
+  return slots.map((slot) => slot.index === target.index ? { ...slot, playerId: id } : source && slot.index === source.index ? { ...slot, playerId: target.playerId } : slot);
+}
+
 export interface OptimizeInput {
   // The lineup on screen: ESPN, saved app lineup or a simulation's.
   current: FormationSlot[];
