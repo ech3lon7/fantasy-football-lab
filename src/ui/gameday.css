@@ -4316,6 +4316,35 @@
     overflow-x: auto;
     max-width: 100%;
   }
+
+  /* Trade score strip: stacks neatly on small screens so it never overflows viewport width */
+  :root[data-gameday] .trade-score-strip {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+  }
+  :root[data-gameday] .trade-score-values {
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    font-size: 13.5px;
+  }
+  :root[data-gameday] .trade-score-context-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  :root[data-gameday] .trade-score-context-row > div {
+    flex-wrap: wrap;
+  }
+  :root[data-gameday] .trade-stress-test,
+  :root[data-gameday] .trade-saved-drawer {
+    max-width: 100%;
+    overflow-x: auto;
+    box-sizing: border-box;
+  }
 }
 /* Grid items default to their content's minimum width, which let wide tables stretch whole pages; each screen's column may shrink instead. */
 :root[data-gameday] .gd-week,
