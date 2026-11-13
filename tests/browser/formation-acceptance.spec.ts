@@ -2,6 +2,24 @@ import { expect, test } from "@playwright/test";
 import { seedFormation } from "./formation-seed";
 import { openRosterTools } from "./roster-workspace-helpers";
 
+// Photo frames fill the matchup panel and remain translucent without covering the text controls.
+test("formation portraits fill the card and preserve controls", async ({ page }) => {
+  await seedFormation(page);
+  const panel = page.locator('.gd-fs[data-slot="QB"] .gd-fc-ph');
+  const portrait = panel.locator(".gd-fc-av");
+  const dimensions = await portrait.evaluate((el) => {
+    const photo = el.getBoundingClientRect();
+    const parent = el.closest(".gd-fc-ph")!.getBoundingClientRect();
+    return { width: photo.width / parent.width, height: photo.height / parent.height, opacity: Number(getComputedStyle(el).opacity) };
+  });
+  expect(dimensions.width).toBeCloseTo(1, 1);
+  expect(dimensions.height).toBeCloseTo(1, 1);
+  expect(dimensions.opacity).toBeGreaterThan(0);
+  expect(dimensions.opacity).toBeLessThan(1);
+  await expect(panel.locator(".gd-fc-nm")).toBeVisible();
+  await expect(panel.getByRole("button", { name: /Pin Jalen Mercer/ })).toBeVisible();
+});
+
 // Roster cards reuse the profile gradient and dot texture with the matchup color substituted.
 test("roster card uses the player profile background and texture", async ({ page }) => {
   await seedFormation(page);

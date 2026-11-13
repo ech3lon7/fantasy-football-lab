@@ -17,7 +17,6 @@ import { clearPins, lineupPinsKey, pinsFor, setPin } from "../../domain/lineup-p
 import { Pin } from "lucide-react";
 import { saveStarterLineup, starterLineupsKey } from "../../domain/starter-lineups";
 import type { ScenarioMove } from "../../domain/roster-scenarios";
-import { teamColors } from "../../domain/view/nfl-colors";
 import type { PositionGrade } from "../../domain/lineups";
 import type { Model, Player } from "../../domain/valuation";
 import { useFeedback } from "../../ui/feel/feedback";
@@ -25,14 +24,10 @@ import { GradeBadge } from "../../ui/GradeBadge";
 import { PlayerName } from "../../ui/PlayerName";
 import { PlayerPhoto } from "../../ui/PlayerPhoto";
 
-// The field is the same dark turf in both themes; only the page around it follows the theme.
+// The photo is a translucent full-card layer; missing images retain the initials fallback.
 function FieldPhoto({ player }: { player: Player }) {
-  const colors = teamColors(player.nfl);
   return (
-    <span
-      className="gd-fc-av"
-      style={{ background: colors.background, color: colors.ink }}
-    >
+    <span className="gd-fc-av">
       <PlayerPhoto player={player} size="fill" className="gd-fc-photo" />
     </span>
   );
@@ -135,7 +130,7 @@ function SlotCard({
         </span>
         {card.flexPos && <span className="gd-fc-flex">{card.flexPos}</span>}
         {player ? (
-          <span draggable onDragStart={(event) => event.dataTransfer.setData("text/plain", player.id)}><FieldPhoto player={player} /></span>
+          <span className="gd-fc-portrait" draggable onDragStart={(event) => event.dataTransfer.setData("text/plain", player.id)}><FieldPhoto player={player} /></span>
         ) : (
           <span className="gd-fc-av gd-fc-av-empty">—</span>
         )}
