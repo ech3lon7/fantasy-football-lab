@@ -1974,7 +1974,8 @@
 :root[data-gameday] .gd-fc-av {
   width: 84px;
   height: 96px;
-  border-radius: 42px 42px 8px 8px;
+  /* Match the profile's framed portrait while leaving the matchup gradient visible. */
+  border-radius: 8px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1995,8 +1996,8 @@
   height: 100%;
 }
 :root[data-gameday] .gd-fc-photo img {
-  object-fit: contain !important;
-  object-position: bottom center !important;
+  object-fit: cover !important;
+  object-position: center top !important;
 }
 :root[data-gameday] .gd-fc-badge {
   position: absolute;

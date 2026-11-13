@@ -1,5 +1,33 @@
 import { expect, test } from "@playwright/test";
 import { seedFormation } from "./formation-seed";
+import { openRosterTools } from "./roster-workspace-helpers";
+
+// An optimized live lineup is explicitly saved in app settings and survives a reload.
+test("save optimized formation to the live lineup", async ({ page }) => {
+  await seedFormation(page);
+  await page.getByRole("button", { name: /Optimize lineup/ }).click();
+  await page.getByRole("button", { name: "Save lineup", exact: true }).first().click();
+  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("M.DUNN");
+  await page.reload();
+  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("M.DUNN");
+  await expect(page.locator(".gd-fm-tot small")).toHaveText("Your saved lineup · MPPG");
+  await expect(page.getByText("Show depth-only pickups")).toHaveCount(0);
+});
+
+// Simulations save the optimized assignment and allow the other team's depth chart to be selected.
+test("save a simulated lineup and select another team", async ({ page }) => {
+  await seedFormation(page);
+  await openRosterTools(page);
+  await page.getByRole("button", { name: "New simulation", exact: true }).click();
+  await page.getByRole("button", { name: /Optimize lineup/ }).click();
+  await page.getByRole("button", { name: "Save lineup", exact: true }).first().click();
+  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("M.DUNN");
+  await page.reload();
+  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("M.DUNN");
+  await openRosterTools(page);
+  await page.getByLabel("Simulated team to edit").selectOption("2");
+  await expect(page.locator('.gd-fs[data-slot="QB"] .gd-fc-nm')).not.toContainText("J.MERCER");
+});
 
 // The initial ESPN lineup and a subsequently saved app lineup must both drive the formation.
 test("formation uses the saved lineup when the starter editor saves one", async ({ page }) => {

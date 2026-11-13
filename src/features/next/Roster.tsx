@@ -152,9 +152,9 @@ export function Roster({
   const [scope, setScope] = useState<"season" | "week">("season");
   const chart = depthChart(m, team, grades),
     pairs = useMemo(() => addDropPairs(m, team, 10, 25, scope), [m, team, scope]),
-    [depthOnly, setDepthOnly] = useState(true),
     [tried, setTried] = useState("");
-  const shownPairs = pairs.filter((p) => depthOnly || p.starts === "starts");
+  // Show only pickups that improve a starting lineup.
+  const shownPairs = pairs.filter((p) => p.starts === "starts");
   const handleCut = (id: string) => {
     if (tryPair([{ kind: "move", player: id, from: team, to: "0" }])) {
       const p = m.byId.get(id);
@@ -179,14 +179,6 @@ export function Roster({
             ? `For each available player, the drop that helps your weekly lineup most by MPPG. Gains are Week ${m.current} MPPG with a spread.`
             : "For each available player, the drop that helps your lineup most, using your existing drop rules. Gains are Expected PPG per week with a spread."}
         </p>
-        <label className="gd-check">
-          <input
-            type="checkbox"
-            checked={depthOnly}
-            onChange={(e) => setDepthOnly(e.target.checked)}
-          />
-          Show depth-only pickups
-        </label>
         {shownPairs.length === 0 ? (
           <p className="gd-muted">No pickup would change your lineup.</p>
         ) : (
@@ -202,11 +194,7 @@ export function Roster({
                     ? "—"
                     : `${p.gain.gain > 0 ? "+" : ""}${p.gain.gain.toFixed(1)}${p.gain.spread === null ? "" : ` ± ${p.gain.spread.toFixed(1)}`}`}
                 </span>
-                <Chip tone={p.starts === "starts" ? "positive" : "neutral"}>
-                  {p.starts === "starts"
-                    ? `Starts at ${p.startsAt}`
-                    : "Depth only"}
-                </Chip>
+                <Chip tone="positive">Starts at {p.startsAt}</Chip>
                 <button
                   type="button"
                   className="gd-pill"
@@ -252,6 +240,7 @@ export function Roster({
           filters={filters}
           onFilters={onFilters}
           onCut={m.simulation ? handleCut : undefined}
+          onSaveSimulation={(move) => tryPair([move])}
         />
         {chart.every((group) => group.tiles.length === 0) && (
           <p>No players on this roster.</p>

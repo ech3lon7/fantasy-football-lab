@@ -13,7 +13,8 @@ import {
 } from "../../domain/lineup-optimizer";
 import { clearPins, lineupPinsKey, pinsFor, setPin } from "../../domain/lineup-pins";
 import { Pin } from "lucide-react";
-import { starterLineupsKey } from "../../domain/starter-lineups";
+import { saveStarterLineup, starterLineupsKey } from "../../domain/starter-lineups";
+import type { ScenarioMove } from "../../domain/roster-scenarios";
 import { teamColors } from "../../domain/view/nfl-colors";
 import type { PositionGrade } from "../../domain/lineups";
 import type { Model, Player } from "../../domain/valuation";
@@ -256,6 +257,7 @@ function FormationBar({
   onOptimize,
   onUndo,
   onCopy,
+  onSave,
   pins,
   pinNames,
   conflictNames,
@@ -268,6 +270,7 @@ function FormationBar({
   onOptimize: () => void;
   onUndo: () => void;
   onCopy: () => void;
+  onSave: () => void;
   pins: string[];
   pinNames: string[];
   conflictNames: string[];
@@ -306,6 +309,9 @@ function FormationBar({
             </span>
           </div>
           <div className="gd-fm-acts">
+            <button type="button" className="gd-fm-opt" onClick={onSave}>
+              Save lineup
+            </button>
             <button type="button" className="gd-fm-opt gd-fm-ghost" onClick={onCopy}>
               Copy changes
             </button>
@@ -355,6 +361,7 @@ export function Formation({
   filters,
   onFilters,
   onCut,
+  onSaveSimulation,
 }: {
   m: Model;
   team: string;
@@ -362,6 +369,7 @@ export function Formation({
   filters: Record<string, string>;
   onFilters: (patch: Record<string, string>) => void;
   onCut?: (id: string) => void;
+  onSaveSimulation: (move: ScenarioMove) => boolean;
 }) {
   const notify = useFeedback();
   // Hypothetical scenarios carry their own starter selections; live rosters use the saved app selection.
@@ -432,6 +440,26 @@ export function Formation({
     setToast("");
   }
 
+  // Persist the exact optimized slot assignments without changing the imported ESPN roster.
+  function save() {
+    if (!optimized) return;
+    const assignments = [...optimized.slots].sort((a, b) => a.index - b.index).map((slot) => slot.playerId);
+    const ids = assignments.filter((id): id is string => id !== null);
+    try {
+      if (m.simulation) {
+        if (!onSaveSimulation({ kind: "lineup", team, ids, assignments })) return;
+      } else {
+        onFilters({ [starterLineupsKey]: saveStarterLineup(m, team, ids, raw, assignments) });
+      }
+      setOptimized(null);
+      setToast("Lineup saved in the app. ESPN is unchanged.");
+      notify("success");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Could not save lineup.");
+      notify("caution");
+    }
+  }
+
   function copy() {
     const text = copyLines.join("\n");
     const write = navigator.clipboard?.writeText(text);
@@ -471,6 +499,7 @@ export function Formation({
             onOptimize={optimize}
             onUndo={undo}
             onCopy={copy}
+            onSave={save}
             pins={pins}
             pinNames={pins.map((id) => m.byId.get(id)?.name.split(" ").slice(-1)[0] ?? id)}
             conflictNames={preview.conflicts.map((id) => m.byId.get(id)?.name ?? id)}

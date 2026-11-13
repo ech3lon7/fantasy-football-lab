@@ -34,6 +34,8 @@ import { ScenarioLineupBoards } from "./ScenarioLineupBoards";
 export function RosterSimulator({
   real,
   model,
+  viewTeam,
+  onViewTeam,
   state,
   savedRaw,
   change,
@@ -43,6 +45,8 @@ export function RosterSimulator({
 }: {
   real: Model;
   model: Model;
+  viewTeam: string;
+  onViewTeam: (team: string) => void;
   state: AppState;
   savedRaw?: string;
   change: (raw: string) => boolean;
@@ -57,7 +61,6 @@ export function RosterSimulator({
   const [name, setName] = useState(""),
     [player, setPlayer] = useState(""),
     [search, setSearch] = useState(""),
-    [viewTeam, setViewTeam] = useState(""),
     [message, setMessage] = useState(""),
     [selectedSlot, setSelectedSlot] = useState<RosterSaveSlot>(
       collection.activeSlot ?? 1,
@@ -388,7 +391,7 @@ export function RosterSimulator({
               });
               setName("");
               setMessage("");
-              setViewTeam(state.preferredTeam);
+              onViewTeam(state.preferredTeam);
             }}
           >
             + New
@@ -766,7 +769,7 @@ export function RosterSimulator({
               <span>Simulated team to edit</span>
               <select
                 value={team}
-                onChange={(e) => setViewTeam(e.target.value)}
+                onChange={(e) => onViewTeam(e.target.value)}
               >
                 <TeamsOptions d={real.dataset} />
               </select>

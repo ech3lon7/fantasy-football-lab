@@ -71,11 +71,9 @@ test("add and drop pairs section lists helpful pickups or says none help", async
       "Simulation:",
     );
   }
-  // The depth-only switch is on by default and can be turned off.
-  const toggle = section.getByLabel("Show depth-only pickups");
-  await expect(toggle).toBeChecked();
-  await toggle.uncheck();
-  await expect(toggle).not.toBeChecked();
+  // The removed depth-only control and recommendations remain absent.
+  await expect(section.getByText("Show depth-only pickups")).toHaveCount(0);
+  await expect(section.getByText("Depth only", { exact: true })).toHaveCount(0);
 });
 
 // Since last import: a stored summary of the previous import produces the digest, and nothing shows without one.

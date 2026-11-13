@@ -169,6 +169,8 @@ export default function App() {
     [updateReady, setUpdateReady] = useState(false);
   // Feel choices made before an import are kept on this device and used until the workspace stores its own.
   const [localFeel, setLocalFeel] = useState<Record<string, string>>(readLocalFeel);
+  // The simulator's team selector also controls the hypothetical depth chart without changing My Team.
+  const [simulationTeam, setSimulationTeam] = useState("");
   const feelFilters: Record<string, string> = {
     ...localFeel,
     ...(w?.state.filters ?? {}),
@@ -1216,6 +1218,8 @@ export default function App() {
       <RosterSimulator
         real={realModel}
         model={model}
+        viewTeam={simulationTeam}
+        onViewTeam={setSimulationTeam}
         state={{
           ...w.state,
           filters: {
@@ -1436,8 +1440,8 @@ export default function App() {
               {page === "roster" && (
                 <Roster
                   m={model}
-                  team={w.state.preferredTeam}
-                  grades={analysisGrades.get(w.state.preferredTeam) ?? []}
+                  team={model.simulation && model.dataset.tables.ModelTeams.some((t) => String(t.TeamID) === simulationTeam) ? simulationTeam : w.state.preferredTeam}
+                  grades={analysisGrades.get(model.simulation && model.dataset.tables.ModelTeams.some((t) => String(t.TeamID) === simulationTeam) ? simulationTeam : w.state.preferredTeam) ?? []}
                   filters={w.state.filters}
                   onFilters={(patch) =>
                     updateState({
@@ -1446,7 +1450,7 @@ export default function App() {
                   }
                   simulator={simulator}
                   tryPair={(moves) =>
-                    trySimulationMoves(w.state.preferredTeam, moves)
+                    trySimulationMoves(model.simulation && simulationTeam ? simulationTeam : w.state.preferredTeam, moves)
                   }
                   onApplyDrop={applySimulationDrop}
                   onSwitchToLive={switchToLiveRoster}
