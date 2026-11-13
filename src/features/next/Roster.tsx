@@ -11,25 +11,10 @@ import { Chip, Segmented } from "../../ui/primitives";
 import { labelTone } from "../../domain/view/labels";
 import { StarterLineupEditor } from "../StarterLineupEditor";
 import { SimulationNote } from "./SimulationIssuePopover";
+import { GradeBadge } from "../../ui/GradeBadge";
+import { Formation } from "./Formation";
 
-// A grade letter on the shared six-step scale; the letter is always shown, never colour alone.
-export function GradeBadge({
-  grade,
-  tone,
-}: {
-  grade: string;
-  tone: number | null;
-}) {
-  return (
-    <span
-      className="gd-grade"
-      data-tone={tone ?? "na"}
-      title={tone === null ? "Grade unavailable" : `Grade ${grade}`}
-    >
-      {grade === "n.a." ? "N/A" : grade}
-    </span>
-  );
-}
+export { GradeBadge };
 
 // The recent-games strip: one bar per played game on the group's scale, with gaps for unrecorded scores and byes marked.
 function Strip({ tile, max }: { tile: DepthTile; max: number }) {
@@ -259,32 +244,18 @@ export function Roster({
               Grades and lineups use it everywhere in the app.
             </p>
           )}
-        <div className="gd-depth-grid">
-          {chart.map((group) => (
-            <section key={group.position} className="gd-depth-group">
-              <h3>
-                {group.position}
-                <GradeBadge grade={group.grade} tone={group.tone} />
-              </h3>
-              {group.tiles.length === 0 ? (
-                <p className="gd-muted">No players</p>
-              ) : (
-                <div className="gd-tiles">
-                  {group.tiles.map((tile) => (
-                    <PlayerTile
-                      key={tile.id}
-                      tile={tile}
-                      player={m.byId.get(tile.id)!}
-                      max={group.scaleMax}
-                      onCut={m.simulation ? handleCut : undefined}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          ))}
-        </div>
-        {chart.length === 0 && <p>No players on this roster.</p>}
+        <Formation
+          key={`${team}/${m.dataset.hash}/${m.simulation?.scenario.id ?? "live"}/${m.simulation?.scenario.cursor ?? ""}/${filters[starterLineupsKey] ?? ""}`}
+          m={m}
+          team={team}
+          grades={grades}
+          filters={filters}
+          onFilters={onFilters}
+          onCut={m.simulation ? handleCut : undefined}
+        />
+        {chart.every((group) => group.tiles.length === 0) && (
+          <p>No players on this roster.</p>
+        )}
       </section>
       {/* Starter choices keep their own saved setting; the editor is hidden while a simulation is active, as before. */}
       {!m.simulation && (

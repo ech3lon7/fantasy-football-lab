@@ -13,7 +13,8 @@ test("roster badges and the scouting table keep the earlier columns", async ({
   page,
 }) => {
   await open(page, "#/roster");
-  await expect(page.locator(".gd-tile .gd-tile-badges").first()).toBeVisible();
+  // Formation cards expose the current matchup and MPPG instead of the old tile badges.
+  await expect(page.locator(".gd-fc-badge").first()).toBeVisible();
   await page.goto("./#/scouting");
   await page
     .getByRole("group", { name: "View" })

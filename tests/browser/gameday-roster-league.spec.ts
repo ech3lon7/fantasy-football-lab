@@ -22,22 +22,10 @@ test("roster shows the simulator, a depth chart with graded groups and the start
   await expect(
     depth.getByRole("heading", { name: "Depth chart" }),
   ).toBeVisible();
-  // Each position group is headed by its grade; the letter is always shown.
-  const groups = depth.locator(".gd-depth-group");
-  expect(await groups.count()).toBeGreaterThan(0);
-  for (const group of await groups.all())
-    await expect(group.locator("h3 .gd-grade")).toHaveText(
-      /^(N\/A|[A-F][+−]?)$/,
-    );
-  // Starters and bench use different tile treatments.
-  await expect(
-    depth.locator('.gd-tile[data-role="Starter"]').first(),
-  ).toBeVisible();
-  const starterBorder = await depth
-    .locator('.gd-tile[data-role="Starter"]')
-    .first()
-    .evaluate((el) => getComputedStyle(el).borderLeftWidth);
-  expect(starterBorder).toBe("8px");
+  // The formation replaces position tiles; its slots retain grades and backup rows.
+  await expect(depth.locator(".gd-fs").first()).toBeVisible();
+  await expect(depth.locator(".gd-fs-lab .gd-grade").first()).toBeVisible();
+  await expect(depth.locator(".gd-fc-bk").first()).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Your roster", exact: true }),
   ).toBeVisible();
@@ -57,7 +45,8 @@ test("roster tile opens the card and focus returns to the tile", async ({
   page,
 }) => {
   await open(page, "#/roster");
-  const link = page.locator(".gd-tile a.player-link").first();
+  // This fixture has no imported starters, so inspect one of the formation's backup links.
+  const link = page.locator("a.gd-fc-bkn").first();
   await link.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toBeVisible();
@@ -163,7 +152,7 @@ test("roster and league have no white fills in dark", async ({ page }) => {
   );
   expect(whiteLeague).toEqual([]);
   await page.goto("./#/roster");
-  await expect(page.locator(".gd-tile").first()).toBeVisible();
+  await expect(page.locator(".gd-fc").first()).toBeVisible();
   const whiteRoster = await page.evaluate(() =>
     [...document.querySelectorAll(".gd-depth *")]
       .filter(

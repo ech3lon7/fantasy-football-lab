@@ -1654,49 +1654,780 @@
   font-family: var(--gd-font-display);
   text-transform: uppercase;
 }
-:root[data-gameday] .gd-depth-grid {
+/* Roster formation (E10). The field is fixed dark turf in both themes; only the page follows the theme. */
+:root[data-gameday] .gd-fm {
+  position: relative;
+  border-radius: 22px;
+  padding: 22px 22px 18px;
+  overflow: hidden;
+  color: #fff;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.035) 0 70px,
+      rgba(255, 255, 255, 0) 70px 140px
+    ),
+    radial-gradient(120% 90% at 50% 0%, #1f5134 0%, #123622 55%, #0b2216 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+:root[data-gameday] .gd-fm::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 139px,
+    rgba(255, 255, 255, 0.07) 139px 141px
+  );
+  pointer-events: none;
+}
+:root[data-gameday] .gd-fm-bar {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  margin: -4px 0 16px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(5, 14, 9, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+:root[data-gameday] .gd-fm-tot {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+:root[data-gameday] .gd-fm-tot small {
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+:root[data-gameday] .gd-fm-tot b {
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 1;
+}
+:root[data-gameday] .gd-fm-tot span {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.7);
+}
+:root[data-gameday] .gd-fm-hint {
+  flex: 1 1 220px;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.85);
+}
+:root[data-gameday] .gd-fm-opt {
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 20px;
+  border: 0;
+  background: #f2c200;
+  color: #1d1600;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #8c6f00;
+}
+:root[data-gameday] .gd-fm-opt:hover {
+  filter: brightness(1.06);
+}
+:root[data-gameday] .gd-fm-opt:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #8c6f00;
+}
+:root[data-gameday] .gd-fm-opt[disabled] {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.75);
+  box-shadow: none;
+  cursor: default;
+}
+:root[data-gameday] .gd-fm-opt.gd-fm-ghost {
+  background: transparent;
+  color: #fff;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6);
+  height: 34px;
+  font-size: 15px;
+}
+:root[data-gameday] .gd-fm-res {
+  flex: 1 1 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+}
+:root[data-gameday] .gd-fm-res b {
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 19px;
+  color: #7be3a2;
+}
+:root[data-gameday] .gd-fm-ch i {
+  font-style: normal;
+  font-weight: 700;
+  color: #7be3a2;
+}
+:root[data-gameday] .gd-fm-ch {
+  display: block;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.88);
+}
+:root[data-gameday] .gd-fm-note {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.6);
+}
+:root[data-gameday] .gd-fm-toast {
+  position: relative;
+  margin: -6px 0 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 12.5px;
+}
+:root[data-gameday] .gd-fm-acts {
+  display: flex;
+  gap: 8px;
+}
+:root[data-gameday] .gd-fm-pins {
+  flex: 1 1 100%;
+  order: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.85);
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+:root[data-gameday] .gd-fm-pins svg {
+  width: 14px;
+  height: 14px;
+  fill: #f2c200;
+  stroke: #f2c200;
+  flex: none;
+}
+:root[data-gameday] .gd-fm-pins button {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: #f2c200;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+:root[data-gameday] .gd-fm-line,
+:root[data-gameday] .gd-fm-back {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  column-gap: 14px;
   align-items: start;
 }
-:root[data-gameday] .gd-depth-group {
+:root[data-gameday] .gd-fm-los {
+  position: relative;
+  height: 0;
+  border-top: 2px dashed rgba(255, 255, 255, 0.28);
+  margin: 14px 0 16px;
+}
+:root[data-gameday] .gd-fm-key {
+  grid-column: 1 / span 2;
+  align-self: end;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.82);
+  padding-right: 8px;
 }
-:root[data-gameday] .gd-depth-group h3 {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 0;
-  padding-bottom: 6px;
+:root[data-gameday] .gd-fm-key b {
   font-family: var(--gd-font-display);
-  font-size: 22px;
   font-weight: 800;
-  border-bottom: 3px solid var(--gd-ink);
+  font-size: 22px;
+  text-transform: uppercase;
+  color: #fff;
+  line-height: 1;
 }
-:root[data-gameday] .gd-depth-group .gd-tiles {
+:root[data-gameday] .gd-fm-sw {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+:root[data-gameday] .gd-fm-sw i {
+  width: 22px;
+  height: 12px;
+  border-radius: 3px;
+  flex: none;
+}
+:root[data-gameday] .gd-fm-st {
+  grid-column: 6 / span 2;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  grid-template-columns: none;
+  gap: 6px;
+  padding: 8px 8px 0;
+  border: 1.5px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 14px;
 }
-@media (max-width: 1040px) {
-  :root[data-gameday] .gd-depth-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+:root[data-gameday] .gd-fm-st-h {
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+:root[data-gameday] .gd-fm-st-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+:root[data-gameday] .gd-fm-st-row .gd-fs {
+  grid-column: auto;
+}
+:root[data-gameday] .gd-fs {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  grid-column: var(--gd-col);
+}
+:root[data-gameday] .gd-fs-lab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+:root[data-gameday] .gd-fs-lab b {
+  /* Field labels stay white in both surrounding page themes. */
+  color: #fff;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: 0.04em;
+}
+:root[data-gameday] .gd-fs-lab .gd-grade {
+  min-width: 24px;
+  padding: 1px 6px;
+  font-size: 12px;
+}
+:root[data-gameday] .gd-fc {
+  display: flex;
+  flex-direction: column;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #151a22;
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.12);
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
+}
+:root[data-gameday] .gd-fc:hover,
+:root[data-gameday] .gd-fc:focus-within {
+  transform: translateY(-3px);
+  box-shadow:
+    0 14px 26px rgba(0, 0, 0, 0.5),
+    0 0 0 2px #fff;
+}
+:root[data-gameday] .gd-fc-ph {
+  position: relative;
+  height: 132px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: linear-gradient(180deg, var(--fc1) 0%, var(--fc2) 100%);
+}
+:root[data-gameday] .gd-fc-good {
+  --fc1: #3dba6f;
+  --fc2: #17663a;
+}
+:root[data-gameday] .gd-fc-mid,
+:root[data-gameday] .gd-fc-neutral {
+  --fc1: #3c7be0;
+  --fc2: #1b3f8a;
+}
+:root[data-gameday] .gd-fc-bad {
+  --fc1: #e25444;
+  --fc2: #8a2219;
+}
+:root[data-gameday] .gd-fc-out {
+  --fc1: #8a919c;
+  --fc2: #474d57;
+}
+:root[data-gameday] .gd-fm-sw i.gd-fc-good,
+:root[data-gameday] .gd-fm-sw i.gd-fc-mid,
+:root[data-gameday] .gd-fm-sw i.gd-fc-neutral,
+:root[data-gameday] .gd-fm-sw i.gd-fc-bad,
+:root[data-gameday] .gd-fm-sw i.gd-fc-out {
+  background: linear-gradient(180deg, var(--fc1), var(--fc2));
+}
+:root[data-gameday] .gd-fc-av {
+  width: 84px;
+  height: 96px;
+  border-radius: 42px 42px 8px 8px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 34px;
+  color: #fff;
+  box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.25);
+}
+:root[data-gameday] .gd-fc-av-empty {
+  background: rgba(0, 0, 0, 0.25);
+  color: rgba(255, 255, 255, 0.6);
+}
+:root[data-gameday] .gd-fc-photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+:root[data-gameday] .gd-fc-photo img {
+  object-fit: contain !important;
+  object-position: bottom center !important;
+}
+:root[data-gameday] .gd-fc-badge {
+  position: absolute;
+  right: 7px;
+  top: 7px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 14, 20, 0.55);
+  border: 2.5px solid #fff;
+  line-height: 1;
+  z-index: 1;
+}
+:root[data-gameday] .gd-fc-badge b {
+  color: #fff;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 17px;
+}
+:root[data-gameday] .gd-fc-badge small {
+  color: #fff;
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+:root[data-gameday] .gd-fc-flex {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  background: #f2c200;
+  color: #2a2005;
+  border-radius: 4px;
+  padding: 1px 6px;
+  z-index: 1;
+}
+:root[data-gameday] .gd-fc-mu {
+  color: #fff;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 3px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: center;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:root[data-gameday] .gd-fc-nm {
+  display: block;
+  border: 0;
+  background: #232a35;
+  color: #fff;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  text-align: left;
+  text-decoration: none;
+  padding: 6px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  border-bottom: 3px solid var(--fc1);
+}
+:root[data-gameday] .gd-fc-nm:hover {
+  text-decoration: underline;
+}
+:root[data-gameday] .gd-fc-bk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  border: 0;
+  background: #1a2029;
+  color: rgba(255, 255, 255, 0.9);
+  font-family: var(--gd-font-display);
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-bottom: 3px solid var(--fb, #3a414c);
+  text-align: left;
+}
+:root[data-gameday] .gd-fc-bkn {
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:root[data-gameday] .gd-fc-bkn:hover {
+  text-decoration: underline;
+}
+:root[data-gameday] .gd-fc-bkn-last {
+  display: none;
+}
+:root[data-gameday] .gd-fc-bk b {
+  font-weight: 800;
+}
+:root[data-gameday] .gd-fb-good {
+  --fb: #3dba6f;
+}
+:root[data-gameday] .gd-fb-mid,
+:root[data-gameday] .gd-fb-neutral {
+  --fb: #3c7be0;
+}
+:root[data-gameday] .gd-fb-bad {
+  --fb: #e25444;
+}
+:root[data-gameday] .gd-fb-out {
+  --fb: #8a919c;
+}
+:root[data-gameday] .gd-fb-none {
+  --fb: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: default;
+}
+:root[data-gameday] .gd-fc-cut {
+  border: 0;
+  background: #2f3743;
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-fm-error {
+  color: var(--gd-negative-ink);
+  font-weight: 600;
+}
+/* Pins: the card tack is 22px, the backup tack 14px, with a larger invisible hit area. */
+:root[data-gameday] .gd-fc-pin {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.75);
+  background: rgba(10, 14, 20, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  z-index: 2;
+}
+:root[data-gameday] .gd-fc-pin::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+}
+:root[data-gameday] .gd-fc-pin svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+:root[data-gameday] .gd-fc-pin:hover {
+  border-color: #fff;
+  background: rgba(10, 14, 20, 0.7);
+}
+:root[data-gameday] .gd-fc-pin.on {
+  background: #f2c200;
+  border-color: #fff;
+  box-shadow: 0 0 0 3px rgba(242, 194, 0, 0.35);
+}
+:root[data-gameday] .gd-fc-pin.on svg {
+  fill: #1d1600;
+  stroke: #1d1600;
+}
+:root[data-gameday] .gd-fc-pin ~ .gd-fc-flex {
+  top: 33px;
+}
+:root[data-gameday] .gd-fb-pin {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0.55;
+}
+:root[data-gameday] .gd-fb-pin::before {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+}
+:root[data-gameday] .gd-fb-pin {
+  position: relative;
+}
+:root[data-gameday] .gd-fb-pin svg {
+  width: 8px;
+  height: 8px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2;
+}
+:root[data-gameday] .gd-fc-bk:hover .gd-fb-pin,
+:root[data-gameday] .gd-fb-pin:focus-visible {
+  opacity: 1;
+}
+:root[data-gameday] .gd-fb-pin.on {
+  opacity: 1;
+  background: #f2c200;
+  border-color: #f2c200;
+}
+:root[data-gameday] .gd-fb-pin.on svg {
+  fill: #1d1600;
+  stroke: #1d1600;
+}
+:root[data-gameday] .gd-fc-newtag {
+  position: absolute;
+  left: 7px;
+  bottom: 22px;
+  font-family: var(--gd-font-display);
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  background: #fff;
+  color: #0d4a27;
+  border-radius: 4px;
+  padding: 1px 6px;
+  z-index: 1;
+}
+:root[data-gameday] .gd-fc.gd-fc-new {
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.4),
+    0 0 0 3px #f2c200;
+}
+:root[data-gameday] .gd-fm.gd-fm-optimized .gd-fc {
+  animation-delay: calc(var(--gd-stagger, 0) * 40ms);
+}
+:root[data-gameday][data-animation="full"] .gd-fm.gd-fm-optimized .gd-fc-new {
+  animation: gd-fcswap 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+:root[data-gameday][data-animation="full"] .gd-fm.gd-fm-optimized .gd-fc:not(.gd-fc-new) {
+  animation: gd-fcsettle 0.45s ease-out both;
+}
+@keyframes gd-fcswap {
+  0% {
+    transform: perspective(600px) rotateY(90deg) scale(0.92);
+    filter: brightness(1.8);
+  }
+  60% {
+    transform: perspective(600px) rotateY(-8deg) scale(1.03);
+    filter: brightness(1.15);
+  }
+  100% {
+    transform: none;
+    filter: none;
   }
 }
-@media (max-width: 640px) {
-  :root[data-gameday] .gd-depth-grid {
+@keyframes gd-fcsettle {
+  0% {
+    transform: translateY(-4px);
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes gd-fc-fade {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes gd-fc-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+:root[data-gameday][data-animation="full"] .gd-fm:not(.gd-fm-optimized) .gd-fc {
+  animation: gd-fc-rise 0.4s ease-out both;
+  animation-delay: calc(var(--gd-stagger, 0) * 40ms);
+}
+:root[data-gameday][data-animation="reduced"] .gd-fm .gd-fc.gd-fc-new {
+  animation: gd-fc-fade 150ms ease-out both;
+}
+@media (max-width: 1100px) {
+  :root[data-gameday] .gd-fc-ph {
+    height: 112px;
+  }
+  :root[data-gameday] .gd-fc-av {
+    width: 66px;
+    height: 78px;
+    font-size: 26px;
+  }
+  :root[data-gameday] .gd-fm-key b,
+  :root[data-gameday] .gd-fm-key span:not(.gd-fm-sw) {
+    display: none;
+  }
+}
+@media (max-width: 719px) {
+  :root[data-gameday] .gd-fm {
+    padding: 16px 12px;
+  }
+  :root[data-gameday] .gd-fm-bar {
+    gap: 8px;
+  }
+  :root[data-gameday] .gd-fm-tot {
+    width: 100%;
+  }
+  :root[data-gameday] .gd-fm-hint,
+  :root[data-gameday] .gd-fm-res {
+    flex: 1 1 100%;
+  }
+  :root[data-gameday] .gd-fm-opt {
+    flex: 1 1 100%;
+  }
+  :root[data-gameday] .gd-fm-acts {
+    flex: 1 1 100%;
+  }
+  :root[data-gameday] .gd-fm-acts .gd-fm-opt {
+    flex: 1;
+  }
+  :root[data-gameday] .gd-fm-line {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 14px;
+    column-gap: 10px;
+  }
+  :root[data-gameday] .gd-fm-back {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 14px;
+    column-gap: 10px;
+  }
+  :root[data-gameday] .gd-fm-line .gd-fs,
+  :root[data-gameday] .gd-fm-back > .gd-fs {
+    grid-column: auto;
+  }
+  :root[data-gameday] .gd-fm-line .gd-fs[data-slot="QB"] {
+    order: -1;
+  }
+  :root[data-gameday] .gd-fm-key {
+    grid-column: 1 / -1;
+    order: 5;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 0;
+    border: 0;
+    align-self: center;
+  }
+  :root[data-gameday] .gd-fm-key b,
+  :root[data-gameday] .gd-fm-key span:not(.gd-fm-sw) {
+    display: none;
+  }
+  :root[data-gameday] .gd-fm-st {
+    grid-column: 1 / -1;
+  }
+  :root[data-gameday] .gd-fm-los {
+    margin: 10px 0 12px;
+  }
+  :root[data-gameday] .gd-fc-ph {
+    height: 96px;
+  }
+  :root[data-gameday] .gd-fc-av {
+    width: 52px;
+    height: 62px;
+    font-size: 22px;
+  }
+  :root[data-gameday] .gd-fc-badge {
+    width: 36px;
+    height: 36px;
+    right: 4px;
+    top: 4px;
+  }
+  :root[data-gameday] .gd-fc-badge b {
+    font-size: 14px;
+  }
+  :root[data-gameday] .gd-fc-nm {
+    font-size: 13px;
+    padding: 5px 6px;
+  }
+  :root[data-gameday] .gd-fc-bk {
+    font-size: 11.5px;
+    padding: 3px 6px;
+  }
+  :root[data-gameday] .gd-fc-mu {
+    font-size: 9px;
+  }
+  :root[data-gameday] .gd-fc-bkn-short {
+    display: none;
+  }
+  :root[data-gameday] .gd-fc-bkn-last {
+    display: inline;
+  }
+  :root[data-gameday] .gd-fc-newtag {
+    top: 44px;
+    left: auto;
+    right: 1px;
+    bottom: auto;
+    /* Keep the tag under the badge and clear of the centered player photo. */
+    font-size: 9px;
+    padding: 1px 0;
   }
 }
-@media (max-width: 480px) {
-  :root[data-gameday] .gd-depth-grid {
-    grid-template-columns: 1fr;
-  }
-}
+
 :root[data-gameday] .gd-muted {
   color: var(--gd-muted);
 }

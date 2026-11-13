@@ -5,7 +5,7 @@ import { seedLabelWhy } from "./label-why-seed";
 // keeps short fades only, and that Off leaves no animation running anywhere.
 const routes = [
   { hash: "#/overview", screen: "gd-week", card: "gd-move" },
-  { hash: "#/roster", screen: "gd-roster", card: "gd-tile" },
+  { hash: "#/roster", screen: "gd-roster", card: "gd-fc" },
   { hash: "#/players", screen: "gd-scout", card: "gd-pcard" },
   { hash: "#/teams", screen: "gd-league", card: "gd-grade-btn" },
   { hash: "#/trades", screen: "gd-trade", card: "gd-side" },
@@ -54,7 +54,7 @@ test("Full wipes every screen in and animates its cards or charts", async ({
       `${route.hash} should wipe its screen container in`,
     ).toBe(true);
     expect(
-      started.some((a) => a.name === "gd-cardin" && a.cls.includes(route.card)),
+      started.some((a) => (a.name === "gd-cardin" || (route.hash === "#/roster" && a.name === "gd-fc-rise")) && a.cls.includes(route.card)),
       `${route.hash} should rise its ${route.card} cards in`,
     ).toBe(true);
   }
