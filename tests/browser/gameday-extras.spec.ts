@@ -52,30 +52,12 @@ test("league power ranges rank every team", async ({ page }) => {
   ).toContainText("not a prediction");
 });
 
-// Add and drop pairs only list pickups that help, and an empty list says so.
-test("add and drop pairs section lists helpful pickups or says none help", async ({
-  page,
-}) => {
+// The removed pickup section is absent from the roster screen.
+test("roster omits add and drop pairs", async ({ page }) => {
   await open(page, "#/roster");
-  const section = page.getByRole("region", { name: "Add and drop pairs" });
-  await expect(section).toBeVisible();
-  const rows = section.locator(".gd-pair");
-  if ((await rows.count()) === 0)
-    await expect(section).toContainText("No pickup would change your lineup.");
-  else {
-    await section
-      .getByRole("button", { name: "Try in a simulation" })
-      .first()
-      .click();
-    await expect(page.locator(".gd-header .gd-chip")).toContainText(
-      "Simulation:",
-    );
-  }
-  // The removed depth-only control and recommendations remain absent.
-  await expect(section.getByText("Show depth-only pickups")).toHaveCount(0);
-  await expect(section.getByText("Depth only", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Add and drop pairs" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Add and drop pairs" })).toHaveCount(0);
 });
-
 // Since last import: a stored summary of the previous import produces the digest, and nothing shows without one.
 test("since last import shows a digest only when a previous import exists", async ({
   page,

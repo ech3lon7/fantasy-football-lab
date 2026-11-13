@@ -1,5 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { addDropPairs, pairMoves } from "../../domain/view/add-drop";
+import { useState, type ReactNode } from "react";
 import type { ScenarioMove } from "../../domain/roster-scenarios";
 import { depthChart, type DepthTile } from "../../domain/view/roster";
 import type { PositionGrade } from "../../domain/lineups";
@@ -7,7 +6,7 @@ import type { Model, Player } from "../../domain/valuation";
 import { starterLineupsKey } from "../../domain/starter-lineups";
 import { PlayerName } from "../../ui/PlayerName";
 import { PlayerPhoto } from "../../ui/PlayerPhoto";
-import { Chip, Segmented } from "../../ui/primitives";
+import { Chip } from "../../ui/primitives";
 import { labelTone } from "../../domain/view/labels";
 import { StarterLineupEditor } from "../StarterLineupEditor";
 import { SimulationNote } from "./SimulationIssuePopover";
@@ -149,12 +148,8 @@ export function Roster({
   onApplyDrop?: (team: string, playerId: string) => void;
   onSwitchToLive?: () => void;
 }) {
-  const [scope, setScope] = useState<"season" | "week">("season");
-  const chart = depthChart(m, team, grades),
-    pairs = useMemo(() => addDropPairs(m, team, 10, 25, scope), [m, team, scope]),
-    [tried, setTried] = useState("");
-  // Show only pickups that improve a starting lineup.
-  const shownPairs = pairs.filter((p) => p.starts === "starts");
+  const chart = depthChart(m, team, grades);
+  const [tried, setTried] = useState("");
   const handleCut = (id: string) => {
     if (tryPair([{ kind: "move", player: id, from: team, to: "0" }])) {
       const p = m.byId.get(id);
@@ -164,59 +159,7 @@ export function Roster({
   return (
     <div className="gd-roster">
       {simulator}
-      <section aria-label="Add and drop pairs" className="gd-pairs">
-        <h2>Add and drop pairs</h2>
-        <div style={{ marginBottom: "10px" }}>
-          <Segmented
-            label="Evaluation scope"
-            options={["Rest of season", "This week"]}
-            value={scope === "season" ? "Rest of season" : "This week"}
-            onChange={(v) => setScope(v === "This week" ? "week" : "season")}
-          />
-        </div>
-        <p className="gd-muted">
-          {scope === "week"
-            ? `For each available player, the drop that helps your weekly lineup most by MPPG. Gains are Week ${m.current} MPPG with a spread.`
-            : "For each available player, the drop that helps your lineup most, using your existing drop rules. Gains are Expected PPG per week with a spread."}
-        </p>
-        {shownPairs.length === 0 ? (
-          <p className="gd-muted">No pickup would change your lineup.</p>
-        ) : (
-          <ul className="gd-pair-list">
-            {shownPairs.map((p) => (
-              <li key={`${p.addId}-${p.dropId}`} className="gd-pair">
-                <span>
-                  Add <b>{p.addName}</b> ({p.addPos}), drop <b>{p.dropName}</b>{" "}
-                  ({p.dropPos})
-                </span>
-                <span className="gd-pair-gain">
-                  {p.gain.gain === null
-                    ? "—"
-                    : `${p.gain.gain > 0 ? "+" : ""}${p.gain.gain.toFixed(1)}${p.gain.spread === null ? "" : ` ± ${p.gain.spread.toFixed(1)}`}`}
-                </span>
-                <Chip tone="positive">Starts at {p.startsAt}</Chip>
-                <button
-                  type="button"
-                  className="gd-pill"
-                  onClick={() => {
-                    if (tryPair(pairMoves(team, p)))
-                      setTried(
-                        `Tried ${p.addName} for ${p.dropName} in a simulation.`,
-                      );
-                  }}
-                >
-                  Try in a simulation
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {tried && (
-          <p role="status" className="gd-muted">
-            {tried}
-          </p>
-        )}
-      </section>
+      {tried && <p role="status" className="gd-muted">{tried}</p>}
       <section aria-label="Depth chart" className="gd-depth">
         <h2>Depth chart</h2>
         <SimulationNote

@@ -2,6 +2,25 @@ import { expect, test } from "@playwright/test";
 import { seedFormation } from "./formation-seed";
 import { openRosterTools } from "./roster-workspace-helpers";
 
+// Roster cards reuse the profile gradient and dot texture with the matchup color substituted.
+test("roster card uses the player profile background and texture", async ({ page }) => {
+  await seedFormation(page);
+  const card = page.locator('.gd-fs[data-slot="QB"] .gd-fc-ph');
+  await page.locator('.gd-fs[data-slot="QB"] .gd-fc-nm').click();
+  await expect(page.locator(".gd-hx")).toBeVisible();
+  const backgrounds = await page.evaluate(() => {
+    const roster = document.querySelector<HTMLElement>('.gd-fs[data-slot="QB"] .gd-fc-ph')!;
+    const profile = document.querySelector<HTMLElement>(".gd-hx")!;
+    profile.style.setProperty("--tc", getComputedStyle(roster).getPropertyValue("--tc"));
+    profile.style.setProperty("--hx-mid", "8%");
+    const dots = (el: HTMLElement) => getComputedStyle(el.querySelector<HTMLElement>(".gd-hx-dots")!).backgroundImage;
+    return { roster: getComputedStyle(roster).backgroundImage, profile: getComputedStyle(profile).backgroundImage, rosterDots: dots(roster), profileDots: dots(profile) };
+  });
+  expect(backgrounds.roster).toBe(backgrounds.profile);
+  expect(backgrounds.rosterDots).toBe(backgrounds.profileDots);
+  await expect(card.locator(".gd-hx-dots")).toHaveCount(1);
+});
+
 // A backup can be dragged into FLEX and the exact slot persists after saving.
 test("drag a backup into the selected slot and save it", async ({ page }) => {
   await seedFormation(page);

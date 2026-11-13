@@ -1941,13 +1941,14 @@
 }
 :root[data-gameday] .gd-fc-ph {
   position: relative;
+  isolation: isolate;
+  --tc: var(--fc1);
   height: 132px;
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: 7px;
   padding: 22px 7px 20px;
-  background: linear-gradient(180deg, var(--fc1) 0%, var(--fc2) 100%);
 }
 :root[data-gameday] .gd-fc-good {
   --fc1: #3dba6f;

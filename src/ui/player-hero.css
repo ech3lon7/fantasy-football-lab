@@ -22,6 +22,11 @@
   min-height: 330px;
   padding: 46px 64px 20px 28px;
   color: var(--gd-hero-ink);
+}
+
+/* Roster cards share the exact player-profile gradient, with their matchup color as --tc. */
+:root[data-gameday] .gd-hx,
+:root[data-gameday] .gd-fc-ph {
   background:
     linear-gradient(
       100deg,

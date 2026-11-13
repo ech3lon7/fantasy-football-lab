@@ -126,6 +126,8 @@ function SlotCard({
   return (
     <article className={`gd-fc gd-fc-${card.tone}${isNew ? " gd-fc-new" : ""}`} draggable={!!player} onDragStart={(event) => { if (player) event.dataTransfer.setData("text/plain", player.id); }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onMove(event.dataTransfer.getData("text/plain")); }}>
       <div className="gd-fc-ph">
+        {/* Reuse the player profile's masked dot texture over the matchup-colored hero background. */}
+        <span className="gd-hx-dots" aria-hidden="true" />
         {player && <PinButton player={player} pinned={pins.includes(player.id)} onToggle={onPin} />}
         <span className="gd-fc-badge" title={card.buildLine || undefined}>
           <b>{card.mppgText}</b>
