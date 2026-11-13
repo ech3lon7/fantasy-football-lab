@@ -133,6 +133,7 @@ export function TradeScoreStrip({
   label,
   dealGrade,
   dealTone,
+  positionImpact,
 }: {
   m: Model;
   draft: Draft;
@@ -142,6 +143,8 @@ export function TradeScoreStrip({
   // Optional surplus deal grade ("Fair deal", "Steal deal", etc.) and visual color tone
   dealGrade?: string;
   dealTone?: "good" | "bad" | "orange" | "neutral";
+  // Positional grade impact for both teams
+  positionImpact?: ChainPositionImpact | null;
 }) {
   // An incomplete offer has no trade forecast; one compact hint preserves room for player cards and the field.
   if (!draft.give.length || !draft.get.length)
@@ -158,38 +161,67 @@ export function TradeScoreStrip({
     >
       {(
         [
-          ["Your", draft.teamA, impact?.own],
-          ["Their", draft.teamB, impact?.other],
+          ["Your", draft.teamA, impact?.own, positionImpact?.own],
+          ["Their", draft.teamB, impact?.other, positionImpact?.other],
         ] as const
-      ).map(([side, id, values]) => (
-        <div className="trade-score-team" key={side}>
-          <div>
-            <strong>{tradeTeamName(m, id)}</strong>
-            <small>{side} average Expected PPG</small>
+      ).map(([side, id, values, posList]) => {
+        const net = posList && posList.length > 0 ? netGradeStepDelta(posList) : null;
+        const netTone =
+          net === null || net === 0
+            ? "neutral"
+            : net > 0
+              ? "good"
+              : "bad";
+        return (
+          <div className="trade-score-team" key={side}>
+            <div>
+              <strong>{tradeTeamName(m, id)}</strong>
+              <small>{side} average Expected PPG</small>
+            </div>
+            <div className="trade-score-values model">
+              <span>{pending ? "…" : fmt(values?.beforePerWeek ?? null)}</span>
+              <ArrowRight size={17} aria-hidden="true" />
+              <strong>{pending ? "…" : fmt(values?.afterPerWeek ?? null)}</strong>
+              <b>{pending ? "…" : signed(values?.expectedPerWeek ?? null)}</b>
+              {net !== null && (
+                <span
+                  className={`trade-position-net-step ${netTone}`}
+                  style={{ marginLeft: "6px" }}
+                  aria-label={`${side} overall net grade step change: ${net > 0 ? `+${net}` : net} steps`}
+                >
+                  {net > 0 ? `+${net}` : `${net}`} steps
+                </span>
+              )}
+            </div>
           </div>
-          <div className="trade-score-values model">
-            <span>{pending ? "…" : fmt(values?.beforePerWeek ?? null)}</span>
-            <ArrowRight size={17} aria-hidden="true" />
-            <strong>{pending ? "…" : fmt(values?.afterPerWeek ?? null)}</strong>
-            <b>{pending ? "…" : signed(values?.expectedPerWeek ?? null)}</b>
-          </div>
-        </div>
-      ))}
-      {/* Context row displaying calculation bounds alongside a concise, non-invasive surplus deal grade badge */}
+        );
+      })}
+      {/* Context row displaying calculation bounds alongside surplus and net grade step badges */}
       <div className="trade-score-context-row">
         <small className="trade-score-context">
           {label ? `${label} · ` : ""}Average across Weeks {m.current}–{m.final};
           model scoring, not ESPN's weekly projection.
         </small>
-        {dealGrade && (
-          <span
-            className={`trade-deal-pill ${dealTone ?? "neutral"}`}
-            role="status"
-            aria-label={`Surplus deal grade: ${dealGrade}`}
-          >
-            Surplus: <strong>{dealGrade}</strong>
-          </span>
-        )}
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          {positionImpact?.own && positionImpact.own.length > 0 && (
+            <span
+              className={`trade-deal-pill ${netGradeStepDelta(positionImpact.own) > 0 ? "good" : netGradeStepDelta(positionImpact.own) < 0 ? "bad" : "neutral"}`}
+              role="status"
+              aria-label={`Overall net grade steps: ${netGradeStepDelta(positionImpact.own) > 0 ? `+${netGradeStepDelta(positionImpact.own)}` : netGradeStepDelta(positionImpact.own)}`}
+            >
+              Net steps: <strong>{netGradeStepDelta(positionImpact.own) > 0 ? `+${netGradeStepDelta(positionImpact.own)}` : `${netGradeStepDelta(positionImpact.own)}`}</strong>
+            </span>
+          )}
+          {dealGrade && (
+            <span
+              className={`trade-deal-pill ${dealTone ?? "neutral"}`}
+              role="status"
+              aria-label={`Surplus deal grade: ${dealGrade}`}
+            >
+              Surplus: <strong>{dealGrade}</strong>
+            </span>
+          )}
+        </div>
       </div>
     </section>
   );

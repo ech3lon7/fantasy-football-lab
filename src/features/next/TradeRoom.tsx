@@ -11,6 +11,10 @@ import {
 } from "../../domain/trade-impact";
 import { scenarioTradeErrors, type RosterScenario } from "../../domain/roster-scenarios";
 import {
+  chainPositionImpact,
+  netGradeStepDelta,
+} from "../../domain/chain-position-impact";
+import {
   gradeStepChips,
   lineupGainSpread,
   lineupMoves,
@@ -201,6 +205,12 @@ function ManualAnalyzer({
   const valid = result && result.valid ? result : null;
   const impact = valid ? tradeImpact(valid, basis) : null;
   const chips = valid ? gradeStepChips(m, draft, valid) : null;
+  const positionImpact = useMemo(
+    () => (valid ? chainPositionImpact(m, draft, valid) : null),
+    [m, draft, valid],
+  );
+  const ownNetSteps = positionImpact ? netGradeStepDelta(positionImpact.own) : 0;
+  const otherNetSteps = positionImpact ? netGradeStepDelta(positionImpact.other) : 0;
   const verdictRows = valid ? verdicts(m, valid, basis) : null;
   const popovers = usePopovers();
   const surface = useMemo(
@@ -308,6 +318,7 @@ function ManualAnalyzer({
               ? "bad"
               : "neutral"
         }
+        positionImpact={positionImpact}
       />
 
       {/* 1. Sides and Tale of the tape */}
@@ -445,6 +456,12 @@ function ManualAnalyzer({
                   {c.text}
                 </span>
               ))}
+              <span
+                className={`trade-position-net-step ${ownNetSteps > 0 ? "good" : ownNetSteps < 0 ? "bad" : "neutral"}`}
+                style={{ marginLeft: "auto" }}
+              >
+                {ownNetSteps > 0 ? `+${ownNetSteps}` : `${ownNetSteps}`} net steps
+              </span>
             </div>
           )}
         </div>
@@ -531,6 +548,46 @@ function ManualAnalyzer({
                   ? `${impact.own.beforePerWeek.toFixed(1)} → ${impact.own.afterPerWeek.toFixed(1)} Expected PPG`
                   : ""}
               </span>
+
+              {positionImpact && (
+                <div
+                  className="gd-tape-steps"
+                  style={{
+                    marginTop: "8px",
+                    paddingTop: "8px",
+                    borderTop: "1px dashed var(--gd-line)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "2px",
+                    alignItems: "center",
+                    width: "100%",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      color: "var(--gd-muted)",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    Net Grade Step Gain / Loss
+                  </span>
+                  <span
+                    className={`trade-position-net-step ${ownNetSteps > 0 ? "good" : ownNetSteps < 0 ? "bad" : "neutral"}`}
+                    style={{
+                      fontSize: "13px",
+                      padding: "3px 10px",
+                    }}
+                  >
+                    {ownNetSteps > 0 ? `+${ownNetSteps}` : `${ownNetSteps}`} overall steps
+                  </span>
+                  <span style={{ fontSize: "11px", color: "var(--gd-muted)" }}>
+                    Opponent: {otherNetSteps > 0 ? `+${otherNetSteps}` : `${otherNetSteps}`} steps
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -705,6 +762,12 @@ function ManualAnalyzer({
                   {c.text}
                 </span>
               ))}
+              <span
+                className={`trade-position-net-step ${otherNetSteps > 0 ? "good" : otherNetSteps < 0 ? "bad" : "neutral"}`}
+                style={{ marginLeft: "auto" }}
+              >
+                {otherNetSteps > 0 ? `+${otherNetSteps}` : `${otherNetSteps}`} net steps
+              </span>
             </div>
           )}
         </div>

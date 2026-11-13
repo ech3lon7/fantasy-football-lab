@@ -322,10 +322,13 @@ test("manual analyzer displays player photo, metrics, and opens card with arrow 
   await expect(scoreStrip).toBeVisible();
   await expect(scoreStrip).toContainText(/Expected PPG/);
 
-  // Verify tale of the tape displays lineup EPPG gain/loss
+  // Verify tale of the tape displays lineup EPPG gain/loss and net grade step gain/loss
   const tapeGain = page.locator(".gd-tape-gain");
   await expect(tapeGain).toBeVisible();
   await expect(tapeGain).toContainText(/EPPG Gain \/ Loss/i);
+  const tapeSteps = page.locator(".gd-tape-steps");
+  await expect(tapeSteps).toBeVisible();
+  await expect(tapeSteps).toContainText(/Net Grade Step Gain \/ Loss/i);
 
   // Click player photo to open card popover
   const photoBtn = sendGroup.locator(".tp button[aria-label*='card']").first();
