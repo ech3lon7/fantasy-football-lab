@@ -30,6 +30,7 @@ import {
   calculatePlayerTrend,
   type PlayerTrendSummary,
 } from "./player-trend";
+import { calculateMppg } from "./mppg";
 export interface Player {
   id: string;
   name: string;
@@ -73,6 +74,7 @@ export interface Player {
   rushShare: number | null;
   opportunities: number | null;
   td: number | null;
+  mppg?: number | null;
   xtd: number | null;
   tdRate: number | null;
   regression: string;
@@ -676,7 +678,7 @@ export function evaluate(
       p.priority = p.gem === "Gem" ? 1 : p.gem === "Pre-gem" ? 2 : p.gem === "Watch" ? 3 : 99;
       p.explanation = p.breakout.explanation;
     }
-  return {
+  const model: Model = {
     players,
     byId: new Map(players.map((p) => [p.id, p])),
     pools,
@@ -694,4 +696,8 @@ export function evaluate(
     evidenceRaw: options.evidence ?? "",
     roleScenarioWeight,
   };
+  for (const p of players) {
+    p.mppg = calculateMppg(model, p).value;
+  }
+  return model;
 }

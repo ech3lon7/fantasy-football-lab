@@ -39,7 +39,7 @@ Consequence: a player who changed NFL teams mid-season is credited to his curren
 
 ## 3. Domain: matchup lineup view
 
-- [ ] **3.1** `weekLineups(m, team, week)` returns two lineups for the current week, built with the **existing** lineup rules and slot assignment:
+- [ ] **3.1** *(Superseded by `2026-11-12-mppg.md`: lineup by MPPG.)* `weekLineups(m, team, week)` returns two lineups for the current week, built with the **existing** lineup rules and slot assignment:
   - **Season view:** the current selection by Value PPG, unchanged.
   - **Matchup view:** the same rules, ranking available players by ESPN's current-week projection (`p.weekly`). A player without a usable weekly projection ranks below every player with one; never treat a missing projection as 0 points.
   - Per slot: both players, both numbers, and whether they differ.
@@ -50,7 +50,7 @@ Consequence: a player who changed NFL teams mid-season is credited to his curren
 
 - [ ] **4.1 Matchup chip** (design `mu-chip`): "W10 vs PHI · soft", coloured by tone (green soft, sand neutral, brick tough; never colour alone: the word is always shown). Hover or focus shows the full sentence: "Soft vs WR · +2.5 points allowed versus average · 28th of 32". Place it on Scouting cards and rows, Roster tiles, League position popovers and lineup slots. Beside it on cards: "◆ ESPN this week 17.3".
 - [ ] **4.2 Rest-of-season strip** on the player card's Story tab (design `mu-strip`), above the existing two columns: one cell per remaining week with week, opponent code, and the signed difference, coloured by tone; byes neutral and labelled; early-sample cells greyed. Summary line: "2 soft · 1 tough · ESPN this week 17.3". Method note: "From each defence's points allowed to the position in completed games. Context only: Expected PPG does not use it."
-- [ ] **4.3 This week: two lineup views** (design `wl`): a table with Slot · Season view (Expected PPG) · Matchup view (ESPN this week) · Matchup chip. Rows where the views differ get the ESPN-blue edge and "◆ differs". Note under it: how many slots differ, what each view ranks by, and that neither changes the ESPN lineup. When they agree: "Both views pick the same starters this week."
+- [ ] **4.3 This week: two lineup views** *(Superseded by `2026-11-12-mppg.md` task 3.1.)* (design `wl`): a table with Slot · Season view (Expected PPG) · Matchup view (ESPN this week) · Matchup chip. Rows where the views differ get the ESPN-blue edge and "◆ differs". Note under it: how many slots differ, what each view ranks by, and that neither changes the ESPN lineup. When they agree: "Both views pick the same starters this week."
 - [ ] **4.4 Scouting:** add "Matchup this week" as a sort and a filter (soft / neutral / tough), and add the chip to the Weekly streamers saved search, where it matters most.
 - [ ] **4.5 Phones:** chip under the name in player rows; the strip scrolls sideways inside the card; the lineup table becomes one row per slot with the two players stacked.
 

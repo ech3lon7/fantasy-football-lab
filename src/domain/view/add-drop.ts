@@ -1,8 +1,9 @@
 import { cmpId } from "../contracts";
-import { lineup, roster, rosterExcess } from "../lineups";
+import { lineup, roster, rosterExcess, weeklyLineup } from "../lineups";
 import type { ScenarioMove } from "../roster-scenarios";
 import type { Model, Player } from "../valuation";
 import { lineupGainSpread, type GainSpread } from "./trade-room";
+import { calculateMppg } from "../mppg";
 
 export interface AddDropPair {
   addId: string;
@@ -31,8 +32,88 @@ export function addDropPairs(
   team: string,
   limit = 10,
   candidates = 25,
+  scope: "season" | "week" = "season",
 ): AddDropPair[] {
   const ids = roster(m, team);
+
+  // 3.6 If scope is "week", rank pairs by the weekly lineup's MPPG gain this week
+  if (scope === "week") {
+    const baseWeekly = weeklyLineup(m, team);
+    const pool = m.players
+      .filter((p) => p.owner === "0" && !p.out && calculateMppg(m, p).value !== null)
+      .sort((a, b) => (calculateMppg(m, b).value ?? 0) - (calculateMppg(m, a).value ?? 0) || cmpId(a.id, b.id))
+      .slice(0, candidates);
+
+    const drops = ids
+      .map((id) => m.byId.get(id))
+      .filter((p): p is Player => !!p && p.droppable);
+
+    const pairs: AddDropPair[] = [];
+    for (const add of pool) {
+      let best: { drop: Player; gain: number; starts: boolean } | undefined;
+      for (const drop of drops) {
+        const nextIds = [...ids.filter((id) => id !== drop.id), add.id];
+        if (rosterExcess(m, nextIds) > 0) continue;
+
+        // Counterfactual weekly lineup
+        // Create an overlay model mapping
+        const overlayModel: Model = {
+          ...m,
+          players: m.players.map((p) => {
+            if (p.id === add.id) return { ...p, owner: team };
+            if (p.id === drop.id) return { ...p, owner: "0" };
+            return p;
+          }),
+        };
+        const nextWeekly = weeklyLineup(overlayModel, team);
+        const gain = Math.round((nextWeekly.totalMppg - baseWeekly.totalMppg) * 10) / 10;
+        const starts = nextWeekly.starterIds.includes(add.id);
+
+        const better =
+          !best ||
+          gain > best.gain + 1e-9 ||
+          (Math.abs(gain - best.gain) <= 1e-9 &&
+            ((drop.index ?? 0) < (best.drop.index ?? 0) ||
+              ((drop.index ?? 0) === (best.drop.index ?? 0) &&
+                cmpId(drop.id, best.drop.id) < 0)));
+        if (better) best = { drop, gain, starts };
+      }
+
+      if (!best || best.gain < -1e-9) continue;
+      const mppgAdd = calculateMppg(m, add);
+      const spread = mppgAdd.spread ?? 3.5;
+      pairs.push({
+        addId: add.id,
+        addName: add.name,
+        addPos: add.pos,
+        dropId: best.drop.id,
+        dropName: best.drop.name,
+        dropPos: best.drop.pos,
+        gain: {
+          gain: best.gain,
+          spread,
+          floor: best.gain - spread,
+          ceiling: best.gain + spread,
+          players: [add.name, best.drop.name],
+          sharesNflTeam: Boolean(add.nfl && add.nfl === best.drop.nfl),
+          reason: `MPPG gain for week ${m.current}`,
+        },
+        starts: best.starts ? "starts" : "depth",
+        startsAt: best.starts ? "FLEX" : null,
+        startWeeks: best.starts ? 1 : 0,
+      });
+    }
+
+    return pairs
+      .sort(
+        (a, b) =>
+          Number(b.starts === "starts") - Number(a.starts === "starts") ||
+          (b.gain.gain ?? -Infinity) - (a.gain.gain ?? -Infinity) ||
+          cmpId(a.addId, b.addId),
+      )
+      .slice(0, limit);
+  }
+
   const base = m.weeks.map((w) => expectedLineup(m, ids, w));
   const pool = m.players
     .filter(

@@ -7,7 +7,7 @@ import type { Model, Player } from "../../domain/valuation";
 import { starterLineupsKey } from "../../domain/starter-lineups";
 import { PlayerName } from "../../ui/PlayerName";
 import { PlayerPhoto } from "../../ui/PlayerPhoto";
-import { Chip } from "../../ui/primitives";
+import { Chip, Segmented } from "../../ui/primitives";
 import { labelTone } from "../../domain/view/labels";
 import { StarterLineupEditor } from "../StarterLineupEditor";
 import { SimulationNote } from "./SimulationIssuePopover";
@@ -100,6 +100,10 @@ export function PlayerTile({
         </PlayerName>
       </div>
       <div className="gd-tile-side">
+        <span className="gd-tile-mppg" style={{ marginRight: "8px" }}>
+          <small>MPPG</small>
+          <strong style={{ fontWeight: 800 }}>{tile.mppg ?? tile.mppgReason ?? "—"}</strong>
+        </span>
         <span className="gd-tile-eppg">
           <small>EPPG</small>
           {tile.eppg ?? "—"}
@@ -160,8 +164,9 @@ export function Roster({
   onApplyDrop?: (team: string, playerId: string) => void;
   onSwitchToLive?: () => void;
 }) {
+  const [scope, setScope] = useState<"season" | "week">("season");
   const chart = depthChart(m, team, grades),
-    pairs = useMemo(() => addDropPairs(m, team), [m, team]),
+    pairs = useMemo(() => addDropPairs(m, team, 10, 25, scope), [m, team, scope]),
     [depthOnly, setDepthOnly] = useState(true),
     [tried, setTried] = useState("");
   const shownPairs = pairs.filter((p) => depthOnly || p.starts === "starts");
@@ -176,10 +181,18 @@ export function Roster({
       {simulator}
       <section aria-label="Add and drop pairs" className="gd-pairs">
         <h2>Add and drop pairs</h2>
+        <div style={{ marginBottom: "10px" }}>
+          <Segmented
+            label="Evaluation scope"
+            options={["Rest of season", "This week"]}
+            value={scope === "season" ? "Rest of season" : "This week"}
+            onChange={(v) => setScope(v === "This week" ? "week" : "season")}
+          />
+        </div>
         <p className="gd-muted">
-          For each available player, the drop that helps your lineup most, using
-          your existing drop rules. Gains are Expected PPG per week with a
-          spread.
+          {scope === "week"
+            ? `For each available player, the drop that helps your weekly lineup most by MPPG. Gains are Week ${m.current} MPPG with a spread.`
+            : "For each available player, the drop that helps your lineup most, using your existing drop rules. Gains are Expected PPG per week with a spread."}
         </p>
         <label className="gd-check">
           <input

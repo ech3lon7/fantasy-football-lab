@@ -1,7 +1,7 @@
 import { mean, n, num, sd, str, sum } from "./contracts";
 import { playedHistory } from "./opportunity";
 import type { Model, Player } from "./valuation";
-import historicalSpread from "./historical-scoring-spread.json";
+import historicalSpread from "./historical-scoring-spread.json" with { type: "json" };
 
 // Use the anonymous historical reference only for the same scoring rules; ignore unrelated league totals and key ordering.
 function positionalReference(m: Model, p: Player) {

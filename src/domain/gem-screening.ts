@@ -103,6 +103,13 @@ export const gemThresholds = [
     advanced: false,
   },
   {
+    key: "mppgMin",
+    label: "Minimum MPPG",
+    metric: "MPPG",
+    stored: "gemMppgMin",
+    advanced: false,
+  },
+  {
     key: "gamesMin",
     label: "Minimum games played",
     metric: "Games played",
@@ -161,6 +168,7 @@ export function defaultGemDraft(team: string): GemDraft {
     indexMin: "",
     indexMax: "",
     recentMin: "",
+    mppgMin: "",
     gamesMin: "",
     gapMin: "",
     roleMin: "",
@@ -498,6 +506,7 @@ export function screenGems(players: Player[], q: GemQuery) {
       indexMin: p.index,
       indexMax: p.index,
       recentMin: p.recent,
+      mppgMin: p.mppg ?? null,
       gamesMin: p.games,
       gapMin: p.gap,
     };
@@ -506,13 +515,17 @@ export function screenGems(players: Player[], q: GemQuery) {
       const threshold = q[f.key];
       if (threshold === null) continue;
       const value = values[f.key];
-      if (value === null || !Number.isFinite(value))
-        missing.push(
-          f.key === "trendMin"
-            ? "Trend PPG unavailable: insufficient usable earlier/recent history."
-            : `${f.metric} unavailable.`,
-        );
-      else if (f.key === "indexMax" ? value > threshold : value < threshold)
+      if (value === null || !Number.isFinite(value)) {
+        if (f.key === "mppgMin") {
+          failed = true;
+        } else {
+          missing.push(
+            f.key === "trendMin"
+              ? "Trend PPG unavailable: insufficient usable earlier/recent history."
+              : `${f.metric} unavailable.`,
+          );
+        }
+      } else if (f.key === "indexMax" ? value > threshold : value < threshold)
         failed = true;
       else
         evidence.push(

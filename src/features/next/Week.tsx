@@ -12,6 +12,9 @@ import { GradeBadge } from "./Roster";
 import { PlayerPhoto } from "../../ui/PlayerPhoto";
 import type { Digest } from "../../domain/view/since-import";
 import { SimulationNote } from "./SimulationIssuePopover";
+import { weeklyLineup } from "../../domain/lineups";
+import { playerMatchups } from "../../domain/matchups";
+import { useOpenPlayer } from "./PlayerCard";
 
 // The outlook line chart: the user's modeled starters against the league median, one point per remaining week.
 function OutlookChart({ summary }: { summary: WeekSummary }) {
@@ -183,6 +186,8 @@ export function Week({
     [m, team, grades, draft, basis],
   );
   const { outlook } = s;
+  const wl = useMemo(() => weeklyLineup(m, team), [m, team]);
+  const openPlayer = useOpenPlayer();
   return (
     <div className="gd-week">
       <SimulationNote
@@ -236,6 +241,143 @@ export function Week({
           </div>
           <OutlookChart summary={s} />
         </section>
+      </section>
+
+      {/* 3.1 Week N lineup · by MPPG */}
+      <section aria-label={`Week ${wl.week} lineup by MPPG`} style={{ marginTop: "16px" }}>
+        <h2 className="gd-h2" style={{ textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          / WEEK {wl.week} LINEUP · BY MPPG
+        </h2>
+        <div className="card" style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "16px 20px" }}>
+          <div className="wtot">
+            <div>
+              <div className="gd-muted" style={{ fontSize: "12.5px", fontWeight: 700, textTransform: "uppercase" }}>
+                ▲ Starters · Week {wl.week} MPPG
+              </div>
+              <div className="wtot-score">
+                <strong>{wl.totalMppg.toFixed(1)}</strong>
+                <span>± {wl.totalSpread.toFixed(1)}</span>
+              </div>
+            </div>
+            <div className="gd-muted" style={{ fontSize: "14px", fontWeight: 600 }}>
+              {wl.gainText} over your season lineup this week
+            </div>
+          </div>
+
+          <div className="gd-muted" style={{ fontSize: "12.5px", lineHeight: "1.4" }}>
+            MPPG (matchup points per game): ESPN's projection for this week, moved by half of the gap between your Expected PPG and ESPN's season projection. This week only; it picks starters, while trades and grades use season Expected PPG. The matchup chip is context and does not feed the number.
+          </div>
+
+          {wl.hasSwaps && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", margin: "4px 0" }}>
+              {wl.swaps.map((sw) => (
+                <div key={`${sw.startId}-${sw.overId}`} className="wsw">
+                  <span>
+                    Start{" "}
+                    <button
+                      type="button"
+                      className="wsw-btn"
+                      onClick={() => openPlayer(sw.startId)}
+                    >
+                      {sw.startName}
+                    </button>{" "}
+                    over{" "}
+                    <button
+                      type="button"
+                      className="wsw-btn"
+                      onClick={() => openPlayer(sw.overId)}
+                    >
+                      {sw.overName}
+                    </button>
+                  </span>
+                  <b className="num" style={{ fontWeight: 800 }}>{sw.gainText}</b>
+                  <div className="wsw-meta">{sw.reason}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ marginTop: "6px" }}>
+            <div className="wl wl-h">
+              <span>Slot</span>
+              <span>Starter</span>
+              <span>MPPG</span>
+              <span>Matchup</span>
+            </div>
+            {wl.slots.map((row, idx) => {
+              const p = row.player;
+              const matchups = p ? playerMatchups(m, p) : [];
+              const currMu = matchups.find((mu) => mu.week === wl.week);
+              const tone = currMu?.tone ?? "neutral";
+              const muLabel = currMu?.shortText.split(" · ")[0] ?? (currMu?.bye ? "Bye" : "—");
+
+              return (
+                <div
+                  key={`${row.slot}-${idx}`}
+                  className={`wl${row.isNewStarter ? " wl-diff" : ""}`}
+                >
+                  <b style={{ fontFamily: "var(--gd-font-mono, monospace)", fontSize: "14px" }}>
+                    {row.slot}
+                  </b>
+                  <div className="wln">
+                    {p ? (
+                      <button
+                        type="button"
+                        style={{
+                          background: "transparent",
+                          border: 0,
+                          padding: 0,
+                          color: "var(--gd-ink)",
+                          fontWeight: 700,
+                          textAlign: "left",
+                          cursor: "pointer",
+                          fontSize: "14.5px",
+                        }}
+                        onClick={() => openPlayer(p.id)}
+                      >
+                        {p.name}
+                      </button>
+                    ) : (
+                      <span className="gd-muted">Unfilled</span>
+                    )}
+                    {row.mppg?.buildLine && (
+                      <small title={row.mppg.buildLine}>{row.mppg.buildLine}</small>
+                    )}
+                  </div>
+                  <div>
+                    {row.mppg?.value !== null && row.mppg?.value !== undefined ? (
+                      <>
+                        <b className="num" style={{ fontWeight: 700 }}>
+                          {row.mppg.value.toFixed(1)}
+                        </b>{" "}
+                        <span className="gd-muted num" style={{ fontSize: "12px" }}>
+                          ± {row.mppg.spread?.toFixed(1) ?? "0.0"}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="gd-muted">{row.mppg?.reason ?? "—"}</span>
+                    )}
+                  </div>
+                  <div>
+                    {currMu && (
+                      <span
+                        className="mu-chip"
+                        data-tone={tone}
+                        title={currMu.text}
+                      >
+                        {currMu.bye ? "Bye" : muLabel.replace(/^W\d+\s*/, "")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="gd-muted" style={{ fontSize: "13px", marginTop: "4px" }}>
+            {wl.note}
+          </div>
+        </div>
       </section>
 
       {digest && (

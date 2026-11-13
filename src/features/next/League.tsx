@@ -382,7 +382,7 @@ export function League({
       <section aria-label="Power ranges">
         <h2>Power ranges, this week</h2>
         <p className="gd-muted">
-          Each team's starting lineup total in Expected PPG, with a combined
+          Each team's starting lineup total in Week {m.current} MPPG, with a combined
           spread. The last column is the chance your lineup outscores theirs, an
           estimate from past variability and not a prediction.
         </p>

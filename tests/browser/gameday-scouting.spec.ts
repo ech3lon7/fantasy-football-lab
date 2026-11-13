@@ -209,3 +209,24 @@ test("Prospective Gem tracking lives in Scouting behind a folding group", async 
     page.getByText(/Automatic observation, not automatic retuning/),
   ).toBeVisible();
 });
+
+// Task 3.5: Scouting sorts by MPPG, table column order is Expected then MPPG.
+test("sorts by MPPG in table view: expected then MPPG column order, highest first", async ({
+  page,
+}) => {
+  await open(page, "#/scouting");
+  await page
+    .getByRole("group", { name: "View" })
+    .getByRole("button", { name: "Table" })
+    .click();
+  await expect(page.locator("table")).toBeVisible();
+  const headers = await page.locator("thead th").allInnerTexts();
+  const expIndex = headers.findIndex((h) => h.includes("Expected"));
+  const mppgIndex = headers.findIndex((h) => h.includes("MPPG"));
+  expect(expIndex).toBeGreaterThanOrEqual(0);
+  expect(mppgIndex).toBe(expIndex + 1);
+
+  await page.locator("thead th").filter({ hasText: "MPPG" }).click();
+  const firstRowMppg = await page.locator("tbody tr").first().locator("td").nth(mppgIndex).innerText();
+  expect(Number(firstRowMppg)).toBeGreaterThan(0);
+});

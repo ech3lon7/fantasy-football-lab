@@ -158,7 +158,8 @@ export function VersusView({
         </section>
       ) : (
         <p className="gd-muted">
-          Start or sit odds need an Expected PPG and a spread for both players.
+          {result.unavailableReason ||
+            "Start or sit odds need an MPPG and a spread for both players."}
         </p>
       )}
       <div className="gd-versus-pickers">

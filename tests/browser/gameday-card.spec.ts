@@ -154,17 +154,18 @@ test("hero shows the team code watermark and the three lead numbers", async ({
   await expect(big).toHaveAttribute("aria-hidden", "true");
   expect(await big.textContent()).toMatch(/^[A-Z]{2,4}$/);
   const stats = card.locator(".gd-card-stat");
-  await expect(stats).toHaveCount(3);
-  await expect(stats.nth(0)).toContainText("EXPECTED PPG");
-  await expect(stats.nth(1)).toContainText("RECENT 3");
-  await expect(stats.nth(2)).toContainText("SURPLUS");
+  await expect(stats).toHaveCount(4);
+  await expect(stats.nth(0)).toContainText("MPPG");
+  await expect(stats.nth(1)).toContainText("EXPECTED PPG");
+  await expect(stats.nth(2)).toContainText("RECENT 3");
+  await expect(stats.nth(3)).toContainText("SURPLUS");
   const sizes = await card
     .locator(".gd-card-stat strong")
     .evaluateAll((els) =>
       els.map((el) => parseFloat(getComputedStyle(el).fontSize)),
     );
   expect(sizes[0]).toBeGreaterThan(sizes[1] ?? 0);
-  expect(sizes[1]).toBe(sizes[2]);
+  expect(sizes[2]).toBe(sizes[3]);
   // Every label carries a state tone instead of the old neutral chip.
   const labelClasses = await card
     .locator(".gd-card-labels .gd-chip-tag")

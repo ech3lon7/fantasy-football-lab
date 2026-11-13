@@ -7,6 +7,9 @@ import {
   sum,
   quantile,
 } from "./contracts";
+import { calculateMppg, type MppgResult } from "./mppg";
+import { playerMatchups } from "./matchups";
+import { combineSpreads, normalCdf } from "./view/odds";
 const fields = {
   QB: "QBSlots",
   RB: "RBSlots",
@@ -445,4 +448,221 @@ export function teamsAssessment(m: Model): Map<string, PositionGrade[]> {
                       : "Protect starters; no healthy above-replacement spare after FLEX.";
     }
   return result;
+}
+
+export interface SuggestedSwap {
+  startId: string;
+  startName: string;
+  overId: string;
+  overName: string;
+  gain: number; // positive difference in MPPG
+  chance: number; // chance start outscores over
+  chancePct: string; // e.g. "67%"
+  reason: string; // e.g. "67% chance he outscores Brannigan · ESPN projects 11.4 this week vs 9.4 · Soft vs RB..."
+  gainText: string; // e.g. "+1.9"
+}
+
+export interface WeeklyLineupSlot {
+  slot: string;
+  playerId: string | null;
+  player: Player | null;
+  mppg: MppgResult | null;
+  isNewStarter: boolean; // starter differs from season lineup
+}
+
+export interface WeeklyLineup {
+  week: number;
+  slots: WeeklyLineupSlot[];
+  starterIds: string[];
+  totalMppg: number;
+  totalSpread: number;
+  seasonLineupMppg: number;
+  gainOverSeasonLineup: number;
+  gainText: string;
+  swaps: SuggestedSwap[];
+  hasSwaps: boolean;
+  note: string;
+}
+
+// 2.1 & 2.2 Weekly lineup ranked by MPPG with suggested swaps
+export function weeklyLineup(m: Model, team: string): WeeklyLineup {
+  const teamRosterIds = roster(m, team);
+  const week = m.current;
+  const ctx = m.dataset.tables.ModelContext[0];
+
+  // 1. Season lineup (using existing standard lineup function)
+  const seasonL = lineup(m, teamRosterIds, week, false, false, "value");
+  const seasonStarterIds = new Set(seasonL.ids.filter((id): id is string => Boolean(id)));
+
+  // Calculate season lineup's total MPPG
+  let seasonMppgTotal = 0;
+  for (const sId of seasonStarterIds) {
+    const p = m.byId.get(sId);
+    if (p) {
+      const res = calculateMppg(m, p, week);
+      if (res.value !== null) {
+        seasonMppgTotal += res.value;
+      }
+    }
+  }
+
+  // 2. Weekly lineup: eligible players must have non-null MPPG
+  const ir = new Set(irAssignments(m, teamRosterIds));
+  const eligiblePlayersWithMppg: { player: Player; mppg: MppgResult }[] = [];
+
+  for (const id of teamRosterIds) {
+    const p = m.byId.get(id);
+    if (!p) continue;
+    if (ir.has(p.id)) continue;
+    const mppgRes = calculateMppg(m, p, week);
+    if (mppgRes.value !== null) {
+      eligiblePlayersWithMppg.push({ player: p, mppg: mppgRes });
+    }
+  }
+
+  // Rank eligible players descending by MPPG value, then stable id tiebreak
+  eligiblePlayersWithMppg.sort(
+    (a, b) => b.mppg.value! - a.mppg.value! || cmpId(a.player.id, b.player.id),
+  );
+
+  const used = new Set<string>();
+  const weeklySlots: WeeklyLineupSlot[] = [];
+
+  function pickWeekly(pos: string, count: number) {
+    const candidates = eligiblePlayersWithMppg.filter(
+      (item) =>
+        !used.has(item.player.id) &&
+        (pos === "FLEX"
+          ? ["RB", "WR", "TE"].includes(item.player.pos)
+          : item.player.pos === pos),
+    );
+    for (let i = 0; i < count; i++) {
+      const item = candidates[i];
+      if (item) {
+        used.add(item.player.id);
+        weeklySlots.push({
+          slot: pos,
+          playerId: item.player.id,
+          player: item.player,
+          mppg: item.mppg,
+          isNewStarter: !seasonStarterIds.has(item.player.id),
+        });
+      } else {
+        weeklySlots.push({
+          slot: pos,
+          playerId: null,
+          player: null,
+          mppg: null,
+          isNewStarter: false,
+        });
+      }
+    }
+  }
+
+  for (const pos of ["QB", "RB", "WR", "TE"] as const)
+    pickWeekly(pos, num(ctx[fields[pos]]));
+  pickWeekly("FLEX", num(ctx.FlexSlots));
+  pickWeekly("K", num(ctx.KSlots));
+  pickWeekly("D/ST", num(ctx.DSTSlots));
+
+  const weeklyStarterIds = weeklySlots
+    .map((s) => s.playerId)
+    .filter((id): id is string => Boolean(id));
+  const weeklyStarterIdSet = new Set(weeklyStarterIds);
+
+  // Total starters MPPG and root-sum-square spread
+  let totalMppg = 0;
+  const spreads: number[] = [];
+  for (const slot of weeklySlots) {
+    if (slot.mppg?.value !== null && slot.mppg?.value !== undefined) {
+      totalMppg += slot.mppg.value;
+      if (slot.mppg.spread !== null && slot.mppg.spread !== undefined) {
+        spreads.push(slot.mppg.spread);
+      }
+    }
+  }
+  const totalSpread = Math.round(combineSpreads(spreads) * 10) / 10;
+  totalMppg = Math.round(totalMppg * 10) / 10;
+  seasonMppgTotal = Math.round(seasonMppgTotal * 10) / 10;
+  const gain = Math.round((totalMppg - seasonMppgTotal) * 10) / 10;
+  const gainText = `${gain >= 0 ? "+" : "−"}${Math.abs(gain).toFixed(1)}`;
+
+  // 3. Suggested swaps: compare starter SETS, not slots
+  // "in": in weekly starters, but not in season starters
+  // "out": in season starters, but not in weekly starters
+  const inPlayers = weeklySlots
+    .filter((s) => s.player && !seasonStarterIds.has(s.player.id))
+    .map((s) => ({ player: s.player!, mppg: s.mppg! }));
+  inPlayers.sort((a, b) => b.mppg.value! - a.mppg.value!);
+
+  const outPlayers: { player: Player; mppg: MppgResult }[] = [];
+  for (const sId of seasonStarterIds) {
+    if (!weeklyStarterIdSet.has(sId)) {
+      const p = m.byId.get(sId);
+      if (p) {
+        outPlayers.push({ player: p, mppg: calculateMppg(m, p, week) });
+      }
+    }
+  }
+  // Sort outPlayers ascending by MPPG value (worst out first, nulls first)
+  outPlayers.sort((a, b) => (a.mppg.value ?? -999) - (b.mppg.value ?? -999));
+
+  const swaps: SuggestedSwap[] = [];
+  const swapCount = Math.min(inPlayers.length, outPlayers.length);
+
+  for (let i = 0; i < swapCount; i++) {
+    const pin = inPlayers[i];
+    const pout = outPlayers[i];
+
+    const vIn = pin.mppg.value ?? 0;
+    const vOut = pout.mppg.value ?? 0;
+    const diff = Math.max(0, Math.round((vIn - vOut) * 10) / 10);
+
+    const spIn = pin.mppg.spread ?? 3.5;
+    const spOut = pout.mppg.spread ?? 3.5;
+    const combSpread = Math.sqrt(spIn * spIn + spOut * spOut);
+    const z = combSpread > 0 ? (vIn - vOut) / combSpread : 0;
+    const pr = Math.round(normalCdf(z) * 100);
+
+    const matchupList = playerMatchups(m, pin.player);
+    const currMatchup = matchupList.find((mu) => mu.week === week);
+    const chipText = currMatchup ? currMatchup.text : "";
+
+    const reason =
+      pout.mppg.value === null
+        ? `${pout.player.name} is ${pout.mppg.reason.toLowerCase()} · ${chipText}`
+        : `${pr}% chance he outscores ${pout.player.name.split(" ").slice(-1)[0]} · ESPN projects ${pin.player.weekly?.toFixed(1) ?? "—"} this week vs ${pout.player.weekly?.toFixed(1) ?? "—"}${chipText ? " · " + chipText : ""}`;
+
+    swaps.push({
+      startId: pin.player.id,
+      startName: pin.player.name,
+      overId: pout.player.id,
+      overName: pout.player.name,
+      gain: diff,
+      chance: pr,
+      chancePct: `${pr}%`,
+      reason,
+      gainText: `+${diff.toFixed(1)}`,
+    });
+  }
+
+  const slotChangeCount = swaps.length;
+  const note =
+    slotChangeCount > 0
+      ? `${slotChangeCount} slot ${slotChangeCount === 1 ? "change" : "changes"} from your season lineup this week. Neither changes your ESPN lineup until you set it there.`
+      : "Your season lineup is already your best Week " + week + " lineup.";
+
+  return {
+    week,
+    slots: weeklySlots,
+    starterIds: weeklyStarterIds,
+    totalMppg,
+    totalSpread,
+    seasonLineupMppg: seasonMppgTotal,
+    gainOverSeasonLineup: gain,
+    gainText,
+    swaps,
+    hasSwaps: swaps.length > 0,
+    note,
+  };
 }

@@ -145,6 +145,8 @@ export function sortScouting(
   const read = (r: GemResult): number | string | null => {
     const p = r.player;
     switch (key) {
+      case "mppg":
+        return p.mppg ?? null;
       case "name":
         return p.name;
       case "recent":

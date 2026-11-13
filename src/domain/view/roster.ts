@@ -1,7 +1,8 @@
 import { n, num } from "../contracts";
-import { irAssignments, lineup, roster, type PositionGrade } from "../lineups";
+import { irAssignments, roster, weeklyLineup, type PositionGrade } from "../lineups";
 import { playedHistory } from "../opportunity";
 import { playerSignals, type Model, type Player } from "../valuation";
+import { calculateMppg } from "../mppg";
 
 // Grade letters map onto the six-step colour scale; "n.a." and unknown values have no tone, never the lowest one.
 export function gradeTone(grade: string): 1 | 2 | 3 | 4 | 5 | 6 | null {
@@ -31,6 +32,8 @@ export interface DepthTile {
   role: Role;
   // The lineup slot a starter fills, such as FLEX; null for bench and IR players.
   slot: string | null;
+  mppg: string | null;
+  mppgReason: string;
   eppg: string | null;
   injury: string;
   labels: string[];
@@ -55,24 +58,20 @@ export function depthChart(
   team: string,
   grades: PositionGrade[],
 ): DepthGroup[] {
-  const ids = roster(m, team),
-    // Mirror the current-week modeled lineup so starters here are the starters everywhere else.
-    week = lineup(
-      m,
-      ids,
-      m.current,
-      false,
-      false,
-      m.ignoreTemporaryAbsences ? "expected" : "value",
-    ),
-    slotOf = new Map<string, string>();
-  week.ids.forEach((id, i) => {
-    if (id) slotOf.set(id, week.slots[i]);
-  });
+  const ids = roster(m, team);
+  // 3.3 The starters highlighted are the weekly lineup
+  const wl = weeklyLineup(m, team);
+  const slotOf = new Map<string, string>();
+  for (const s of wl.slots) {
+    if (s.playerId) slotOf.set(s.playerId, s.slot);
+  }
   const ir = new Set(irAssignments(m, ids)),
     history = playedHistory(m.dataset);
   const tile = (p: Player): DepthTile => {
     const slot = slotOf.get(p.id) ?? null;
+    const mppgRes = calculateMppg(m, p);
+    const mppg = mppgRes.value !== null ? mppgRes.value.toFixed(1) : null;
+    const mppgReason = mppgRes.reason || "";
     const playerHistory = (history.get(p.id) ?? []).map((r) => ({
       week: num(r.Week),
       points: n(r.Points),
@@ -93,6 +92,8 @@ export function depthChart(
       nfl: p.nfl,
       role: slot ? "Starter" : ir.has(p.id) ? "IR" : "Bench",
       slot,
+      mppg,
+      mppgReason,
       eppg: p.blendedExpected === null ? null : p.blendedExpected.toFixed(1),
       injury: p.injury,
       labels: playerSignals(p).filter((x) => x && !/^(none|no )/i.test(x)),

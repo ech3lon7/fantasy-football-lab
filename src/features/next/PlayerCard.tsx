@@ -22,6 +22,7 @@ import { Radar } from "./Radar";
 import { PlayerEvidence } from "./PlayerEvidence";
 import { VersusView } from "./Versus";
 import { addToVersus } from "../../domain/view/versus";
+import { MPPG_METHOD_NOTE } from "../../domain/mppg";
 import { useFeedback } from "../../ui/feel/feedback";
 import { PlayerPhoto } from "../../ui/PlayerPhoto";
 
@@ -176,15 +177,51 @@ function CardView({
           </div>
         </div>
         <div className="gd-card-nums">
+          {/* 3.2 ▲ MPPG · Week N leads */}
+          <div
+            className="gd-card-stat gd-card-mppg"
+            aria-label="Matchup points per game"
+          >
+            <small>
+              ▲ MPPG · WEEK {m.current}{" "}
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label="MPPG method explanation"
+                title={MPPG_METHOD_NOTE}
+                style={{ cursor: "help", opacity: 0.8 }}
+              >
+                ⓘ
+              </span>
+            </small>
+            <strong style={{ fontSize: "72px", lineHeight: 0.9 }}>
+              {h.mppg.value !== null ? h.mppg.value.toFixed(1) : "—"}
+            </strong>
+            {h.mppg.value !== null ? (
+              <>
+                <small>
+                  Floor {h.mppg.floor?.toFixed(1) ?? "—"} · ceiling {h.mppg.ceiling?.toFixed(1) ?? "—"}
+                  {h.mppg.importedAt ? ` · as of import ${new Date(h.mppg.importedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ""}
+                </small>
+                {h.mppg.buildLine && (
+                  <small title={h.mppg.buildLine} style={{ opacity: 0.85, fontSize: "11px" }}>
+                    {h.mppg.buildLine}
+                  </small>
+                )}
+              </>
+            ) : (
+              <small>{h.mppg.reason || "Unavailable"}</small>
+            )}
+          </div>
           <div
             className="gd-card-stat gd-card-eppg"
             aria-label="Expected points per game"
           >
-            <small>▲ EXPECTED PPG</small>
-            <strong>{h.eppg ?? "—"}</strong>
+            <small>▲ EXPECTED PPG · SEASON</small>
+            <strong style={{ fontSize: "54px", lineHeight: 1 }}>{h.eppg ?? "—"}</strong>
             {h.floor !== null && h.ceiling !== null ? (
               <small>
-                Floor {h.floor} · ceiling {h.ceiling}
+                Next game floor {h.floor} · ceiling {h.ceiling}
               </small>
             ) : (
               <small title={h.rangeReason}>Range unavailable</small>
@@ -265,40 +302,99 @@ function CardView({
         aria-labelledby={`gd-tab-${tab}`}
       >
         {tab === "story" && (
-          <div className="gd-story-grid">
-            <div className="gd-story-left">
-              <NextRefreshScenarios m={m} p={p} defaultOpen />
-              {h.blendLine && <small className="gd-blend">{h.blendLine}</small>}
-              <ul className="gd-story">
-                {card.story.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            </div>
-            <div className="gd-story-right">
+          <>
+            <section
+              className="gd-card-matchups gd-story-panel"
+              style={{ marginBottom: "18px" }}
+              aria-label="Rest of season matchups"
+            >
               <div
-                ref={chart}
-                className="gd-story-panel"
-                role="region"
-                aria-label={`Moving-average chart for ${h.name}`}
+                className="gd-card-matchups-head"
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                }}
               >
-                <span className="gd-kick">
-                  Performance momentum &amp; moving averages
+                <span className="gd-kick">MATCHUPS · REST OF SEASON</span>
+                <span style={{ fontSize: "13px", opacity: 0.85, fontWeight: 600 }}>
+                  {card.matchups.filter((mu) => mu.tone === "soft").length} soft ·{" "}
+                  {card.matchups.filter((mu) => mu.tone === "tough").length} tough
+                  {p.weekly !== null && p.weekly !== undefined
+                    ? ` · ESPN this week ${p.weekly.toFixed(1)}`
+                    : ""}
                 </span>
-                <PlayerStockChart
-                  trend={card.chart.trend}
-                  playerName={h.name}
-                  position={h.pos}
-                  leagueAvgVolume={card.chart.leagueAvgVolume}
-                  height={200}
-                />
               </div>
-              <div className="gd-story-panel">
-                <span className="gd-kick">Profile vs average {h.pos}</span>
-                <Radar axes={card.radar} />
+              <div className="mu-strip" role="list" aria-label="Rest of season matchups">
+                {card.matchups.map((mu) => (
+                  <div
+                    key={mu.week}
+                    className="mu-cell"
+                    data-tone={mu.tone}
+                    role="listitem"
+                  >
+                    <small>W{mu.week}</small>
+                    <b>{mu.bye ? "BYE" : mu.opponent}</b>
+                    <span>
+                      {mu.bye
+                        ? "—"
+                        : mu.diff !== null
+                        ? `${mu.diff > 0 ? "+" : ""}${mu.diff.toFixed(1)}`
+                        : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p
+                style={{
+                  margin: "8px 0 0",
+                  fontSize: "11.5px",
+                  opacity: 0.75,
+                  lineHeight: 1.4,
+                }}
+              >
+                Green = defence allows more than average to {h.pos}s · sand = average · red = allows less.
+                From each defence's points allowed to the position in completed games. Context only:
+                Expected PPG does not use it.
+              </p>
+            </section>
+            <div className="gd-story-grid">
+              <div className="gd-story-left">
+                <NextRefreshScenarios m={m} p={p} defaultOpen />
+                {h.blendLine && <small className="gd-blend">{h.blendLine}</small>}
+                <ul className="gd-story">
+                  {card.story.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="gd-story-right">
+                <div
+                  ref={chart}
+                  className="gd-story-panel"
+                  role="region"
+                  aria-label={`Moving-average chart for ${h.name}`}
+                >
+                  <span className="gd-kick">
+                    Performance momentum &amp; moving averages
+                  </span>
+                  <PlayerStockChart
+                    trend={card.chart.trend}
+                    playerName={h.name}
+                    position={h.pos}
+                    leagueAvgVolume={card.chart.leagueAvgVolume}
+                    height={200}
+                  />
+                </div>
+                <div className="gd-story-panel">
+                  <span className="gd-kick">Profile vs average {h.pos}</span>
+                  <Radar axes={card.radar} />
+                </div>
               </div>
             </div>
-          </div>
+          </>
         )}
         {tab === "numbers" && (
           <>

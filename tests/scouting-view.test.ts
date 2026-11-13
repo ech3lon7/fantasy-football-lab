@@ -64,6 +64,16 @@ describe("optional engine criteria", () => {
     expect(ids(query("buysell", { regression: "BUY LOW" }))).toEqual(["3"]);
     expect(ids(query("streamers", { pool: "All" }))).toEqual(["5"]);
   });
+  it("filters by mppgMin: players below or with null MPPG fail the filter", () => {
+    const list = [
+      player("1", { mppg: 15.0 }),
+      player("2", { mppg: 9.5 }),
+      player("3", { mppg: null }),
+    ];
+    const q = query("all", { mppgMin: "10" });
+    const matches = screenGems(list, q).matches.map((r) => r.player.id);
+    expect(matches).toEqual(["1"]);
+  });
   it("round-trips the optional criteria and clears them with filtersPatch", () => {
     const q = query("buysell", { signals: ["Gem"], signalMode: "any" });
     const saved = filtersPatch(q);
@@ -155,5 +165,18 @@ describe("sorting", () => {
     expect(
       sortScouting(results, "expected", false).map((r) => r.player.id),
     ).toEqual(["1", "2", "4", "3"]);
+  });
+
+  it("sorts by MPPG descending with nulls (bye/out/missing) ranked last, never 0", () => {
+    const results = [
+      player("1", { mppg: 14.5 }),
+      player("2", { mppg: null }), // bye or out
+      player("3", { mppg: 18.2 }),
+      player("4", { mppg: 8.0 }),
+    ].map((p) => ({ player: p, evidence: [], missing: [] }));
+    const sorted = sortScouting(results, "mppg", true);
+    expect(sorted.map((r) => r.player.id)).toEqual(["3", "1", "4", "2"]);
+    expect(sorted[0].player.mppg).toBe(18.2);
+    expect(sorted[3].player.mppg).toBeNull();
   });
 });

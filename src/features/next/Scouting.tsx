@@ -32,6 +32,8 @@ import {
   setGroupOpen,
 } from "../../domain/view/primitives";
 import type { Model, Player } from "../../domain/valuation";
+import { calculateMppg } from "../../domain/mppg";
+import { playerMatchups } from "../../domain/matchups";
 import {
   DataTable,
   PlayerSignals,
@@ -64,6 +66,7 @@ import { labelTone } from "../../domain/view/labels";
 const views = ["cards", "table"] as const;
 const sorts: [string, string][] = [
   ["expected", "Expected PPG"],
+  ["mppg", "MPPG · this week"],
   ["recent", "Recent PPG"],
   ["index", "Surplus index"],
   ["trend", "Trend PPG"],
@@ -234,7 +237,12 @@ export function Scouting({
               const q = validateGemDraft(p.draft(defaultTeam), teamIds).query;
               if (q) {
                 setDraft(p.draft(defaultTeam));
-                onFilters(filtersPatch(q));
+                const patch: Record<string, string> = filtersPatch(q);
+                if (p.id === "streamers") {
+                  patch.scoutingSort = "mppg";
+                  patch.scoutingDirection = "desc";
+                }
+                onFilters(patch);
                 setLimit(48);
               }
             }}
@@ -445,6 +453,7 @@ export function Scouting({
             {numeric("trendMin")}
             {numeric("indexMin")}
             {numeric("recentMin")}
+            {numeric("mppgMin")}
           </section>
           <FoldingGroup
             title="Advanced filters"
@@ -667,6 +676,8 @@ export function Scouting({
                   <div className="gd-cards">
                     {cards.cards.map((c) => {
                       const p = m.byId.get(c.id)!;
+                      const mppg = calculateMppg(m, p);
+                      const mu = playerMatchups(m, p)[0];
                       return (
                         <article
                           key={c.id}
@@ -706,6 +717,22 @@ export function Scouting({
                                 <small>▲ Expected PPG</small>
                                 <b>{c.eppg ?? "—"}</b>
                               </div>
+                              <div
+                                style={{ textAlign: "center" }}
+                                title={mppg.buildLine || mppg.reason || undefined}
+                                tabIndex={0}
+                              >
+                                <small>▲ MPPG · W{m.current}</small>
+                                <b style={{ fontSize: "1.15em" }}>
+                                  {mppg.value !== null
+                                    ? mppg.value.toFixed(1)
+                                    : mppg.reason === "Bye week"
+                                    ? "Bye"
+                                    : mppg.reason === "Out"
+                                    ? "Out"
+                                    : "—"}
+                                </b>
+                              </div>
                               <div style={{ textAlign: "right" }}>
                                 <small>● Recent 3</small>
                                 <b>{c.recent ?? "—"}</b>
@@ -722,6 +749,28 @@ export function Scouting({
                                 unavailableReason="Next-game range needs a usable EPPG and scoring variability."
                               />
                             </div>
+                            {mu && (
+                              <div
+                                className="gd-pcard-matchup-row"
+                                style={{
+                                  display: "flex",
+                                  gap: "8px",
+                                  alignItems: "center",
+                                  flexWrap: "wrap",
+                                  marginTop: "6px",
+                                  marginBottom: "4px",
+                                }}
+                              >
+                                <span className="mu-chip" data-tone={mu.tone}>
+                                  {mu.shortText}
+                                </span>
+                                {p.weekly !== null && p.weekly !== undefined && (
+                                  <small style={{ opacity: 0.85, fontSize: "11px" }}>
+                                    ◆ ESPN this week {p.weekly.toFixed(1)}
+                                  </small>
+                                )}
+                              </div>
+                            )}
                             {c.sparkline && (
                               <svg
                                 className="gd-pcard-spark"
@@ -847,16 +896,42 @@ function ResultsTable({
     value: (p) => -p.priority,
     render: (p) => <PlayerSignals p={p} />,
   };
+  const mppgCol: Column<Player> = {
+    key: "mppg",
+    label: "MPPG",
+    kind: "model",
+    value: (p) => p.mppg ?? null,
+    render: (p) => {
+      const res = calculateMppg(m, p);
+      if (res.value !== null) {
+        return (
+          <span title={res.buildLine || undefined} tabIndex={0}>
+            {res.value.toFixed(1)}
+          </span>
+        );
+      }
+      const label =
+        res.reason === "Bye week" ? "Bye" : res.reason === "Out" ? "Out" : "—";
+      return (
+        <span title={res.reason || undefined} tabIndex={0} className="gd-muted">
+          {label}
+        </span>
+      );
+    },
+  };
   const full: Column<Player>[] = [
     playerColumnName,
     ...extendedColumns.filter((c) => !["name"].includes(c.key)),
   ];
+  const fullExpIdx = full.findIndex((c) => c.key === "expected");
+  if (fullExpIdx >= 0) full.splice(fullExpIdx + 1, 0, mppgCol);
   const base: Column<Player>[] = all
     ? full
     : [
         playerColumnName,
         playerColumnTrend,
         playerColumnExpected,
+        mppgCol,
         playerColumnIndex,
         playerColumnRecent,
         playerColumnProjected,

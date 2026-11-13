@@ -40,6 +40,9 @@ export interface CalcStep {
   note: string;
 }
 
+import { calculateMppg, type MppgResult } from "../mppg";
+import { playerMatchups, type PlayerWeeklyMatchup } from "../matchups";
+
 export interface PlayerCard {
   id: string;
   header: {
@@ -55,11 +58,14 @@ export interface PlayerCard {
     ceiling: string | null;
     spread: string | null;
     rangeReason: string;
+    // 3.2 MPPG in player card header
+    mppg: MppgResult;
     // For example "64% this player's games · 36% WR history"; null when no positional reference applies.
     blendLine: string | null;
     recent: string | null;
     surplus: string | null;
   };
+  matchups: PlayerWeeklyMatchup[];
   story: string[];
   numbers: {
     groups: { provenance: Provenance; title: string; items: NumberItem[] }[];
@@ -253,7 +259,9 @@ export function playerCard(m: Model, id: string): PlayerCard | null {
           : "",
       recent: f(p.recent),
       surplus: f(p.index, 0),
+      mppg: calculateMppg(m, p),
     },
+    matchups: playerMatchups(m, p),
     story,
     numbers: { groups, unavailable: all.filter((x) => x.display === null) },
     radar: radarAxes(m, p),

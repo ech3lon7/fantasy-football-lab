@@ -7,7 +7,7 @@ import {
   nextRefreshEppg,
 } from "../src/domain/next-refresh";
 import { fixture } from "./fixtures";
-import historicalSpread from "../src/domain/historical-scoring-spread.json";
+import historicalSpread from "../src/domain/historical-scoring-spread.json" with { type: "json" };
 
 // EPPG takes precedence over any weekly projection, including zero; the spread remains the historical sample SD.
 it("autofills EPPG plus/minus sample SD and falls back only to a usable weekly projection", async () => {

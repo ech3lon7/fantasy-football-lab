@@ -16,14 +16,14 @@
 
 ## 1. Coordination
 
-Another session is changing the **Manual analyzer** in `TradeRoom.tsx` (uncommitted on 2026-11-12). To avoid conflicts, build the two tabs in **new files** and change `TradeRoom.tsx` only to mount them:
+The Manual analyzer work landed in `b167e19` (v1.0.12). Before editing `TradeRoom.tsx`, run `git status`: if it has uncommitted changes from other work, stop and ask the owner. Build the two tabs in **new files** and change `TradeRoom.tsx` only to mount them:
 
 - `src/features/next/trade/FindTrades.tsx`
 - `src/features/next/trade/ChainPlanner.tsx`
 - `src/features/next/trade/useTradeSearch.ts`, `useChainSearch.ts` (state, persistence, worker calls)
 - `src/features/next/trade/SearchControls.tsx` (folding groups shared by both)
 
-Wait for the Manual analyzer work to be committed before touching `TradeRoom.tsx`.
+Order of work: write the section 5 tests first and show the owner they fail on the current build; then build.
 
 ## 2. Architecture
 

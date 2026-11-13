@@ -2,6 +2,7 @@ import { nextRefreshDefaults } from "../next-refresh";
 import type { Model, Player } from "../valuation";
 import { teamColors } from "./nfl-colors";
 import { oddsCaveat, oddsReading, outscoreProbability } from "./odds";
+import { calculateMppg } from "../mppg";
 
 export interface VersusSide {
   id: string;
@@ -36,8 +37,9 @@ export interface Versus {
   a: VersusSide;
   b: VersusSide;
   rows: VersusRow[];
-  // Null when either player's EPPG or spread is unavailable; no figure is shown then.
+  // Null when either player's MPPG or spread is unavailable; no figure is shown then.
   odds: StartOrSit | null;
+  unavailableReason?: string;
 }
 
 const side = (p: Player): VersusSide => ({
@@ -79,10 +81,24 @@ export function versus(m: Model, aId: string, bId: string): Versus | null {
         x === null || y === null ? null : x === y ? "even" : x > y ? "a" : "b",
     } satisfies VersusRow;
   });
-  const pa = outscoreProbability(
-    { mean: ra.base, spread: ra.spread },
-    { mean: rb.base, spread: rb.spread },
-  );
+  // 3.4 Start-or-sit odds use MPPG and its spread
+  const mppgA = calculateMppg(m, a);
+  const mppgB = calculateMppg(m, b);
+
+  let pa: number | null = null;
+  let reasonIfNotAvailable = "";
+
+  if (mppgA.value === null || mppgA.spread === null) {
+    reasonIfNotAvailable = `${a.name}: ${mppgA.reason}`;
+  } else if (mppgB.value === null || mppgB.spread === null) {
+    reasonIfNotAvailable = `${b.name}: ${mppgB.reason}`;
+  } else {
+    pa = outscoreProbability(
+      { mean: mppgA.value, spread: mppgA.spread },
+      { mean: mppgB.value, spread: mppgB.spread },
+    );
+  }
+
   const odds: StartOrSit | null =
     pa === null
       ? null
@@ -90,10 +106,16 @@ export function versus(m: Model, aId: string, bId: string): Versus | null {
           a: `${Math.round(pa * 100)}%`,
           b: `${Math.round((1 - pa) * 100)}%`,
           reading: oddsReading(pa),
-          ranges: `${a.name} ${ra.base!.toFixed(1)} ± ${ra.spread!.toFixed(1)} vs ${b.name} ${rb.base!.toFixed(1)} ± ${rb.spread!.toFixed(1)}`,
+          ranges: `${a.name} ${mppgA.value!.toFixed(1)} ± ${mppgA.spread!.toFixed(1)} vs ${b.name} ${mppgB.value!.toFixed(1)} ± ${mppgB.spread!.toFixed(1)}`,
           caveat: oddsCaveat,
         };
-  return { a: side(a), b: side(b), rows, odds };
+  return {
+    a: side(a),
+    b: side(b),
+    rows,
+    odds,
+    unavailableReason: reasonIfNotAvailable || undefined,
+  };
 }
 
 // Keep the last two chosen players; adding a third replaces the oldest, and the same player is never added twice.

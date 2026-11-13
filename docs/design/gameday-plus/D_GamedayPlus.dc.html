@@ -189,7 +189,7 @@ a{color:var(--es)}a:hover{color:var(--infofg)}
 .rng{width:100%;accent-color:var(--ed)}
 .sel{height:36px;border-radius:10px;border:2px solid #CFC3F2;background:#FBFAFF;font:inherit;padding:0 8px;color:var(--ink);max-width:100%}
 .applied{background:var(--soft);border-radius:12px;padding:10px 14px;font-size:14px}
-.trw{display:grid;grid-template-columns:minmax(190px,1.5fr) repeat(7,72px) minmax(170px,1.3fr) 96px;gap:8px;padding:10px 12px;border-bottom:1px solid var(--ln);align-items:center;min-width:1060px;font-size:14px}
+.trw{display:grid;grid-template-columns:minmax(190px,1.5fr) repeat(8,72px) minmax(170px,1.3fr) 96px;gap:8px;padding:10px 12px;border-bottom:1px solid var(--ln);align-items:center;min-width:1140px;font-size:14px}
 .trw.h{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--mu);background:var(--soft)}
 .trw .r{text-align:right}
 .nmb{border:0;background:none;padding:0;font-weight:700;text-align:left}
@@ -270,8 +270,13 @@ a{color:var(--es)}a:hover{color:var(--infofg)}
 .mu-cell small{font-size:11px;font-weight:700;opacity:.85}
 .mu-cell b{font-family:'Barlow Condensed';font-weight:800;font-size:19px;line-height:1}
 .mu-cell span{font-size:11.5px;font-variant-numeric:tabular-nums}
-.wl{display:grid;grid-template-columns:70px minmax(0,1fr) minmax(0,1fr) 110px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--ln);font-size:14.5px}
+.wl{display:grid;grid-template-columns:56px minmax(0,1fr) 110px 110px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--ln);font-size:14.5px}
 .wl-h{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--mu)}
+.wtot{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;padding-bottom:6px;border-bottom:1px solid var(--ln)}
+.wsw{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:8px 12px;border-radius:10px;background:var(--okbg);color:var(--okfg);font-size:14px}
+.wsw .quiet{grid-column:1/-1;font-size:12.5px;color:inherit;opacity:.8}
+.wln{display:flex;flex-direction:column;line-height:1.2;min-width:0}
+.wln small{font-size:11.5px}
 .wl-diff{box-shadow:inset 4px 0 0 var(--es);padding-left:8px}
 .mo-full .mu-cell{animation:cardin .35s cubic-bezier(.2,.8,.2,1) both}
 .edot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ed);margin:0 5px;vertical-align:middle}
@@ -344,6 +349,42 @@ a{color:var(--es)}a:hover{color:var(--infofg)}
 .mo-full .srow:nth-child(2){animation-delay:.08s}.mo-full .srow:nth-child(3){animation-delay:.16s}.mo-full .srow:nth-child(4){animation-delay:.24s}
 .mo-full .pc,.mo-full .move{animation:cardin .45s cubic-bezier(.2,.8,.2,1) both}
 .mo-off *,.mo-off *::before,.mo-off *::after{animation:none!important;transition:none!important}
+.hx{min-height:330px;padding-top:46px;background:linear-gradient(100deg,rgba(0,0,0,.55) 0%,rgba(0,0,0,.08) 46%,rgba(0,0,0,.42) 100%),var(--tc);isolation:isolate}
+.hx-dots{position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.28) 1.2px,transparent 1.7px);background-size:7px 7px;-webkit-mask-image:linear-gradient(100deg,transparent 22%,#000 58%,rgba(0,0,0,.4) 82%,transparent 100%);mask-image:linear-gradient(100deg,transparent 22%,#000 58%,rgba(0,0,0,.4) 82%,transparent 100%);pointer-events:none}
+.hx-num{position:absolute;right:270px;top:-18px;font-family:'Barlow Condensed';font-weight:800;font-size:250px;line-height:1;color:transparent;background-image:radial-gradient(rgba(255,255,255,.8) 1.5px,transparent 1.9px);background-size:6px 6px;-webkit-background-clip:text;background-clip:text;-webkit-text-stroke:2px rgba(255,255,255,.55);opacity:.75;pointer-events:none;letter-spacing:-.03em}
+.hx-crumb{position:absolute;left:28px;top:16px;font-family:'Barlow Condensed';font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;opacity:.82}
+.hx-id{position:relative;flex:1 1 560px;display:flex;gap:20px;align-items:flex-end;padding-right:250px}
+.hx-photo{flex:none;width:140px;height:164px;border-radius:14px 14px 4px 4px;background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(0,0,0,.35)),var(--ta);box-shadow:0 0 0 3px rgba(255,255,255,.9),0 14px 30px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:56px}
+.hx-name{display:flex;flex-direction:column;gap:6px;min-width:0}
+.hx-first{font-family:'Barlow Condensed';font-weight:700;font-size:20px;letter-spacing:.08em;text-transform:uppercase;opacity:.88;line-height:1}
+.hx h1{font-size:78px;letter-spacing:.01em;text-shadow:0 3px 0 rgba(0,0,0,.25)}
+.hx-meta{font-size:14px;font-weight:600;opacity:.92}
+.hx-form{display:flex;align-items:center;gap:8px;font-family:'Barlow Condensed';font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase}
+.hx-form i{width:150px;height:8px;border-radius:4px;background:rgba(0,0,0,.35);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)}
+.hx-form b{display:block;height:100%;border-radius:4px}
+.hx-bio{position:absolute;right:22px;top:16px;width:232px;z-index:2;background:rgba(10,12,18,.58);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.28);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.hx-bio-h{font-family:'Barlow Condensed';font-weight:800;font-size:14px;letter-spacing:.12em;text-transform:uppercase;padding-bottom:4px;border-bottom:1px solid rgba(255,255,255,.25);margin-bottom:2px}
+.hx-bio-r{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;font-size:12.5px}
+.hx-bio-r span{font-family:'Barlow Condensed';font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.7}
+.hx-posname{font-family:'Barlow Condensed';font-weight:800;font-size:15px;letter-spacing:.1em;text-transform:uppercase;text-align:right;padding-top:6px;border-top:1px solid rgba(255,255,255,.25);margin-top:4px}
+.tier{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:6px;border:0;font-family:'Barlow Condensed';font-weight:800;font-size:14px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,.3)}
+.tier-s{background:linear-gradient(120deg,#B8901A,#F7E7A1 35%,#FFF6D2 50%,#C9A227 65%,#8C6A10);color:#2A2005}
+.tier-t{background:linear-gradient(120deg,#8E97A5,#E9EDF3 35%,#FFFFFF 50%,#AEB6C2 65%,#6F7887);color:#1B1F26}
+.tier-g{background:linear-gradient(120deg,#9A6A44,#E3C2A0 45%,#B07A4F);color:#2B1A0C}
+.fx{position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden;border-radius:inherit;display:none}
+.mo-full .fx{display:block}
+.fx-pap b{position:absolute;inset:0;background:#fff;opacity:0;animation:bloom 1.6s .05s linear both}
+.fx-pap i{position:absolute;transform:translate(-50%,-50%) scale(.4);border-radius:50%;opacity:0;background:radial-gradient(circle,#fff 0%,rgba(255,255,255,.95) 10%,rgba(225,235,255,.45) 30%,rgba(255,255,255,0) 64%);animation:pap .55s ease-out both}
+.fx-pap i::before,.fx-pap i::after{content:'';position:absolute;left:50%;top:50%;width:180%;height:2px;transform:translate(-50%,-50%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.95),transparent)}
+.fx-pap i::after{transform:translate(-50%,-50%) rotate(90deg)}
+.fx-shine i{position:absolute;top:-60%;left:-30%;width:9%;height:220%;transform:rotate(22deg);background:linear-gradient(90deg,rgba(255,255,255,0),rgba(236,242,255,.55) 35%,rgba(255,255,255,.92) 50%,rgba(236,242,255,.55) 65%,rgba(255,255,255,0));mix-blend-mode:screen;animation:sweep 1.15s .25s cubic-bezier(.45,0,.2,1) both}
+.fx-shine i.thin{width:2%;animation-delay:.36s;opacity:.7}
+.fx-glint i{position:absolute;left:150px;top:96px;width:46px;height:46px;margin:-23px 0 0 -23px;opacity:0;background:radial-gradient(circle,rgba(255,255,255,.9) 0%,rgba(255,255,255,.35) 18%,rgba(255,255,255,0) 50%),linear-gradient(90deg,transparent 46%,rgba(255,255,255,.9) 50%,transparent 54%),linear-gradient(0deg,transparent 46%,rgba(255,255,255,.9) 50%,transparent 54%);animation:glint .9s .3s ease-in-out both}
+@keyframes pap{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}10%{opacity:1;transform:translate(-50%,-50%) scale(1)}35%{opacity:.35}100%{opacity:0;transform:translate(-50%,-50%) scale(1.25)}}
+@keyframes bloom{0%{opacity:0}5%{opacity:.26}12%{opacity:0}52%{opacity:0}57%{opacity:.18}64%{opacity:0}100%{opacity:0}}
+@keyframes sweep{from{left:-30%}to{left:125%}}
+@keyframes glint{0%{opacity:0;transform:scale(.2) rotate(0)}45%{opacity:.75;transform:scale(1) rotate(45deg)}100%{opacity:0;transform:scale(.5) rotate(90deg)}}
+@media (max-width:720px){.hx{padding-top:40px}.hx-num{font-size:150px;right:10px;top:20px}.hx-id{padding-right:0;flex-basis:100%;gap:14px}.hx-photo{width:92px;height:108px;font-size:36px}.hx h1{font-size:46px}.hx-bio{position:relative;right:auto;top:auto;width:100%;order:3}.fx-glint i{left:96px;top:110px}}
 @keyframes wipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 @keyframes slidein{from{opacity:0;transform:translateX(-24px)}to{opacity:1;transform:none}}
@@ -426,11 +467,18 @@ a{color:var(--es)}a:hover{color:var(--infofg)}
         </section>
 
         <section style="display: flex; flex-direction: column; gap: 14px">
-          <h2 class="sec">Week 10 lineup · season view vs matchup view</h2>
-          <div class="card" style="gap: 6px; padding: 10px 18px">
-            <div class="wl wl-h"><span>Slot</span><span>▲ Season view · Expected PPG</span><span>◆ Matchup view · ESPN this week</span><span>Matchup</span></div>
+          <h2 class="sec">Week 10 lineup · by MPPG</h2>
+          <div class="card" style="gap: 8px; padding: 12px 18px">
+            <div class="wtot"><div><div class="quiet">▲ Starters · Week 10 MPPG</div><b class="cond num" style="font-size: 40px; line-height: 1">{{wl.total}}</b> <span class="quiet num">{{wl.totalSp}}</span></div><div class="quiet">{{wl.seasonGain}} over your season lineup this week</div></div>
+            <div class="quiet" style="font-size: 12.5px">MPPG (matchup points per game): ESPN's projection for this week, moved by half of the gap between your Expected PPG and ESPN's season projection. This week only; it picks starters, while trades and grades use season Expected PPG. The matchup chip is context and does not feed the number.</div>
+            <sc-if value="{{wl.hasSwaps}}" hint-placeholder-val="{{ true }}">
+              <sc-for list="{{wl.swaps}}" as="w" hint-placeholder-count="1">
+                <div class="wsw"><span>Start <button class="nmb" onClick="{{w.openS}}">{{w.start}}</button> over <button class="nmb" onClick="{{w.openO}}">{{w.over}}</button></span><b class="num" style="color: var(--fa)">{{w.gain}}</b><span class="quiet">{{w.odds}} · {{w.why}}</span></div>
+              </sc-for>
+            </sc-if>
+            <div class="wl wl-h"><span>Slot</span><span>Starter</span><span>MPPG</span><span>Matchup</span></div>
             <sc-for list="{{wl.rows}}" as="r" hint-placeholder-count="8">
-              <div class="wl {{r.cls}}"><b>{{r.slot}}</b><span>{{r.season}} <span class="quiet num">{{r.seasonV}}</span></span><span>{{r.week}} <span class="quiet num">{{r.weekV}}</span>{{r.swap}}</span><span class="mu-chip" style="background: {{r.bg}}; color: {{r.fg}}" title="{{r.text}}">{{r.mu}}</span></div>
+              <div class="wl {{r.cls}}"><b>{{r.slot}}</b><span class="wln"><button class="nmb" onClick="{{r.open}}">{{r.name}}</button><small class="quiet">{{r.how}}</small></span><span><b class="num">{{r.v}}</b> <span class="quiet num" style="font-size: 12px">{{r.sp}}</span></span><span class="mu-chip" style="background: {{r.bg}}; color: {{r.fg}}" title="{{r.text}}">{{r.mu}}</span></div>
             </sc-for>
             <div class="quiet" style="font-size: 13px">{{wl.note}}</div>
           </div>
@@ -524,7 +572,7 @@ a{color:var(--es)}a:hover{color:var(--infofg)}
               <sc-for list="{{c.players}}" as="p" hint-placeholder-count="2">
                 <button class="dt {{p.cls}}" data-row="1" onClick="{{p.open}}">
                   <span class="nm">{{p.name}}</span>
-                  <span style="font-size: 12.5px; opacity: .8">{{p.role}} · EPPG {{p.eppg}}</span>
+                  <span style="font-size: 12.5px; opacity: .8">{{p.role}} · <b>{{p.wkE}}</b> · EPPG {{p.eppg}}</span>
                   <span class="hs" aria-hidden="true"><sc-for list="{{p.heat}}" as="h" hint-placeholder-count="9"><i style="background: {{h}}"></i></sc-for></span>
                 </button>
                 <sc-if value="{{p.canCut}}" hint-placeholder-val="{{ false }}"><button class="cbtn" style="height: 26px; align-self: flex-start" onClick="{{p.cut}}">Cut</button></sc-if>
@@ -567,16 +615,16 @@ a{color:var(--es)}a:hover{color:var(--infofg)}
             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
               <div class="seg" role="group" aria-label="View"><button aria-pressed="{{vCards}}" onClick="{{setCards}}">Cards</button><button aria-pressed="{{vTable}}" onClick="{{setTable}}">Table</button></div>
               <label style="display: flex; gap: 8px; align-items: center; margin-left: auto"><span class="quiet">Sort by</span>
-                <select class="sel" value="{{sort}}" onChange="{{onSort}}"><option value="eppg">Expected PPG</option><option value="surplus">Surplus index</option><option value="value">Value PPG</option><option value="trend">Trend</option><option value="recent">Recent PPG</option></select>
+                <select class="sel" value="{{sort}}" onChange="{{onSort}}"><option value="eppg">Expected PPG</option><option value="mppg">MPPG · this week</option><option value="surplus">Surplus index</option><option value="value">Value PPG</option><option value="trend">Trend</option><option value="recent">Recent PPG</option></select>
               </label>
             </div>
             <sc-if value="{{vTable}}" hint-placeholder-val="{{ false }}">
               <div class="card" style="padding: 0; overflow-x: auto; gap: 0">
-                <div class="trw h"><span>Player</span><span class="r">Trend Δ</span><span class="r" style="color: var(--mo)">Expected</span><span class="r" style="color: var(--mo)">Surplus</span><span class="r" style="color: var(--fa)">Actual</span><span class="r" style="color: var(--fa)">Recent</span><span class="r" style="color: var(--es)">ESPN</span><span class="r" style="color: var(--mo)">Value</span><span>Signals</span><span>Injury</span></div>
+                <div class="trw h"><span>Player</span><span class="r">Trend Δ</span><span class="r" style="color: var(--mo)">Expected</span><span class="r" style="color: var(--mo)" title="Matchup points per game: this week only">MPPG</span><span class="r" style="color: var(--mo)">Surplus</span><span class="r" style="color: var(--fa)">Actual</span><span class="r" style="color: var(--fa)">Recent</span><span class="r" style="color: var(--es)">ESPN</span><span class="r" style="color: var(--mo)">Value</span><span>Signals</span><span>Injury</span></div>
                 <sc-for list="{{trows}}" as="r" hint-placeholder-count="8">
                   <div class="trw">
                     <span><button class="nmb" data-row="1" onClick="{{r.open}}">{{r.name}}</button> <span class="mab" style="background: {{r.maBg}}; color: {{r.maFg}}">{{r.ma}}</span><br><span class="quiet">{{r.pos}} · {{r.team}} · {{r.owner}}</span></span>
-                    <span class="r num" style="font-weight: 700; color: {{r.trendC}}">{{r.trend}}</span><span class="r num" style="color: var(--mo)">{{r.expected}}</span><span class="r num" style="color: var(--mo)">{{r.si}}</span><span class="r num" style="color: var(--fa)">{{r.actual}}</span><span class="r num" style="color: var(--fa)">{{r.recent}}</span><span class="r num" style="color: var(--es)">{{r.espn}}</span><span class="r num" style="color: var(--mo)">{{r.value}}</span>
+                    <span class="r num" style="font-weight: 700; color: {{r.trendC}}">{{r.trend}}</span><span class="r num" style="color: var(--mo)">{{r.expected}}</span><span class="r num" style="color: var(--mo)" title="{{r.mppgHow}}">{{r.mppg}}</span><span class="r num" style="color: var(--mo)">{{r.si}}</span><span class="r num" style="color: var(--fa)">{{r.actual}}</span><span class="r num" style="color: var(--fa)">{{r.recent}}</span><span class="r num" style="color: var(--es)">{{r.espn}}</span><span class="r num" style="color: var(--mo)">{{r.value}}</span>
                     <span style="display: flex; gap: 4px; flex-wrap: wrap"><sc-for list="{{r.labels}}" as="lb" hint-placeholder-count="1"><span class="lab {{lb.cls}}">{{lb.t}}</span></sc-for></span>
                     <span class="quiet">{{r.inj}}</span>
                   </div>
@@ -595,6 +643,7 @@ a{color:var(--es)}a:hover{color:var(--infofg)}
               <div class="body">
                 <div class="statrow">
                   <div><small style="color: var(--mo)">▲ Expected PPG</small><b class="num" style="color: var(--mo)">{{c.eppg}}</b></div>
+                  <div title="{{c.mppgHow}}"><small style="color: var(--mo)">▲ MPPG · W10</small><b class="num" style="color: var(--mo); font-size: 26px">{{c.mppg}}</b></div>
                   <div style="text-align: right"><small style="color: var(--fa)">● Recent 3</small><b class="num" style="color: var(--fa); font-size: 26px">{{c.recent}}</b></div>
                 </div>
                 <div title="Next game: floor and ceiling are his EPPG minus and plus the blended spread"><div class="whisk"><i style="left: {{c.nr.l}}%; width: {{c.nr.w}}%"></i><b style="left: {{c.nr.dot}}%"></b></div><div class="quiet" style="display: flex; justify-content: space-between; font-size: 12px"><span>Floor {{c.nr.floorT}}</span><span>± {{c.nr.sdT}}</span><span>Ceiling {{c.nr.ceilT}}</span></div></div>
@@ -891,19 +940,38 @@ a{color:var(--es)}a:hover{color:var(--infofg)}
   <sc-if value="{{cardOpen}}" hint-placeholder-val="{{ false }}">
     <div class="modal top" data-pop="card" tabindex="-1" style="overflow-y: auto; padding: 32px 16px" onClick="{{closeCard}}" onKeyDown="{{keyCard}}">
       <div class="mbox" role="dialog" aria-label="{{pf.name}}" onClick="{{stop}}" style="width: min(1040px, 100%); gap: 18px">
-                <section class="hero" style="background: {{pf.bg}}">
-          <span class="big" aria-hidden="true">{{pf.pos}}</span>
-          <div style="flex: 1 1 360px; position: relative; display: flex; flex-direction: column; gap: 10px" class="slide">
-            <span class="kick" style="color: rgba(255,255,255,.85)">{{pf.teamName}} · {{pf.owner}}</span>
-            <h1>{{pf.name}}</h1>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap"><span class="lab" style="background: rgba(255,255,255,.18); color: #fff">{{pf.inj}}</span><sc-for list="{{pf.labels}}" as="lb" hint-placeholder-count="1"><span class="lab {{lb.cls}}">{{lb.t}}</span></sc-for></div>
+                <section class="hero hx" style="--tc: {{pf.tc}}; --ta: {{pf.ta}}">
+          <div class="hx-dots" aria-hidden="true"></div>
+          <span class="hx-num" aria-hidden="true">{{pf.rankNum}}</span>
+          <span class="hx-crumb">{{pf.crumb}}</span>
+          <aside class="hx-bio" aria-label="Profile">
+            <div class="hx-bio-h">◉ Profile</div>
+            <sc-for list="{{pf.bio}}" as="b" hint-placeholder-count="5"><div class="hx-bio-r"><span>{{b.k}}</span><b>{{b.v}}</b></div></sc-for>
+            <div class="hx-posname">{{pf.posName}}</div>
+          </aside>
+          <div class="hx-id">
+            <div class="hx-photo" aria-hidden="true"><span>{{pf.ini}}</span></div>
+            <div class="hx-name slide">
+              <span class="hx-first">{{pf.first}}</span>
+              <h1>{{pf.last}}</h1>
+              <div class="hx-meta">{{pf.pos}} · {{pf.teamName}} · {{pf.g}} games · {{pf.owner}}</div>
+              <div class="hx-form" title="{{pf.formTip}}"><span>Form</span><i><b style="width: {{pf.formW}}%; background: {{pf.formC}}"></b></i><span>{{pf.formT}}</span></div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+                <sc-if value="{{pf.hasTier}}" hint-placeholder-val="{{ true }}"><button class="tier {{pf.tierCls}}" onClick="{{pf.replay}}" title="{{pf.tierTip}}" aria-label="{{pf.tierLabel}}, replay the card entrance">{{pf.tierText}}</button></sc-if>
+                <span class="lab" style="background: rgba(255,255,255,.18); color: #fff">{{pf.inj}}</span><sc-for list="{{pf.labels}}" as="lb" hint-placeholder-count="1"><span class="lab {{lb.cls}}">{{lb.t}}</span></sc-for>
+              </div>
+            </div>
           </div>
           <div style="position: relative; display: flex; gap: 22px; flex-wrap: wrap">
-            <div><div class="cond" style="font-size: 14px; opacity: .85">▲ Expected PPG</div><div class="cond num" style="font-size: 72px; line-height: .9">{{pf.eppg}}</div><div style="font-size: 13px; opacity: .9">Next game floor {{pf.nr.floorT}} · ceiling {{pf.nr.ceilT}}</div></div>
+            <div><div class="cond" style="font-size: 14px; opacity: .85">▲ MPPG · Week 10</div><div class="cond num" style="font-size: 72px; line-height: .9">{{pf.we.t}}</div><div style="font-size: 13px; opacity: .9">{{pf.we.rangeT}}</div><div style="font-size: 12px; opacity: .75">{{pf.we.how}}</div></div>
+            <div><div class="cond" style="font-size: 14px; opacity: .85">▲ Expected PPG · season</div><div class="cond num" style="font-size: 54px; line-height: 1">{{pf.eppg}}</div><div style="font-size: 13px; opacity: .9">Next game floor {{pf.nr.floorT}} · ceiling {{pf.nr.ceilT}}</div></div>
             <div><div class="cond" style="font-size: 14px; opacity: .85">● Recent 3</div><div class="cond num" style="font-size: 54px; line-height: 1">{{pf.recent}}</div></div>
             <div><div class="cond" style="font-size: 14px; opacity: .85">▲ Surplus</div><div class="cond num" style="font-size: 54px; line-height: 1">{{pf.si}}</div></div>
           </div>
           <div style="position: relative; display: flex; gap: 8px; flex-basis: 100%"><button class="ibtn" aria-pressed="{{pf.vsOn}}" onClick="{{pf.vs}}">{{pf.vsText}}</button><button class="ibtn" onClick="{{pf.trade}}">Take to trade room</button><span style="margin-left: auto"></span><sc-if value="{{pf.hasList}}" hint-placeholder-val="{{ false }}"><button class="ibtn" onClick="{{pf.prev}}" aria-label="Previous player">‹</button><span style="align-self: center; font-size: 13px; font-weight: 600">{{pf.listPos}}</span><button class="ibtn" onClick="{{pf.next}}" aria-label="Next player">›</button></sc-if><button class="ibtn" onClick="{{closeCard}}">Close ✕</button></div>
+          <sc-if value="{{pf.fxSuper}}" hint-placeholder-val="{{ false }}"><div class="fx fx-pap" aria-hidden="true"><b></b><i style="left: 14%; top: 24%; width: 150px; height: 150px; animation-delay: 0.06s"></i><i style="left: 71%; top: 18%; width: 120px; height: 120px; animation-delay: 0.19s"></i><i style="left: 38%; top: 70%; width: 170px; height: 170px; animation-delay: 0.32s"></i><i style="left: 86%; top: 62%; width: 140px; height: 140px; animation-delay: 0.61s"></i><i style="left: 55%; top: 30%; width: 190px; height: 190px; animation-delay: 0.76s"></i><i style="left: 22%; top: 58%; width: 130px; height: 130px; animation-delay: 1.05s"></i><i style="left: 64%; top: 78%; width: 150px; height: 150px; animation-delay: 1.18s"></i><i style="left: 8%; top: 82%; width: 110px; height: 110px; animation-delay: 1.3s"></i><i style="left: 92%; top: 30%; width: 120px; height: 120px; animation-delay: 1.42s"></i></div></sc-if>
+          <sc-if value="{{pf.fxStar}}" hint-placeholder-val="{{ false }}"><div class="fx fx-shine" aria-hidden="true"><i></i><i class="thin"></i></div></sc-if>
+          <sc-if value="{{pf.fxGood}}" hint-placeholder-val="{{ false }}"><div class="fx fx-glint" aria-hidden="true"><i></i></div></sc-if>
         </section>
         <div class="ptabs" role="tablist" aria-label="Profile sections">
           <sc-for list="{{ptabs}}" as="t" hint-placeholder-count="4"><button class="ptab" role="tab" aria-selected="{{t.on}}" onClick="{{t.pick}}">{{t.name}}</button></sc-for>
@@ -1090,7 +1158,24 @@ class Component extends DCLogic {
     if (s.sound) {
       try {
         var C = window.AudioContext || window.webkitAudioContext;
-        if (C) {
+        if (C && (kind === 'shutter' || kind === 'shine' || kind === 'glint')) {
+          this._ac = this._ac || new C();
+          var ac0 = this._ac, t0 = ac0.currentTime;
+          if (kind === 'shutter') {
+            [0, 0.045].forEach(function (off, k) {
+              var len = Math.floor(ac0.sampleRate * 0.03), buf = ac0.createBuffer(1, len, ac0.sampleRate), d = buf.getChannelData(0);
+              for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+              var src = ac0.createBufferSource(), bp = ac0.createBiquadFilter(), g0 = ac0.createGain();
+              src.buffer = buf; bp.type = 'bandpass'; bp.frequency.value = k ? 2400 : 3600; g0.gain.value = k ? 0.05 : 0.08;
+              src.connect(bp); bp.connect(g0); g0.connect(ac0.destination); src.start(t0 + off);
+            });
+          } else {
+            var o0 = ac0.createOscillator(), gg = ac0.createGain(), dur = kind === 'shine' ? 0.4 : 0.14;
+            o0.type = 'sine'; o0.frequency.setValueAtTime(kind === 'shine' ? 1400 : 2093, t0); if (kind === 'shine') o0.frequency.exponentialRampToValueAtTime(2800, t0 + dur);
+            gg.gain.setValueAtTime(0.0001, t0); gg.gain.exponentialRampToValueAtTime(kind === 'shine' ? 0.03 : 0.02, t0 + 0.03); gg.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+            o0.connect(gg); gg.connect(ac0.destination); o0.start(t0); o0.stop(t0 + dur + 0.02);
+          }
+        } else if (C) {
           this._ac = this._ac || new C();
           var ac = this._ac, o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
           o.type = 'triangle'; o.frequency.value = ({ tap: 440, select: 660, success: 784, warn: 196 })[kind] || 440;
@@ -1100,7 +1185,19 @@ class Component extends DCLogic {
         }
       } catch (e) {}
     }
-    if (s.haptics && s.canVibrate) { try { navigator.vibrate(({ tap: 6, select: 10, success: [10, 40, 14], warn: [24, 30, 24] })[kind] || 6); } catch (e) {} }
+    if (s.haptics && s.canVibrate) { try { navigator.vibrate(({ tap: 6, select: 10, success: [10, 40, 14], warn: [24, 30, 24], shutter: 8, shine: 12, glint: 0 })[kind] || 6); } catch (e) {} }
+  }
+  cardFx(id) {
+    var self = this, p = this.data().byId[id];
+    if (!p || !p.tier || this.state.motion === 'off') return;
+    this.setState({ fxRun: false }, function () {
+      setTimeout(function () {
+        self.setState({ fxRun: true });
+        if (p.tier === 's') [60, 190, 320, 610, 760, 1050, 1180, 1300, 1420].forEach(function (t) { setTimeout(function () { self.fb('shutter'); }, t); });
+        else if (p.tier === 't') setTimeout(function () { self.fb('shine'); }, 250);
+        else setTimeout(function () { self.fb('glint'); }, 300);
+      }, 30);
+    });
   }
   go(sc, extra) {
     var off = this.eff() === 'off', self = this, st = this.state;
@@ -1174,6 +1271,12 @@ class Component extends DCLogic {
     TEAMS.forEach(function (t) { dvp[t] = {}; POS.forEach(function (pos) { dvp[t][pos] = ((H(t + pos) % 61) - 30) / 10; }); });
     POS.forEach(function (pos) { rank[pos] = {}; TEAMS.slice().sort(function (a, b) { return dvp[a][pos] - dvp[b][pos]; }).forEach(function (t, i) { rank[pos][t] = i + 1; }); });
     this._d = { players: players, byId: byId, OWN: OWN, sched: sched, dvp: dvp, rank: rank, nTeams: TEAMS.length };
+    var ranked = players.filter(function (p) { return p.g >= 4; }).sort(function (a, b) { return b.actual - a.actual; });
+    // Canvas cut-offs 3 / 8 / 16 because the demo league has 5 teams; the app uses 1x, 3x and 6x the number of teams.
+    ranked.forEach(function (p, i) { p.rank = i + 1; p.tier = i < 3 ? 's' : i < 8 ? 't' : i < 16 ? 'g' : ''; });
+    players.forEach(function (p) { if (!p.rank) { p.rank = null; p.tier = ''; } });
+    this._d.rankedN = ranked.length;
+    players.forEach(function (p) { p.we = self.weekE(p, 10); p.wE10 = p.we.v == null ? -1 : p.we.v; });
     return this._d;
   }
   gate(label, val, thr, unit, dec) {
@@ -1279,6 +1382,18 @@ class Component extends DCLogic {
     var tone = rank <= 2 ? 'tough' : rank >= n - 1 ? 'soft' : 'neutral';
     return { w: w, opp: opp, bye: false, tone: tone, diff: diff, rank: rank, text: (tone === 'tough' ? 'Tough' : tone === 'soft' ? 'Soft' : 'Neutral') + ' vs ' + p.pos + ' · ' + (diff >= 0 ? '+' : '−') + Math.abs(diff).toFixed(1) + ' pts allowed vs average · ' + rank + ' of ' + n };
   }
+  weekE(p, w) {
+    // MPPG, method 3 (ESPN-anchored): ESPN weekly + 1/2 x (EPPG - ESPN season PPG). Imported week only.
+    var m = this.matchup(p, w);
+    var none = function (why) { return { v: null, sp: null, t: '—', spT: '', why: why, rangeT: why, how: why + ': no MPPG, never counted as 0', m: m }; };
+    if (m.bye) return none('Bye week');
+    if (['OUT', 'IR', 'INJURY_RESERVE', 'SUSPENSION'].indexOf(p.inj) >= 0) return none('Out');
+    if (w !== 10 || p.week10 == null) return none('No ESPN weekly projection');
+    var edge = 0.5 * (p.expected - p.espn), v = Math.max(0, p.week10 + edge), sp = p.nr.sp;
+    return { v: v, sp: sp, edge: edge, m: m, t: v.toFixed(1), spT: '± ' + sp.toFixed(1),
+      rangeT: 'Floor ' + Math.max(0, v - sp).toFixed(1) + ' · ceiling ' + (v + sp).toFixed(1) + ' · as of import Tue 9:14',
+      how: 'ESPN week ' + p.week10.toFixed(1) + ' ' + (edge >= 0 ? '+' : '−') + ' ½ × ' + Math.abs(p.expected - p.espn).toFixed(1) + ' (EPPG ' + p.expected.toFixed(1) + ' vs ESPN season ' + p.espn.toFixed(1) + ')' };
+  }
   muTone(t) { return t === 'soft' ? ['#3F7D57', '#fff'] : t === 'tough' ? ['#96524A', '#fff'] : t === 'bye' ? ['var(--soft)', 'var(--mu)'] : ['#D9CBA3', '#3A3219']; }
   lineupOf(ids, key) {
     var P = this.data().byId, pl = ids.map(function (id) { return P[id]; }).sort(function (a, b) { return (b[key || 'value'] || 0) - (a[key || 'value'] || 0); }), used = {}, slots = [], tot = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, 'D/ST': 0 }, etot = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, 'D/ST': 0 };
@@ -1335,7 +1450,7 @@ class Component extends DCLogic {
     var go = function (sc) { return function () { self.go(sc); }; };
     var cur = {}; ['week', 'roster', 'scout', 'league', 'trade', 'lab'].forEach(function (k) { cur[k] = s.screen === k ? 'page' : 'false'; });
     var lists = {};
-    var openP = function (id, key) { return function () { self.fb('select'); self.setState({ cardId: id, cardList: key ? (lists[key] || []).slice() : [], q: '', mah: null, whyTag: 0, showGames: false }); }; };
+    var openP = function (id, key) { return function () { self.fb('select'); self.setState({ cardId: id, cardList: key ? (lists[key] || []).slice() : [], q: '', mah: null, whyTag: 0, showGames: false }); self.cardFx(id); }; };
     var rowMove = function (box, e) { var rows = Array.prototype.slice.call(box.querySelectorAll('[data-row]')); if (!rows.length) return false; var i = rows.indexOf(box.ownerDocument.activeElement), n = e.key === 'ArrowDown' ? Math.min(rows.length - 1, i + 1) : Math.max(0, i - 1); e.preventDefault(); rows[n].focus(); return true; };
     var listKey = function (e) { if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) rowMove(e.currentTarget, e); };
     var popKey = function (close, step) { return function (e) {
@@ -1375,7 +1490,7 @@ class Component extends DCLogic {
       drops: sim ? sim.drop.map(function (id) { return { name: P[id].name, undo: function () { patchSim(function (x) { x.drop = x.drop.filter(function (y) { return y !== id; }); return x; }); } }; }) : [],
       addable: sim ? D.players.filter(function (q) { return myIds.indexOf(q.id) < 0 && q.pos !== 'K' && q.pos !== 'D/ST'; }).sort(function (a, b) { return b.expected - a.expected; }).slice(0, 10).map(function (q) { return { name: q.name, meta: q.pos + ' · ' + q.owner, add: function () { patchSim(function (x) { if (x.drop.indexOf(q.id) >= 0) x.drop = x.drop.filter(function (y) { return y !== q.id; }); else x.add = x.add.concat([q.id]); return x; }); } }; }) : []
     };
-    var depth = ['QB', 'RB', 'WR', 'TE', 'K', 'D/ST'].map(function (pos) { return { pos: pos, players: mineP.filter(function (p) { return p.pos === pos; }).sort(function (a, b) { return b.value - a.value; }).map(function (p) { return { name: p.name, role: meKey(p.id) ? 'Starts at ' + meKey(p.id) : 'Bench', eppg: self.f1(p.expected), cls: meKey(p.id) ? 'st1' : '', open: openP(p.id, 'roster'), canCut: !!sim, cut: cutP(p.id), heat: p.wk.map(function (v) { if (v == null) return '#C9CDD4'; var k = Math.min(1, v / 26); return 'rgba(17,128,91,' + (0.15 + k * 0.85).toFixed(2) + ')'; }) }; }) }; });
+    var depth = ['QB', 'RB', 'WR', 'TE', 'K', 'D/ST'].map(function (pos) { return { pos: pos, players: mineP.filter(function (p) { return p.pos === pos; }).sort(function (a, b) { return b.value - a.value; }).map(function (p) { return { name: p.name, role: meKey(p.id) ? 'Starts at ' + meKey(p.id) : 'Bench', eppg: self.f1(p.expected), wkE: p.we.v == null ? p.we.why : 'MPPG ' + p.we.t, cls: meKey(p.id) ? 'st1' : '', open: openP(p.id, 'roster'), canCut: !!sim, cut: cutP(p.id), heat: p.wk.map(function (v) { if (v == null) return '#C9CDD4'; var k = Math.min(1, v / 26); return 'rgba(17,128,91,' + (0.15 + k * 0.85).toFixed(2) + ')'; }) }; }) }; });
     // scouting
     var presetDefs = [
       { id: 'all', name: 'All', f: function () { return true; } },
@@ -1387,7 +1502,7 @@ class Component extends DCLogic {
     var pre = presetDefs.filter(function (x) { return x.id === s.preset; })[0];
     var presets = presetDefs.map(function (x) { return { name: x.name, count: D.players.filter(x.f).length, on: x.id === s.preset, pick: function () { self.fb('select'); self.setState({ preset: x.id }); } }; });
     var posChips = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'D/ST'].map(function (x) { return { name: x === 'ALL' ? 'All' : x, on: s.pos === x, pick: function () { self.fb('select'); self.setState({ pos: x }); } }; });
-    var sk = { eppg: 'expected', surplus: 'si', value: 'value', trend: 'trend', recent: 'recent' }[s.sort];
+    var sk = { eppg: 'expected', mppg: 'wE10', surplus: 'si', value: 'value', trend: 'trend', recent: 'recent' }[s.sort];
     // screener facets (all current gem-screener filters, applied live)
     var ownOf = function (p) { return p.own === 'me' ? 'My team' : p.own === 'fa' ? 'Available' : 'Other teams'; };
     var pass = function (p, skip) {
@@ -1416,9 +1531,9 @@ class Component extends DCLogic {
     var spresets = spDefs.map(function (d) { return { name: d[1], on: s.spre === d[0], pick: function () { self.fb('select'); self.setState(Object.assign({}, blank, d[2], { spre: d[0] })); } }; });
     var parts = [];
     if (s.fown.length) parts.push('Pool: ' + s.fown.join(' / ')); if (s.fpos.length) parts.push('Position: ' + s.fpos.join(' / ')); if (s.fsig.length) parts.push((s.sigAll ? 'All of: ' : 'Any of: ') + s.fsig.join(', ')); if (s.golden) parts.push('Golden cross'); if (s.death) parts.push('Death cross'); parts.push(s.injured ? 'Injured included' : 'Active players only'); if (s.minTrend > -5) parts.push('Trend ≥ ' + s.minTrend); if (s.minSi) parts.push('Surplus ≥ ' + s.minSi); if (s.minRecent) parts.push('Recent ≥ ' + s.minRecent);
-    var skT = { eppg: 'expected', surplus: 'si', value: 'value', trend: 'trend', recent: 'recent' }[s.sort];
+    var skT = { eppg: 'expected', mppg: 'wE10', surplus: 'si', value: 'value', trend: 'trend', recent: 'recent' }[s.sort];
     var openCard = openP;
-    var trows = flist.slice().sort(function (a, b) { return b[skT] - a[skT]; }).map(function (p) { return { name: p.name, pos: p.pos, team: p.team, owner: p.owner, open: openP(p.id, 'scout'), ma: (p.ma.diff >= 0 ? '+' : '') + p.ma.diff.toFixed(1) + ' MA' + (p.ma.cross === 'golden' ? ' · Golden' : p.ma.cross === 'death' ? ' · Death' : ''), maBg: p.ma.diff >= 0 ? 'var(--okbg)' : 'var(--badbg)', maFg: p.ma.diff >= 0 ? 'var(--okfg)' : 'var(--badfg)', trend: (p.trend >= 0 ? '↑ +' : '↓ ') + self.f1(p.trend), trendC: p.trend > 1 ? 'var(--fa)' : p.trend < -1 ? 'var(--bad)' : 'var(--mu)', expected: self.f1(p.expected), si: p.si.toFixed(0), actual: self.f1(p.actual), recent: self.f1(p.recent), espn: self.f1(p.espn), value: self.f1(p.value), labels: p.labels, inj: p.inj }; });
+    var trows = flist.slice().sort(function (a, b) { return b[skT] - a[skT]; }).map(function (p) { return { name: p.name, pos: p.pos, team: p.team, owner: p.owner, open: openP(p.id, 'scout'), ma: (p.ma.diff >= 0 ? '+' : '') + p.ma.diff.toFixed(1) + ' MA' + (p.ma.cross === 'golden' ? ' · Golden' : p.ma.cross === 'death' ? ' · Death' : ''), maBg: p.ma.diff >= 0 ? 'var(--okbg)' : 'var(--badbg)', maFg: p.ma.diff >= 0 ? 'var(--okfg)' : 'var(--badfg)', trend: (p.trend >= 0 ? '↑ +' : '↓ ') + self.f1(p.trend), trendC: p.trend > 1 ? 'var(--fa)' : p.trend < -1 ? 'var(--bad)' : 'var(--mu)', expected: self.f1(p.expected), mppg: p.we.v == null ? (p.we.why === 'Bye week' ? 'Bye' : p.we.why === 'Out' ? 'Out' : '—') : p.we.t, mppgHow: p.we.how, si: p.si.toFixed(0), actual: self.f1(p.actual), recent: self.f1(p.recent), espn: self.f1(p.espn), value: self.f1(p.value), labels: p.labels, inj: p.inj }; });
     // league grid: computed grades, green-to-red scale
     var GS = this.GS(), posKeys = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'D/ST'];
     var teamLU = {}; ['me', 'bb', 'fl', 'rz'].forEach(function (o) { teamLU[o] = self.lineupOf(self.rosterOf(o)); });
@@ -1437,7 +1552,7 @@ class Component extends DCLogic {
     if (s.cardId && P[s.cardId]) { var cp = P[s.cardId]; pc = { name: cp.name, ini: this.ini(cp.name), sub: cp.teamName + ' · ' + cp.pos + ' · ' + cp.owner, bg: 'linear-gradient(115deg,' + cp.tc + ' 0%,' + cp.tc + ' 60%,' + cp.ta + ' 170%)', labels: cp.labels, eppg: this.f1(cp.expected), nr: cp.nr, recent: this.f1(cp.recent), si: cp.si.toFixed(0), ma: this.maChart(cp), full: function () { self.go('profile', { player: cp.id, ptab: 'story', cardId: null, cell: null }); }, trade: function () { self.setState({ cardId: null, cell: null }); toTrade(cp.id)(); } }; }
     lists.roster = mineP.map(function (q) { return q.id; });
     var muCard = function (p) { var m0 = self.matchup(p, 10), c0 = self.muTone(m0.tone); return { label: m0.bye ? 'Bye' : 'vs ' + m0.opp + ' · ' + (m0.tone === 'tough' ? 'tough' : m0.tone === 'soft' ? 'soft' : 'neutral'), text: m0.text, bg: c0[0], fg: c0[1] }; };
-    var cards = flist.sort(function (a, b) { return b[sk] - a[sk]; }).map(function (p) { var on = s.vs.indexOf(p.id) >= 0; return { name: p.name, pos: p.pos, team: p.team, teamName: p.teamName, tc: p.tc, eppg: self.f1(p.expected), nr: p.nr, mu: muCard(p), wk: self.f1(p.week10), value: self.f1(p.value), recent: self.f1(p.recent), si: p.si.toFixed(0), labels: p.labels, spark: self.spark(p.wk, 100, 30), owner: p.owner, open: openP(p.id, 'scout'), vs: vsToggle(p.id), vsOn: on, vsText: on ? 'In VS' : '+ VS' }; });
+    var cards = flist.sort(function (a, b) { return b[sk] - a[sk]; }).map(function (p) { var on = s.vs.indexOf(p.id) >= 0; return { name: p.name, pos: p.pos, team: p.team, teamName: p.teamName, tc: p.tc, eppg: self.f1(p.expected), mppg: p.we.v == null ? (p.we.why === 'Bye week' ? 'Bye' : p.we.why === 'Out' ? 'Out' : '—') : p.we.t, mppgHow: p.we.how, nr: p.nr, mu: muCard(p), wk: self.f1(p.week10), value: self.f1(p.value), recent: self.f1(p.recent), si: p.si.toFixed(0), labels: p.labels, spark: self.spark(p.wk, 100, 30), owner: p.owner, open: openP(p.id, 'scout'), vs: vsToggle(p.id), vsOn: on, vsText: on ? 'In VS' : '+ VS' }; });
     lists.scout = flist.map(function (q) { return q.id; });
     if (s.cell) lists.cell = this.rosterOf(s.cell.own).map(function (id) { return P[id]; }).filter(function (q) { return s.cell.pos === 'FLEX' ? q.skill : q.pos === s.cell.pos; }).sort(function (a, b) { return b.value - a.value; }).map(function (q) { return q.id; });
     // profile
@@ -1477,7 +1592,15 @@ class Component extends DCLogic {
       }
       pf = {
         name: p.name, pos: p.pos, teamName: p.teamName, owner: p.owner, inj: p.inj, labels: p.labels, bg: 'linear-gradient(115deg,' + p.tc + ' 0%,' + p.tc + ' 55%,' + p.ta + ' 160%)',
-        value: this.f1(p.value), recent: this.f1(p.recent), si: p.si.toFixed(0), actual: this.f1(p.actual), g: String(p.g), sd: this.f1(p.sd), espn: this.f1(p.espn), wk10: this.f1(p.week10), expected: this.f1(p.expected), loss: p.loss.toFixed(2), vorp: this.f1(p.vorp),
+        value: this.f1(p.value), recent: this.f1(p.recent), si: p.si.toFixed(0), actual: this.f1(p.actual), g: String(p.g), sd: this.f1(p.sd), espn: this.f1(p.espn), wk10: this.f1(p.week10), we: p.we,
+        tc: p.tc, ta: p.ta, ini: this.ini(p.name), first: p.pos === 'D/ST' ? p.teamName : p.name.split(' ')[0], last: p.pos === 'D/ST' ? 'D/ST' : p.name.split(' ').slice(1).join(' '),
+        crumb: 'Gameday / ' + ({ week: 'This week', scout: 'Scouting', roster: 'Roster', league: 'League', trades: 'Trade room' }[s.screen] || 'Players') + ' / Player card',
+        rankNum: p.rank ? String(p.rank) : '', posName: { QB: 'Quarterback', RB: 'Running back', WR: 'Wide receiver', TE: 'Tight end', K: 'Kicker', 'D/ST': 'Defense / special teams' }[p.pos],
+        bio: [{ k: 'Fantasy team', v: p.owner }, { k: 'Status', v: p.inj }, { k: 'FPTS / game', v: this.f1(p.actual) + (p.rank ? ' · #' + p.rank + ' of ' + D.rankedN : '') }, { k: 'Games', v: String(p.g) }, { k: 'ESPN season', v: this.f1(p.espn) + ' PPG' }],
+        formW: Math.max(6, Math.min(100, 50 + (p.recent - p.expected) / Math.max(1, p.expected) * 120)), formC: p.recent - p.expected > 1 ? '#5FD08A' : p.recent - p.expected < -1 ? '#E0705F' : '#E8D9A8', formT: p.recent - p.expected > 1 ? 'Hot' : p.recent - p.expected < -1 ? 'Cold' : 'Steady', formTip: 'Recent 3 ' + this.f1(p.recent) + ' vs Expected PPG ' + this.f1(p.expected),
+        hasTier: !!p.tier, tierCls: 'tier-' + (p.tier || 'n'), tierText: { s: '★ Superstar', t: 'Star', g: 'Good' }[p.tier] || '', tierLabel: { s: 'Superstar', t: 'Star', g: 'Good player' }[p.tier] || '',
+        tierTip: p.rank ? '#' + p.rank + ' in fantasy points per game across every position (minimum 4 games). Click to replay.' : '',
+        fxSuper: p.tier === 's' && s.fxRun, fxStar: p.tier === 't' && s.fxRun, fxGood: p.tier === 'g' && s.fxRun, replay: function () { self.cardFx(p.id); }, expected: this.f1(p.expected), loss: p.loss.toFixed(2), vorp: this.f1(p.vorp),
         vsOn: onVs, vsText: onVs ? 'In versus mode' : 'Add to versus', vs: vsToggle(p.id), trade: toTrade(p.id),
         eppg: this.f1(p.expected), nr: p.nr, w: wsel || { signal: [], trust: [], hist: [], games: [] }, whyTabs: whyTabs, hasWhy: !!wsel,
         hasList: (s.cardList || []).length > 1 && (s.cardList || []).indexOf(p.id) >= 0, listPos: ((s.cardList || []).indexOf(p.id) + 1) + ' of ' + (s.cardList || []).length, prev: function () { stepCard(-1); }, next: function () { stepCard(1); },
@@ -1688,9 +1811,28 @@ class Component extends DCLogic {
       })(),
       keyCard: popKey(function () { self.setState({ cardId: null }); }, stepCard), keyCell: popKey(function () { self.setState({ cell: null }); }), keyVs: popKey(function () { self.setState({ vsOpen: false }); }, function () { self.fb('tap'); self.setState({ vs: self.state.vs.slice().reverse() }); }), keySettings: popKey(function () { self.setState({ settings: false }); }),
       wl: (function () {
-        var ids = self.rosterOf('me'), a = self.lineupOf(ids), b = self.lineupOf(ids, 'week10'), diff = 0;
-        var rows = a.slots.map(function (sa, i) { var sb = b.slots[i], pa = sa.id ? P[sa.id] : null, pb = sb.id ? P[sb.id] : null, same = (pa && pb && pa.id === pb.id) || (!pa && !pb); if (!same) diff++; var m0 = pb ? self.matchup(pb, 10) : null, c0 = self.muTone(m0 ? m0.tone : 'none'); return { slot: sa.key, season: pa ? pa.name : 'Unfilled', seasonV: pa ? self.f1(pa.expected) : '', week: pb ? pb.name : 'Unfilled', weekV: pb ? self.f1(pb.week10) : '', swap: same ? '' : '  ◆ differs', cls: same ? '' : 'wl-diff', mu: m0 ? (m0.bye ? 'Bye' : 'vs ' + m0.opp) : '', bg: c0[0], fg: c0[1], text: m0 ? m0.text : '' }; });
-        return { rows: rows, note: diff ? 'The two views disagree on ' + diff + (diff === 1 ? ' slot' : ' slots') + ' this week. Season view ranks by Expected PPG; matchup view ranks by ESPN’s projection for this week, which includes the opponent. Neither changes your ESPN lineup.' : 'Both views pick the same starters this week.' };
+        var ids = self.rosterOf('me'), a = self.lineupOf(ids), b = self.lineupOf(ids, 'wE10'), tot = 0, var2 = 0, totA = 0;
+        var phi = function (z) { var t = 1 / (1 + 0.3275911 * Math.abs(z)), y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-z * z / 2); return z >= 0 ? (1 + y) / 2 : (1 - y) / 2; };
+        var startersOf = function (l) { return l.slots.filter(function (x) { return x.id; }).map(function (x) { return x.id; }); }, sA = startersOf(a), sB = startersOf(b);
+        var ins = sB.filter(function (id) { return sA.indexOf(id) < 0; }).sort(function (x, y) { return P[y].wE10 - P[x].wE10; }), outs = sA.filter(function (id) { return sB.indexOf(id) < 0; }).sort(function (x, y) { return P[x].wE10 - P[y].wE10; });
+        sA.forEach(function (id) { if (P[id].we.v != null) totA += P[id].we.v; });
+        var swaps = ins.map(function (id, i) {
+          var pb = P[id], pa = outs[i] ? P[outs[i]] : null, e = pb.we;
+          if (!pa) return null;
+          var ea = pa.we, last = function (q) { return q.name.split(' ').slice(-1)[0]; };
+          if (ea.v == null) return { start: pb.name, over: pa.name, openS: openP(pb.id), openO: openP(pa.id), gain: '', odds: last(pa) + ' has no MPPG', why: ea.why };
+          var d = e.v - ea.v, pr = phi(d / Math.sqrt(e.sp * e.sp + ea.sp * ea.sp));
+          return { start: pb.name, over: pa.name, openS: openP(pb.id), openO: openP(pa.id), gain: '+' + d.toFixed(1), odds: Math.round(pr * 100) + '% chance he outscores ' + last(pa), why: 'ESPN projects ' + pb.week10.toFixed(1) + ' this week vs ' + pa.week10.toFixed(1) + ' · ' + e.m.text };
+        }).filter(function (x) { return x; });
+        var rows = b.slots.map(function (sb) {
+          var pb = sb.id ? P[sb.id] : null, e = pb ? pb.we : null;
+          if (e && e.v != null) { tot += e.v; var2 += e.sp * e.sp; }
+          var diff = pb && sA.indexOf(pb.id) < 0;
+          var c0 = self.muTone(e ? e.m.tone : 'none');
+          return { slot: sb.key, name: pb ? pb.name : 'Unfilled', open: pb ? openP(pb.id) : null, v: e ? e.t : '', sp: e ? e.spT : '', how: e ? e.how : '', cls: diff ? 'wl-diff' : '', mu: e ? (e.m.bye ? 'Bye' : 'vs ' + e.m.opp) : '', bg: c0[0], fg: c0[1], text: e ? e.m.text : '' };
+        });
+        return { rows: rows, swaps: swaps, hasSwaps: swaps.length > 0, total: tot.toFixed(1), totalSp: '± ' + Math.sqrt(var2).toFixed(1), seasonGain: (tot - totA >= 0 ? '+' : '−') + Math.abs(tot - totA).toFixed(1),
+          note: swaps.length ? swaps.length + (swaps.length === 1 ? ' slot changes' : ' slots change') + ' from your season lineup this week. Neither changes your ESPN lineup until you set it there.' : 'Your season lineup is already your best Week 10 lineup.' };
       })(),
       listKey: listKey, odds: odds, power: power, pk: pk, digest: digest, co: co, tCounter: s.ttab === 'counter',
       tr: tr, ttabs: ttabs, tManual: s.ttab === 'manual', tFind: s.ttab === 'find', tChain: s.ttab === 'chain', lb: lb, fd: fd, ch: ch,
