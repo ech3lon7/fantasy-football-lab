@@ -11,7 +11,7 @@ test("pin a backup, optimize, reload and clear pins", async ({ page }) => {
   const pin = page.getByRole("button", { name: "Pin Kofi Osei: Optimize will always start him" }).first();
   await pin.click();
   await expect(page.locator(".gd-fm-pins")).toContainText("Osei");
-  await expect(page.locator(".gd-fm-pins")).toContainText("Pins cost 3.8 MPPG");
+  await expect(page.locator(".gd-fm-pins")).toContainText("Pins cost 3.2 MPPG");
   await expect(page.getByRole("button", { name: "Unpin Kofi Osei" }).first()).toHaveAttribute("aria-pressed", "true");
   await page.locator(".gd-fm").screenshot({ path: test.info().outputPath("pins-before-dark-1320.png"), animations: "disabled" });
   await page.getByRole("button", { name: /Optimize lineup/ }).click();

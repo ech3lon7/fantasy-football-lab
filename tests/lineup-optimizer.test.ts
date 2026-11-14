@@ -40,24 +40,24 @@ describe("manual formation moves", () => {
 });
 
 describe("optimizer: maximum-MPPG lineup", () => {
-  it("starts a bench RB over the starting FLEX WR and only that slot moves", async () => {
+  it("starts the best bench RB over the lower matchup-adjusted RB and only that slot moves", async () => {
     const { m, team, current } = await setup();
     const result = optimizeLineup(m, team, { current, pins: [] });
     expect(result.changes).toHaveLength(1);
     const change = result.changes[0];
     expect(change).toMatchObject({
-      slot: "FLEX",
+      slot: "RB",
       inId: "10",
-      outId: "7",
-      gain: 1.9,
+      outId: "3",
+      gain: 7,
       pinned: false,
     });
     expect(
-      result.slots.find((slot) => slot.slot === "FLEX")?.playerId,
+      result.slots.find((slot) => slot.index === change.slotIndex)?.playerId,
     ).toBe("10");
-    expect(result.currentTotal).toBe(107.8);
-    expect(result.optimizedTotal).toBe(109.7);
-    expect(result.gain).toBe(1.9);
+    expect(result.currentTotal).toBe(120.4);
+    expect(result.optimizedTotal).toBe(127.4);
+    expect(result.gain).toBe(7);
     expect(result.pinCost).toBeNull();
   });
 });
@@ -67,17 +67,18 @@ describe("optimizer: slot stability", () => {
     const { m, team, current } = await setup();
     const first = optimizeLineup(m, team, { current, pins: [] });
     const result = optimizeLineup(m, team, { current: first.slots, pins: ["10", "11"] });
-    expect(result.slots.find((entry) => entry.slot === "FLEX")?.playerId).toBe("10");
+    expect(result.slots.find((entry) => entry.slot === "FLEX")?.playerId).toBe("7");
   });
   it("describes each replacement against the player leaving that slot", async () => {
     const { m, team, current } = await setup();
     const changed = current.map((entry) => ({
       ...entry,
-      playerId: entry.playerId === "1" ? "15" : entry.playerId === "3" ? "13" : entry.playerId,
+      playerId: entry.playerId === "1" ? "15" : entry.playerId === "2" ? "13" : entry.playerId,
     }));
     const result = optimizeLineup(m, team, { current: changed, pins: [] });
     expect(result.changes.find((entry) => entry.inId === "1")?.outId).toBe("15");
-    expect(result.changes.find((entry) => entry.inId === "3")?.outId).toBe("13");
+    expect(result.changes.find((entry) => entry.inId === "2")?.outId).toBe("3");
+    expect(result.changes.find((entry) => entry.inId === "10")?.outId).toBe("13");
   });
   it("keeps unchanged starters in their indices and treats a same-position swap as no change", async () => {
     const { m, team, current } = await setup();
@@ -95,17 +96,11 @@ describe("optimizer: slot stability", () => {
       current: swapped,
       pins: [],
     });
-    // The RB swap alone changes nothing: the only change is the same FLEX upgrade as before.
-    expect(result.changes).toEqual(fixed.changes);
-    expect(result.changes.map((c) => c.slot)).toEqual(["FLEX"]);
-    expect(result.gain).toBe(1.9);
-    expect(
-      result.slots
-        .filter((slot) => slot.slot === "RB")
-        .map((slot) => slot.playerId),
-    ).toEqual(
-      swapped.filter((slot) => slot.slot === "RB").map((slot) => slot.playerId),
-    );
+    // The same lower-value starter leaves despite having moved to the other RB slot.
+    expect(result.changes.map(({ inId, outId }) => ({ inId, outId }))).toEqual(fixed.changes.map(({ inId, outId }) => ({ inId, outId })));
+    expect(result.changes.map((c) => c.slot)).toEqual(["RB"]);
+    expect(result.gain).toBe(7);
+    expect(result.slots.find((slot) => slot.playerId === "2")?.index).toBe(swapped.find((slot) => slot.playerId === "2")?.index);
   });
 });
 
@@ -136,8 +131,8 @@ describe("optimizer: pins", () => {
     expect(
       result.slots.find((slot) => slot.slot === "WR" && slot.playerId === "11"),
     ).toBeTruthy();
-    // Okafor + Osei at WR, Dunn at FLEX; Andrade and Brannigan sit out.
-    expect(result.optimizedTotal).toBe(105.9);
+    // Matchups place Dunn at RB, Osei at WR and retain Brannigan at FLEX.
+    expect(result.optimizedTotal).toBe(124.2);
     expect(result.changes.map((c) => c.inId)).toContain("11");
   });
 
@@ -146,7 +141,7 @@ describe("optimizer: pins", () => {
     const result = optimizeLineup(m, team, { current, pins: ["11"] });
     const unpinned = optimizeLineup(m, team, { current, pins: [] });
     expect(result.pinCost).toBe(round(unpinned.optimizedTotal - result.optimizedTotal));
-    expect(result.pinCost).toBe(3.8);
+    expect(result.pinCost).toBe(3.2);
   });
 
   it("reports conflicting pins and leaves the lineup unchanged", async () => {
@@ -188,14 +183,21 @@ describe("optimizer: rounding", () => {
     const { m, current } = await setup();
     // MPPG currently rounds to tenths upstream; controlled fractional values exercise the optimizer's separate rounding contract.
     const calculate = mppg.calculateMppg;
+    let incoming = 16.21;
+    let outgoing = 8.51;
     const stub = vi.spyOn(mppg, "calculateMppg").mockImplementation((model, player, week) => {
       const result = calculate(model, player, week);
-      return { ...result, value: player.id === "7" ? 9.34 : player.id === "10" ? 11.26 : result.value };
+      return { ...result, value: player.id === "5" ? outgoing : player.id === "10" ? incoming : result.value };
     });
     try {
-      const result = optimizeLineup(m, "1", { current, pins: [] });
-      expect(result.gain).toBe(round(result.optimizedTotal - result.currentTotal));
-      expect(result.gain).not.toBe(result.changes[0].gain);
+      let found = false;
+      for (const a of [16.21, 16.24, 16.26, 16.29]) for (const b of [8.51, 8.54, 8.56, 8.59]) {
+        incoming = a; outgoing = b;
+        const result = optimizeLineup(m, "1", { current, pins: [] });
+        expect(result.gain).toBe(round(result.optimizedTotal - result.currentTotal));
+        if (result.changes.length && result.gain !== result.changes[0].gain) found = true;
+      }
+      expect(found).toBe(true);
     } finally {
       stub.mockRestore();
     }
@@ -206,6 +208,6 @@ describe("optimizer: rounding", () => {
     expect(result.currentTotal).toBe(round(result.currentTotal));
     expect(result.optimizedTotal).toBe(round(result.optimizedTotal));
     expect(result.gain).toBe(round(result.optimizedTotal - result.currentTotal));
-    expect(result.gain).toBe(1.9);
+    expect(result.gain).toBe(7);
   });
 });

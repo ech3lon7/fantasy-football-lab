@@ -64,6 +64,10 @@ test("lab pages keep every model, evidence, audit and account function", async (
   await expect(
     page.getByRole("heading", { name: "Source data audit" }),
   ).toBeVisible();
+  // Verify the matchup audit remains available from the Audits page.
+  await expect(
+    page.getByRole("heading", { name: "MPPG matchup check" }),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Model settings" }),
   ).toHaveCount(0);

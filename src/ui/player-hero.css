@@ -89,15 +89,21 @@
   padding-right: 250px;
 }
 :root[data-gameday] .gd-hx-photo {
-  /* Match the roster card: translucent image across the whole header behind its content. */
+  /* Size the bust by the header height and soften its side edges behind the rank. */
   position: absolute;
-  inset: 0;
+  inset: auto;
+  bottom: 0;
+  left: 52%;
   z-index: -1;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
+  width: auto;
+  height: min(115%, 560px);
+  aspect-ratio: 350 / 254;
+  transform: translateX(-50%);
+  overflow: visible;
   opacity: 0.68;
   pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, var(--gd-hero-shade) 12%, var(--gd-hero-shade) 88%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, var(--gd-hero-shade) 12%, var(--gd-hero-shade) 88%, transparent 100%);
 }
 /* The headshot is a landscape image: crop to head and shoulders, with no upscaling filter. */
 :root[data-gameday] .gd-hx-photo img,
@@ -111,6 +117,8 @@
   border-radius: 0;
   font-size: 56px;
 }
+/* Override the image's inline cover rule so the whole bust stays inside its frame. */
+:root[data-gameday] .gd-hx-photo img { object-fit: contain !important; object-position: 50% 100%; }
 :root[data-gameday] .gd-hx-name {
   display: flex;
   flex-direction: column;
@@ -437,6 +445,19 @@
     gap: 14px;
     padding-right: 0;
   }
+  /* Cover the header through its stats row and fade the bust into the content below. */
+  :root[data-gameday] .gd-hx .gd-hx-photo {
+    left: 50%;
+    bottom: calc(100% - var(--hx-photo-region, 100%));
+    height: var(--hx-photo-region, 100%);
+    opacity: 0.55;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, var(--gd-hero-shade) 12%, var(--gd-hero-shade) 88%, transparent 100%), linear-gradient(180deg, var(--gd-hero-shade) 0%, var(--gd-hero-shade) 80%, transparent 100%);
+    -webkit-mask-composite: source-in;
+    mask-image: linear-gradient(90deg, transparent 0%, var(--gd-hero-shade) 12%, var(--gd-hero-shade) 88%, transparent 100%), linear-gradient(180deg, var(--gd-hero-shade) 0%, var(--gd-hero-shade) 80%, transparent 100%);
+    mask-composite: intersect;
+  }
+  :root[data-gameday] .gd-hx-photo .gd-photo { position: relative; overflow: visible !important; }
+  :root[data-gameday] .gd-hx-photo img { position: absolute; bottom: 0; width: 100% !important; height: 105% !important; }
   :root[data-gameday] .gd-hx-photo .gd-photo {
     font-size: 36px;
   }

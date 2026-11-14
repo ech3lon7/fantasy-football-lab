@@ -34,15 +34,17 @@ test.describe("hero header", () => {
   }) => {
     const card = await openCard(page, ids.superstar);
     const hero = card.locator(".gd-hx");
-    // The full-size translucent photo remains behind the hero's readable controls.
+    // The bust is bottom-aligned, centered at 52%, and sized by the hero height.
     const photo = hero.locator(".gd-hx-photo");
     const geometry = await photo.evaluate((el) => {
       const a = el.getBoundingClientRect(), b = el.closest(".gd-hx")!.getBoundingClientRect();
-      return { width: a.width / b.width, height: a.height / b.height, opacity: Number(getComputedStyle(el).opacity) };
+      return { height: a.height, expectedHeight: Math.min(b.height * 1.15, 560), bottomGap: Math.abs(a.bottom - b.bottom), center: (a.left + a.width / 2 - b.left) / b.width, opacity: Number(getComputedStyle(el).opacity), mask: getComputedStyle(el).maskImage };
     });
-    expect(geometry.width).toBeCloseTo(1, 1);
-    expect(geometry.height).toBeCloseTo(1, 1);
+    expect(geometry.height).toBeCloseTo(geometry.expectedHeight, 0);
+    expect(geometry.bottomGap).toBeLessThanOrEqual(1);
+    expect(geometry.center).toBeCloseTo(0.52, 2);
     expect(geometry.opacity).toBeCloseTo(0.68, 2);
+    expect(geometry.mask).toContain("12%");
     await expect(hero.locator(".gd-hx-dots")).toBeAttached();
     await expect(hero.locator(".gd-hx-num")).toHaveText("1");
     await expect(hero.locator(".gd-hx-num")).toHaveAttribute(
@@ -77,6 +79,22 @@ test.describe("hero header", () => {
     await expect(card.locator(".gd-hx-bio")).toContainText("unranked");
   });
 
+  // Check the approved desktop geometry at the wider acceptance viewport in both themes.
+  for (const theme of ["light", "dark"] as const) {
+    test(`wide desktop photo geometry in ${theme}`, async ({ page }) => {
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await page.emulateMedia({ colorScheme: theme });
+      const card = await openCard(page, ids.superstar);
+      const geometry = await card.locator(".gd-hx-photo").evaluate((el) => {
+        const photo = el.getBoundingClientRect(), hero = el.closest(".gd-hx")!.getBoundingClientRect();
+        return { height: photo.height, expected: Math.min(hero.height * 1.15, 560), center: (photo.left + photo.width / 2 - hero.left) / hero.width, bottom: Math.abs(photo.bottom - hero.bottom) };
+      });
+      expect(geometry.height).toBeCloseTo(geometry.expected, 0);
+      expect(geometry.center).toBeCloseTo(0.52, 2);
+      expect(geometry.bottom).toBeLessThanOrEqual(1);
+    });
+  }
+
   test("the portrait falls back to initials when the headshot is missing", async ({
     page,
   }) => {
@@ -84,6 +102,24 @@ test.describe("hero header", () => {
     await expect(card.locator(".gd-hx-photo .gd-photo-fallback")).toHaveText(
       "SS",
     );
+  });
+
+  // On phones the bust ends with the stats row, fades at its lower edge and remains decorative.
+  test("phone photo ends at the stats row and uses the approved fade", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 1000 });
+    const card = await openCard(page, ids.superstar);
+    const geometry = await card.locator(".gd-hx-photo").evaluate((el) => {
+      const photo = el.getBoundingClientRect();
+      const hero = el.closest(".gd-hx")!.getBoundingClientRect();
+      const stats = el.closest(".gd-hx")!.querySelector(".gd-card-nums")!.getBoundingClientRect();
+      return { top: Math.abs(photo.top - hero.top), bottom: Math.abs(photo.bottom - stats.bottom), center: (photo.left + photo.width / 2 - hero.left) / hero.width, opacity: Number(getComputedStyle(el).opacity), mask: getComputedStyle(el).maskImage };
+    });
+    expect(geometry.top).toBeLessThanOrEqual(1);
+    expect(geometry.bottom).toBeLessThanOrEqual(1);
+    expect(geometry.center).toBeCloseTo(0.5, 2);
+    expect(geometry.opacity).toBeCloseTo(0.55, 2);
+    expect(geometry.mask).toContain("80%");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 });
 

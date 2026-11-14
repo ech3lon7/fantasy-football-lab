@@ -15,6 +15,7 @@ import { SimulationNote } from "./SimulationIssuePopover";
 import { weeklyLineup } from "../../domain/lineups";
 import { playerMatchups } from "../../domain/matchups";
 import { useOpenPlayer } from "./PlayerCard";
+import { MPPG_METHOD_NOTE } from "../../domain/mppg";
 
 // The outlook line chart: the user's modeled starters against the league median, one point per remaining week.
 function OutlookChart({ summary }: { summary: WeekSummary }) {
@@ -265,7 +266,7 @@ export function Week({
           </div>
 
           <div className="gd-muted" style={{ fontSize: "12.5px", lineHeight: "1.4" }}>
-            MPPG (matchup points per game): ESPN's projection for this week, moved by half of the gap between your Expected PPG and ESPN's season projection. This week only; it picks starters, while trades and grades use season Expected PPG. The matchup chip is context and does not feed the number.
+            {MPPG_METHOD_NOTE}
           </div>
 
           {wl.hasSwaps && (

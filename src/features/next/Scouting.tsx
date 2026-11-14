@@ -765,11 +765,6 @@ export function Scouting({
                                 <span className="mu-chip" data-tone={mu.tone}>
                                   {mu.shortText}
                                 </span>
-                                {p.weekly !== null && p.weekly !== undefined && (
-                                  <small style={{ opacity: 0.85, fontSize: "11px" }}>
-                                    ◆ ESPN this week {p.weekly.toFixed(1)}
-                                  </small>
-                                )}
                               </div>
                             )}
                             {c.sparkline && (

@@ -40,6 +40,18 @@ export function PlayerHero({
   // The overlays exist only while entrances are allowed at full motion; Reduced and Off render none.
   const [run, setRun] = useState(0);
   const cancel = useRef<() => void>(() => {});
+  const photoRef = useRef<HTMLDivElement>(null);
+
+  // Measure the end of the stats row so the phone photo stops before the profile panel.
+  useEffect(() => {
+    const hero = photoRef.current?.closest<HTMLElement>(".gd-hx");
+    const stats = hero?.querySelector<HTMLElement>(".gd-card-nums");
+    if (!hero || !stats) return;
+    const measure = () => hero.style.setProperty("--hx-photo-region", `${stats.getBoundingClientRect().bottom - hero.getBoundingClientRect().top}px`);
+    const observer = new ResizeObserver(measure);
+    observer.observe(hero); observer.observe(stats); measure();
+    return () => { observer.disconnect(); hero.style.removeProperty("--hx-photo-region"); };
+  }, [p.id]);
 
   const play = useCallback(() => {
     cancel.current();
@@ -68,7 +80,7 @@ export function PlayerHero({
   return (
     <>
       {/* Fill the entire player-card hero with the same translucent portrait used on roster cards. */}
-      <div className="gd-hx-photo"><PlayerPhoto player={p} size="fill" /></div>
+      <div className="gd-hx-photo" ref={photoRef}><PlayerPhoto player={p} size="fill" /></div>
       <div className="gd-hx-dots" aria-hidden="true" />
       {info?.rank != null && (
         <span className="gd-hx-num" aria-hidden="true">

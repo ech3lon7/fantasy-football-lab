@@ -326,9 +326,6 @@ function CardView({
                 <span style={{ fontSize: "13px", opacity: 0.85, fontWeight: 600 }}>
                   {card.matchups.filter((mu) => mu.tone === "soft").length} soft ·{" "}
                   {card.matchups.filter((mu) => mu.tone === "tough").length} tough
-                  {p.weekly !== null && p.weekly !== undefined
-                    ? ` · ESPN this week ${p.weekly.toFixed(1)}`
-                    : ""}
                 </span>
               </div>
               <div className="mu-strip" role="list" aria-label="Rest of season matchups">
@@ -366,6 +363,7 @@ function CardView({
             </section>
             <div className="gd-story-grid">
               <div className="gd-story-left">
+                <p>{MPPG_METHOD_NOTE}</p>
                 <NextRefreshScenarios m={m} p={p} defaultOpen />
                 {h.blendLine && <small className="gd-blend">{h.blendLine}</small>}
                 <ul className="gd-story">

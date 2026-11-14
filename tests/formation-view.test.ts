@@ -51,7 +51,7 @@ describe("formation view: cards", () => {
       [2, 7],
     ]);
     expect(view.source).toBe("Your ESPN lineup");
-    expect(view.total).toBe(107.8);
+    expect(view.total).toBe(120.4);
     expect(view.spread).toBeGreaterThan(0);
   });
 
@@ -152,7 +152,7 @@ describe("formation view: names", () => {
     const qb = view.cards.find((card) => card.label === "QB")!;
     expect(qb.shortName).toBe("J.MERCER");
     expect(qb.accessibleName).toBe(
-      "Jalen Mercer, QB, MPPG 21.6, vs SOFT · good matchup",
+      "Jalen Mercer, QB, MPPG 32.4, vs SOFT · good matchup",
     );
     const flex = view.cards.find((card) => card.label === "FLEX")!;
     expect(flex.flexPos).toBe("WR");

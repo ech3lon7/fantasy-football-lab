@@ -458,7 +458,7 @@ export interface SuggestedSwap {
   gain: number; // positive difference in MPPG
   chance: number; // chance start outscores over
   chancePct: string; // e.g. "67%"
-  reason: string; // e.g. "67% chance he outscores Brannigan · ESPN projects 11.4 this week vs 9.4 · Soft vs RB..."
+  reason: string; // Start/sit probability and matchup context for each player.
   gainText: string; // e.g. "+1.9"
 }
 
@@ -628,10 +628,14 @@ export function weeklyLineup(m: Model, team: string): WeeklyLineup {
     const currMatchup = matchupList.find((mu) => mu.week === week);
     const chipText = currMatchup ? currMatchup.text : "";
 
+    // Explain each available player's applied opponent adjustment without ESPN projections.
+    const matchupReason = (result: MppgResult, player: Player) => result.matchupPct === null
+      ? "matchup data unavailable"
+      : `vs ${result.opponent} ${result.matchupPct >= 0 ? "+" : "−"}${Math.round(Math.abs(result.matchupPct) * 100)}% to ${{ QB: "QBs", RB: "RBs", WR: "WRs", TE: "TEs", K: "kickers", "D/ST": "defences" }[player.pos] ?? player.pos}`;
     const reason =
       pout.mppg.value === null
         ? `${pout.player.name} is ${pout.mppg.reason.toLowerCase()} · ${chipText}`
-        : `${pr}% chance he outscores ${pout.player.name.split(" ").slice(-1)[0]} · ESPN projects ${pin.player.weekly?.toFixed(1) ?? "—"} this week vs ${pout.player.weekly?.toFixed(1) ?? "—"}${chipText ? " · " + chipText : ""}`;
+        : `${pr}% chance he outscores ${pout.player.name.split(" ").slice(-1)[0]} · ${matchupReason(pin.mppg, pin.player)} · ${pout.player.name.split(" ").slice(-1)[0]} ${matchupReason(pout.mppg, pout.player)}`;
 
     swaps.push({
       startId: pin.player.id,

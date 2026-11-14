@@ -65,9 +65,9 @@ test("save optimized formation to the live lineup", async ({ page }) => {
   await seedFormation(page);
   await page.getByRole("button", { name: /Optimize lineup/ }).click();
   await page.getByRole("button", { name: "Save lineup", exact: true }).first().click();
-  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("Dunn");
+  await expect(page.locator('.gd-fs[data-label="RB1"] .gd-fc-nm')).toContainText("Dunn");
   await page.reload();
-  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("Dunn");
+  await expect(page.locator('.gd-fs[data-label="RB1"] .gd-fc-nm')).toContainText("Dunn");
   await expect(page.locator(".gd-fm-tot small")).toHaveText("Your saved lineup · MPPG");
   await expect(page.getByText("Show depth-only pickups")).toHaveCount(0);
 });
@@ -79,9 +79,9 @@ test("save a simulated lineup and select another team", async ({ page }) => {
   await page.getByRole("button", { name: "New simulation", exact: true }).click();
   await page.getByRole("button", { name: /Optimize lineup/ }).click();
   await page.getByRole("button", { name: "Save lineup", exact: true }).first().click();
-  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("Dunn");
+  await expect(page.locator('.gd-fs[data-label="RB1"] .gd-fc-nm')).toContainText("Dunn");
   await page.reload();
-  await expect(page.locator('.gd-fs[data-slot="FLEX"] .gd-fc-nm')).toContainText("Dunn");
+  await expect(page.locator('.gd-fs[data-label="RB1"] .gd-fc-nm')).toContainText("Dunn");
   await openRosterTools(page);
   await page.getByLabel("Simulated team to edit").selectOption("2");
   await expect(page.locator('.gd-fs[data-slot="QB"] .gd-fc-nm')).not.toContainText("Mercer");

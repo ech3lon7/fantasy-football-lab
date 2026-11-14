@@ -11,6 +11,8 @@ export interface DefensePositionStat {
   gamesPlayed: number;
   pointsAllowedPerGame: number;
   leagueAverage: number;
+  allowedPerGameRaw: number;
+  leagueAverageRaw: number;
   diff: number; // pointsAllowedPerGame - leagueAverage (+ means soft / allows more points)
   rank: number; // 1 = allows fewest (toughest), 32 = allows most (softest)
   totalDefenses: number;
@@ -36,8 +38,13 @@ export interface PlayerWeeklyMatchup {
 export const TOUGH_PERCENTILE = 1 / 6;
 export const SOFT_PERCENTILE = 5 / 6;
 
-// Computes points allowed per defense team and position across all completed weeks.
-export function computeDefenseStats(m: Model): Map<string, DefensePositionStat> {
+// Cache the current snapshot by model; historical cutoffs are deliberately computed separately.
+const defenseCache = new WeakMap<Model, Map<string, DefensePositionStat>>();
+
+// Computes points allowed per defense team and position, optionally before a historical week.
+export function computeDefenseStats(m: Model, throughWeek?: number): Map<string, DefensePositionStat> {
+  const cached = throughWeek === undefined ? defenseCache.get(m) : undefined;
+  if (cached) return cached;
   const result = new Map<string, DefensePositionStat>();
   const dataset = m.dataset;
   const schedules = dataset.tables.ModelSchedule;
@@ -64,6 +71,7 @@ export function computeDefenseStats(m: Model): Map<string, DefensePositionStat> 
     const pHistory = histories.get(p.id) ?? [];
     for (const h of pHistory) {
       const week = num(h.Week);
+      if (throughWeek !== undefined && week >= throughWeek) continue;
       // Only completed/past weeks up to current-1 or where StatsOfficial is true
       const sched =
         scheduleLookup.get(`${p.nflId}/${week}`) ??
@@ -162,6 +170,8 @@ export function computeDefenseStats(m: Model): Map<string, DefensePositionStat> 
         gamesPlayed: d.games,
         pointsAllowedPerGame: Math.round(d.ptsAllowedPerGame * 10) / 10,
         leagueAverage: Math.round(leagueAvg * 10) / 10,
+        allowedPerGameRaw: d.ptsAllowedPerGame,
+        leagueAverageRaw: leagueAvg,
         diff: Math.round(d.diff * 10) / 10,
         rank,
         totalDefenses,
@@ -173,6 +183,7 @@ export function computeDefenseStats(m: Model): Map<string, DefensePositionStat> 
     });
   }
 
+  if (throughWeek === undefined) defenseCache.set(m, result);
   return result;
 }
 

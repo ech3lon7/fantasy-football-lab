@@ -1,188 +1,49 @@
 import { num, str } from "./contracts";
 import type { Model, Player } from "./valuation";
 import { nextRefreshDefaults } from "./next-refresh";
+import { computeDefenseStats, type DefensePositionStat } from "./matchups";
 
-export const MPPG_EDGE_WEIGHT = 0.5;
-
-export const MPPG_METHOD_NOTE =
-  "MPPG starts from ESPN's projection for this week, which already reflects the opponent, injuries and game lines, and adds half of the difference between your Expected PPG and ESPN's season projection. It exists only for the imported week and only picks weekly starters; trades and grades use season Expected PPG. The matchup chip is shown for context and does not change the number.";
+export const MPPG_EARLY_GAMES = 3;
+export const MPPG_EARLY_RELIABILITY = 0.5;
+export const MPPG_CAP = 0.5;
+export const MPPG_METHOD_NOTE = "MPPG is your Expected PPG adjusted for this week's opponent: how many more or fewer points that defence has allowed to this position than the league average, as a percentage. A defence's record counts in full from its 4th game (half before that), and the change is capped at 50%. It exists only for the imported week and only picks weekly starters; trades and grades use Expected PPG.";
 
 export interface MppgResult {
-  value: number | null;
-  spread: number | null;
-  floor: number | null;
-  ceiling: number | null;
-  espnWeek: number | null;
-  edge: number | null;
-  eppg: number | null;
-  espnSeason: number | null;
-  source: "blend" | "espn-only" | "unavailable";
-  reason: string;
-  importedAt: string | null;
-  buildLine: string;
+  value: number | null; spread: number | null; floor: number | null; ceiling: number | null;
+  eppg: number | null; source: "matchup" | "eppg-only" | "unavailable";
+  reason: string; importedAt: string | null; buildLine: string;
+  matchupPct: number | null; rawMatchupPct: number | null; opponent: string | null;
+  defenseGames: number | null; capped: boolean;
 }
 
-// Compute MPPG for player p in the current imported week of model m.
-export function calculateMppg(
-  m: Model,
-  p: Player,
-  targetWeek: number = m.current,
-): MppgResult {
+// Compute the approved current-week multiplier from unrounded defense rates.
+export function calculateMppg(m: Model, p: Player, targetWeek = m.current, defenseStats?: Map<string, DefensePositionStat>): MppgResult {
+  const eppg = p.blendedExpected ?? null;
   const importedAt = m.dataset.sourceUTC ?? null;
-
-  // 1. Future or past weeks outside the current imported week: null
-  if (targetWeek !== m.current) {
-    return {
-      value: null,
-      spread: null,
-      floor: null,
-      ceiling: null,
-      espnWeek: null,
-      edge: null,
-      eppg: p.blendedExpected ?? null,
-      espnSeason: p.projected ?? null,
-      source: "unavailable",
-      reason: `MPPG is available only for the imported week (Week ${m.current})`,
-      importedAt,
-      buildLine: "",
-    };
-  }
-
-  // 2. Availability: Bye week check
-  const scheduled = m.dataset.tables.ModelSchedule.find(
-    (r) => str(r.ProTeamID) === p.nflId && num(r.Week) === targetWeek,
-  );
-  const isBye =
-    p.bye === targetWeek ||
-    (scheduled !== undefined &&
-      (num(scheduled.HasGame) === 0 || num(scheduled.ByeWeek) === 1));
-
-  if (isBye) {
-    return {
-      value: null,
-      spread: null,
-      floor: null,
-      ceiling: null,
-      espnWeek: null,
-      edge: null,
-      eppg: p.blendedExpected ?? null,
-      espnSeason: p.projected ?? null,
-      source: "unavailable",
-      reason: "Bye week",
-      importedAt,
-      buildLine: "",
-    };
-  }
-
-  // Availability: Injury OUT / IR / Suspension check
-  const injuryUpper = (p.injury || "").toUpperCase();
-  const isOut =
-    p.out ||
-    [
-      "OUT",
-      "INJURY_RESERVE",
-      "IR",
-      "SUSPENSION",
-      "SUSPENDED",
-      "SSPD",
-      "SUSP",
-    ].includes(injuryUpper);
-
-  if (isOut) {
-    return {
-      value: null,
-      spread: null,
-      floor: null,
-      ceiling: null,
-      espnWeek: null,
-      edge: null,
-      eppg: p.blendedExpected ?? null,
-      espnSeason: p.projected ?? null,
-      source: "unavailable",
-      reason: "Out",
-      importedAt,
-      buildLine: "",
-    };
-  }
-
-  // 3. ESPN weekly projection check
-  const espnWeekly = p.weekly;
-  if (
-    espnWeekly === null ||
-    espnWeekly === undefined ||
-    !Number.isFinite(espnWeekly)
-  ) {
-    return {
-      value: null,
-      spread: null,
-      floor: null,
-      ceiling: null,
-      espnWeek: null,
-      edge: null,
-      eppg: p.blendedExpected ?? null,
-      espnSeason: p.projected ?? null,
-      source: "unavailable",
-      reason: "No ESPN weekly projection",
-      importedAt,
-      buildLine: "",
-    };
-  }
-
-  // 4. Model edge calculation
-  const eppg = p.blendedExpected;
-  const espnSeason = p.projected;
-
-  let edge: number | null = null;
-  let source: "blend" | "espn-only" = "blend";
-  let reason = "";
-
-  if (
-    eppg === null ||
-    eppg === undefined ||
-    !Number.isFinite(eppg) ||
-    espnSeason === null ||
-    espnSeason === undefined ||
-    !Number.isFinite(espnSeason)
-  ) {
-    source = "espn-only";
-    reason = "ESPN weekly alone (EPPG or season projection unavailable)";
-  } else {
-    edge = MPPG_EDGE_WEIGHT * (eppg - espnSeason);
-  }
-
-  const rawMppg = edge !== null ? espnWeekly + edge : espnWeekly;
-  const value = Math.max(0, Math.round(rawMppg * 10) / 10);
-
-  // 5. Spread from nextRefreshDefaults (blended empirical/prior spread)
-  const refreshDefaults = nextRefreshDefaults(m, p);
-  const spread =
-    refreshDefaults.spread !== null
-      ? Math.round(refreshDefaults.spread * 10) / 10
-      : null;
-  const floor = spread !== null ? Math.max(0, Math.round((value - spread) * 10) / 10) : null;
-  const ceiling = spread !== null ? Math.round((value + spread) * 10) / 10 : null;
-
-  // 6. Build line explanation string
-  // Format: "ESPN week 11.4 − ½ × 0.3 (EPPG 8.7 vs ESPN season 9.0)"
-  let buildLine = `ESPN week ${espnWeekly.toFixed(1)}`;
-  if (source === "blend" && eppg !== null && espnSeason !== null && edge !== null) {
-    const gap = Math.abs(eppg - espnSeason);
-    const sign = edge >= 0 ? "+" : "−";
-    buildLine = `ESPN week ${espnWeekly.toFixed(1)} ${sign} ½ × ${gap.toFixed(1)} (EPPG ${eppg.toFixed(1)} vs ESPN season ${espnSeason.toFixed(1)})`;
-  }
-
-  return {
-    value,
-    spread,
-    floor,
-    ceiling,
-    espnWeek: espnWeekly,
-    edge,
-    eppg: eppg ?? null,
-    espnSeason: espnSeason ?? null,
-    source,
-    reason,
-    importedAt,
-    buildLine,
-  };
+  const empty = (reason: string): MppgResult => ({ value: null, spread: null, floor: null, ceiling: null, eppg, source: "unavailable", reason, importedAt, buildLine: "", matchupPct: null, rawMatchupPct: null, opponent: null, defenseGames: null, capped: false });
+  if (targetWeek !== m.current) return empty(`MPPG is available only for the imported week (Week ${m.current})`);
+  const scheduled = m.dataset.tables.ModelSchedule.find((r) => (str(r.ProTeamID) === p.nflId || str(r.NFLTeam) === p.nfl) && num(r.Week) === targetWeek);
+  if (p.bye === targetWeek || (scheduled && (num(scheduled.HasGame) === 0 || num(scheduled.ByeWeek) === 1))) return empty("Bye week");
+  if (p.out || p.slot === 21 || ["OUT", "INJURY_RESERVE", "IR", "SUSPENSION", "SUSPENDED", "SSPD", "SUSP"].includes((p.injury || "").toUpperCase())) return empty("Out");
+  if (eppg === null || !Number.isFinite(eppg)) return empty("No Expected PPG");
+  const opponent = scheduled ? str(scheduled.Opponent || scheduled.OpponentID || "") : "";
+  const stat = opponent ? (defenseStats ?? computeDefenseStats(m)).get(`${opponent}/${p.pos}`) : undefined;
+  const usable = !!stat && stat.gamesPlayed > 0 && Number.isFinite(stat.allowedPerGameRaw) && Number.isFinite(stat.leagueAverageRaw) && stat.leagueAverageRaw > 0;
+  const raw = usable ? stat.allowedPerGameRaw / stat.leagueAverageRaw - 1 : null;
+  const reliability = usable && stat.gamesPlayed <= MPPG_EARLY_GAMES ? MPPG_EARLY_RELIABILITY : 1;
+  const adjusted = raw === null ? 0 : raw * reliability;
+  const applied = Math.max(-MPPG_CAP, Math.min(MPPG_CAP, adjusted));
+  const capped = Math.abs(adjusted) > MPPG_CAP;
+  const value = Math.max(0, Math.round(eppg * (1 + applied) * 10) / 10);
+  const refresh = nextRefreshDefaults(m, p);
+  const spread = refresh.spread === null ? null : Math.round(refresh.spread * 10) / 10;
+  const floor = spread === null ? null : Math.max(0, Math.round((value - spread) * 10) / 10);
+  const ceiling = spread === null ? null : Math.round((value + spread) * 10) / 10;
+  const words: Record<string, string> = { QB: "QBs", RB: "RBs", WR: "WRs", TE: "TEs", K: "kickers", "D/ST": "defences" };
+  const sign = applied < 0 ? "−" : "+";
+  const pct = Math.round(Math.abs(applied) * 100);
+  const rawPct = raw === null ? 0 : Math.round(Math.abs(raw) * 100);
+  const count = usable ? `${stat.gamesPlayed} ${stat.gamesPlayed === 1 ? "game" : "games"}${reliability < 1 ? ", counted at 50%" : ""}` : "";
+  const buildLine = raw === null ? `EPPG ${eppg.toFixed(1)} · matchup data unavailable` : `EPPG ${eppg.toFixed(1)} × (1 ${sign} ${pct}%${capped ? ", capped" : ""}) · ${opponent} allows ${rawPct}% ${raw < 0 ? "fewer" : "more"} points to ${words[p.pos] ?? p.pos} than average (${count})`;
+  return { value, spread, floor, ceiling, eppg, source: usable ? "matchup" : "eppg-only", reason: usable ? "" : "Matchup data unavailable", importedAt, buildLine, matchupPct: usable ? applied : null, rawMatchupPct: raw, opponent: opponent || null, defenseGames: usable ? stat.gamesPlayed : null, capped };
 }

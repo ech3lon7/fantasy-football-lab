@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Model } from "../domain/valuation";
 import { settingsSchema, tableNames, type Settings } from "../domain/contracts";
 import type { GemTrackingState } from "../domain/gem-tracking";
@@ -7,6 +7,7 @@ import { effectiveLabelRules } from "../domain/label-rules";
 import { DataTable, fmt } from "../ui/components";
 import { PlayerName } from "../ui/PlayerName";
 import { GemTracking } from "./GemTracking";
+import { backtestMatchup } from "../domain/mppg-tuning";
 
 interface SettingField {
   key: keyof Settings;
@@ -349,6 +350,8 @@ export function ModelView({
   // Build compact method context from aggregate-only evidence and the same effective settings used by classification.
   const labelAudit = historicalLabelAudit(m);
   const labelRules = effectiveLabelRules(m.settings);
+  // Only run the historical matchup check when the audit view is opened.
+  const matchupAudit = useMemo(() => !part || part === "audits" ? backtestMatchup(m) : null, [m, part]);
 
   return (
     <>
@@ -413,6 +416,17 @@ export function ModelView({
       {!part && <GemTracking tracking={tracking} />}
       {(!part || part === "audits") && (
         <>
+          <section className="gd-card gd-audit-card" aria-label="MPPG matchup check">
+            <h2 className="gd-h2">MPPG matchup check</h2>
+            {matchupAudit?.ready ? <>
+              <p>{matchupAudit.playerWeeks} player-weeks across {matchupAudit.weeks} weeks.</p>
+              <table><thead><tr><th>Variant</th><th>Average miss</th><th>Start/sit hit rate</th></tr></thead><tbody>
+                {matchupAudit.results.map((row) => <tr key={row.label}><td>{row.label}{row.best && <strong> · Best average miss</strong>}</td><td>{row.averageMiss.toFixed(2)}</td><td>{row.hitRate === null ? "—" : `${(row.hitRate * 100).toFixed(1)}%`}</td></tr>)}
+              </tbody></table>
+            </> : <p>{matchupAudit?.message}</p>}
+            <p>Uses points per game to date in place of Expected PPG, and only data available before each week. Settings change only on the owner's request.</p>
+            <p>Defense totals include only players present in the imported dataset.</p>
+          </section>
           {/* Keep research and rule inventories collapsed while preserving the existing settings and baseline workflow. */}
           <section className="gd-card gd-audit-card">
             <div className="gd-audit-card-head">

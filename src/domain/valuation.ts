@@ -31,6 +31,7 @@ import {
   type PlayerTrendSummary,
 } from "./player-trend";
 import { calculateMppg } from "./mppg";
+import { computeDefenseStats } from "./matchups";
 export interface Player {
   id: string;
   name: string;
@@ -696,8 +697,10 @@ export function evaluate(
     evidenceRaw: options.evidence ?? "",
     roleScenarioWeight,
   };
+  // Reuse one defense snapshot for every player's current-week MPPG.
+  const defenseStats = computeDefenseStats(model);
   for (const p of players) {
-    p.mppg = calculateMppg(model, p).value;
+    p.mppg = calculateMppg(model, p, model.current, defenseStats).value;
   }
   return model;
 }
