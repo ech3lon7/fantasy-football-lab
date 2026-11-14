@@ -486,6 +486,7 @@ export function PlayerCardProvider({
   saveTab,
   versusRaw,
   saveVersus,
+  returnRoute = "overview",
   children,
 }: {
   m: Model | null;
@@ -494,13 +495,14 @@ export function PlayerCardProvider({
   // The saved comparison pair, as "idA,idB".
   versusRaw: string;
   saveVersus: (raw: string) => void;
+  returnRoute?: string;
   children: ReactNode;
 }) {
   const popovers = usePopovers(),
     [active, setActive] = useState<string | null>(null),
     keyRef = useRef<number | null>(null),
-    latest = useRef({ m, lastTab, saveTab, versusRaw, saveVersus });
-  latest.current = { m, lastTab, saveTab, versusRaw, saveVersus };
+    latest = useRef({ m, lastTab, saveTab, versusRaw, saveVersus, returnRoute });
+  latest.current = { m, lastTab, saveTab, versusRaw, saveVersus, returnRoute };
   // Open the comparison for the two saved players; it stacks above any open card.
   const openVersus = useCallback(
     (ids?: string[]) => {
@@ -547,7 +549,7 @@ export function PlayerCardProvider({
           setActive(null);
           // A card opened from a #/player/ address returns that address to This week when it closes.
           if (location.hash.startsWith("#/player/"))
-            location.hash = "#/overview";
+            location.hash = `#/${latest.current.returnRoute}`;
         },
         render: (close) => (
           <CardView

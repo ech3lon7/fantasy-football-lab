@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Activity, useEffect, useMemo, useState } from "react";
 import { actionCue, searchCue, useFeedback } from "../../ui/feel/feedback";
 import { str, type AppState, type Draft } from "../../domain/contracts";
 import { evaluateTrade, type TradeResult } from "../../domain/trades";
@@ -1565,6 +1565,9 @@ export function TradeRoom({
   onSwitchToLive?: () => void;
 }) {
   const notify = useFeedback();
+  // Keep each visited trade tool mounted while its tab is hidden.
+  const [visitedTabs, setVisitedTabs] = useState(() => new Set<TradeTab>([tab]));
+  useEffect(() => { setVisitedTabs((old) => old.has(tab) ? old : new Set([...old, tab])); }, [tab]);
   const [manualFiltersOpen, setManualFiltersOpen] = useState(false);
   const [restoredStress, setRestoredStress] = useState<StressRecipe | undefined>(undefined);
   const [stressRestoreKey, setStressRestoreKey] = useState(0);
@@ -1701,7 +1704,7 @@ export function TradeRoom({
 
       <FoldMemoryContext.Provider value={foldMemory}>
         <div role="tabpanel" aria-label={tabLabel[tab]} style={{ minWidth: 0 }}>
-          {tab === "counters" ? (
+          {(tab === "counters" || visitedTabs.has("counters")) && <Activity mode={tab === "counters" ? "visible" : "hidden"}>
             <CounterOffers
               m={m}
               draft={draft}
@@ -1712,7 +1715,8 @@ export function TradeRoom({
                 setTab("manual");
               }}
             />
-          ) : tab === "manual" ? (
+          </Activity>}
+          {(tab === "manual" || visitedTabs.has("manual")) && <Activity mode={tab === "manual" ? "visible" : "hidden"}>
             <ManualAnalyzer
               m={m}
               draft={draft}
@@ -1733,7 +1737,8 @@ export function TradeRoom({
               manualFiltersOpen={manualFiltersOpen}
               setManualFiltersOpen={setManualFiltersOpen}
             />
-          ) : tab === "find" ? (
+          </Activity>}
+          {(tab === "find" || visitedTabs.has("find")) && <Activity mode={tab === "find" ? "visible" : "hidden"}>
             <FindTrades
               key={`${m.dataset.hash}/find`}
               model={m}
@@ -1759,7 +1764,8 @@ export function TradeRoom({
               restore={restore}
               onAnalyze={() => setTab("manual")}
             />
-          ) : tab === "chains" ? (
+          </Activity>}
+          {(tab === "chains" || visitedTabs.has("chains")) && <Activity mode={tab === "chains" ? "visible" : "hidden"}>
             <ChainPlanner
               key={`${m.dataset.hash}/chains`}
               model={m}
@@ -1786,7 +1792,7 @@ export function TradeRoom({
                 setTab("manual");
               }}
             />
-          ) : null}
+          </Activity>}
         </div>
       </FoldMemoryContext.Provider>
     </div>

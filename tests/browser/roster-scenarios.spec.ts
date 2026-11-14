@@ -938,7 +938,9 @@ test("roster save slots restore exact working points and require explicit saves"
   await slots
     .getByRole("button", { name: "Save to slot 2", exact: true })
     .click();
-  await page.getByText("Advanced roster moves", { exact: true }).click();
+  // The disclosure remains open when the roster screen is revisited.
+  if (await page.getByText("Advanced roster moves", { exact: true }).locator("..").getAttribute("open") === null)
+    await page.getByText("Advanced roster moves", { exact: true }).click();
   await page
     .getByRole("combobox", { name: "League player", exact: true })
     .selectOption("200");

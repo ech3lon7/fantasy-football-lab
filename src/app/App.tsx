@@ -17,6 +17,7 @@ import {
   useAnimationRoot,
 } from "../ui/feel/settings";
 import { BottomBar, GamedayHeader } from "../features/next/Shell";
+import { SearchSessionsProvider } from "../features/next/trade/search-sessions-context";
 import { Scouting } from "../features/next/Scouting";
 import { Roster } from "../features/next/Roster";
 import { Lab } from "../features/next/Lab";
@@ -48,7 +49,7 @@ import {
   mppgSnapshotsKey,
   recordMppgSnapshot,
 } from "../domain/mppg-tuning";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { Activity, useState, useEffect, useRef, useMemo } from "react";
 import { X } from "lucide-react";
 import {
   initialState,
@@ -126,16 +127,40 @@ function readRoute() {
     : "overview";
 }
 function useRoute() {
-  const [route, set] = useState(readRoute);
+  const [navigation, set] = useState(() => ({ route: readRoute(), origin: "overview" }));
   useEffect(() => {
+    // Record each section separately so returning restores its prior viewport.
+    const positions = new Map<string, number>();
+    const initial = readRoute();
+    let origin = initial.startsWith("player/") ? "overview" : initial;
+    // Legacy scouting addresses share the same section and therefore the same scroll memory.
+    const screenKey = (value: string) => {
+      const page = pageForRoute(value);
+      return ["players", "gems", "weekly"].includes(page) ? "players" : page;
+    };
+    let current = screenKey(origin);
+    let frame = 0;
+    const remember = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => positions.set(current, window.scrollY));
+    };
     const fn = () => {
-      set(readRoute());
-      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+      cancelAnimationFrame(frame);
+      positions.set(current, window.scrollY);
+      const next = readRoute();
+      if (!next.startsWith("player/")) origin = next;
+      const nextPage = screenKey(next.startsWith("player/") ? origin : next);
+      set({ route: next, origin });
+      if (current !== nextPage) {
+        current = nextPage;
+        frame = requestAnimationFrame(() => window.scrollTo({ top: positions.get(current) ?? 0, left: 0, behavior: "instant" }));
+      }
     };
     window.addEventListener("hashchange", fn);
-    return () => window.removeEventListener("hashchange", fn);
+    window.addEventListener("scroll", remember, { passive: true });
+    return () => { cancelAnimationFrame(frame); window.removeEventListener("hashchange", fn); window.removeEventListener("scroll", remember); };
   }, []);
-  return route;
+  return navigation;
 }
 // A route change is a navigation tap; the page the app opens on is not.
 function RouteFeedback({ route }: { route: string }) {
@@ -149,7 +174,8 @@ function RouteFeedback({ route }: { route: string }) {
   return null;
 }
 export default function App() {
-  const route = useRoute(),
+  const navigation = useRoute(),
+    route = navigation.route,
     [w, setW] = useState<Workspace | null>(null),
     wRef = useRef<Workspace | null>(null),
     [ready, setReady] = useState(false),
@@ -1099,7 +1125,13 @@ export default function App() {
       (t) => str(t.TeamID) === w?.state.preferredTeam,
     ),
     // The six section routes, and the earlier addresses, map to the screens below.
-    page = pageForRoute(route);
+    page = pageForRoute(route.startsWith("player/") ? navigation.origin : route);
+  // Remember sections only for this mounted app session; existing screen keys still control resets.
+  const [visited, setVisited] = useState(() => new Set<string>());
+  const section = ["players", "gems", "weekly"].includes(page) ? "players" : page;
+  useEffect(() => {
+    setVisited((previous) => previous.has(section) ? previous : new Set([...previous, section]));
+  }, [section]);
   // The account and import controls, shown on Data & account and on the Lab's Data and account page.
   const accountView = (
     <Account
@@ -1437,7 +1469,7 @@ export default function App() {
             <GamedayWelcome onImport={() => fileRef.current?.click()} />
           ) : model && w ? (
             <>
-              {page === "roster" && (
+              {(section === "roster" || visited.has("roster")) && <Activity mode={section === "roster" ? "visible" : "hidden"}>
                 <Roster
                   m={model}
                   team={model.simulation && model.dataset.tables.ModelTeams.some((t) => String(t.TeamID) === simulationTeam) ? simulationTeam : w.state.preferredTeam}
@@ -1455,9 +1487,9 @@ export default function App() {
                   onApplyDrop={applySimulationDrop}
                   onSwitchToLive={switchToLiveRoster}
                 />
-              )}
-              {page === "teams" && (
-                // The grade grid replaces the team page; the full team detail stays below it.
+              </Activity>}
+              {(section === "teams" || visited.has("teams")) && <Activity mode={section === "teams" ? "visible" : "hidden"}>
+                {/* The grade grid replaces the team page; the full team detail stays below it. */}
                 <League
                   m={model}
                   grades={analysisGrades}
@@ -1469,8 +1501,8 @@ export default function App() {
                     })
                   }
                 />
-              )}
-              {page === "overview" && (
+              </Activity>}
+              {(section === "overview" || visited.has("overview")) && <Activity mode={section === "overview" ? "visible" : "hidden"}>
                 <Week
                   m={model}
                   team={w.state.preferredTeam}
@@ -1482,9 +1514,9 @@ export default function App() {
                   onApplyDrop={applySimulationDrop}
                   onSwitchToLive={switchToLiveRoster}
                 />
-              )}
-              {["players", "gems", "weekly"].includes(page) && (
-                // One explorer replaces Players, the Gem screener and Weekly streamers.
+              </Activity>}
+              {(section === "players" || visited.has("players")) && <Activity mode={section === "players" ? "visible" : "hidden"}>
+                {/* One explorer replaces Players, the Gem screener and Weekly streamers. */}
                 <Scouting
                   key={w.owner}
                   tracking={
@@ -1501,8 +1533,8 @@ export default function App() {
                     })
                   }
                 />
-              )}
-              {page === "trades" && (
+              </Activity>}
+              {(section === "trades" || visited.has("trades")) && <Activity mode={section === "trades" ? "visible" : "hidden"}>
                 <TradeRoom
                   key={w.owner}
                   m={model}
@@ -1551,16 +1583,16 @@ export default function App() {
                   onApplyDrop={applySimulationDrop}
                   onSwitchToLive={switchToLiveRoster}
                 />
-              )}
-              {page === "journal" && (
-                // The journal keeps its behaviour; the new theme is applied around it.
+              </Activity>}
+              {(section === "journal" || visited.has("journal")) && <Activity mode={section === "journal" ? "visible" : "hidden"}>
+                {/* The journal keeps its behaviour; the new theme is applied around it. */}
                 <div className="legacy">
                   <TradeJournal m={model} ownTeam={w.state.preferredTeam} />
                 </div>
-              )}
+              </Activity>}
             </>
           ) : null}
-          {page === "lab" && (
+          {(section === "lab" || visited.has("lab")) && <Activity mode={section === "lab" ? "visible" : "hidden"}>
             <Lab
               tab={labTabForRoute(route)}
               settings={labSettings}
@@ -1570,7 +1602,7 @@ export default function App() {
               feel={feel}
               changeFeel={changeFeelSetting}
             />
-          )}
+          </Activity>}
           <Legend />
           <footer className="footer">
             Fantasy Football Lab{" "}
@@ -1598,6 +1630,7 @@ export default function App() {
   );
   // Keep inspection state outside routed views so opening a card preserves each screen's draft.
   return (
+    <SearchSessionsProvider owner={w?.owner} hash={w?.dataset?.hash}>
     <NegotiationsProvider
       key={w?.owner ?? "local"}
       owner={w?.owner ?? "local"}
@@ -1609,6 +1642,7 @@ export default function App() {
         {/* The single player card replaces the anchored popover and the player page. */}
         <PlayerCardProvider
           m={model}
+          returnRoute={navigation.origin}
           lastTab={readCardTab(w?.state.filters[cardTabKey])}
           versusRaw={w?.state.filters.versusIds ?? ""}
           // Remember the comparison pair against the latest workspace, preserving unrelated filters.
@@ -1634,5 +1668,6 @@ export default function App() {
       </PopoverProvider>
       </FeedbackProvider>
     </NegotiationsProvider>
+    </SearchSessionsProvider>
   );
 }

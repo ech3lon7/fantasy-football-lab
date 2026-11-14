@@ -1,6 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useSearchSessions } from "./trade/search-sessions-context";
 import {
   bottomBarItems,
+  pageForRoute,
   searchPlayers,
   sectionForRoute,
   sections,
@@ -343,6 +345,14 @@ function MoreMenu({
 }
 
 // The phone bottom bar: the five main sections, shown only below 720px.
+// Announce background work without adding a control or showing it inside the Trade room.
+function SearchRunningDot({ route }: { route: string }) {
+  const sessions = useSearchSessions();
+  const running = useSyncExternalStore(sessions.subscribe, sessions.running);
+  if (!running || pageForRoute(route) === "trades") return null;
+  return <span className="gd-search-running"><span className="visually-hidden">Search running</span></span>;
+}
+
 export function BottomBar({ route }: { route: string }) {
   const current = sectionForRoute(route);
   return (
@@ -354,6 +364,7 @@ export function BottomBar({ route }: { route: string }) {
           aria-current={current === s.id ? "page" : undefined}
         >
           {s.label}
+          {s.id === "trade" && <SearchRunningDot route={route} />}
         </a>
       ))}
     </nav>
@@ -430,6 +441,7 @@ export function GamedayHeader({
             aria-current={current === s.id ? "page" : undefined}
           >
             {s.label}
+            {s.id === "trade" && <SearchRunningDot route={route} />}
           </a>
         ))}
       </nav>

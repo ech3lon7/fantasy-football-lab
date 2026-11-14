@@ -1,4 +1,8 @@
 /* Gameday Plus component styles. Tokens only; every rule is scoped to the preview root. */
+/* Indicate a background trade search; animation is limited to full-motion mode. */
+:root[data-gameday] .gd-search-running { display: inline-block; width: 8px; height: 8px; margin-left: 5px; border-radius: 50%; background: var(--gd-edit); }
+:root[data-gameday][data-animation="full"] .gd-search-running { animation: gd-search-pulse 1.8s ease-in-out infinite; }
+@keyframes gd-search-pulse { 50% { opacity: 0.45; } }
 /* Every transition is gated on the effective animation level: Reduced keeps short fades only, Off removes all. */
 :root[data-gameday][data-animation="off"],
 :root[data-gameday][data-animation="off"] *,

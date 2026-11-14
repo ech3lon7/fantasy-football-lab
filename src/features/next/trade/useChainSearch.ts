@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useSearchSessions } from "./search-sessions-context";
 import type { Draft } from "../../../domain/contracts";
 import { str } from "../../../domain/contracts";
 import type { Model } from "../../../domain/valuation";
@@ -206,13 +207,17 @@ export function useChainSearch({
     initial?.controls.recipientGain ??
       String(defaultChainRecipient.minimumGain),
   );
-  const [job, setJob] = useState<ChainJob | null>(null);
+  // Subscribe to the app-owned job so progress continues while this panel is hidden.
+  const sessions = useSearchSessions();
+  const session = useSyncExternalStore(sessions.subscribe, () => sessions.get("chains"));
+  const job = session.job as ChainJob | null;
+  const setJob = (value: ChainJob | null | ((previous: ChainJob | null) => ChainJob | null)) =>
+    sessions.setJob("chains", (previous) => typeof value === "function" ? value(previous as ChainJob | null) : value);
   const [saved, setSaved] = useState<string[]>([]);
   const [details, setDetails] = useState<Record<string, SearchLineupDetails>>(
     {},
   );
   const [detailError, setDetailError] = useState("");
-  const active = useRef<Worker | null>(null);
   // Each displayed step is saved and inspected against the roster and starter plans it was searched on.
   const resultContext = useRef<{ model: Model; plans?: string } | null>(null);
 
@@ -342,22 +347,14 @@ export function useChainSearch({
   if ((query.first.manager || query.second.manager) && !journal.ready)
     errors.push("Saved manager profiles are still loading.");
 
-  // Any source, pool, basis, limit or control edit invalidates the captured work.
+  // Re-showing an Activity is harmless; only a real context change clears local detail state.
+  const previousContext = useRef(context);
   useEffect(() => {
-    active.current?.terminate();
-    active.current = null;
-    setJob((previous) =>
-      previous && previous.context !== context
-        ? { ...previous, status: "stale" }
-        : previous,
-    );
-    setDetails({});
-    setSaved([]);
-    setDetailError("");
-    return () => {
-      active.current?.terminate();
-      active.current = null;
-    };
+    sessions.invalidate("chains", context);
+    if (previousContext.current !== context) {
+      setDetails({}); setSaved([]); setDetailError("");
+      previousContext.current = context;
+    }
   }, [context]);
 
   function applyOptions(next: ChainQuery, label: string) {
@@ -419,7 +416,6 @@ export function useChainSearch({
 
   function search(deeper = false) {
     if (errors.length) return;
-    active.current?.terminate();
     const id = crypto.randomUUID();
     const base = deeper
       ? { ...effective, depth: "deeper" as const }
@@ -431,33 +427,32 @@ export function useChainSearch({
         new URL("../../../workers/trade-chains.worker.ts", import.meta.url),
         { type: "module" },
       );
-      active.current = worker;
-      setJob({ context, query: base, status: "running", result: previous });
+      sessions.start("chains", worker, id, context, { context, query: base, status: "running", result: previous } as ChainJob);
       setSaved([]);
       setDetails({});
       setDetailError("");
       worker.onmessage = (event) => {
         const message = event.data;
         if (
-          active.current !== worker ||
+          sessions.get("chains").worker !== worker ||
           message.id !== id ||
           message.context !== context
         )
           return;
         if (message.type === "progress")
-          setJob({
+          sessions.update("chains", id, () => ({
             context,
             query: base,
             result: previous,
             status: "running",
             stats: message.stats,
             elapsed: message.elapsed,
-          });
+          }));
         else {
           if (message.type === "complete")
             notify(searchCue((message.result.plans?.length ?? 0) > 0));
           else notify("caution");
-          setJob(
+          sessions.update("chains", id, () =>
             message.type === "complete"
               ? {
                   context,
@@ -482,21 +477,19 @@ export function useChainSearch({
                   error: message.message,
                 },
           );
-          worker.terminate();
-          active.current = null;
+          if (message.type !== "complete") sessions.fail("chains", id);
         }
       };
       worker.onerror = () => {
-        if (active.current !== worker) return;
+        if (sessions.get("chains").worker !== worker) return;
         notify("caution");
-        worker.terminate();
-        active.current = null;
         setJob({
           context,
           query: base,
           status: "error",
           error: "Chain worker failed. Try again or use standard depth.",
         });
+        sessions.fail("chains", id);
       };
       const request: ChainRequest = {
         id,
@@ -509,10 +502,9 @@ export function useChainSearch({
         lineupsRaw,
         query: base,
       };
-      worker.postMessage(request);
+      sessions.post("chains", id, request);
     } catch (error) {
-      active.current?.terminate();
-      active.current = null;
+      sessions.dispose("chains");
       setJob({
         context,
         query: base,
@@ -526,8 +518,7 @@ export function useChainSearch({
   }
 
   function cancel() {
-    active.current?.terminate();
-    active.current = null;
+    sessions.cancel("chains");
     setJob((previous) =>
       previous ? { ...previous, status: "cancelled" } : previous,
     );
@@ -535,8 +526,7 @@ export function useChainSearch({
 
   // Restore the defaults of this planner; the team, pool, scope and basis are kept.
   function clearFilters() {
-    active.current?.terminate();
-    active.current = null;
+    sessions.dispose("chains");
     setJob(null);
     setDependencyRoute(defaultChainDependency.route);
     setAcquiredShare(String(defaultChainDependency.minimumAcquiredShare * 100));

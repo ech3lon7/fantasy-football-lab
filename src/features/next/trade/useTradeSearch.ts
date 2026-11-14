@@ -16,7 +16,8 @@ import {
   readLineupBasis,
   type LineupBasis,
 } from "../../../domain/trade-impact";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useSearchSessions } from "./search-sessions-context";
 import { useSearchLimits } from "../limitsContext";
 import { sourceDataset } from "../../../domain/roster-scenarios";
 import { poolIndexRanges } from "../../../domain/trade-tools";
@@ -256,7 +257,12 @@ export function useTradeSearch({
     ),
   ];
   const selectedPosition = deficitPosition || offeredPositions[0] || "";
-  const [job, setJob] = useState<SearchJob | null>(null);
+  // Subscribe to the app-owned job so messages survive a hidden screen.
+  const sessions = useSearchSessions();
+  const session = useSyncExternalStore(sessions.subscribe, () => sessions.get("find"));
+  const job = session.job as SearchJob | null;
+  const setJob = (value: SearchJob | null | ((previous: SearchJob | null) => SearchJob | null)) =>
+    sessions.setJob("find", (previous) => typeof value === "function" ? value(previous as SearchJob | null) : value);
   // Result browsing is local to the completed search and is never saved as a scoring filter.
   const [resultBrowse, setResultBrowse] = useState(emptyTradeBrowse);
   const browseToken = useRef("");
@@ -269,9 +275,11 @@ export function useTradeSearch({
   const resultModel = useRef<Model | null>(null);
   const [diagnostic, setDiagnostic] = useState(""),
     [savedRow, setSavedRow] = useState("");
-  const active = useRef<{ worker: Worker; id: string; context: string } | null>(
-    null,
-  );
+  // Resolve the live worker from the store rather than a component-owned ref.
+  const current = () => {
+    const saved = sessions.get("find");
+    return saved.worker && saved.id && saved.context ? { worker: saved.worker, id: saved.id, context: saved.context } : null;
+  };
   // Preserve invalid/empty edits as invalid input, instead of Number("") silently becoming zero.
   const parseOffset = (text: string) => (text.trim() ? Number(text) : NaN);
   // Keep blank weekly bounds distinct from invalid input and from a real numeric zero.
@@ -455,7 +463,10 @@ export function useTradeSearch({
     bounds.errors.push("Saved manager profiles are still loading.");
   const context = tradeSearchContext(m, query, lineupsRaw);
   // Editing filters dismisses the open result drawer; the captured result remains available to inspect again.
+  const drawerContext = useRef(context);
   useEffect(() => {
+    if (drawerContext.current === context) return;
+    drawerContext.current = context;
     document
       .querySelectorAll<HTMLDetailsElement>(
         ".trade-workspace .trade-result-details[open]",
@@ -548,6 +559,7 @@ export function useTradeSearch({
   }
   // Existing controls migrate once; later edits remain independent across route changes and reloads.
   useEffect(() => {
+    if (settingsReady.current) return;
     const previous = initialSettings.standard as
       | { query?: TradeSearchQuery; controls?: Partial<StoredControls> }
       | undefined;
@@ -625,31 +637,23 @@ export function useTradeSearch({
     settingsReady.current = true;
   }, []);
   // Restored queries keep unrelated criteria; retired surface restrictions are deliberately ignored.
+  const appliedRestore = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!restore) return;
+    if (!restore || appliedRestore.current === restore.id) return;
+    appliedRestore.current = restore.id;
     onLineupBasisChange?.(readLineupBasis(restore.query.lineupBasis));
     restoreQuery(restore.query);
     setAdvanced(true);
   }, [restore?.id]);
 
-  // Relevant input changes stop worker work; completed trade ideas remain available for saving and loading.
+  // Changing context invalidates captured work; showing the same screen again does nothing.
   useEffect(() => {
-    // Once invalidated, reverting controls still requires a new worker rather than reviving terminated pages.
-    setJob((previous) =>
-      previous && previous.context !== context
-        ? { ...previous, status: "stale", paging: false }
-        : previous,
-    );
-    return () => {
-      active.current?.worker.terminate();
-      active.current = null;
-    };
+    sessions.invalidate("find", context);
   }, [context]);
 
   // Start a captured immutable request; request/context checks reject late messages after cancel or restart.
   function search() {
     if (bounds.errors.length) return;
-    active.current?.worker.terminate();
     const id = crypto.randomUUID();
     // Clear feedback from the previous captured result set.
     setSavedRow("");
@@ -659,24 +663,24 @@ export function useTradeSearch({
     appliedSearch.current = { query: structuredClone(query), context };
     resultModel.current = m;
     resultPlans.current = lineupsRaw;
-    setJob({ id, context, status: "running", rows: [], total: 0 });
     try {
       const worker = new Worker(
         new URL("../../../workers/trade-search.worker.ts", import.meta.url),
         { type: "module" },
       );
-      active.current = { worker, id, context };
+      sessions.start("find", worker, id, context, { id, context, status: "running", rows: [], total: 0 } as SearchJob);
       worker.onmessage = (event: MessageEvent<SearchResponse>) => {
         const message = event.data;
         if (
-          active.current?.id !== message.id ||
-          active.current.context !== message.context
+          current()?.id !== message.id ||
+          current()?.context !== message.context
         )
           return;
         // Typing or paging can supersede an earlier browse response without invalidating the completed calculations.
         if (message.type === "browse" && message.token !== browseToken.current)
           return;
-        setJob((previous) => {
+        sessions.update("find", id, (value) => {
+          const previous = value as SearchJob | null;
           if (
             !previous ||
             previous.id !== message.id ||
@@ -732,15 +736,12 @@ export function useTradeSearch({
         }
         if (message.type === "error") {
           notify("caution");
-          worker.terminate();
-          active.current = null;
+          sessions.fail("find", id);
         }
       };
       worker.onerror = () => {
-        if (active.current?.id !== id) return;
+        if (current()?.id !== id) return;
         notify("caution");
-        worker.terminate();
-        active.current = null;
         setJob((previous) =>
           previous?.id === id
             ? {
@@ -751,6 +752,7 @@ export function useTradeSearch({
               }
             : previous,
         );
+        sessions.fail("find", id);
       };
       const request: SearchRequest = {
         type: "start",
@@ -764,10 +766,9 @@ export function useTradeSearch({
         lineupsRaw,
         query,
       };
-      worker.postMessage(request);
+      sessions.post("find", id, request);
     } catch (error) {
-      active.current?.worker.terminate();
-      active.current = null;
+      sessions.dispose("find");
       setJob({
         id,
         context,
@@ -792,8 +793,7 @@ export function useTradeSearch({
 
   // Termination is immediate even if the worker is busy in a large package enumeration/evaluation loop.
   function cancel() {
-    active.current?.worker.terminate();
-    active.current = null;
+    sessions.cancel("find");
     setJob((previous) =>
       previous
         ? {
@@ -811,8 +811,7 @@ export function useTradeSearch({
   // Clear screening restrictions and stop stale work while preserving the trade draft, protected pool and package sizes.
   function clearFilters() {
     setDeficitProtection({ ...defaultDeficitProtection, enabled: false });
-    active.current?.worker.terminate();
-    active.current = null;
+    sessions.dispose("find");
     setJob(null);
     setPendingSearch(null);
     setGoal("custom");
@@ -884,7 +883,7 @@ export function useTradeSearch({
       !job ||
       stale ||
       job.status !== "complete" ||
-      active.current?.id !== job.id
+      current()?.id !== job.id
     )
       return;
     browseToken.current = crypto.randomUUID();
@@ -894,11 +893,11 @@ export function useTradeSearch({
 
   // Debounce text entry; filtering names never blocks typing or allows an old response to replace newer selections.
   useEffect(() => {
-    const captured = active.current,
+    const captured = current(),
       token = browseToken.current;
     if (!captured || !token) return;
     const timer = window.setTimeout(() => {
-      if (active.current?.id !== captured.id || browseToken.current !== token)
+      if (current()?.id !== captured.id || browseToken.current !== token)
         return;
       const message: SearchRequest = {
         type: "browse",
@@ -907,7 +906,7 @@ export function useTradeSearch({
         token,
         options: resultBrowse,
       };
-      captured.worker.postMessage(message);
+      sessions.post("find", captured.id, message);
     }, 200);
     return () => window.clearTimeout(timer);
   }, [resultBrowse]);
@@ -918,7 +917,7 @@ export function useTradeSearch({
       !job ||
       stale ||
       job.status !== "complete" ||
-      active.current?.id !== job.id ||
+      current()?.id !== job.id ||
       job.lineups?.[row.key]
     )
       return;
@@ -933,12 +932,11 @@ export function useTradeSearch({
       context,
       key: row.key,
     };
-    active.current.worker.postMessage(request);
+    sessions.post("find", job.id, request);
   }
 
   return {
     above,
-    active,
     advanced,
     appliedSearch,
     availablePositions,

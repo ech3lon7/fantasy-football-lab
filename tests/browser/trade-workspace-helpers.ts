@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 
 // Open the current manual disclosures and saved drawer through their visible controls.
 export async function openTradeDetails(page: Page) {
-  const groups = page.locator(".gd-manual > div > details.gd-disclosure");
+  const groups = page.locator(".gd-manual:visible > div > details.gd-disclosure");
   for (let i = 0; i < await groups.count(); i++) {
     if (await groups.nth(i).getAttribute("open") === null)
       await groups.nth(i).locator(":scope > summary").click();
@@ -32,7 +32,7 @@ export async function openManualPlayers(page: Page) {
 export async function openTradeFilters(page: Page, scope = "Standard") {
   // Manual assessment controls live inside their own disclosure after the redesign.
   if (scope === "Manual") {
-    const section = page.locator(".gd-manual details.gd-disclosure").filter({
+    const section = page.locator(".gd-manual:visible details.gd-disclosure").filter({
       has: page.locator(":scope > summary", { hasText: "Surface assessment & manager expectations" }),
     });
     if (await section.getAttribute("open") === null)

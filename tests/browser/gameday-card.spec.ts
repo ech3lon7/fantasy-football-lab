@@ -30,10 +30,10 @@ test("player route opens the card with four tabs and EPPG as the lead metric", a
     card.getByRole("region", { name: /Moving-average chart/ }),
   ).toBeVisible();
   await page.screenshot({ path: "test-results/card-story-light.png" });
-  // Closing returns the address to This week.
+  // Closing returns to the Data screen from which this card was opened.
   await page.keyboard.press("Escape");
   await expect(card).toHaveCount(0);
-  await expect(page).toHaveURL(/#\/overview$/);
+  await expect(page).toHaveURL(/#\/data$/);
   expect(errors).toEqual([]);
 });
 

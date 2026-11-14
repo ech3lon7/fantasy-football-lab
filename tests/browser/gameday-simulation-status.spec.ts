@@ -122,7 +122,7 @@ test.describe("Section 4: Simulation status and roster-limit warnings", () => {
     await expect(page.locator(".toolbar .notice.danger")).toHaveCount(0);
 
     // 4. One-line simulation note is visible on the screen
-    const note = page.locator(".gd-simulation-note");
+    const note = page.locator(".gd-simulation-note:visible");
     await expect(note).toBeVisible();
     await expect(note).toContainText("In your simulation ‘Draft 2026’");
 
