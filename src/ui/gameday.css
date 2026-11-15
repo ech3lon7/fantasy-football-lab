@@ -1228,9 +1228,7 @@
   border: 0;
   border-radius: 0;
 }
-:root[data-gameday] .gd-pcard-photo img, :root[data-gameday] .gd-versus-photo img {
-  object-position: 50% 20%;
-}
+
 :root[data-gameday] .gd-pcard-wm {
   position: absolute;
   right: -6px;
@@ -2028,12 +2026,7 @@
   opacity: 0.68;
 }
 /* Keep the whole bust inside the panel: the hero's contain rule, bottom-aligned, with headroom. */
-:root[data-gameday] .gd-fc-portrait .gd-fc-photo img {
-  height: 92% !important;
-  align-self: end;
-  object-fit: contain !important;
-  object-position: 50% 100% !important;
-}
+
 :root[data-gameday] .gd-fc-ph .gd-fc-nm {
   position: relative;
   z-index: 1;
@@ -2054,10 +2047,7 @@
   border: 0;
   border-radius: 0;
 }
-:root[data-gameday] .gd-fc-photo img {
-  object-fit: cover !important;
-  object-position: center top !important;
-}
+
 :root[data-gameday] .gd-fc-badge {
   position: absolute;
   right: 7px;
@@ -2538,7 +2528,7 @@
   border: 0;
   border-radius: 0;
 }
-:root[data-gameday] .gd-tile-photo img, :root[data-gameday] .gd-move-photo img { object-position: 50% 20%; }
+
 :root[data-gameday] .gd-tile[data-role="Starter"] {
   border-color: var(--gd-ink);
   border-left: 8px solid var(--gd-selected);
@@ -6692,3 +6682,23 @@
 }
 
 
+
+/* One framing for every faded card photo: the whole head and both shoulders, shoulders on the bottom edge. */
+:root[data-gameday] :is(.gd-pcard-photo, .gd-versus-photo, .gd-tile-photo, .gd-move-photo, .gd-fc-portrait) .gd-photo {
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+:root[data-gameday] :is(.gd-pcard-photo, .gd-versus-photo, .gd-tile-photo, .gd-move-photo, .gd-fc-portrait) .gd-photo img {
+  width: auto !important;
+  max-width: 100% !important;
+  height: 92% !important; /* decided 2026-11-15: leaves headroom above the head; satisfies the existing ≥4px formation headroom test */
+  object-fit: contain !important;
+  object-position: 50% 100% !important;
+}
+/* Keep initials centered when the photo frame uses flex alignment. */
+:root[data-gameday] :is(.gd-pcard-photo, .gd-versus-photo, .gd-tile-photo, .gd-move-photo, .gd-fc-portrait) .gd-photo-fallback {
+  align-self: center;
+}
