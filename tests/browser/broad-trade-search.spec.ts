@@ -12,7 +12,11 @@ for (const width of [1320, 1000, 390]) test(`broad search filters retained resul
   await page.getByRole("button", { name: "Search all trades" }).click();
   await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 30000 });
   await expect(page.locator("[aria-label=\"Trade search results\"] article").first()).toBeVisible();
-  if (width <= 1100) await page.getByRole("button", { name: /Filters ·/ }).click();
+  if (width <= 1100) {
+    // Below 1100px the list filters sit behind the wheel's "list view" link.
+    await page.getByRole("button", { name: /Filters ·/ }).click();
+    await page.getByRole("button", { name: "list view" }).click();
+  }
   await expect(page.getByLabel(/Their EPPG gain minimum/)).toHaveValue("1");
   await page.getByLabel(/Their EPPG gain minimum/).fill("0");
   await expect(page.getByLabel(/Their EPPG gain minimum/)).toHaveValue("0");

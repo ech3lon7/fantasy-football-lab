@@ -1,5 +1,5 @@
 import type { SearchRow } from "../domain/trade-search";
-import type { UsefulCoverage } from "../domain/useful-move-search";
+import type { TeamProgress, UsefulCoverage } from "../domain/useful-move-search";
 import type { evaluate } from "../domain/valuation";
 import type { applyRosterScenario } from "../domain/roster-scenarios";
 
@@ -19,6 +19,7 @@ export interface PartRequest {
 }
 export type PartMessage =
   | { type: "singles"; rows: SearchRow[] }
+  | ({ type: "team" } & TeamProgress)
   | { type: "done"; rows: SearchRow[]; coverage: UsefulCoverage }
   | { type: "error"; message: string };
 
@@ -55,6 +56,7 @@ export function runPooled(
   slices: string[][],
   spawn: () => Worker,
   onSingles: (rows: SearchRow[]) => void,
+  onTeam?: (event: TeamProgress) => void,
 ): Promise<{ rows: SearchRow[]; coverage: UsefulCoverage }> {
   return new Promise((resolve, reject) => {
     const workers: Worker[] = [];
@@ -76,6 +78,8 @@ export function runPooled(
         if (message.type === "singles") {
           singles.set(index, message.rows);
           onSingles([...singles.values()].flat());
+        } else if (message.type === "team") {
+          onTeam?.(message);
         } else if (message.type === "done") {
           done.set(index, { rows: message.rows, coverage: message.coverage });
           worker.terminate();

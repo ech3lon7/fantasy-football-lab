@@ -1,0 +1,701 @@
+/* The filter wheel in the Chalk Playbook style: a chalkboard in a wood frame. The chalk style is for the wheel and the search-run
+   scene only. Colours are the board's own and do not change with the theme. */
+:root[data-gameday] {
+  --gw-chalk: #f4f1e6;
+  --gw-muted: rgba(244, 241, 230, 0.8);
+  --gw-faint: rgba(244, 241, 230, 0.45);
+  --gw-yellow: #ffe45c;
+  --gw-board-1: #2b3a32;
+  --gw-board-2: #1c2620;
+  --gw-board-3: #141b17;
+  --gw-wood: #5a3b22;
+  --gw-wood-dark: #3c2716;
+  --gw-scrim: rgba(8, 12, 10, 0.62);
+  --gw-marker: "Permanent Marker", "Marker Felt", cursive;
+  --gw-hand: Kalam, "Segoe Print", cursive;
+}
+
+:root[data-gameday] .gd-wheel-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  background: var(--gw-scrim);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+:root[data-gameday] .gd-wheel-fit {
+  position: relative;
+}
+:root[data-gameday] .gd-wheel-board {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  transform-origin: 0 0;
+  font-family: var(--gw-hand);
+  color: var(--gw-chalk);
+  background: radial-gradient(90% 80% at 50% 45%, var(--gw-board-1) 0%, var(--gw-board-2) 70%, var(--gw-board-3) 100%);
+  box-shadow: inset 0 0 0 14px var(--gw-wood), inset 0 0 0 18px var(--gw-wood-dark), 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+:root[data-gameday] .gd-wheel-title {
+  position: absolute;
+  left: 44px;
+  top: 36px;
+  font-family: var(--gw-marker);
+  font-size: 26px;
+  transform: rotate(-3deg);
+}
+:root[data-gameday] .gd-wheel-sub {
+  position: absolute;
+  left: 48px;
+  top: 74px;
+  font-size: 16px;
+  color: var(--gw-muted);
+}
+:root[data-gameday] .gd-wheel-count {
+  position: absolute;
+  right: 52px;
+  top: 40px;
+  font-family: var(--gw-marker);
+  font-size: 22px;
+  color: var(--gw-yellow);
+  transform: rotate(2deg);
+}
+:root[data-gameday] .gd-wheel-svg {
+  position: absolute;
+  left: 160px;
+  top: 0;
+  overflow: visible;
+}
+
+/* Rings and spokes: chalk with a broken dash and a ghost circle beside it. */
+:root[data-gameday] .gd-wheel-rings {
+  stroke: var(--gw-chalk);
+  opacity: 0.9;
+}
+:root[data-gameday] .gd-ring-outer {
+  stroke-width: 3;
+  stroke-dasharray: 18 3 6 4;
+}
+:root[data-gameday] .gd-ring-ghost {
+  stroke-width: 1.2;
+  opacity: 0.5;
+}
+:root[data-gameday] .gd-ring-inner {
+  stroke-width: 2.5;
+  stroke-dasharray: 12 4;
+}
+:root[data-gameday] .gd-spoke {
+  stroke-width: 2.5;
+}
+
+/* Segments: yellow hatch and a dashed yellow outline when hovered, focused or chosen. */
+:root[data-gameday] .gd-wheel-seg {
+  cursor: pointer;
+  outline: none;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+:root[data-gameday] .gd-seg-hit {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+}
+:root[data-gameday] .gd-seg-hatch {
+  opacity: 0;
+  stroke: var(--gw-yellow);
+  stroke-width: 3;
+  stroke-dasharray: 14 3;
+  pointer-events: none;
+}
+:root[data-gameday] .gd-wheel-seg:hover .gd-seg-hatch,
+:root[data-gameday] .gd-wheel-seg:focus .gd-seg-hatch,
+:root[data-gameday] .gd-wheel-seg[data-selected] .gd-seg-hatch {
+  opacity: 1;
+}
+:root[data-gameday] .gd-wheel-seg[data-dim] {
+  opacity: 0.6;
+}
+:root[data-gameday] .gd-seg-label {
+  fill: var(--gw-chalk);
+  font-family: var(--gw-marker);
+  font-size: 17px;
+  pointer-events: none;
+}
+:root[data-gameday] .gd-wheel-seg[data-selected] .gd-seg-label {
+  fill: var(--gw-yellow);
+  font-size: 22px;
+}
+:root[data-gameday] .gd-seg-set {
+  fill: var(--gw-yellow);
+  font-family: var(--gw-hand);
+  font-size: 14px;
+  font-weight: 700;
+  pointer-events: none;
+}
+:root[data-gameday] .gd-chalk-icon {
+  stroke: var(--gw-chalk);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+/* The arc slider. */
+:root[data-gameday] .gd-arc-track {
+  stroke: var(--gw-faint);
+  stroke-width: 3;
+  stroke-dasharray: 4 9;
+}
+:root[data-gameday] .gd-arc-route,
+:root[data-gameday] .gd-arc-arrow {
+  stroke: var(--gw-yellow);
+  stroke-width: 4;
+}
+:root[data-gameday] .gd-arc-hit {
+  stroke: transparent;
+  stroke-width: 44;
+  pointer-events: stroke;
+  cursor: pointer;
+  touch-action: none;
+}
+:root[data-gameday] .gd-arc-handle {
+  cursor: grab;
+  outline: none;
+}
+:root[data-gameday] .gd-arc-handle-o {
+  fill: var(--gw-board-2);
+  stroke: var(--gw-yellow);
+  stroke-width: 4;
+}
+:root[data-gameday] .gd-arc-handle:focus .gd-arc-handle-o {
+  stroke-width: 7;
+}
+:root[data-gameday] .gd-arc-x path {
+  stroke: var(--gw-chalk);
+  stroke-width: 3;
+}
+:root[data-gameday] .gd-arc-end {
+  fill: var(--gw-chalk);
+  font-family: var(--gw-marker);
+  font-size: 18px;
+  stroke: none;
+}
+:root[data-gameday] .gd-arc-end-hi {
+  fill: var(--gw-yellow);
+}
+
+/* Toggles on the outer arc. */
+:root[data-gameday] .gd-bubble {
+  cursor: pointer;
+  outline: none;
+}
+:root[data-gameday] .gd-bubble circle {
+  fill: var(--gw-board-2);
+  stroke: var(--gw-chalk);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+:root[data-gameday] .gd-bubble text {
+  fill: var(--gw-chalk);
+  font-family: var(--gw-marker);
+  font-size: 13px;
+}
+:root[data-gameday] .gd-bubble[data-on="true"] circle {
+  fill: rgba(255, 228, 92, 0.14);
+  stroke: var(--gw-yellow);
+  stroke-width: 3;
+  stroke-dasharray: none;
+}
+:root[data-gameday] .gd-bubble[data-on="true"] text {
+  fill: var(--gw-yellow);
+}
+:root[data-gameday] .gd-bubble:focus circle {
+  stroke-width: 5;
+}
+:root[data-gameday] .gd-chalk-tick {
+  stroke: var(--gw-yellow);
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+:root[data-gameday] .gd-chalk-tick[data-on="true"] {
+  stroke-dashoffset: 0;
+}
+
+/* The hub: handwritten, no disc. */
+:root[data-gameday] .gd-wheel-hub {
+  position: absolute;
+  left: 400px;
+  top: 240px;
+  width: 160px;
+  height: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+:root[data-gameday] .gd-hub-name {
+  font-family: var(--gw-marker);
+  font-size: 26px;
+  color: var(--gw-yellow);
+}
+:root[data-gameday] .gd-hub-line {
+  font-size: 15px;
+  color: var(--gw-muted);
+}
+:root[data-gameday] .gd-hub-value {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--gw-marker);
+  font-size: 44px;
+  line-height: 1.05;
+  color: var(--gw-yellow);
+  transform: rotate(-4deg);
+  cursor: pointer;
+}
+:root[data-gameday] .gd-hub-input {
+  width: 110px;
+  font-family: var(--gw-marker);
+  font-size: 30px;
+  text-align: center;
+  color: var(--gw-yellow);
+  background: transparent;
+  border: 2px dashed var(--gw-yellow);
+  border-radius: 8px;
+}
+:root[data-gameday] .gd-hub-hides {
+  font-size: 15px;
+  color: var(--gw-chalk);
+}
+:root[data-gameday] .gd-hub-steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+:root[data-gameday] .gd-hub-steps button {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  color: var(--gw-chalk);
+  background: transparent;
+  border: 2px dashed var(--gw-muted);
+  border-radius: 15px;
+  font-family: var(--gw-marker);
+  font-size: 15px;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-hub-steps button[aria-pressed="true"] {
+  color: var(--gw-yellow);
+  border: 2px solid var(--gw-yellow);
+}
+:root[data-gameday] .gd-hub-page {
+  font-family: var(--gw-marker);
+  font-size: 15px;
+}
+
+/* A panel for lists and editors that do not fit on a circle. */
+:root[data-gameday] .gd-wheel-panel {
+  position: absolute;
+  left: 340px;
+  top: 190px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 280px;
+  max-height: 340px;
+  padding: 12px;
+  overflow: auto;
+  background: rgba(20, 27, 23, 0.94);
+  border: 2px dashed var(--gw-muted);
+  border-radius: 14px;
+}
+:root[data-gameday] .gd-panel-input,
+:root[data-gameday] .gd-wheel-panel select {
+  height: 36px;
+  padding: 0 10px;
+  color: var(--gw-chalk);
+  background: transparent;
+  border: 2px dashed var(--gw-yellow);
+  border-radius: 10px;
+  font-family: var(--gw-hand);
+  font-size: 16px;
+}
+:root[data-gameday] .gd-wheel-panel select option {
+  color: #111;
+}
+:root[data-gameday] .gd-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+:root[data-gameday] .gd-panel-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+  padding: 4px 10px;
+  color: var(--gw-chalk);
+  text-align: left;
+  background: transparent;
+  border: 2px dashed transparent;
+  border-radius: 10px;
+  font-family: var(--gw-hand);
+  font-size: 16px;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-panel-item:hover,
+:root[data-gameday] .gd-panel-item[aria-pressed="true"],
+:root[data-gameday] .gd-panel-item[aria-checked="true"] {
+  color: var(--gw-yellow);
+  border-color: var(--gw-yellow);
+}
+:root[data-gameday] .gd-panel-row {
+  display: flex;
+  gap: 8px;
+}
+:root[data-gameday] .gd-panel-empty {
+  margin: 0;
+  font-size: 15px;
+  color: var(--gw-muted);
+}
+:root[data-gameday] .gd-panel-goals {
+  font-size: 14px;
+  color: var(--gw-chalk);
+}
+
+/* Sub-option pills: dashed when off, solid yellow when on. */
+:root[data-gameday] .gd-wheel-pills {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 608px;
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+}
+:root[data-gameday] .gd-wheel-pill {
+  height: 40px;
+  padding: 0 16px;
+  color: var(--gw-chalk);
+  background: transparent;
+  border: 2px dashed rgba(244, 241, 230, 0.7);
+  border-radius: 22px;
+  font-family: var(--gw-marker);
+  font-size: 16px;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-wheel-pill[data-on="true"] {
+  color: var(--gw-yellow);
+  background: rgba(255, 228, 92, 0.12);
+  border: 3px solid var(--gw-yellow);
+}
+:root[data-gameday] .gd-wheel-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 664px;
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+}
+:root[data-gameday] .gd-foot-link {
+  padding: 0;
+  color: var(--gw-yellow);
+  background: none;
+  border: 0;
+  font-family: var(--gw-hand);
+  font-size: 16px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-foot-link:disabled {
+  color: var(--gw-faint);
+  cursor: default;
+  text-decoration: none;
+}
+:root[data-gameday] .gd-wheel-board button:focus-visible,
+:root[data-gameday] .gd-wheel-board input:focus-visible,
+:root[data-gameday] .gd-wheel-board select:focus-visible {
+  outline: 3px solid var(--gw-yellow);
+  outline-offset: 2px;
+}
+
+/* Chalk dust: a puff at the Filters button when the wheel opens, and a short trail behind the slider handle. Only at Full motion. */
+:root[data-gameday] .chalk-particle {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3px 0 0 -3px;
+  pointer-events: none;
+  background: var(--gw-chalk);
+  border-radius: 50%;
+  opacity: 0;
+}
+:root[data-gameday][data-animation="full"] .chalk-puff {
+  animation: chalk-dust 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+:root[data-gameday][data-animation="full"] .gd-wheel-board .chalk-particle:not(.chalk-puff) {
+  animation: chalk-trail 400ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes chalk-dust {
+  from {
+    opacity: 0.9;
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(0.4);
+  }
+}
+@keyframes chalk-trail {
+  from {
+    opacity: 0.8;
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(8px, 10px) scale(0.3);
+  }
+}
+/* Drawn and written parts rest in their finished state. */
+:root[data-gameday] .gd-mask-draw {
+  stroke-dashoffset: 0;
+}
+:root[data-gameday] .gd-write-clip {
+  transform-box: fill-box;
+  transform-origin: 0 50%;
+}
+:root[data-gameday] .gd-seg-set,
+:root[data-gameday] .gd-bubble,
+:root[data-gameday] .gd-arc-handle-o,
+:root[data-gameday] .gd-hub-value,
+:root[data-gameday] .gd-wheel-bubbles {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+:root[data-gameday] .gd-arc-route {
+  stroke-dasharray: 1;
+}
+:root[data-gameday] .gd-wheel-toast {
+  position: absolute;
+  left: 48px;
+  bottom: 60px;
+  padding: 6px 14px;
+  font-size: 16px;
+  color: var(--gw-chalk);
+  background: rgba(20, 27, 23, 0.94);
+  border: 2px dashed var(--gw-muted);
+  border-radius: 14px;
+}
+:root[data-gameday] .gd-wheel-toast button {
+  color: var(--gw-yellow);
+  background: none;
+  border: 0;
+  font-family: var(--gw-hand);
+  font-size: 16px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* The play-call scene shown while Search all trades runs: a small chalkboard with your team as an O and each opponent as an X. */
+:root[data-gameday] .gd-playcall {
+  position: relative;
+  overflow: hidden;
+  padding: 10px 14px 4px;
+  margin-bottom: 12px;
+  color: var(--gw-chalk);
+  background: radial-gradient(90% 90% at 50% 40%, var(--gw-board-1) 0%, var(--gw-board-2) 70%, var(--gw-board-3) 100%);
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 6px var(--gw-wood), inset 0 0 0 8px var(--gw-wood-dark);
+}
+:root[data-gameday] .gd-playcall svg {
+  display: block;
+  max-height: 210px;
+}
+:root[data-gameday] .gd-playcall-band {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--gw-board-1) 30%, var(--gw-board-1) 70%, transparent);
+  transform: translateX(-100%);
+}
+:root[data-gameday] .gd-pc-mark {
+  stroke: var(--gw-chalk);
+  stroke-width: 3;
+}
+:root[data-gameday] .gd-pc-o {
+  stroke: var(--gw-yellow);
+}
+:root[data-gameday] .gd-pc-route,
+:root[data-gameday] .gd-pc-circle {
+  stroke: var(--gw-yellow);
+  stroke-width: 3;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+:root[data-gameday] .gd-pc-route[data-on="true"],
+:root[data-gameday] .gd-pc-circle[data-on="true"] {
+  stroke-dashoffset: 0;
+}
+:root[data-gameday] .gd-pc-label {
+  fill: var(--gw-muted);
+  font-family: var(--gw-hand);
+  font-size: 15px;
+}
+:root[data-gameday] .gd-pc-count {
+  fill: var(--gw-chalk);
+  font-family: var(--gw-marker);
+  font-size: 15px;
+}
+:root[data-gameday] .gd-playcall-plain {
+  padding: 12px 16px;
+  font-family: var(--gw-hand);
+}
+:root[data-gameday] .gd-playcall-plain p {
+  margin: 6px 0 0;
+  font-size: 15px;
+}
+:root[data-gameday] .gd-pc-bar {
+  height: 8px;
+  overflow: hidden;
+  background: rgba(244, 241, 230, 0.15);
+  border-radius: 4px;
+}
+:root[data-gameday] .gd-pc-bar i {
+  display: block;
+  height: 100%;
+  background: var(--gw-yellow);
+  border-radius: 4px;
+}
+
+/* The phone fan: a half-wheel sheet rising from the bottom edge. Segments are at least 48px; nothing depends on hover. */
+:root[data-gameday] .gd-fan-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: var(--gw-scrim);
+}
+:root[data-gameday] .gd-fan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(420px, 100%);
+  max-height: 92dvh;
+  padding: 12px 12px calc(10px + env(safe-area-inset-bottom));
+  overflow: auto;
+  font-family: var(--gw-hand);
+  color: var(--gw-chalk);
+  background: radial-gradient(90% 80% at 50% 45%, var(--gw-board-1) 0%, var(--gw-board-2) 70%, var(--gw-board-3) 100%);
+  border-radius: 20px 20px 0 0;
+  box-shadow: inset 0 0 0 7px var(--gw-wood), inset 0 0 0 9px var(--gw-wood-dark);
+}
+:root[data-gameday] .gd-fan-pill {
+  min-height: 44px;
+  margin: 8px 6px 0;
+  padding: 0 14px;
+  color: var(--gw-yellow);
+  background: rgba(255, 228, 92, 0.1);
+  border: 2px solid var(--gw-yellow);
+  border-radius: 22px;
+  font-family: var(--gw-marker);
+  font-size: 15px;
+}
+:root[data-gameday] .gd-fan-pill:disabled {
+  color: var(--gw-chalk);
+  background: transparent;
+  border: 2px dashed var(--gw-muted);
+  opacity: 1;
+}
+:root[data-gameday] .gd-fan-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 6px;
+}
+:root[data-gameday] .gd-fan-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+:root[data-gameday] .gd-fan-seg {
+  cursor: pointer;
+  outline: none;
+}
+:root[data-gameday] .gd-fan-wedge {
+  fill: transparent;
+  stroke: var(--gw-chalk);
+  stroke-width: 2.5;
+  stroke-dasharray: 14 3;
+  pointer-events: all;
+}
+:root[data-gameday] .gd-fan-seg:focus .gd-fan-wedge,
+:root[data-gameday] .gd-fan-seg[data-on="true"] .gd-fan-wedge {
+  fill: rgba(255, 228, 92, 0.16);
+  stroke: var(--gw-yellow);
+}
+:root[data-gameday] .gd-fan-label {
+  fill: var(--gw-chalk);
+  font-family: var(--gw-marker);
+  font-size: 12px;
+  pointer-events: none;
+}
+:root[data-gameday] .gd-fan-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 38dvh;
+  padding: 10px;
+  overflow: auto;
+  border: 2px dashed var(--gw-muted);
+  border-radius: 14px;
+}
+:root[data-gameday] .gd-fan-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  font-family: var(--gw-marker);
+}
+:root[data-gameday] .gd-fan-steps button {
+  min-width: 48px;
+  height: 48px;
+  color: var(--gw-chalk);
+  background: transparent;
+  border: 2px dashed var(--gw-muted);
+  border-radius: 24px;
+  font-family: var(--gw-marker);
+  font-size: 18px;
+}
+:root[data-gameday] .gd-fan-steps button[aria-pressed="true"] {
+  color: var(--gw-yellow);
+  border: 2px solid var(--gw-yellow);
+}
+:root[data-gameday] .gd-fan-foot {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+:root[data-gameday] .gd-fan-foot button {
+  min-height: 44px;
+  padding: 0 14px;
+  color: var(--gw-yellow);
+  background: none;
+  border: 0;
+  font-family: var(--gw-hand);
+  font-size: 17px;
+  text-decoration: underline;
+}
+:root[data-gameday] .gd-fan button:focus-visible,
+:root[data-gameday] .gd-fan input:focus-visible {
+  outline: 3px solid var(--gw-yellow);
+  outline-offset: 2px;
+}

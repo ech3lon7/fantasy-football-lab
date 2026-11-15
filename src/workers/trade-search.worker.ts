@@ -197,13 +197,15 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
             partition(opponents, size),
             () => new Worker(new URL("./trade-search-part.worker.ts", import.meta.url), { type: "module" }),
             partial,
+            (event) => send({ id, context, type: "team", ...event }),
           );
         } catch {
           found = undefined;
         }
       if (!found) {
         const result = await runUsefulTradeSearch(model, own, request.useful.protectedIds, basis, request.lineupsRaw,
-          (singles) => partial(singles.map((row) => row.searchRow)));
+          (singles) => partial(singles.map((row) => row.searchRow)), undefined, undefined,
+          (event) => send({ id, context, type: "team", ...event }));
         found = {
           rows: result.rows.map(({ trade, variants }) => ({ ...trade.searchRow, variants: variants.map((v) => v.searchRow) })),
           coverage: result.coverage,

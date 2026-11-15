@@ -24,6 +24,7 @@ self.onmessage = async (event: MessageEvent<PartRequest>) => {
       (singles) => send({ type: "singles", rows: singles.map((row) => row.searchRow) }),
       request.beam,
       request.opponents,
+      (event) => send({ type: "team", ...event }),
     );
     send({
       type: "done",

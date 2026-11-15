@@ -89,6 +89,8 @@ interface SearchJob {
   // Preserve measured broad-search coverage while paging through the same results.
   coverage?: { singles: number; extensions: number; opponents: number; beamCutoffs: number;
     beamCutoffsByTeam: Record<string, Record<string, number>> };
+  // Each opponent's progress through the search, by team id, for the search scene.
+  teams?: Record<string, { singles: number; extensions: number; done: boolean }>;
   // Hidden reasons and per-filter counts are tied to the same retained result set.
   filterCounts?: Record<string, number>;
   hiddenRows?: { row: SearchRow; reasons: string[] }[];
@@ -740,6 +742,15 @@ export function useTradeSearch({
             };
           if (message.type === "progress")
             return { ...previous, progress: message.progress };
+          // Each opponent reports when its one-for-ones and then all its packages are done; the search scene draws from this.
+          if (message.type === "team")
+            return {
+              ...previous,
+              teams: {
+                ...previous.teams,
+                [message.team]: { singles: message.singles, extensions: message.extensions, done: message.done },
+              },
+            };
           if (message.type === "error")
             return {
               ...previous,

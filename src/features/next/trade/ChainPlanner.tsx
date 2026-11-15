@@ -1,3 +1,6 @@
+import { useRef, useState } from "react";
+import { FilterWheel } from "./wheel/FilterWheel";
+import { chainWheelData } from "./wheel/wheel-data";
 import type { Draft } from "../../../domain/contracts";
 import { str } from "../../../domain/contracts";
 import type { Model } from "../../../domain/valuation";
@@ -123,14 +126,81 @@ export function ChainPlanner({
     .filter((p) => p.owner !== s.team && p.owner !== "0")
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  // The wheel sets the same chain state as the lists below: Their EPPG, the opponents and the sequence types.
+  const [wheel, setWheel] = useState(false);
+  const opener = useRef<HTMLButtonElement>(null);
+  const defaults = {
+    gain: "1",
+    teams: undefined as string[] | undefined,
+    sequences: "connected" as const,
+  };
+  const wheelData = chainWheelData({
+    m: model,
+    own: s.team,
+    theirGain: Number(s.recipientGain),
+    setTheirGain: (value) => s.setRecipientGain(String(value)),
+    selectedTeams: s.selectedTeams,
+    setSelectedTeams: s.setSelectedTeams,
+    sequences: s.discovery.sequences,
+    setSequences: (sequences) => s.setDiscovery({ ...s.discovery, sequences }),
+    counts: { total: s.chains.length, visible: s.chains.length },
+    clear: () => {
+      s.setRecipientGain(defaults.gain);
+      s.setSelectedTeams(defaults.teams);
+      s.setDiscovery({ ...s.discovery, sequences: defaults.sequences });
+    },
+    snapshot: () => ({
+      gain: s.recipientGain,
+      teams: s.selectedTeams,
+      sequences: s.discovery.sequences,
+    }),
+    restore: (snapshot) => {
+      const v = snapshot as {
+        gain: string;
+        teams: string[] | undefined;
+        sequences: "connected" | "sequential" | "both";
+      };
+      s.setRecipientGain(v.gain);
+      s.setSelectedTeams(v.teams);
+      s.setDiscovery({ ...s.discovery, sequences: v.sequences });
+    },
+  });
+  const toList = () => {
+    setWheel(false);
+    opener.current?.focus();
+    document
+      .querySelector('[aria-label="Per-trade settings"]')
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <div className="gd-chain">
       <section className="gd-card" aria-label="Two-trade chain planner">
         <div className="gd-chips" style={{ justifyContent: "space-between" }}>
           <h3>Two-trade chain planner</h3>
-          <label className="gd-field"><span>Their EPPG gain minimum</span>
-            <input type="number" min={-2} max={1} step={0.5} value={s.recipientGain}
-              onChange={(event) => s.setRecipientGain(String(clampTheirGain(Number(event.target.value))))} />
+          <button
+            ref={opener}
+            type="button"
+            className="gd-cbtn gd-wheel-open"
+            aria-haspopup="dialog"
+            onClick={() => setWheel(true)}
+          >
+            Filters · {wheelData.activeCount}
+          </button>
+          <label className="gd-field">
+            <span>Their EPPG gain minimum</span>
+            <input
+              type="number"
+              min={-2}
+              max={1}
+              step={0.5}
+              value={s.recipientGain}
+              onChange={(event) =>
+                s.setRecipientGain(
+                  String(clampTheirGain(Number(event.target.value))),
+                )
+              }
+            />
           </label>
           <label className="gd-field">
             <span>Chain search depth</span>
@@ -204,7 +274,9 @@ export function ChainPlanner({
         </p>
       </section>
 
-      {s.migrationNote && <p className="gd-quiet">Saved search: ignored {s.migrationNote}.</p>}
+      {s.migrationNote && (
+        <p className="gd-quiet">Saved search: ignored {s.migrationNote}.</p>
+      )}
 
       <section className="gd-card" aria-label="Chain search limits">
         <details className="gd-limits">
@@ -234,7 +306,19 @@ export function ChainPlanner({
       <ChainWhole m={model} s={s} />
       <ChainDiagnostics s={s} />
       <ChainResults m={model} s={s} canSave={!!save} onAnalyze={onAnalyze} />
+      {wheel && (
+        <FilterWheel
+          data={wheelData}
+          goalsEditor={null}
+          opener={opener}
+          onClose={() => {
+            setWheel(false);
+            opener.current?.focus();
+          }}
+          onListView={toList}
+          onHandoff={() => undefined}
+        />
+      )}
     </div>
   );
 }
-

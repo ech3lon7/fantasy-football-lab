@@ -3,7 +3,7 @@ import { tradeImpact, type LineupBasis } from "./trade-impact";
 import { evaluateTrade } from "./trades";
 import { scoreTradeMatch, type SearchRow, type TradeSearchQuery } from "./trade-search";
 import { buildTradeImpactMap } from "./trade-impact-map";
-import { buildUsefulMoves, FLOOR_MAX_LOSS, type UsefulEvaluation } from "./useful-move-search";
+import { buildUsefulMoves, FLOOR_MAX_LOSS, type TeamProgress, type UsefulEvaluation } from "./useful-move-search";
 import { chainPositionImpact } from "./chain-position-impact";
 import { lineupFilterEvidence } from "./trade-lineup-evidence";
 import type { FilterableTrade } from "./trade-filters";
@@ -11,7 +11,7 @@ import type { Model } from "./valuation";
 
 // Adapt the real lineup impact map and existing trade evaluator to the package-generation engine.
 export function runUsefulTradeSearch(m: Model, ownTeam: string, protectedIds: string[], basis: LineupBasis,
-  lineupsRaw?: string, onSingles?: (rows: UsefulScoredTrade[]) => void, beam?: number, only?: string[]) {
+  lineupsRaw?: string, onSingles?: (rows: UsefulScoredTrade[]) => void, beam?: number, only?: string[], onTeam?: (event: TeamProgress) => void) {
   const original = buildTradeImpactMap(m, ownTeam, basis, lineupsRaw);
   const add = new Map(original.add), leave = new Map(original.leave);
   // Cache model-wide input values once; scoring still comes from the existing evaluator.
@@ -58,6 +58,6 @@ export function runUsefulTradeSearch(m: Model, ownTeam: string, protectedIds: st
       searchRow.positionImpact = evidence.positionImpact;
     }
     return { ...offer, legal: searchRow.legal, changed, own: searchRow.own, other: searchRow.other, searchRow };
-  }, onSingles, beam));
+  }, onSingles, beam, onTeam));
 }
 export interface UsefulScoredTrade extends UsefulEvaluation { searchRow: SearchRow }

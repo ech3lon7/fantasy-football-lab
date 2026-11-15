@@ -304,6 +304,8 @@ export type SearchRequest =
 export type SearchFilterSort = "own" | "other" | "week" | "both" | "balance" | "acceptance";
 export type SearchResponse = { id: string; context: string } & (
   | { type: "progress"; progress: SearchProgress }
+  // One opponent finished its one-for-ones, or all its packages: drives the search scene.
+  | { type: "team"; team: string; singles: number; extensions: number; done: boolean }
   | { type: "filtered"; rows: SearchRow[]; total: number; visibleTotal: number; groupsTotal: number; view: TradeResultView;
       counts: Record<string, number>; hidden: { row: SearchRow; reasons: string[] }[]; stats: SearchStats }
   | {

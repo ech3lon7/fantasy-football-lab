@@ -108,7 +108,10 @@ test.describe("Positional Grade Search E2E", () => {
     await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
     const topRows = page.locator(".gd-res > .gd-res-group > .gd-res-row");
     await expect(topRows.first()).toBeVisible();
-    const before = Number((await page.getByText(/^[\d,]+ of [\d,]+ trades$/).innerText()).match(/\d+/)![0]);
+    // Let the streamed list settle before measuring it.
+    const shown = async () => Number((await page.getByText(/^[\d,]+ of [\d,]+ trades$/).innerText()).match(/\d+/)![0]);
+    let before = await shown();
+    await expect.poll(async () => { const now = await shown(); const same = now === before; before = now; return same; }, { intervals: [1500], timeout: 60000 }).toBe(true);
 
     // The Grades filter starts with no goals.
     await page.locator("details", { has: page.locator("summary", { hasText: /^Grades/ }) }).locator("> summary").click();

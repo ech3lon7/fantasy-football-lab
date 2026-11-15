@@ -1,11 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Model } from "../../../domain/valuation";
 import { str, type Draft } from "../../../domain/contracts";
 import type { SearchLimits } from "../../../domain/search-limits";
 import type { LineupBasis } from "../../../domain/trade-impact";
 import type { TradeSearchQuery } from "../../../domain/trade-search";
 import type { SavedTradeSummary } from "../../../domain/saved-trades";
+import { defaultTradeFilters } from "../../../domain/trade-filters";
 import { PlayerPick } from "./controls";
+import { GradeGoals } from "./GradeGoals";
+import { FilterWheel } from "./wheel/FilterWheel";
+import { findWheelData } from "./wheel/wheel-data";
+import { activeFilterCount } from "./wheel/wheel-model";
 import { BroadFilters } from "./BroadFilters";
 import { BroadResults } from "./BroadResults";
 import { useTradeSearch } from "./useTradeSearch";
@@ -62,27 +67,38 @@ export function FindTrades({
     (t) => str(t.TeamID) !== "0",
   );
   const f = s.broad.filters;
-  const active =
-    Number(f.yourGain.minimum !== null || f.yourGain.maximum !== null) +
-    1 +
-    Number(f.ownWeek.minimum !== null || f.ownWeek.maximum !== null) +
-    Number(f.otherWeek.minimum !== null || f.otherWeek.maximum !== null) +
-    Number(f.receiveStarts) +
-    Number(f.giveStarts) +
-    Number(!!f.gradeGoals.length) +
-    Number(!!f.mustGet.length) +
-    Number(!!f.mustGive.length) +
-    Number(!!f.exclude.length) +
-    Number(!!f.getPositions.length) +
-    Number(!!f.givePositions.length) +
-    Number(!!f.labels.length) +
-    Number(f.teams !== null) +
-    Number(!!f.teamGrade) +
-    Number(f.giveSize.minimum !== 1 || f.giveSize.maximum !== 3) +
-    Number(f.getSize.minimum !== 1 || f.getSize.maximum !== 3);
+  const active = activeFilterCount(f);
+  const [wheel, setWheel] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLButtonElement>(null);
+  const update = (patch: Partial<typeof f>) =>
+    s.updateBroad({ filters: { ...f, ...patch } });
+  // F opens the wheel while this tab is showing and focus is not in a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (e.key.toLowerCase() !== "f" || e.ctrlKey || e.metaKey || e.altKey)
+        return;
+      if (
+        el &&
+        (el.isContentEditable ||
+          ["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName))
+      )
+        return;
+      if (!s.job || !root.current || root.current.offsetParent === null) return;
+      e.preventDefault();
+      setWheel(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [s.job]);
+  const closeWheel = () => {
+    setWheel(false);
+    opener.current?.focus();
+  };
   const selected = s.broad.protectedIds;
   return (
-    <div className="gd-find gd-broad-search">
+    <div ref={root} className="gd-find gd-broad-search">
       <section className="gd-card gd-broad-top" aria-label="Search all trades">
         <label>
           Team{" "}
@@ -159,10 +175,11 @@ export function FindTrades({
       {s.job && (
         <div className="gd-broad-layout">
           <button
-            className="gd-cbtn gd-broad-filter-toggle"
+            ref={opener}
+            className="gd-cbtn gd-wheel-open"
             type="button"
-            aria-expanded={open}
-            onClick={() => setOpen(!open)}
+            aria-haspopup="dialog"
+            onClick={() => setWheel(true)}
           >
             Filters · {active}
           </button>
@@ -186,6 +203,36 @@ export function FindTrades({
       )}
       {!s.job && (
         <p>Press Search all trades to check every legal trade for your team</p>
+      )}
+      {wheel && s.job && (
+        <FilterWheel
+          opener={opener}
+          data={findWheelData({
+            m: model,
+            teamA: draft.teamA,
+            filters: f,
+            update,
+            clear: () => s.updateBroad({ filters: defaultTradeFilters() }),
+            counts: {
+              total: s.job.total,
+              visible: s.job.visibleTotal ?? s.job.rows.length,
+              hides: s.job.filterCounts ?? {},
+            },
+          })}
+          goalsEditor={
+            <GradeGoals
+              m={model}
+              draft={draft}
+              rules={f.gradeGoals}
+              onChange={(gradeGoals) => update({ gradeGoals })}
+            />
+          }
+          onClose={closeWheel}
+          onListView={() => {
+            setWheel(false);
+            setOpen(true);
+          }}
+        />
       )}
     </div>
   );

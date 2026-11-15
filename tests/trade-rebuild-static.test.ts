@@ -57,6 +57,9 @@ describe("2.3 the retired trade files are deleted", () => {
   });
 });
 
+// The filter wheel handoff names these two classes in its acceptance wording ("no .chalk-particle elements exist"), so they keep their names.
+const specNamed = new Set(["chalk-particle", "chalk-puff"]);
+
 describe("2.2 the rebuilt screens use only gd- classes and tokens", () => {
   const dir = "src/features/next/trade";
   const files = existsSync(dir) ? getFiles(dir).filter((f) => f.endsWith(".tsx")) : [];
@@ -82,7 +85,7 @@ describe("2.2 the rebuilt screens use only gd- classes and tokens", () => {
       const text = readFileSync(f, "utf8");
       for (const m of text.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g))
         for (const token of (m[1] ?? m[2] ?? "").split(/\s+/))
-          if (token && !token.startsWith("gd-") && !token.startsWith("$"))
+          if (token && !token.startsWith("gd-") && !token.startsWith("$") && !specNamed.has(token))
             offenders.push(`${f}: ${token}`);
     }
     expect(offenders).toEqual([]);

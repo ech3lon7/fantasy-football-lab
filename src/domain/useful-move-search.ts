@@ -6,6 +6,13 @@ export interface UsefulCoverage {
   singles: number; extensions: number; opponents: number; beamCutoffs: number;
   beamCutoffsByTeam: Record<string, Record<string, number>>;
 }
+// One opponent's progress: its one-for-ones are done (done false), or all its packages are (done true).
+export interface TeamProgress {
+  team: string;
+  singles: number;
+  extensions: number;
+  done: boolean;
+}
 export interface UsefulOffer { team: string; give: string[]; get: string[] }
 export interface UsefulEvaluation extends UsefulOffer { legal: boolean | null; changed: boolean; own: number | null; other: number | null }
 export interface UsefulRow<T extends UsefulEvaluation> { trade: T; variants: T[] }
@@ -23,6 +30,7 @@ function passesFloor(r: UsefulEvaluation) {
 export async function buildUsefulMoves<T extends UsefulEvaluation>(
   roster: { own: string[]; opponents: Record<string, string[]> }, impacts: Impacts, protectedIds: string[],
   evaluate: (offer: UsefulOffer) => T, onSingles?: (rows: T[]) => void, beam = BEAM_PER_TEAM,
+  onTeam?: (event: TeamProgress) => void,
 ) {
   const ours = roster.own.filter((id) => !protectedIds.includes(id));
   const evaluated = new Set<string>(), retained: T[] = [], singles: T[] = [];
@@ -36,11 +44,15 @@ export async function buildUsefulMoves<T extends UsefulEvaluation>(
       values.slice(give.length + get.length).reduce<number>((a, b) => a + b!, 0);
   };
   // Every one-for-one reaches the original evaluator, including players with unavailable impact estimates.
-  for (const [team, theirs] of Object.entries(roster.opponents)) for (const give of ours) for (const get of theirs) {
+  const extByTeam: Record<string, number> = {};
+  for (const [team, theirs] of Object.entries(roster.opponents)) {
+  for (const give of ours) for (const get of theirs) {
     const offer = { team, give: [give], get: [get] }; evaluated.add(offerKey(offer)); coverage.singles++;
     const row = evaluate(offer); singles.push(row); if (passesFloor(row)) retained.push(row);
     // Early batches let the first rows appear long before every one-for-one is checked.
     if (coverage.singles % 100 === 0) onSingles?.([...retained]);
+  }
+  onTeam?.({ team, singles: ours.length * theirs.length, extensions: 0, done: false });
   }
   onSingles?.([...retained]);
   // Yield to the worker event loop so filters and browsing can respond while extensions are built.
@@ -83,11 +95,13 @@ export async function buildUsefulMoves<T extends UsefulEvaluation>(
         teamCutoffs[size] = (teamCutoffs[size] ?? 0) + 1;
         continue;
       }
-      counts.set(size, count + 1); evaluated.add(offerKey(candidate.offer)); coverage.extensions++;
+      counts.set(size, count + 1); evaluated.add(offerKey(candidate.offer)); coverage.extensions++; extByTeam[team] = (extByTeam[team] ?? 0) + 1;
       const row = evaluate(candidate.offer); if (passesFloor(row)) retained.push(row);
       // Regular yields keep filter messages responsive without reducing search coverage.
       if (coverage.extensions % 25 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
+    // The last size pass finishes this opponent.
+    if (total === 6) onTeam?.({ team, singles: ours.length * (roster.opponents[team]?.length ?? 0), extensions: extByTeam[team] ?? 0, done: true });
   }
   // Attach near-identical supersets to their smaller core without rounding gains before comparison.
   const rows: UsefulRow<T>[] = [];

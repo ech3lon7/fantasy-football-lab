@@ -1,10 +1,37 @@
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Model } from "../../../domain/valuation";
 import type { SearchRow } from "../../../domain/trade-search";
 import { defaultTradeFilters } from "../../../domain/trade-filters";
 import { PlayerName } from "../../../ui/PlayerName";
 import { tradeDebugReport } from "../../../domain/trade-tools";
 import { ResultRow } from "./ResultRow";
+import { useFlipList } from "./wheel/useFlipList";
+import { TweenCount } from "./wheel/TweenCount";
+import { PlayCallScene } from "./wheel/PlayCallScene";
 import type { TradeSearchState } from "./useTradeSearch";
+
+// A disclosure that builds its rows only once it is open: each row is a fully evaluated trade, and a closed list of hundreds of
+// variants must not be evaluated on every change of the filters.
+function Lazy({
+  className,
+  summary,
+  children,
+}: {
+  className: string;
+  summary: string;
+  children: () => ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details
+      className={className}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary>{summary}</summary>
+      {open && children()}
+    </details>
+  );
+}
 
 // Keep saved and analyzed trades tied to their captured, fully evaluated packages.
 export function BroadResults({
@@ -20,6 +47,14 @@ export function BroadResults({
 }) {
   const job = s.job,
     model = s.resultModel.current ?? m;
+  const listRef = useRef<HTMLDivElement>(null);
+  // The play-call scene starts with a search and folds away when it ends.
+  const [scene, setScene] = useState(false);
+  useEffect(() => {
+    if (s.running) setScene(true);
+  }, [s.running]);
+  // Rows slide, collapse and draw in as filters, sort and the search change them (A11, A13).
+  useFlipList(listRef, job?.rows.map((r) => r.key) ?? [], s.running);
   const names = (ids: string[]) =>
     ids.map((id, i) => {
       const p = model.byId.get(id);
@@ -51,7 +86,7 @@ export function BroadResults({
     getSize: "Incoming size",
   };
   const show = (row: SearchRow, variant = false): React.ReactNode => (
-    <div key={row.key} className="gd-res-group">
+    <div key={row.key} data-key={row.key} className="gd-res-group">
       <ResultRow
         model={model}
         row={row}
@@ -61,16 +96,20 @@ export function BroadResults({
         variant={variant}
       />
       {!variant && !!row.variants?.length && (
-        <details className="gd-variants">
-          <summary>+{row.variants.length} variants</summary>
-          {row.variants.map((v) => show(v, true))}
-        </details>
+        <Lazy
+          className="gd-variants"
+          summary={`+${row.variants.length} variants`}
+        >
+          {() => row.variants!.map((v) => show(v, true))}
+        </Lazy>
       )}
       {!variant && !!row.related?.length && (
-        <details className="gd-variants">
-          <summary>More trades for this swap ({row.related.length})</summary>
-          {row.related.map((v) => show(v))}
-        </details>
+        <Lazy
+          className="gd-variants"
+          summary={`More trades for this swap (${row.related.length})`}
+        >
+          {() => row.related!.map((v) => show(v))}
+        </Lazy>
       )}
     </div>
   );
@@ -118,6 +157,16 @@ export function BroadResults({
     );
   return (
     <section aria-label="Trade search results">
+      {scene && (
+        <PlayCallScene
+          m={m}
+          ownTeam={s.appliedSearch.current?.query.teamA ?? ""}
+          teams={job.teams}
+          running={s.running}
+          failed={job.status === "error"}
+          onGone={() => setScene(false)}
+        />
+      )}
       {s.running && (
         <p role="status">
           {job.progress?.phase ?? "Searching trades"}…
@@ -130,7 +179,8 @@ export function BroadResults({
       )}
       <div className="gd-chips" aria-live="polite">
         <b>
-          {job.visibleTotal ?? job.rows.length} of {job.total} trades
+          <TweenCount value={job.visibleTotal ?? job.rows.length} /> of{" "}
+          {job.total.toLocaleString()} trades
         </b>
         <label>
           Sort{" "}
@@ -171,10 +221,11 @@ export function BroadResults({
         <p>
           All {job.coverage.singles.toLocaleString()} one-for-ones checked ·{" "}
           {job.coverage.extensions.toLocaleString()} larger packages evaluated ·{" "}
-          {job.coverage.opponents} {job.coverage.opponents === 1 ? "team" : "teams"}
+          {job.coverage.opponents}{" "}
+          {job.coverage.opponents === 1 ? "team" : "teams"}
         </p>
       )}
-      <div className="gd-card gd-res">
+      <div ref={listRef} className="gd-card gd-res">
         <div className="gd-res-grid gd-res-head">
           <span>Offer → receive</span>
           <span>Your grade steps</span>

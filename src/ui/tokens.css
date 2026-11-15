@@ -51,6 +51,30 @@
 }
 /* Gameday Plus design tokens. Scoped to the preview root so the current interface is unaffected.
    Components use these variables only; no literal colours belong in component rules. */
+/* Chalk Playbook fonts for the filter wheel (latin subsets): Permanent Marker is Apache-2.0, Kalam is SIL OFL 1.1.
+   Licence texts sit beside the files in public/fonts. */
+@font-face {
+  font-family: "Permanent Marker";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/permanent-marker-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Kalam";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/kalam-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Kalam";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/kalam-700.woff2") format("woff2");
+}
+
 :root[data-gameday] {
   --gd-font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
   --gd-font-body: "Barlow", system-ui, sans-serif;
