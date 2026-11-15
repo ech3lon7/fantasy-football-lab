@@ -16,7 +16,8 @@ async function openFind(
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
   await page.getByRole("button", { name: "Search all trades" }).click();
   await expect(page.getByText(/one-for-ones checked/)).toBeVisible({
-    timeout: 90000,
+    // The big league's full search takes over a minute on a two-core CI runner.
+    timeout: 240000,
   });
 }
 const wheel = (page: Page) =>
@@ -581,7 +582,7 @@ test.describe("results move when filters change (A11, A13)", () => {
   test("Full: streaming rows slide up and fade in over 180 ms while the search runs", async ({
     page,
   }) => {
-    test.setTimeout(180000);
+    test.setTimeout(420000);
     await seedTradeLeague(page, "big", draft, { feelAnimation: "full" });
     await page.goto("./#/trade");
     await page.getByRole("tab", { name: "Find trades", exact: true }).click();
@@ -608,7 +609,7 @@ test.describe("the play-call scene while a search runs (A12)", () => {
   test("Full: a chalk diagram with an X for each of the 11 opponents, routes drawn as teams are searched, circles when done", async ({
     page,
   }) => {
-    test.setTimeout(180000);
+    test.setTimeout(420000);
     await startSearch(page, "full");
     const scene = page.locator(".gd-playcall");
     await expect(scene).toBeVisible({ timeout: 10000 });
@@ -629,7 +630,7 @@ test.describe("the play-call scene while a search runs (A12)", () => {
     ).toBeVisible();
     // It ends by folding into the coverage line.
     await expect(page.getByText(/one-for-ones checked/)).toBeVisible({
-      timeout: 90000,
+      timeout: 240000,
     });
     await expect(scene).toHaveCount(0, { timeout: 3000 });
   });
@@ -637,7 +638,7 @@ test.describe("the play-call scene while a search runs (A12)", () => {
   test("Full: every opponent ends up with a route and a circle", async ({
     page,
   }) => {
-    test.setTimeout(180000);
+    test.setTimeout(420000);
     await startSearch(page, "full");
     const scene = page.locator(".gd-playcall");
     await expect(scene).toBeVisible({ timeout: 10000 });
@@ -666,7 +667,7 @@ test.describe("the play-call scene while a search runs (A12)", () => {
   });
 
   test("Reduced: a plain progress bar and no drawing", async ({ page }) => {
-    test.setTimeout(180000);
+    test.setTimeout(420000);
     await startSearch(page, "reduced");
     const scene = page.locator(".gd-playcall");
     await expect(scene).toBeVisible({ timeout: 10000 });
@@ -675,7 +676,7 @@ test.describe("the play-call scene while a search runs (A12)", () => {
       scene.locator(".gd-pc-x, .gd-pc-route, .gd-pc-circle"),
     ).toHaveCount(0);
     await expect(page.getByText(/one-for-ones checked/)).toBeVisible({
-      timeout: 90000,
+      timeout: 240000,
     });
     await expect(scene).toHaveCount(0, { timeout: 3000 });
   });
@@ -683,11 +684,11 @@ test.describe("the play-call scene while a search runs (A12)", () => {
   test("Off: no scene at all, only the plain status and then the coverage line", async ({
     page,
   }) => {
-    test.setTimeout(180000);
+    test.setTimeout(420000);
     await startSearch(page, "off");
     await expect(page.locator(".gd-playcall")).toHaveCount(0);
     await expect(page.getByText(/one-for-ones checked/)).toBeVisible({
-      timeout: 90000,
+      timeout: 240000,
     });
     await expect(page.locator(".gd-playcall")).toHaveCount(0);
   });
@@ -706,7 +707,7 @@ test.describe("phone fan (390px)", () => {
     await page.getByRole("tab", { name: "Find trades", exact: true }).click();
     await page.getByRole("button", { name: "Search all trades" }).click();
     await expect(page.getByText(/one-for-ones checked/)).toBeVisible({
-      timeout: 60000,
+      timeout: 240000,
     });
     await page.getByRole("button", { name: /^Filters · \d+$/ }).tap();
     await expect(wheel(page)).toBeVisible();
@@ -830,7 +831,7 @@ test.describe("phone fan (390px)", () => {
     await page.getByRole("tab", { name: "Find trades", exact: true }).click();
     await page.getByRole("button", { name: "Search all trades" }).click();
     await expect(page.getByText(/one-for-ones checked/)).toBeVisible({
-      timeout: 60000,
+      timeout: 240000,
     });
     const durations = await page.evaluate(
       () =>
