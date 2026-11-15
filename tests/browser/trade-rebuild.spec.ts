@@ -1,9 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 import { seedTradeLeague } from "./trade-seed";
 
-// Acceptance tests 5.2 and 5.3 of the Find trades and Chain planner rebuild plan. They assert the rebuilt screens' contract:
-// gd- classes, one Search button, summaries under titles, a Diagnostics disclosure, one preset radio group, shared limits.
-// They never accept a fallback selector or skip a check when an element is missing, and they run on real search results.
+// Acceptance tests of the one-broad-search design (docs/trade-search-one-search-proposal.md) in the browser:
+// Find trades is Team, a Never trade list and one Search; filters, Sort and Show hidden act on retained results.
+// Nothing here accepts a fallback selector or skips a check when an element is missing.
 
 const searchDraft = { teamA: "1", teamB: "2", give: ["101"], get: [] };
 const chainDraft = { teamA: "1", teamB: "2", give: ["3", "8", "9"], get: [] };
@@ -12,237 +12,203 @@ async function openFind(page: Page) {
   await seedTradeLeague(page, "search", searchDraft, { feelAnimation: "off" });
   await page.goto("./#/trade");
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-  await expect(page.locator(".gd-find")).toBeVisible();
+  await expect(page.locator(".gd-broad-search")).toBeVisible();
 }
-
-async function openChain(page: Page) {
-  await seedTradeLeague(page, "chain", chainDraft, { feelAnimation: "off" });
-  await page.goto("./#/trade");
-  await page.getByRole("tab", { name: "Chain planner", exact: true }).click();
-  await expect(page.locator(".gd-chain")).toBeVisible();
+async function runSearch(page: Page) {
+  await page.getByRole("button", { name: "Search all trades" }).click();
+  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
 }
+// "188 of 221 trades" → { shown: 188, total: 221 }
+async function counts(page: Page) {
+  const text = await page.getByText(/^[\d,]+ of [\d,]+ trades$/).innerText();
+  const [shown, total] = text.match(/[\d,]+/g)!.map((n) => Number(n.replace(/,/g, "")));
+  return { shown, total };
+}
+const hides = async (page: Page, key: string) =>
+  Number((await page.locator(`.gd-hides[data-filter="${key}"]`).innerText()).replace(/\D/g, ""));
 
-const groupTitles = [
-  "Players & packages",
-  "Teams to search",
-  "Team needs",
-  "Positional grade goals",
-  "What you receive",
-  "Roster fit",
-  "Search limits",
-  "Manager profiles & acceptance",
-  "Ranking",
-];
-
-test.describe("5.2 Find trades", () => {
-  test("exactly one Search button and none of the retired texts", async ({ page }) => {
+test.describe("Find trades: one search", () => {
+  test("the header is Team, Never trade and one Search button; the retired options are gone", async ({ page }) => {
     await openFind(page);
     const panel = page.getByRole("tabpanel", { name: "Find trades" });
+    const top = page.locator(".gd-broad-top");
+    await expect(top.getByRole("combobox")).toHaveCount(1);
+    await expect(top.getByText("Never trade", { exact: true })).toBeVisible();
     const visible: string[] = [];
     const buttons = panel.getByRole("button", { name: /search/i });
     for (let i = 0; i < (await buttons.count()); i++)
-      if (await buttons.nth(i).isVisible())
-        visible.push((await buttons.nth(i).innerText()).trim());
-    expect(visible).toEqual(["Search trades across the league"]);
+      if (await buttons.nth(i).isVisible()) visible.push((await buttons.nth(i).innerText()).trim());
+    expect(visible).toEqual(["Search all trades"]);
     for (const retired of [
-      "Every find trades control is below",
-      "Independent standard-search controls",
-      "Use strict index range",
-      "Value range",
-      "Find matching trades",
+      "Search goal", "Rank by", "Manager profiles", "Surface Trading", "Search limits", "Use strict index range",
+      "Value range", "Find matching trades", "Every find trades control is below", "near misses",
     ])
-      await expect(panel.getByText(retired, { exact: false })).toHaveCount(0);
-    // The Search limits bar above the tabs and the Filters toggle are gone too.
-    await expect(
-      page.getByRole("button", { name: "Filters", exact: true }),
-    ).toHaveCount(0);
-    await expect(page.locator(".gd-limits-bar")).toHaveCount(0);
+      // The Manual analyzer keeps its own surface panel mounted but hidden, so only what is visible counts.
+      await expect(panel.getByText(retired, { exact: false }).filter({ visible: true })).toHaveCount(0);
   });
 
-  test("nine folding groups, each summary below its title", async ({ page }) => {
+  test("before a search there is a prompt and no results", async ({ page }) => {
     await openFind(page);
-    const groups = page.locator(".gd-find aside[aria-label='Search controls'] details.gd-fg");
-    await expect(groups).toHaveCount(groupTitles.length);
-    await expect(groups.locator("> summary .gd-fg-title")).toHaveText(groupTitles);
-    for (let i = 0; i < groupTitles.length; i++) {
-      const summary = groups.nth(i).locator("> summary");
-      const title = await summary.locator(".gd-fg-title").boundingBox();
-      const line = await summary.locator(".gd-fs").boundingBox();
-      expect(title, `title of ${groupTitles[i]}`).not.toBeNull();
-      expect(line, `summary of ${groupTitles[i]}`).not.toBeNull();
-      // Below, never beside: the summary starts at or under the bottom of the title.
-      expect(line!.y).toBeGreaterThanOrEqual(title!.y + title!.height - 1);
-      expect(
-        (await summary.locator(".gd-fs").innerText()).trim().length,
-        `summary text of ${groupTitles[i]}`,
-      ).toBeGreaterThan(0);
-    }
-  });
-
-  test("Diagnostics holds the debug buttons and is closed by default", async ({ page }) => {
-    await openFind(page);
-    const diag = page.locator(".gd-find details.gd-diag");
-    await expect(diag).toHaveCount(1);
-    await expect(diag.locator("> summary")).toHaveText(/Diagnostics/);
-    await expect(diag).not.toHaveAttribute("open", "");
-    const download = diag.getByRole("button", { name: "Download search debug" });
-    const why = diag.getByRole("button", { name: /Why wasn.t this trade found/ });
-    await expect(download).toBeHidden();
-    await expect(why).toBeHidden();
-    // Nothing diagnostic sits beside the Search button.
-    await diag.locator("> summary").click();
-    await expect(download).toBeVisible();
-    await expect(why).toBeVisible();
-    // Every debug button in the screen is inside Diagnostics: none sits beside the Search button.
-    await expect(
-      page.locator(".gd-find").getByRole("button", { name: /debug|Why wasn/ }),
-    ).toHaveCount(2);
-    await expect(
-      diag.getByRole("button", { name: /debug|Why wasn/ }),
-    ).toHaveCount(2);
-  });
-
-  test("before a search there are no result rows, chips or invented numbers", async ({ page }) => {
-    await openFind(page);
+    await expect(page.getByText("Press Search all trades to check every legal trade for your team")).toBeVisible();
     await expect(page.locator(".gd-res-row")).toHaveCount(0);
-    await expect(page.locator(".gd-find .gd-chipg")).toHaveCount(0);
-    await expect(page.locator(".gd-find .gd-stag")).toHaveCount(0);
-    await expect(page.locator(".gd-find .gd-res")).toContainText(/Run a search/);
   });
 
-  test("an impossible goal lists no trades and says so", async ({ page }) => {
+  test("a search lists real rows with photos, grade chips, a gain with range and a status, and a coverage line", async ({ page }) => {
     await openFind(page);
-    const goals = page.locator(".gd-find .gd-goals");
-    await goals.getByRole("button", { name: "+ Add goal" }).click();
-    await goals.getByRole("combobox", { name: "Team" }).selectOption("other");
-    await goals.getByRole("combobox", { name: "Position" }).selectOption("WR");
-    await goals.getByRole("combobox", { name: "Grade steps" }).selectOption("5");
-    await page.getByRole("button", { name: "Search trades across the league" }).click();
-    await expect(page.locator(".gd-find .gd-applied")).toContainText(/0 trades meet every goal/, {
-      timeout: 30000,
-    });
-    await expect(page.locator(".gd-res-row")).toHaveCount(0);
-    await expect(page.locator(".gd-find .gd-res")).toContainText(/No trades met every goal/);
-  });
-
-  test("after a search every result row has a photo or initials, grade chips, a spread and a status tag", async ({
-    page,
-  }) => {
-    await openFind(page);
-    await page.getByRole("button", { name: "Search trades across the league" }).click();
-    const rows = page.locator(".gd-res-row");
-    await expect(rows.first()).toBeVisible({ timeout: 30000 });
+    await runSearch(page);
+    // Top-level rows only: variants sit inside closed disclosures.
+    const rows = page.locator(".gd-res > .gd-res-group > .gd-res-row");
+    await expect(rows.first()).toBeVisible();
     const count = await rows.count();
     expect(count).toBeGreaterThan(0);
     for (let i = 0; i < count; i++) {
       const row = rows.nth(i);
       await expect(row.locator(".gd-photo").first()).toBeVisible();
-      await expect(row.locator(".gd-chipg").first()).toBeVisible();
       await expect(row.locator(".gd-gain")).toContainText("±");
-      await expect(row.locator(".gd-stag").first()).toHaveText(
-        /Passes every price test|Price warning|Widened search/,
-      );
+      await expect(row.locator(".gd-stag").first()).toHaveText(/Passes every price test|Price warning|Widened search/);
       await expect(row.getByRole("button", { name: "Analyze" })).toBeVisible();
     }
-    // The summary line states the real total; rows show the first page of it (25 at a time).
-    const summary = await page.locator(".gd-find .gd-applied").innerText();
-    const total = Number(/^([\d,]+) trades? meet/.exec(summary)?.[1].replace(/,/g, ""));
-    expect(total).toBeGreaterThan(0);
-    expect(count).toBe(Math.min(total, 25));
-    // Near misses live in a collapsed section below the results.
-    const nm = page.locator(".gd-find details.gd-nm");
-    await expect(nm).toHaveCount(1);
-    await expect(nm).not.toHaveAttribute("open", "");
+    expect(await rows.locator(".gd-chipg").count()).toBeGreaterThan(0);
+    await expect(page.getByText(/^All [\d,]+ one-for-ones checked · [\d,]+ larger packages evaluated · \d+ teams?$/)).toBeVisible();
+    const { shown, total } = await counts(page);
+    expect(shown).toBeLessThanOrEqual(total);
+  });
+
+  test("Their EPPG gain defaults to +1, accepts only -2 to +1 in half steps, and Clear filters restores it (R6b)", async ({ page }) => {
+    await openFind(page);
+    await runSearch(page);
+    const box = page.getByRole("spinbutton", { name: "Their EPPG gain minimum" });
+    await expect(box).toHaveValue("1");
+    await box.fill("5");
+    await expect(box).toHaveValue("1");
+    await box.fill("-9");
+    await expect(box).toHaveValue("-2");
+    await box.fill("0.3");
+    await expect(box).toHaveValue("0.5");
+    await expect(page.getByRole("slider", { name: "Their EPPG gain slider" })).toHaveValue("0.5");
+    // There is no maximum for their gain.
+    await expect(page.getByRole("spinbutton", { name: /Their EPPG gain maximum/ })).toHaveCount(0);
+    await page.getByRole("button", { name: "Clear filters" }).click();
+    await expect(box).toHaveValue("1");
+    await expect(page.getByRole("spinbutton", { name: "Your EPPG gain minimum" })).toHaveValue("0");
+  });
+
+  test("relaxing a filter updates the list at once and raises the count by exactly its hides N (R6)", async ({ page }) => {
+    await openFind(page);
+    await runSearch(page);
+    const before = await counts(page);
+    // On this league the default Your EPPG gain minimum of 0 hides trades by itself.
+    const n = await hides(page, "yourGain");
+    expect(n).toBeGreaterThan(0);
+    await page.getByRole("spinbutton", { name: "Your EPPG gain minimum" }).fill("");
+    await expect.poll(async () => (await counts(page)).shown).toBe(before.shown + n);
+    expect((await counts(page)).total).toBe(before.total);
+    // No new search ran: there is still one coverage line, from the first search.
+    await expect(page.getByText(/one-for-ones checked/)).toHaveCount(1);
+    // Putting the default back hides them again.
+    await page.getByRole("spinbutton", { name: "Your EPPG gain minimum" }).fill("0");
+    await expect.poll(async () => (await counts(page)).shown).toBe(before.shown);
+  });
+
+  test("Sort changes the order and never the count; Show hidden lists the removed trades with their reasons (R7, R8)", async ({ page }) => {
+    await openFind(page);
+    await runSearch(page);
+    const before = await counts(page);
+    const sort = page.getByRole("combobox", { name: "Sort" });
+    for (const value of ["other", "week", "both", "balance", "acceptance"]) {
+      await sort.selectOption(value);
+      await expect.poll(async () => (await counts(page)).shown).toBe(before.shown);
+    }
+    await page.getByRole("checkbox", { name: "Show hidden" }).check();
+    const hidden = page.getByText(/· Hidden:/);
+    await expect(hidden.first()).toBeVisible();
+    await expect(hidden.first()).toContainText(/Your EPPG gain|Their EPPG gain/);
+    expect(await hidden.count()).toBe(before.total - before.shown);
+  });
+
+  test("a player on the Never trade list never appears in what you give (R9)", async ({ page }) => {
+    await openFind(page);
+    await page.locator(".gd-broad-top summary", { hasText: "+ Add" }).click();
+    await page.locator(".gd-broad-top").getByRole("button", { name: /Main QB/ }).first().click();
+    await expect(page.locator(".gd-broad-top").getByRole("button", { name: "Main QB ×" })).toBeVisible();
+    await runSearch(page);
+    await expect(page.locator(".gd-res-row").first()).toBeVisible();
+    await expect(page.locator(".gd-res-row", { hasText: "Main QB" })).toHaveCount(0);
+  });
+
+  test("filters survive a reload for the same team", async ({ page }) => {
+    await openFind(page);
+    await runSearch(page);
+    await page.getByRole("spinbutton", { name: "Their EPPG gain minimum" }).fill("-1");
+    await page.reload();
+    await page.getByRole("tab", { name: "Find trades", exact: true }).click();
+    await runSearch(page);
+    await expect(page.getByRole("spinbutton", { name: "Their EPPG gain minimum" })).toHaveValue("-1");
+  });
+
+  test("Diagnostics is closed by default and holds the debug download", async ({ page }) => {
+    await openFind(page);
+    await runSearch(page);
+    const diag = page.locator("details.gd-diag");
+    await expect(diag).toHaveCount(1);
+    await expect(diag).not.toHaveAttribute("open", "");
+    await expect(page.getByRole("button", { name: "Download search debug" })).toBeHidden();
+    await diag.locator("> summary").click();
+    await expect(page.getByRole("button", { name: "Download search debug" })).toBeVisible();
   });
 });
 
-test.describe("5.3 Chain planner", () => {
-  test("one radio group of ten described presets, one selected", async ({ page }) => {
-    await openChain(page);
-    const group = page.getByRole("radiogroup", { name: "Chain preset" });
-    await expect(group).toBeVisible();
-    const options = group.getByRole("radio");
-    await expect(options).toHaveCount(10);
-    await expect(group.locator(".gd-pre-name")).toHaveText([
-      "Balanced opportunities",
-      "Mutual benefit",
-      "Acquire a star",
-      "Turn a star into depth",
-      "Acquire coverage, then upgrade",
-      "Connected chains",
-      "Surface-stat trading",
-      "Speculative sequences",
-      "Fix my weakest position",
-      "Buy low, then flip",
-    ]);
-    for (let i = 0; i < 10; i++)
-      expect(
-        (await options.nth(i).locator(".gd-pre-desc").innerText()).trim().length,
-      ).toBeGreaterThan(10);
-    await expect(group.locator("[aria-checked='true']")).toHaveCount(1);
-    // Picking another preset moves the selection and leaves the shared limits alone.
-    await options.nth(5).click();
-    await expect(options.nth(5)).toHaveAttribute("aria-checked", "true");
-    await expect(group.locator("[aria-checked='true']")).toHaveCount(1);
-    await expect(page.locator(".gd-chain select").filter({ hasText: /Balanced opportunities/ })).toHaveCount(0);
-  });
+test.describe("Chain planner after the simplification", () => {
+  async function openChain(page: Page) {
+    await seedTradeLeague(page, "chain", chainDraft, { feelAnimation: "off" });
+    await page.goto("./#/trade");
+    await page.getByRole("tab", { name: "Chain planner", exact: true }).click();
+    await expect(page.locator(".gd-chain")).toBeVisible();
+  }
 
-  test("no strictness or price-test controls", async ({ page }) => {
+  test("no presets, rank mode, Surface Trading, grade-drop limit, strictness or price-test controls (R10)", async ({ page }) => {
     await openChain(page);
     const panel = page.getByRole("tabpanel", { name: "Chain planner" });
+    await expect(page.getByRole("radiogroup", { name: "Chain preset" })).toHaveCount(0);
     for (const retired of [
-      "strictness",
-      "Price tests required",
-      "Chain price tests",
-      "Final gain ≥ 5 EPPG",
+      "Chain preset", "Rank plans by", "Surface Trading", "Limit positional grade drops", "strictness", "Price tests required",
     ])
-      await expect(panel.getByText(retired, { exact: false })).toHaveCount(0);
-    await expect(page.getByLabel(/strictness/i)).toHaveCount(0);
+      // The Manual analyzer keeps its own surface panel mounted but hidden, so only what is visible counts.
+      await expect(panel.getByText(retired, { exact: false }).filter({ visible: true })).toHaveCount(0);
   });
 
-  test("a shared limit edited in Chain planner shows in Find trades", async ({ page }) => {
+  test("Their EPPG gain minimum: default +1, only -2 to +1 in half steps", async ({ page }) => {
+    await openChain(page);
+    const box = page.getByRole("spinbutton", { name: "Their EPPG gain minimum" });
+    await expect(box).toHaveValue("1");
+    await box.fill("7");
+    await expect(box).toHaveValue("1");
+    await box.fill("-4");
+    await expect(box).toHaveValue("-2");
+  });
+
+  test("the shared limits stay editable and show an edited marker", async ({ page }) => {
     await openChain(page);
     const limits = page.locator(".gd-chain details.gd-limits");
     await limits.locator("> summary").click();
-    for (const name of [
-      "Minimum final gain",
-      "Maximum temporary loss",
-      "Maximum recipient value loss",
-      "Index window",
-    ])
-      await expect(limits.getByRole("slider", { name })).toBeVisible();
     await limits.getByRole("slider", { name: "Minimum final gain" }).fill("6");
     await expect(limits.locator("> summary .gd-edot")).toBeVisible();
-    await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-    const group = page
-      .locator(".gd-find details.gd-fg")
-      .filter({ has: page.locator(".gd-fg-title", { hasText: /^Search limits$/ }) });
-    await expect(group.locator("> summary .gd-fs")).toContainText("6.0");
-    await expect(group.locator("> summary .gd-edot")).toBeVisible();
   });
 
-  test("no step cards before a search; after one, two step cards and one connected result", async ({
-    page,
-  }) => {
+  test("no step cards before a search; after one, every chain is two step cards and one connected result, with Sort in the results header", async ({ page }) => {
     await openChain(page);
     await expect(page.locator(".gd-leg")).toHaveCount(0);
     await page.getByRole("button", { name: "Run chain trade search" }).click();
     const steps = page.locator(".gd-leg[data-kind='step']");
     await expect(steps.first()).toBeVisible({ timeout: 60000 });
-    // Every chain is two step cards and one connected result card.
     const chains = page.locator(".gd-leg[data-kind='chain']");
     const chainCount = await chains.count();
     expect(chainCount).toBeGreaterThan(0);
     await expect(steps).toHaveCount(chainCount * 2);
     await expect(steps.nth(0)).toContainText("Trade 1");
     await expect(steps.nth(1)).toContainText("Trade 2");
-    for (let i = 0; i < 2; i++) {
-      await expect(steps.nth(i).locator(".gd-chipg").first()).toBeVisible();
-      await expect(steps.nth(i).locator(".gd-gain").first()).toContainText("±");
-    }
-    const chain = chains.first();
-    await expect(chain).toContainText("Connected chain result");
-    await expect(chain.locator(".gd-gain")).toContainText("±");
-    await expect(chain.locator(".gd-stag").first()).toBeVisible();
+    await expect(chains.first()).toContainText("Connected chain result");
+    await expect(chains.first().locator(".gd-gain")).toContainText("±");
+    await expect(page.getByRole("combobox", { name: "Sort" })).toBeVisible();
   });
 });

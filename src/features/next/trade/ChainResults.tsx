@@ -12,8 +12,6 @@ import type { ResultRowView } from "../../../domain/view/search-rows";
 import type { GainSpread, GradeChip } from "../../../domain/view/trade-room";
 import { fmt, signed } from "../../../ui/components";
 import { PlayerName } from "../../../ui/PlayerName";
-import { SurfaceAppealView } from "../../SurfaceAppeal";
-import { ManagerEvidence } from "../../Negotiations";
 import type { ChainSearchState } from "./useChainSearch";
 
 const pageStep = 10;
@@ -107,7 +105,6 @@ function DependencyDetails({
 
 // The results of a chain search: a summary line, then each chain as two step cards and one connected result card.
 export function ChainResults({
-  m,
   s,
   canSave,
   onAnalyze,
@@ -120,7 +117,13 @@ export function ChainResults({
   const { job, stale, running } = s;
   const result = job?.result;
   const [limit, setLimit] = useState(pageStep);
-  const shown = s.chains.slice(0, limit);
+  // Sort only captured results so changing their order never starts or changes a search.
+  const [sort, setSort] = useState<"own" | "other" | "both">("own");
+  const ordered = [...s.chains].sort((a, b) => {
+    const value = (chain: TradeChain) => sort === "own" ? chain.gain : sort === "other" ? chain.opponentGain : Math.min(chain.gain, chain.opponentGain);
+    return value(b) - value(a) || a.key.localeCompare(b.key);
+  });
+  const shown = ordered.slice(0, limit);
   const resultModel = s.resultModel;
   const name = (id: string) => resultModel.byId.get(id);
   const names = (ids: string[]) =>
@@ -190,18 +193,6 @@ export function ChainResults({
             </small>
           )}
         </span>
-        {leg.surface && (
-          <div className="gd-quiet">
-            Their gain · surface stats{" "}
-            {leg.surface.average.gain == null
-              ? "unavailable"
-              : `${signed(leg.surface.average.gain)} season-average PPG`}
-            {leg.surface.projection.gain == null
-              ? ""
-              : ` · ${signed(leg.surface.projection.gain)} projection`}
-            ; your gain {signed(row.own)} EPPG / wk.
-          </div>
-        )}
         {step === 2 && (
           <p className="gd-quiet">
             Requires trade 1 to be completed first; saved with that roster
@@ -287,15 +278,6 @@ export function ChainResults({
               . {fit.matched ? "MATCH" : "NO MATCH"}.
             </p>
           ))}
-          {leg.row.manager && (
-            <ManagerEvidence
-              value={leg.row.manager}
-              m={s.legContext(chain, step).model}
-              draft={leg.draft}
-              allowLog={false}
-            />
-          )}
-          {leg.surface && <SurfaceAppealView value={leg.surface} m={m} />}
           <p className="gd-quiet">
             Your required drops: {names(row.dropsA)}. Their required drops:{" "}
             {names(row.dropsB)}.
@@ -381,6 +363,9 @@ export function ChainResults({
           "No results yet for the current settings."
         )}
       </div>
+      {complete && <label className="gd-field"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}>
+        <option value="own">Your EPPG gain</option><option value="other">Their EPPG gain</option><option value="both">Both sides</option>
+      </select></label>}
       {complete && result && (
         <div className="gd-chips">
           <button
@@ -497,3 +482,5 @@ export function ChainResults({
     </>
   );
 }
+
+

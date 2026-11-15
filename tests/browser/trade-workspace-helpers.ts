@@ -39,15 +39,27 @@ export async function openTradeFilters(page: Page, scope = "Standard") {
       await section.locator(":scope > summary").click();
     return;
   }
-  // The rebuilt screens have no Filters toggle: every folding group of the active tab opens from its own summary.
-  const root = page.locator(scope === "Chain" ? ".gd-chain" : ".gd-find");
-  await expect(root).toBeVisible();
-  for (const selector of ["details.gd-fg", "details.gd-limits"]) {
-    const groups = root.locator(selector);
-    for (let i = 0; i < (await groups.count()); i++)
-      if ((await groups.nth(i).getAttribute("open")) === null)
-        await groups.nth(i).locator(":scope > summary").click();
+  if (scope === "Chain") {
+    // The Chain planner's folding groups open from their own summaries.
+    const root = page.locator(".gd-chain");
+    await expect(root).toBeVisible();
+    for (const selector of ["details.gd-fg", "details.gd-limits"]) {
+      const groups = root.locator(selector);
+      for (let i = 0; i < (await groups.count()); i++)
+        if ((await groups.nth(i).getAttribute("open")) === null)
+          await groups.nth(i).locator(":scope > summary").click();
+    }
+    return;
   }
+  // Find trades shows its filters beside the results once a search has run; on narrow screens they open from "Filters · N".
+  const toggle = page.locator(".gd-broad-filter-toggle").first();
+  if ((await toggle.isVisible()) && (await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+  const panel = page.locator(".gd-broad-filter-panel");
+  await expect(panel).toBeVisible();
+  const groups = panel.locator("details");
+  for (let i = 0; i < (await groups.count()); i++)
+    if ((await groups.nth(i).getAttribute("open")) === null)
+      await groups.nth(i).locator(":scope > summary").click();
 }
 
 // The earlier trade finder and chain planner open under their Trade room tabs.

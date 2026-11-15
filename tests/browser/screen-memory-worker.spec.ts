@@ -24,7 +24,7 @@ test("a running search receives progress while Trade room is hidden", async ({ p
   await seedTradeLeague(page, "search", { teamA: "1", teamB: "2", give: ["101"], get: [] }, { feelAnimation: "off" });
   await page.goto("./#/trade");
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-  await page.getByRole("button", { name: "Search trades across the league" }).click();
+  await page.getByRole("button", { name: "Search all trades" }).click();
   await page.goto("./#/teams");
   // The visible navigation announces a running background search.
   await expect(page.locator(".gd-nav .gd-search-running")).toBeVisible();
@@ -50,9 +50,11 @@ for (const width of [1320, 390]) test(`find results survive inner tabs at ${widt
   await seedTradeLeague(page, "search", { teamA: "1", teamB: "2", give: ["101"], get: [] }, { feelAnimation: "off" });
   await page.goto("./#/trade");
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-  await page.getByRole("button", { name: "Search trades across the league" }).click();
+  await page.getByRole("button", { name: "Search all trades" }).click();
   const rows = page.locator(".gd-find .gd-res-row");
   await expect(rows.first()).toBeVisible({ timeout: 30000 });
+  // Results stream in; count them once the search has finished.
+  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
   const count = await rows.count();
   await page.getByRole("tab", { name: "Chain planner", exact: true }).click();
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
@@ -102,7 +104,7 @@ test("section navigation restores scroll and hides inactive controls", async ({ 
   const before = await page.evaluate(() => window.scrollY);
   await page.goto("./#/teams");
   await expect(page.locator(".gd-find")).toBeHidden();
-  await expect(page.getByRole("button", { name: "Search trades across the league" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Search all trades" })).toHaveCount(0);
   await page.goto("./#/trade");
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before - 2);
 });

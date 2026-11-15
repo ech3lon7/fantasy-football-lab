@@ -195,6 +195,15 @@ export function evaluateGradeImpacts(
             ? "drop_limit"
             : "deplete");
 
+    // Migrated legacy drop limits apply to each affected position, matching the former per-position rule.
+    if (rule.position.toUpperCase() === "AFFECTED" && effectiveType === "drop_limit") {
+      for (const row of sideImpacts) {
+        if (row.stepDelta === null || row.stepDelta < -Math.abs(rule.steps))
+          failures.push(`${sideLabel} ${row.position}: ${row.before} → ${row.after}; grade drop exceeds the saved limit or is unavailable.`);
+      }
+      continue;
+    }
+
     // Support overall net step requirements across all positions
     if (rule.position.toUpperCase() === "OVERALL") {
       const netDelta = netGradeStepDelta(sideImpacts);

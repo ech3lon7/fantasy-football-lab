@@ -4,23 +4,18 @@ import type { Model } from "../../../domain/valuation";
 import type { LineupBasis } from "../../../domain/trade-impact";
 import type { SavedTradeSummary } from "../../../domain/saved-trades";
 import type { TradeSearchQuery } from "../../../domain/trade-search";
-import {
-  chainPresets,
-  chainPresetDescriptions,
-} from "../../../domain/chain-discovery";
 import { editedLimits, type SearchLimits } from "../../../domain/search-limits";
-import { limitsSummary } from "../../../domain/view/limits";
-import { ChainLegs, ChainPresets, ChainWhole } from "./ChainControls";
+import { ChainLegs, ChainWhole } from "./ChainControls";
 import { ChainResults } from "./ChainResults";
 import { LimitsEditor } from "./LimitsEditor";
 import { useChainSearch, type ChainSearchState } from "./useChainSearch";
+import { clampTheirGain } from "../../../domain/trade-filters";
 
 // The exclusion counts and attempts of the last chain search, closed until asked for.
 function ChainDiagnostics({ s }: { s: ChainSearchState }) {
   const stats = s.job?.result?.stats;
   const rows: [string, number | undefined][] = [
     ["Dependency exclusions", stats?.rejectedDependency],
-    ["Surface Trading exclusions", stats?.rejectedManager ?? 0],
     ["Index-window exclusions", stats?.rejectedIndex],
     ["Price-test failures", stats?.rejectedValue],
     ["Surplus/deficit exclusions", stats?.rejectedFit ?? 0],
@@ -127,14 +122,16 @@ export function ChainPlanner({
   const finalTargets = model.players
     .filter((p) => p.owner !== s.team && p.owner !== "0")
     .sort((a, b) => a.name.localeCompare(b.name));
-  const selected = chainPresets.find((p) => p.id === s.preset);
-  const custom = s.customPresets.find((p) => p.id === s.preset);
 
   return (
     <div className="gd-chain">
       <section className="gd-card" aria-label="Two-trade chain planner">
         <div className="gd-chips" style={{ justifyContent: "space-between" }}>
           <h3>Two-trade chain planner</h3>
+          <label className="gd-field"><span>Their EPPG gain minimum</span>
+            <input type="number" min={-2} max={1} step={0.5} value={s.recipientGain}
+              onChange={(event) => s.setRecipientGain(String(clampTheirGain(Number(event.target.value))))} />
+          </label>
           <label className="gd-field">
             <span>Chain search depth</span>
             <select
@@ -207,69 +204,12 @@ export function ChainPlanner({
         </p>
       </section>
 
-      <section className="gd-card" aria-label="Chain presets">
-        <div className="gd-chips" style={{ justifyContent: "space-between" }}>
-          <span className="gd-kick">
-            Chain preset · pick a scenario, then adjust
-          </span>
-          <span className="gd-quiet">
-            One search method: {limitsSummary(limits)} · widens automatically if
-            nothing is found
-          </span>
-        </div>
-        <ChainPresets s={s} />
-        <div className="gd-applied">
-          <b>{selected?.label ?? custom?.name ?? "Custom"}</b> —{" "}
-          {selected
-            ? chainPresetDescriptions[selected.id]
-            : "Your own settings."}{" "}
-          A preset only describes the kind of chain to look for. Every preset
-          runs the same search with the same limits. Teams, protected players,
-          required targets and positional goals are kept when you switch.
-        </div>
-        <div className="gd-chips">
-          <label className="gd-field">
-            <span>Custom preset name</span>
-            <input
-              className="gd-sel"
-              type="text"
-              maxLength={60}
-              placeholder="e.g. RB for WR swap"
-              value={s.presetName}
-              onChange={(e) => s.setPresetName(e.target.value)}
-            />
-          </label>
-          <button
-            type="button"
-            className="gd-cbtn"
-            disabled={!s.presetName.trim() || s.errors.length > 0}
-            onClick={s.savePreset}
-          >
-            Save current settings as a preset
-          </button>
-          {custom && (
-            <button type="button" className="gd-cbtn" onClick={s.deletePreset}>
-              Delete custom preset
-            </button>
-          )}
-        </div>
-        <div className="gd-chips">
-          <span className="gd-quiet">Result order:</span>
-          <span className="gd-stag" data-kind="pass">
-            Passes every price test
-          </span>
-          <span className="gd-quiet">first, then</span>
-          <span className="gd-stag" data-kind="warning">
-            Price warning
-          </span>
-          <span className="gd-quiet">then</span>
-          <span className="gd-stag" data-kind="widened">
-            Widened search
-          </span>
-        </div>
+      {s.migrationNote && <p className="gd-quiet">Saved search: ignored {s.migrationNote}.</p>}
+
+      <section className="gd-card" aria-label="Chain search limits">
         <details className="gd-limits">
           <summary>
-            Search limits · shared with Find trades{" "}
+            Search limits{" "}
             {edited && (
               <>
                 <span
@@ -297,3 +237,4 @@ export function ChainPlanner({
     </div>
   );
 }
+

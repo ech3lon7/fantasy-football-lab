@@ -32,7 +32,7 @@ import {
   type ChainDependencySettings,
 } from "../../../domain/chain-plausibility";
 import { defaultDeficitProtection } from "../../../domain/trade-safeguards";
-import { withoutLegacySurface } from "../../../domain/surface-appeal";
+import { migrateLegacyChainStep } from "../../../domain/trade-query-migration";
 import {
   applyRosterScenario,
   sourceDataset,
@@ -50,8 +50,8 @@ import { opponentIncentive } from "../../../domain/trade-discovery";
 import { tradeDebugReport } from "../../../domain/trade-tools";
 import type { ChainRequest } from "../../../workers/trade-chains.worker";
 import { searchCue, useFeedback } from "../../../ui/feel/feedback";
-import { useNegotiations } from "../../Negotiations";
 import { mergeTradeSettings, readTradeSettings } from "./tradeSettings";
+import { clampTheirGain } from "../../../domain/trade-filters";
 
 // What the planner remembers: its editable controls only. Results and applied trades stay explicit actions.
 export interface ChainPreferences {
@@ -143,10 +143,16 @@ export function useChainSearch({
   ) => boolean | void;
 }) {
   const notify = useFeedback();
-  const journal = useNegotiations();
   const [initial] = useState(() =>
     readChainPreferences(settingsRaw, legacySettingsRaw),
   );
+  // Convert old per-position protections before exposing or executing saved preferences.
+  const [legacyLegs] = useState(() => ({
+    first: migrateLegacyChainStep({ ...defaultLeg(), ...initial?.query.first }),
+    second: migrateLegacyChainStep({ ...defaultLeg(), ...initial?.query.second }),
+  }));
+  const migrationNote = [...new Set([...legacyLegs.first.ignored, ...legacyLegs.second.ignored,
+    ...(initial?.preset && initial.preset !== "custom" ? ["preset"] : [])])].join(", ");
 
   const [team, setTeam] = useState(initial?.query.team ?? draft.teamA);
   const [pool, setPool] = useState<string[]>(
@@ -174,10 +180,10 @@ export function useChainSearch({
     initial?.query.depth ?? "standard",
   );
   const [first, setFirst] = useState<ChainQuery["first"]>(
-    withoutLegacySurface({ ...defaultLeg(), ...initial?.query.first }),
+    legacyLegs.first.step,
   );
   const [second, setSecond] = useState<ChainQuery["second"]>(
-    withoutLegacySurface({ ...defaultLeg(), ...initial?.query.second }),
+    legacyLegs.second.step,
   );
   const [firstOverride, setFirstOverride] = useState(
     initial?.firstOverride ?? false,
@@ -204,8 +210,7 @@ export function useChainSearch({
   );
   // Numeric limits come from the shared limits at search time; these hold the recipient gain floor and the values a saved search carried.
   const [recipientGain, setRecipientGain] = useState(
-    initial?.controls.recipientGain ??
-      String(defaultChainRecipient.minimumGain),
+    String(clampTheirGain(Number(initial?.controls.recipientGain ?? 1))),
   );
   // Subscribe to the app-owned job so progress continues while this panel is hidden.
   const sessions = useSearchSessions();
@@ -240,15 +245,15 @@ export function useChainSearch({
             defaultDeficitProtection.minimum),
     },
     teams: override ? leg.teams : selectedTeams,
-    manager: leg.manager
-      ? { ...leg.manager, profiles: journal.profiles }
-      : undefined,
+    // Surface and manager criteria were retired from search; saved legacy settings cannot silently filter chains.
+    manager: undefined,
+    surface: undefined,
   });
 
   const query: ChainQuery = {
     team,
     pool,
-    discovery,
+    discovery: { ...discovery, ranking: "own" },
     mode: initial?.query.mode ?? "both",
     pricePolicy: "required",
     maximumLoss: initial?.query.maximumLoss ?? 3,
@@ -344,8 +349,6 @@ export function useChainSearch({
   ]);
   const stale = !!job && job.context !== context;
   const errors = chainErrors(m, effective);
-  if ((query.first.manager || query.second.manager) && !journal.ready)
-    errors.push("Saved manager profiles are still loading.");
 
   // Re-showing an Activity is harmless; only a real context change clears local detail state.
   const previousContext = useRef(context);
@@ -531,7 +534,7 @@ export function useChainSearch({
     setDependencyRoute(defaultChainDependency.route);
     setAcquiredShare(String(defaultChainDependency.minimumAcquiredShare * 100));
     setInteractionGain(String(defaultChainDependency.minimumInteractionGain));
-    setRecipientGain(String(defaultChainRecipient.minimumGain));
+    setRecipientGain("1");
     presetQuery.current = "pending";
     setPreset("balanced");
     setDiscovery({ sequences: "connected", ranking: "own" });
@@ -665,6 +668,7 @@ export function useChainSearch({
   const chains = job?.result ? orderChainsByPrice(job.result.chains) : [];
 
   return {
+    recipientGain, setRecipientGain, migrationNote,
     team,
     setTeam,
     pool,
@@ -719,3 +723,5 @@ export function useChainSearch({
 }
 
 export type ChainSearchState = ReturnType<typeof useChainSearch>;
+
+

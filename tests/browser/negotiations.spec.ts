@@ -160,17 +160,16 @@ test("keeps direct/search toggles independent and freezes an explicitly logged f
   await seed(page);
   await openLegacyTrades(page);
   await openTradeDetails(page);
-  await openTradeFilters(page);
-  // Each optional assessment is reached through its own mode and filter drawer.
-  const searchToggle = page.getByRole("checkbox", { name: "Enable Surface Trading", exact: true });
-  await expect(searchToggle).not.toBeChecked();
+  // Surface Trading is no longer a search option; only the Manual analyzer's own assessment keeps it, and it starts off.
+  await expect(page.getByRole("checkbox", { name: "Enable Surface Trading", exact: true }).filter({ visible: true })).toHaveCount(0);
   await page.getByRole("tab", { name: "Manual analyzer" }).or(page.getByRole("button", { name: "Manual analyzer", exact: true })).click();
   await openTradeFilters(page, "Manual");
   const directToggle = page.getByRole("checkbox", { name: "Enable Surface Trading", exact: true });
   await expect(directToggle).not.toBeChecked();
   await directToggle.check();
-  await page.getByRole("tab", { name: "Find trades" }).or(page.getByRole("button", { name: "Find matching trades", exact: true })).click();
-  await expect(searchToggle).not.toBeChecked();
+  await page.getByRole("tab", { name: "Find trades" }).click();
+  // Turning it on in the Manual analyzer reaches no search control.
+  await expect(page.getByRole("checkbox", { name: "Enable Surface Trading", exact: true }).filter({ visible: true })).toHaveCount(0);
   await page.getByRole("tab", { name: "Manual analyzer" }).or(page.getByRole("button", { name: "Manual analyzer", exact: true })).click();
   // Switching tools remounts the manual panel with its assessment disclosure closed.
   await openTradeFilters(page, "Manual");

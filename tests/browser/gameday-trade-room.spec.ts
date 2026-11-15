@@ -1,6 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
 import { seedLabelWhy } from "./label-why-seed";
-import { openTradeFilters } from "./trade-workspace-helpers";
 
 // Open the Trade room.
 async function open(page: Page) {
@@ -152,22 +151,14 @@ test("manual analyzer has no white fills in dark", async ({ page }) => {
   expect(white).toEqual([]);
 });
 
-// The Search limits group of Find trades: its summary line and edited marker.
-const limitsGroup = (page: Page) =>
-  page.locator(".gd-find details.gd-fg").filter({
-    has: page.locator(".gd-fg-title", { hasText: /^Search limits$/ }),
-  });
+// The Chain planner's Search limits: Off is the default index window, edits are marked and persist, and Reset restores them.
+const chainLimits = (page: Page) => page.locator(".gd-chain details.gd-limits");
 
-// The shared Search limits are one editable section for Find trades and chains, with Off as the default index window.
-test("shared search limits: Off by default, edited markers, persistence and reset", async ({
-  page,
-}) => {
+test("search limits: Off by default, edited markers, persistence and reset", async ({ page }) => {
   await open(page);
-  await page.getByRole("tab", { name: "Find trades" }).click();
-  const group = limitsGroup(page);
+  await page.getByRole("tab", { name: "Chain planner" }).click();
+  const group = chainLimits(page);
   const head = group.locator("> summary");
-  // Folded, the header summarises the limits in one line.
-  await expect(head.locator(".gd-fs")).toContainText("Defaults");
   await expect(head.locator(".gd-edot")).toHaveCount(0);
   await head.click();
   const window = group.getByRole("slider", { name: "Index window" });
@@ -176,95 +167,43 @@ test("shared search limits: Off by default, edited markers, persistence and rese
   await window.fill("10");
   await expect(group.locator(".gd-limit").filter({ hasText: "Index window" })).toContainText("±10");
   await expect(head.locator(".gd-edot")).toBeVisible();
-  // Fold it again: the one-line summary shows the edited value and the marker stays visible.
-  await head.click();
-  await expect(head.locator(".gd-fs")).toContainText("±10");
-  await expect(head.locator(".gd-edot")).toBeVisible();
   await page.reload();
-  await expect(limitsGroup(page).locator("> summary .gd-fs")).toContainText("±10");
-  await limitsGroup(page).locator("> summary").click();
+  await page.getByRole("tab", { name: "Chain planner" }).click();
+  await expect(chainLimits(page).locator("> summary .gd-edot")).toBeVisible();
+  await chainLimits(page).locator("> summary").click();
+  await expect(chainLimits(page).getByRole("slider", { name: "Index window" })).toHaveValue("10");
   await page.getByRole("button", { name: "Reset to defaults" }).click();
-  await expect(
-    limitsGroup(page).getByRole("slider", { name: "Index window" }),
-  ).toHaveValue("0");
-  await expect(limitsGroup(page).locator("> summary .gd-edot")).toHaveCount(0);
+  await expect(chainLimits(page).getByRole("slider", { name: "Index window" })).toHaveValue("0");
+  await expect(chainLimits(page).locator("> summary .gd-edot")).toHaveCount(0);
 });
 
-// With shared limits there is no strictness setting and no strict-index checkbox; the chain presets number ten.
-test("no strictness setting or strict-index checkbox, and ten chain presets", async ({
-  page,
-}) => {
+// There is no strictness setting and no strict-index checkbox, and the chain presets are gone.
+test("no strictness setting, strict-index checkbox or chain presets", async ({ page }) => {
   await open(page);
   await page.getByRole("tab", { name: "Find trades" }).click();
-  await openTradeFilters(page, "Standard");
   await expect(page.getByLabel("Use strict index range")).toHaveCount(0);
   await page.getByRole("tab", { name: "Chain planner" }).click();
   await expect(page.getByLabel(/strictness/i)).toHaveCount(0);
-  const presets = page.getByRole("radiogroup", { name: "Chain preset" });
-  const labels = await presets.locator(".gd-pre-name").allTextContents();
-  for (const label of [
-    "Balanced opportunities",
-    "Surface-stat trading",
-    "Fix my weakest position",
-    "Buy low, then flip",
-  ])
-    expect(labels).toContain(label);
-  expect(labels).not.toContain("Surface-stat opportunities");
-  // Presets describe the kind of chain; they never touch the limits.
-  const limits = page.locator(".gd-chain details.gd-limits");
-  const before = await limits.locator("> summary").innerText();
-  await presets.getByRole("radio", { name: /Buy low, then flip/ }).click();
-  expect(await limits.locator("> summary").innerText()).toBe(before);
+  await expect(page.getByRole("radiogroup", { name: "Chain preset" })).toHaveCount(0);
 });
 
-// Presets are cards with descriptions; choosing one never changes the shared limits.
-test("chain presets show as ten described cards and leave the limits alone", async ({
-  page,
-}) => {
-  await open(page);
-  await page.getByRole("tab", { name: "Chain planner" }).click();
-  const cards = page
-    .getByRole("radiogroup", { name: "Chain preset" })
-    .getByRole("radio");
-  await expect(cards).toHaveCount(10);
-  await expect(cards.filter({ hasText: "Surface-stat trading" })).toBeVisible();
-  const limits = page.locator(".gd-chain details.gd-limits");
-  const before = await limits.locator("> summary").innerText();
-  const weakest = cards.filter({ hasText: "Fix my weakest position" });
-  await weakest.click();
-  await expect(weakest).toHaveAttribute("aria-checked", "true");
-  expect(await limits.locator("> summary").innerText()).toBe(before);
-});
-
-// A grade goal reads in plain language beneath its controls.
-test("a positional grade goal shows a plain-language line", async ({
-  page,
-}) => {
+// A grade goal reads in plain language beneath its controls (the Grades filter of Find trades).
+test("a positional grade goal shows a plain-language line", async ({ page }) => {
   await open(page);
   await page.getByRole("tab", { name: "Find trades" }).click();
-  await openTradeFilters(page, "Standard");
-  await page.locator(".gd-find .gd-goals").getByRole("button", { name: "+ Add goal" }).click();
+  await page.getByRole("button", { name: "Search all trades" }).click();
+  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+  await page.locator("details", { has: page.locator("summary", { hasText: /^Grades/ }) }).locator("> summary").click();
+  await page.locator(".gd-goals").getByRole("button", { name: "+ Add goal" }).click();
   const line = page.locator(".gd-goal-line").first();
   await expect(line).toBeVisible();
   await expect(line).toContainText(/^Your .+/);
 });
 
-// Filter groups left open stay open, saved trades open from the header, and the journal keeps working in the new look.
-test("open filter groups are remembered; saved trades and journal are reachable", async ({
-  page,
-}) => {
+// Saved trades open from the header, and the journal keeps working in the new look.
+test("saved trades and journal are reachable from Find trades", async ({ page }) => {
   await open(page);
   await page.getByRole("tab", { name: "Find trades" }).click();
-  // Opening every group records each as open.
-  await openTradeFilters(page, "Standard");
-  const group = () =>
-    page.locator(".gd-find details.gd-fg").filter({
-      has: page.locator(".gd-fg-title", { hasText: /^Players & packages$/ }),
-    });
-  await expect(group()).toHaveAttribute("open", "");
-  await page.reload();
-  // After a reload the group is open again by itself.
-  await expect(group()).toHaveAttribute("open", "");
   await page
     .locator(".gd-trade-head")
     .getByRole("button", { name: "Saved trades" })

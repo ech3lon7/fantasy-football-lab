@@ -1,25 +1,22 @@
+import { useState } from "react";
 import type { Model } from "../../../domain/valuation";
-import type { Draft } from "../../../domain/contracts";
+import { str, type Draft } from "../../../domain/contracts";
 import type { SearchLimits } from "../../../domain/search-limits";
 import type { LineupBasis } from "../../../domain/trade-impact";
 import type { TradeSearchQuery } from "../../../domain/trade-search";
 import type { SavedTradeSummary } from "../../../domain/saved-trades";
-import { Diagnostics } from "./Diagnostics";
-import { FindControls } from "./FindControls";
-import { FindResults } from "./FindResults";
-import { GradeGoals } from "./GradeGoals";
+import { PlayerPick } from "./controls";
+import { BroadFilters } from "./BroadFilters";
+import { BroadResults } from "./BroadResults";
 import { useTradeSearch } from "./useTradeSearch";
 
-// Find trades: the controls panel on the left; the positional grade goals, the summary and the results on the right.
+// Search all eligible trades once; the separate panel changes only the retained results.
 export function FindTrades({
   model,
   draft,
   lineupsRaw,
   change,
   save,
-  limits,
-  updateLimits,
-  resetLimits,
   basis,
   onBasisChange,
   settingsRaw,
@@ -47,6 +44,7 @@ export function FindTrades({
   restore?: { id: string; query: TradeSearchQuery };
   onAnalyze: () => void;
 }) {
+  const [open, setOpen] = useState(false);
   const s = useTradeSearch({
     m: model,
     draft,
@@ -59,54 +57,136 @@ export function FindTrades({
     settingsRaw,
     saveSettings,
   });
+  const mine = model.players.filter((p) => p.owner === draft.teamA);
+  const teams = model.dataset.tables.ModelTeams.filter(
+    (t) => str(t.TeamID) !== "0",
+  );
+  const f = s.broad.filters;
+  const active =
+    Number(f.yourGain.minimum !== null || f.yourGain.maximum !== null) +
+    1 +
+    Number(f.ownWeek.minimum !== null || f.ownWeek.maximum !== null) +
+    Number(f.otherWeek.minimum !== null || f.otherWeek.maximum !== null) +
+    Number(f.receiveStarts) +
+    Number(f.giveStarts) +
+    Number(!!f.gradeGoals.length) +
+    Number(!!f.mustGet.length) +
+    Number(!!f.mustGive.length) +
+    Number(!!f.exclude.length) +
+    Number(!!f.getPositions.length) +
+    Number(!!f.givePositions.length) +
+    Number(!!f.labels.length) +
+    Number(f.teams !== null) +
+    Number(!!f.teamGrade) +
+    Number(f.giveSize.minimum !== 1 || f.giveSize.maximum !== 3) +
+    Number(f.getSize.minimum !== 1 || f.getSize.maximum !== 3);
+  const selected = s.broad.protectedIds;
   return (
-    <div className="gd-find">
-      <aside className="gd-fac" aria-label="Search controls">
-        <FindControls
-          m={model}
-          draft={draft}
-          change={change}
-          s={s}
-          limits={limits}
-          updateLimits={updateLimits}
-          resetLimits={resetLimits}
-        />
-        <Diagnostics m={model} draft={draft} lineupsRaw={lineupsRaw} s={s} />
-      </aside>
-      <div className="gd-main">
-        <GradeGoals
-          m={model}
-          draft={draft}
-          rules={s.gradeImpacts}
-          onChange={s.setGradeImpacts}
-        >
-          {s.bounds.errors.map((message) => (
-            <p key={message} className="gd-quiet" role="alert">
-              {message}
-            </p>
+    <div className="gd-find gd-broad-search">
+      <section className="gd-card gd-broad-top" aria-label="Search all trades">
+        <label>
+          Team{" "}
+          <select
+            value={draft.teamA}
+            onChange={(e) =>
+              change({
+                ...draft,
+                teamA: e.target.value,
+                teamB: "",
+                give: [],
+                get: [],
+              })
+            }
+          >
+            {teams.map((team) => (
+              <option key={str(team.TeamID)} value={str(team.TeamID)}>
+                {str(team.TeamName)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div>
+          <b>Never trade</b>{" "}
+          {selected.map((id) => (
+            <button
+              key={id}
+              className="gd-cbtn"
+              type="button"
+              onClick={() =>
+                s.updateBroad({
+                  protectedIds: selected.filter((x) => x !== id),
+                })
+              }
+            >
+              {model.byId.get(id)?.name ?? id} ×
+            </button>
           ))}
-          <div className="gd-chips">
-            {s.running ? (
-              <button type="button" className="gd-primary" onClick={s.cancel}>
-                Cancel
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="gd-primary"
-                disabled={s.bounds.errors.length > 0}
-                onClick={s.search}
-              >
-                Search trades across the league
-              </button>
-            )}
-            <button type="button" className="gd-cbtn" onClick={s.clearFilters}>
-              Clear filters
+          <details>
+            <summary>+ Add</summary>
+            <PlayerPick
+              label="Never trade"
+              players={mine}
+              selected={selected}
+              max={mine.length}
+              onToggle={(id) =>
+                s.updateBroad({
+                  protectedIds: selected.includes(id)
+                    ? selected.filter((x) => x !== id)
+                    : [...selected, id],
+                })
+              }
+            />
+          </details>
+        </div>
+        {s.running ? (
+          <button className="gd-primary" type="button" onClick={s.cancel}>
+            Cancel
+          </button>
+        ) : (
+          <button
+            className="gd-primary"
+            type="button"
+            disabled={!draft.teamA}
+            onClick={() => s.search(selected)}
+          >
+            Search all trades
+          </button>
+        )}
+      </section>
+      {s.migrationNote && (
+        <p className="gd-quiet">Saved search: ignored {s.migrationNote}.</p>
+      )}
+      {s.job && (
+        <div className="gd-broad-layout">
+          <button
+            className="gd-cbtn gd-broad-filter-toggle"
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            Filters · {active}
+          </button>
+          <div className="gd-broad-filter-panel" data-open={open}>
+            <BroadFilters m={model} draft={draft} s={s} />
+            <button
+              className="gd-cbtn gd-broad-filter-toggle"
+              type="button"
+              onClick={() => setOpen(false)}
+            >
+              Done
             </button>
           </div>
-        </GradeGoals>
-        <FindResults m={model} s={s} canSave={!!save} onAnalyze={onAnalyze} />
-      </div>
+          <BroadResults
+            m={model}
+            s={s}
+            canSave={!!save}
+            onAnalyze={onAnalyze}
+          />
+        </div>
+      )}
+      {!s.job && (
+        <p>Press Search all trades to check every legal trade for your team</p>
+      )}
     </div>
   );
 }

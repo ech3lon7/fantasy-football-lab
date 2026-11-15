@@ -92,7 +92,7 @@ export function GradeGoals({
             >
               {positionList.map((p) => (
                 <option key={p} value={p}>
-                  {p}
+                  {p === "AFFECTED" ? "All affected positions" : p}
                 </option>
               ))}
               <option value="OVERALL">Overall (net steps)</option>

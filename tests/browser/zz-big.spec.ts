@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { initialState, type Dataset, type Workspace } from "../../src/domain/contracts";
-import { openTradeFilters, buildManualOffer } from "./trade-workspace-helpers";
+import { buildManualOffer } from "./trade-workspace-helpers";
 
 async function seed(page: Page, filters: Record<string, string>) {
   const dataset: Dataset = JSON.parse(
@@ -34,12 +34,11 @@ test("big find", async ({ page }) => {
   await page.waitForTimeout(500);
   // Store review captures in the test artifact directory instead of modifying tracked files.
   await page.screenshot({ path: test.info().outputPath("find-collapsed.png") });
-  await openTradeFilters(page);
   await page.waitForTimeout(400);
   await page.screenshot({ path: test.info().outputPath("find-open.png"), fullPage: true });
-  await page.getByRole("button", { name: "Search trades across the league" }).click();
+  await page.getByRole("button", { name: "Search all trades" }).click();
   await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
-  await expect(page.locator(".gd-find .gd-applied")).toContainText(/trades? meet every goal/, { timeout: 30000 });
+  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
   await page.screenshot({ path: test.info().outputPath("find-results.png"), fullPage: true });
   await page.goto("./#/roster");
   await page.waitForTimeout(500);

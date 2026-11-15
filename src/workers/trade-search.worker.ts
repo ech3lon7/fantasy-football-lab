@@ -6,6 +6,12 @@ import { gradeImpactFailures } from "../domain/chain-position-impact";
 import { findTradeRecoveries } from "../domain/trade-guidance";
 import { evaluate, type Model } from "../domain/valuation";
 import { applyRosterScenario } from "../domain/roster-scenarios";
+import { runUsefulTradeSearch } from "../domain/useful-trade-adapter";
+import type { UsefulCoverage } from "../domain/useful-move-search";
+import { partition, poolSize, runPooled } from "./trade-search-pool";
+import { readLineupBasis } from "../domain/trade-impact";
+import { defaultTradeFilters, type TradeFilters } from "../domain/trade-filters";
+import { tradeFilterView } from "../domain/trade-filter-view";
 import {
   scoreTradeMatch,
   matchesWeekly,
@@ -15,6 +21,7 @@ import {
   type SearchResponse,
   type SearchRow,
   type SearchStats,
+  type SearchFilterSort,
 } from "../domain/trade-search";
 import {
   compareDiscoveryRows,
@@ -35,19 +42,64 @@ let retained:
       model: Model;
       query: TradeSearchQuery;
       lineupsRaw?: string;
+      filteredRows?: SearchRow[];
+      filters?: TradeFilters;
+      sort?: SearchFilterSort;
+      showHidden?: boolean;
+      limit?: number;
+      useful?: boolean;
     }
   | undefined;
 const send = (message: SearchResponse) => self.postMessage(message);
-self.onmessage = (event: MessageEvent<SearchRequest>) => {
+self.onmessage = async (event: MessageEvent<SearchRequest>) => {
   const request = event.data;
   const { id, context } = request;
   try {
+    // Filter and sort the captured evidence only; stale worker messages are ignored.
+    if (request.type === "filter" || request.type === "sort") {
+      if (!retained || retained.id !== id || retained.context !== context) return;
+      if (request.type === "filter") {
+        retained.filters = request.filters;
+        retained.showHidden = request.showHidden;
+        retained.limit = Math.max(1, request.limit ?? 50);
+      }
+      retained.sort = request.sort;
+      const all = retained.rows.flatMap((row) => [row, ...(row.variants ?? [])]);
+      const byKey = new Map(all.map((row) => [row.key, row]));
+      const groupByKey = new Map(retained.rows.flatMap((core) => [core, ...(core.variants ?? [])].map((row) => [row.key, core.key] as const)));
+      const evidence = all.flatMap((row) => row.filterEvidence ? [row.filterEvidence] : []);
+      const result = tradeFilterView(evidence, retained.filters ?? defaultTradeFilters(), retained.sort, !!retained.showHidden);
+      // Group distinct packages by core swap, while retaining equal-gain throw-ins as variants.
+      const grouped = new Map<string, SearchRow>(), parents = new Map<string, SearchRow>();
+      for (const item of result.visible) {
+        const row = byKey.get(item.key);
+        if (!row) continue;
+        const parent = groupByKey.get(item.key) ?? item.key, group = row.coreSwap ?? parent;
+        const existingParent = parents.get(parent);
+        if (existingParent) { existingParent.variants!.push({ ...row, variants: [], related: [] }); continue; }
+        const next = { ...row, variants: [], related: [] }, existingGroup = grouped.get(group);
+        parents.set(parent, next);
+        if (existingGroup) existingGroup.related!.push(next);
+        else grouped.set(group, next);
+      }
+      retained.filteredRows = [...grouped.values()];
+      const hidden = result.hidden.flatMap(({ row, reasons }) => {
+        const original = byKey.get(row.key);
+        return original ? [{ row: original, reasons }] : [];
+      });
+      send({ id, context, type: "filtered", ...browseTradeResults(retained.model, retained.filteredRows, undefined, []),
+        rows: retained.filteredRows.slice(0, retained.limit ?? 50), groupsTotal: retained.filteredRows.length,
+        total: result.total, visibleTotal: result.visible.length, counts: result.only, hidden, stats: retained.stats });
+      return;
+    }
     // Detail requests reuse the captured model/query and affect neither the completed ranking nor draft.
     if (request.type === "details") {
       if (!retained || retained.id !== id || retained.context !== context)
         return;
       try {
-        const row = [...retained.rows, ...retained.suggestions].find(
+        // Expanded variants share the same captured model and must remain inspectable by their own keys.
+        const rows = [...retained.rows, ...retained.suggestions];
+        const row = [...rows, ...rows.flatMap((candidate) => candidate.variants ?? [])].find(
           (candidate) => candidate.key === request.key,
         );
         if (!row)
@@ -63,6 +115,7 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
               retained.query,
               row,
               retained.lineupsRaw,
+              !retained.useful,
             ),
             incentive: opponentIncentive(
               retained.model,
@@ -97,11 +150,11 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
         token: request.token,
         ...browseTradeResults(
           retained.model,
-          retained.rows,
+          retained.filteredRows ?? retained.rows,
           request.options,
           retained.query.give,
         ),
-        total: retained.rows.length,
+        total: (retained.filteredRows ?? retained.rows).length,
         stats: retained.stats,
       });
       return;
@@ -116,6 +169,53 @@ self.onmessage = (event: MessageEvent<SearchRequest>) => {
       request.lineupsRaw,
     );
     const started = performance.now();
+    // Keep the existing path intact until the broad-search controls are enabled.
+    if (request.useful) {
+      const stats: SearchStats = { teams: 0, checked: 0, excluded: 0, thinTeams: 0, matched: 0, scored: 0 };
+      const own = request.query.teamA;
+      const basis = readLineupBasis(request.query.lineupBasis);
+      // Retain streamed one-for-ones so filters work before the larger packages finish.
+      let lastPartial = -Infinity;
+      const partial = (rows: SearchRow[], final = false) => {
+        // Batches arrive often; the screen only needs a fresh list a couple of times a second.
+        const now = performance.now();
+        if (!final && now - lastPartial < 400) return;
+        lastPartial = now;
+        retained = { id, context, rows, suggestions: [], stats, model, query: request.query, lineupsRaw: request.lineupsRaw, useful: true };
+        send({ id, context, type: "partial", ...browseTradeResults(model, rows, undefined, []), total: rows.length, stats });
+      };
+      const opponents = [...new Set(model.players.map((p) => p.owner))].filter((owner) => owner && owner !== "0" && owner !== own);
+      const size = poolSize(opponents.length, self.navigator?.hardwareConcurrency, typeof Worker !== "undefined");
+      let found: { rows: SearchRow[]; coverage: UsefulCoverage } | undefined;
+      // Opponents are searched in helper workers owned by this one; ending this worker ends them. No helpers means one thread.
+      if (size > 1)
+        try {
+          found = await runPooled(
+            { dataset: request.dataset, settings: request.settings, evidence: request.evidence, roleWeight: request.roleWeight,
+              scenario: request.scenario, lineupsRaw: request.lineupsRaw, teamA: own, basis: request.query.lineupBasis,
+              protectedIds: request.useful.protectedIds },
+            partition(opponents, size),
+            () => new Worker(new URL("./trade-search-part.worker.ts", import.meta.url), { type: "module" }),
+            partial,
+          );
+        } catch {
+          found = undefined;
+        }
+      if (!found) {
+        const result = await runUsefulTradeSearch(model, own, request.useful.protectedIds, basis, request.lineupsRaw,
+          (singles) => partial(singles.map((row) => row.searchRow)));
+        found = {
+          rows: result.rows.map(({ trade, variants }) => ({ ...trade.searchRow, variants: variants.map((v) => v.searchRow) })),
+          coverage: result.coverage,
+        };
+      }
+      const rows = found.rows;
+      Object.assign(stats, { teams: found.coverage.opponents, checked: found.coverage.singles,
+        scored: found.coverage.singles + found.coverage.extensions, matched: rows.length });
+      retained = { id, context, rows, suggestions: [], stats, model, query: request.query, lineupsRaw: request.lineupsRaw, useful: true };
+      send({ id, context, type: "complete", ...browseTradeResults(model, rows, undefined, []), total: rows.length, stats, coverage: found.coverage });
+      return;
+    }
     let lastProgress = 0,
       evaluationStarted = started;
     // Throttle expensive structured-clone messages while keeping phase changes immediately visible.

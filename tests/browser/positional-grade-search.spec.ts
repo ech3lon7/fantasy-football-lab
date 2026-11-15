@@ -93,32 +93,26 @@ async function seedWorkspace(
   // Navigate to Trade Analyzer and expand base trade filters
   await openLegacyTrades(page);
   await openTradeDetails(page);
-  await openTradeFilters(page);
   return dataset;
 }
 
 test.describe("Positional Grade Search E2E", () => {
-  // Test 1: Find Trades with Positional Grade Goals
+  // Test 1: Find Trades with positional grade goals, applied to the retained results without a new search.
   test("Find Trades renders and applies positional grade impact goals", async ({
     page,
   }) => {
     // Seed standard starter fixture where all standard positions are active
     await seedWorkspace(page, "starter");
     await expect(page.locator(".gd-find")).toBeVisible();
+    await page.getByRole("button", { name: "Search all trades", exact: true }).click();
+    await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+    const topRows = page.locator(".gd-res > .gd-res-group > .gd-res-row");
+    await expect(topRows.first()).toBeVisible();
+    const before = Number((await page.getByText(/^[\d,]+ of [\d,]+ trades$/).innerText()).match(/\d+/)![0]);
 
-    // The Team needs group previews every starting position's grade.
-    const teamNeedsGroup = page.locator(".gd-find details.gd-fg").filter({
-      has: page.locator(".gd-fg-title", { hasText: /^Team needs$/ }),
-    });
-    await expect(teamNeedsGroup).toHaveAttribute("open", "");
-    const tiles = teamNeedsGroup.locator(".gd-gradepill");
-    await expect(tiles).toHaveCount(7);
-    for (const pos of ["QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"])
-      // Each tile starts with its position name.
-      await expect(tiles.filter({ hasText: pos })).not.toHaveCount(0);
-
-    // The goals card starts empty.
-    const goals = page.locator(".gd-find .gd-goals");
+    // The Grades filter starts with no goals.
+    await page.locator("details", { has: page.locator("summary", { hasText: /^Grades/ }) }).locator("> summary").click();
+    const goals = page.locator(".gd-broad-filter-panel .gd-goals");
     await expect(goals).toContainText("No positional grade goals configured.");
     await goals.getByRole("button", { name: "+ Add goal", exact: true }).click();
 
@@ -132,20 +126,17 @@ test.describe("Positional Grade Search E2E", () => {
     await steps.selectOption("1");
     await expect(goals.locator(".gd-goal-line")).toContainText(/^Your WR/);
 
-    // The goal is part of the next search.
-    const run = page.getByRole("button", {
-      name: "Search trades across the league",
-      exact: true,
-    });
-    await expect(run).toBeEnabled();
-    await run.click();
-    const row = page.locator(".gd-res-row").first();
-    await expect(row).toBeVisible({ timeout: 20000 });
-
-    // The candidate row shows the WR upgrade as a grade-step chip.
-    const chip = row.locator('.gd-chipg[data-tone="positive"]').filter({ hasText: "WR" }).first();
-    await expect(chip).toBeVisible();
-    await expect(chip).toContainText("→");
+    // The list narrows at once: no new search ran, and every row left shows the WR upgrade as a grade-step chip.
+    await expect(page.getByText(/one-for-ones checked/)).toHaveCount(1);
+    await expect.poll(async () => Number((await page.getByText(/^[\d,]+ of [\d,]+ trades$/).innerText()).match(/\d+/)![0])).toBeLessThanOrEqual(before);
+    await expect(topRows.first()).toBeVisible();
+    const rows = await topRows.count();
+    for (let i = 0; i < rows; i++) {
+      const chip = topRows.nth(i).locator('.gd-chipg[data-tone="positive"]').filter({ hasText: "WR" }).first();
+      await expect(chip).toBeVisible();
+      await expect(chip).toContainText("→");
+    }
+    await expect(page.locator('.gd-hides[data-filter="gradeGoals"]')).toBeVisible();
 
     await captureScreenshot(page, "find-trades-grade-goals.png");
   });

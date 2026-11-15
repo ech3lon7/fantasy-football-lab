@@ -75,13 +75,7 @@ async function seed(page: Page, missing = false) {
   await page.reload();
   await openLegacyTrades(page);
   await openTradeDetails(page);
-  await openTradeFilters(page);
-  const panel = page.locator(".gd-find");
-  // Filter categories are already expanded by openTradeFilters.
-  await panel
-    .getByRole("checkbox", { name: "Create package", exact: true })
-    .uncheck();
-  return panel;
+  return page.locator(".gd-find");
 }
 
 // Read persistence only after the normal save queue commits, keeping the source and roster checkpoint separate from search criteria.
@@ -110,29 +104,14 @@ test("retires legacy surface restrictions from preferences and saved trades", as
 }) => {
   const panel = await seed(page);
   const original = await stored(page);
-  const toggle = panel.getByRole("checkbox", {
-    name: "Enable Surface Trading",
-    exact: true,
-  });
-  await expect(toggle).not.toBeChecked();
-  await expect(
-    panel.getByRole("combobox", { name: "Search goal", exact: true }),
-  ).toHaveValue("custom");
-  await expect(
-    panel.getByRole("checkbox", {
-      name: "Find trades with surface appeal",
-      exact: true,
-    }),
-  ).toHaveCount(0);
-  await expect(
-    panel.getByRole("spinbutton", {
-      name: "Minimum apparent lineup gain",
-      exact: true,
-    }),
-  ).toHaveCount(0);
-  await panel.getByRole("button", { name: "Search trades across the league", exact: true }).click();
-  await expect(panel.getByText(/1 trade meets every goal/)).toBeVisible();
-  const row = panel.locator(".gd-res-row");
+  // The old saved query still loads: its retired settings are listed in one line and are not search controls any more.
+  await expect(panel.getByText(/^Saved search: ignored/)).toContainText(/surface trading/);
+  for (const retired of ["Enable Surface Trading", "Search goal", "Find trades with surface appeal", "Minimum apparent lineup gain"])
+    await expect(panel.getByText(retired, { exact: false }).filter({ visible: true })).toHaveCount(0);
+  await panel.getByRole("button", { name: "Search all trades", exact: true }).click();
+  // The old minimum of 9999 cannot hide anything.
+  await expect(panel.getByText(/^[\d,]+ of [\d,]+ trades$/)).toBeVisible({ timeout: 60000 });
+  const row = panel.locator(".gd-res > .gd-res-group > .gd-res-row").first();
   await row.getByRole("button", { name: /^Save trade/ }).click();
   await expect
     .poll(
@@ -169,7 +148,6 @@ test("retires legacy surface restrictions from preferences and saved trades", as
   await page.reload();
   await openLegacyTrades(page);
   await openTradeDetails(page);
-  await openTradeFilters(page);
   const card = page
     .locator("details:not(.trade-saved-drawer):not(.trade-full-analysis)")
     .filter({
@@ -181,9 +159,8 @@ test("retires legacy surface restrictions from preferences and saved trades", as
   await card
     .getByRole("button", { name: "Load saved trade", exact: true })
     .click();
-  await expect(toggle).not.toBeChecked();
-  await panel.getByRole("button", { name: "Search trades across the league", exact: true }).click();
-  await expect(panel.getByText(/1 trade meets every goal/)).toBeVisible();
+  await panel.getByRole("button", { name: "Search all trades", exact: true }).click();
+  await expect(panel.getByText(/^[\d,]+ of [\d,]+ trades$/)).toBeVisible({ timeout: 60000 });
   workspace = await stored(page);
   expect(workspace.dataset).toEqual(original.dataset);
   expect(
@@ -195,55 +172,24 @@ test("retires legacy surface restrictions from preferences and saved trades", as
   ).toBeLessThanOrEqual(391);
 });
 
-// The redesigned evaluator is the sole opt-in; unavailable weekly projections cannot reactivate retired source-gain gates.
-test("uses one optional Surface Trading control per tool and per chain stage", async ({
+// Surface Trading is no longer a search option: only the Manual analyzer keeps its one optional control, and it starts off.
+test("only the Manual analyzer has a Surface Trading control; Find trades and the Chain planner have none", async ({
   page,
 }) => {
   const panel = await seed(page, true);
-  const toggle = panel.getByRole("checkbox", {
-    name: "Enable Surface Trading",
-    exact: true,
-  });
-  await toggle.check();
-  await expect(
-    panel.getByRole("combobox", { name: "Recipient preset", exact: true }),
-  ).toBeVisible();
-  // The manual opt-in remains off behind its own independent filter drawer.
-  await page.getByRole("tab", { name: "Manual analyzer" }).or(page.getByRole("button", { name: "Manual analyzer", exact: true })).click();
-  await openTradeFilters(page, "Manual");
-  await expect(page.getByRole("checkbox", { name: "Enable Surface Trading", exact: true })).not.toBeChecked();
-  await page.getByRole("tab", { name: "Find trades" }).or(page.getByRole("button", { name: "Find matching trades", exact: true })).click();
-  await expect
-    .poll(
-      async () =>
-        JSON.parse((await stored(page)).state.filters.tradeSearchSettings)
-          .standard.query.manager?.version,
-    )
-    .toBe(1);
-  await toggle.uncheck();
-  await panel.getByRole("button", { name: "Search trades across the league", exact: true }).click();
-  await expect(panel.getByText(/1 trade meets every goal/)).toBeVisible();
-  await page
-    .getByRole("tab", { name: "Chain planner" })
-    .or(page.getByRole("button", { name: "Two-trade chain planner", exact: true }))
-    .click();
+  const control = page.getByRole("checkbox", { name: /Surface Trading/ }).filter({ visible: true });
+  await panel.getByRole("button", { name: "Search all trades", exact: true }).click();
+  await expect(panel.getByText(/^[\d,]+ of [\d,]+ trades$/)).toBeVisible({ timeout: 60000 });
+  await expect(control).toHaveCount(0);
+  await page.getByRole("tab", { name: "Chain planner" }).click();
   await openTradeFilters(page, "Chain");
-  await expect(
-    page.getByRole("checkbox", {
-      name: "First trade: Enable Surface Trading",
-      exact: true,
-    }),
-  ).not.toBeChecked();
-  // Each trade's settings show one at a time; switch to the second before looking for its control.
+  await expect(control).toHaveCount(0);
   await page.getByRole("button", { name: "Trade 2 settings" }).click();
   await openTradeFilters(page, "Chain");
-  await expect(
-    page.getByRole("checkbox", {
-      name: "Second trade: Enable Surface Trading",
-      exact: true,
-    }),
-  ).not.toBeChecked();
-  await expect(
-    page.getByRole("checkbox", { name: /surface appeal/i }),
-  ).toHaveCount(0);
+  await expect(control).toHaveCount(0);
+  await expect(page.getByRole("checkbox", { name: /surface appeal/i })).toHaveCount(0);
+  // The Manual analyzer's one control is present and starts off.
+  await page.getByRole("tab", { name: "Manual analyzer" }).click();
+  await openTradeFilters(page, "Manual");
+  await expect(page.getByRole("checkbox", { name: "Enable Surface Trading", exact: true })).not.toBeChecked();
 });

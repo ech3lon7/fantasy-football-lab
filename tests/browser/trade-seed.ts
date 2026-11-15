@@ -12,14 +12,16 @@ import {
 // "tiers" is the two-team league with free agents in every player-card tier.
 export async function seedTradeLeague(
   page: Page,
-  which: "search" | "chain" | "tiers",
+  which: "search" | "chain" | "tiers" | "big",
   draft: Draft,
   filters: Record<string, string> = {},
 ) {
   const [file, fn] =
     which === "search"
       ? ["./tests/fixtures.ts", "tradeSearchFixture"]
-      : which === "tiers"
+      : which === "big"
+        ? ["./tests/big-league-fixture.ts", "bigLeagueFixture"]
+        : which === "tiers"
         ? ["./tests/tier-fixture.ts", "tierFixture"]
         : ["./tests/chain-fixture.ts", "fairChainFixture"];
   const dataset: Dataset = JSON.parse(

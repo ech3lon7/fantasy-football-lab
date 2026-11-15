@@ -1,5 +1,5 @@
 import { openRosterTools } from "./roster-workspace-helpers";
-import { openTradeFilters, openTradeDetails, openSavedTrades, openManualPlayers } from "./trade-workspace-helpers";
+import { openTradeDetails, openSavedTrades, openManualPlayers } from "./trade-workspace-helpers";
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import {
@@ -7,18 +7,6 @@ import {
   type Dataset,
   type Workspace,
 } from "../../src/domain/contracts";
-
-// Roster-sensitive score checks must explicitly open the collapsed result teams, just as a user does after searching.
-async function openSearchTeams(search: Locator) {
-  await expect(
-    search.getByRole("button", { name: "Cancel", exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    search.getByRole("button", { name: "Loading results…", exact: true }),
-  ).toHaveCount(0);
-  // The rebuilt results list rows directly; there are no collapsed team groups to open.
-  await expect(search.locator(".gd-res-row").first()).toBeVisible();
-}
 
 // Exercise the built app and real workers using synthetic league data and the normal IndexedDB workspace.
 async function seed(page: Page, flexBye = false, temporary = false) {
@@ -111,14 +99,48 @@ const receivable = (page: Page, name: string) =>
     .locator('.gd-picker[aria-label="Players you receive"]')
     .getByRole("button", { name: new RegExp(name) });
 
-// Open Find trades with every filter group expanded; the package chosen in the Manual analyzer is kept.
+// Open Find trades; the broad search considers the whole roster, so there is nothing to set before searching.
 async function openFind(page: Page) {
   await page.goto("./#/trade");
   await page.getByRole("tab", { name: "Manual analyzer", exact: true }).click();
   await openManualPlayers(page);
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-  await openTradeFilters(page);
 }
+
+// Run the broad search, then narrow the retained results (instantly, with no new search) to what the test inspects:
+// the default gain floors are lifted so every evaluated trade can be seen, and the named players can be required.
+async function broadSearch(
+  page: Page,
+  search: Locator,
+  focus: { give?: string; get?: string; single?: boolean } = {},
+) {
+  await search.getByRole("button", { name: "Search all trades" }).click();
+  await expect(search.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+  const panel = page.locator(".gd-broad-filter-panel");
+  await expect(panel).toBeVisible();
+  await panel.getByRole("spinbutton", { name: "Your EPPG gain minimum" }).fill("");
+  await panel.getByRole("spinbutton", { name: "Their EPPG gain minimum" }).fill("-2");
+  const open = async (title: RegExp) => {
+    const group = panel.locator("details", { has: page.locator("summary", { hasText: title }) });
+    if ((await group.getAttribute("open")) === null) await group.locator("> summary").click();
+    return group;
+  };
+  if (focus.give || focus.get) {
+    const players = await open(/^Players$/);
+    if (focus.give)
+      await players.getByRole("group", { name: /I give must include/ }).getByRole("button", { name: new RegExp(focus.give) }).first().click();
+    if (focus.get)
+      await players.getByRole("group", { name: /I get must include/ }).getByRole("button", { name: new RegExp(focus.get) }).first().click();
+  }
+  if (focus.single) {
+    const size = await open(/^Size$/);
+    await size.getByRole("combobox", { name: "Give maximum" }).selectOption("1");
+    await size.getByRole("combobox", { name: "Get maximum" }).selectOption("1");
+  }
+}
+// The first listed trade among the top-level rows whose players include the named link.
+const rowWith = (search: Locator, page: Page, name: string) =>
+  search.locator(".gd-res > .gd-res-group > .gd-res-row").filter({ has: page.getByRole("link", { name, exact: true }) }).first();
 
 // Wait on durable account state rather than using fixed sleeps before a reload or navigation.
 async function stored(page: Page) {
@@ -442,24 +464,10 @@ test("saved hypothetical trades restore their own recipe and debug exports conta
     "true",
   );
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-  await openTradeFilters(page);
   const search = page.locator(".gd-find");
-  await search
-    .getByLabel("Search goal", { exact: true })
-    .selectOption("custom");
-  // This case verifies saved-scenario diagnostics independently of the new optional opponent safeguard.
-  await search
-    .getByLabel("Protect their weak positions", {
-      exact: true,
-    })
-    .uncheck();
-  // The index window defaults to Off, so no price range needs widening.
-  await search
-    .getByRole("button", { name: "Search trades across the league" })
-    .click();
-  await expect(
-    search.getByRole("button", { name: "Cancel", exact: true }),
-  ).toHaveCount(0);
+  await search.getByRole("button", { name: "Search all trades" }).click();
+  await expect(search.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+  await expect(search.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
   // The debug export lives in the Diagnostics disclosure, closed by default.
   await search.locator("details.gd-diag > summary").click();
   const downloading = page.waitForEvent("download");
@@ -475,15 +483,7 @@ test("saved hypothetical trades restore their own recipe and debug exports conta
   expect(contents).not.toMatch(
     /access_token|refresh_token|ModelHistory|localStorage|workspace.owner/,
   );
-  // Candidate diagnostics sit in the same Diagnostics disclosure, already open.
-  await search
-    .getByRole("button", { name: "Why wasn’t this trade found?", exact: true })
-    .click();
-  await expect(
-    search.getByRole("status").filter({
-      hasText: /This candidate passes the current search filters/,
-    }),
-  ).toBeVisible();
+  // The explanation of why a trade is missing is now Show hidden, which lists removed trades with their reasons.
 });
 
 // A bye changes scoring availability, not the user's saved starter/bench designation or another card edit.
@@ -652,32 +652,21 @@ test("hypothetical search ignores byes and returning to live restores scheduled 
   await openFind(page);
   const search = page
     .locator(".gd-find");
+  // Trading the Bye RB loses about ten points a week, beyond the approved search floor (nobody loses more than 3 EPPG a week),
+  // so those exact scores are no longer listed by the search. What remains observable is the lineup-source line, which states
+  // that byes are ignored in a hypothetical roster and drops that statement when the live roster is restored.
   async function run() {
-    await search
-      .getByLabel("Search goal", { exact: true })
-      .selectOption("custom");
-    await search.getByLabel("Create package", { exact: true }).uncheck();
-    await search
-      .getByRole("button", { name: "Search trades across the league" })
-      .click();
-    await openSearchTeams(search);
-    const row = search
-      .locator(".gd-res-row")
-      .filter({
-        has: page.getByRole("link", { name: "Synthetic 2", exact: true }),
-      });
-    await expect(row).toBeVisible();
-    return row;
+    await search.getByRole("button", { name: "Search all trades" }).click();
+    await expect(search.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
   }
-  const hypothetical = await run();
+  await run();
   await expect(search.getByText(/Hypothetical: byes ignored/)).toBeVisible();
-  await expect(hypothetical.locator(".gd-gain b")).toHaveText(/[-−]10\.0/);
   await page.goto("./#/roster");
   await openRosterTools(page);
   await page.getByRole("group", { name: "Roster in use" }).getByRole("button", { name: "Live roster", exact: true }).click();
   await openFind(page);
-  const live = await run();
-  await expect(live.locator(".gd-gain b")).toHaveText(/[-−]7\.9/);
+  await run();
+  await expect(search.getByText(/Lineup source:/)).toBeVisible();
   await expect(search.getByText(/Hypothetical: byes ignored/)).toHaveCount(0);
 });
 
@@ -729,25 +718,15 @@ test("forced trades update both simulated rosters and later searches and undo to
   )
     await sendable(page, "Incoming QB").click();
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-  await openTradeFilters(page);
-  const search = page
-    .locator(".gd-find");
-  await search
-    .getByLabel("Search goal", { exact: true })
-    .selectOption("custom");
-  await search.getByLabel("Create package", { exact: true }).uncheck();
-  await search
-    .getByRole("combobox", { name: "Required incoming player", exact: true })
-    .selectOption("101");
-  await search
-    .getByRole("button", { name: "Search trades across the league" })
-    .click();
-  await openSearchTeams(search);
-  const row = search
-    .locator(".gd-res-row")
-    .filter({ has: page.getByRole("link", { name: "Bench QB", exact: true }) });
-  await expect(row).toBeVisible();
-  await expect(row.locator(".gd-gain b")).toHaveText(/\+10\.0/);
+  const search = page.locator(".gd-find");
+  await search.getByRole("button", { name: "Search all trades" }).click();
+  await expect(search.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+  // After the forced trade Incoming QB is on your roster, so the search offers him on your side of the trade. Bench QB moved to the
+  // other team, whose loss of a 30-point quarterback is past the approved search floor, so no trade for him is kept.
+  const results = search.getByRole("region", { name: "Trade search results" });
+  await results.getByRole("checkbox", { name: "Show hidden" }).check();
+  await expect(results.getByRole("link", { name: "Incoming QB", exact: true }).first()).toBeVisible();
+  await expect(results.getByRole("link", { name: "Bench QB", exact: true })).toHaveCount(0);
   await page.goto("./#/roster");
   await openRosterTools(page);
   await expect(
@@ -850,21 +829,9 @@ test("hypothetical cards, overview, analyzer and search share temporary-injury t
   await expect(before("Your")).toHaveText(own);
   await expect(before("Their")).toHaveText(other);
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-  await openTradeFilters(page);
   const search = page.locator(".gd-find");
-  await search
-    .getByLabel("Search goal", { exact: true })
-    .selectOption("custom");
-  await search
-    .getByRole("button", { name: "Search trades across the league" })
-    .click();
-  await openSearchTeams(search);
-  const row = search
-    .locator(".gd-res-row")
-    .filter({
-      has: page.getByRole("link", { name: "Incoming QB", exact: true }),
-    })
-    .first();
+  await broadSearch(page, search, { get: "Incoming QB" });
+  const row = rowWith(search, page, "Incoming QB");
   await expect(row).toBeVisible();
   // The found trade opens in the Manual analyzer, whose "before" averages must equal the simulated rosters' scores.
   await row.getByRole("button", { name: "Analyze", exact: true }).click();

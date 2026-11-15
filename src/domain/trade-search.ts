@@ -10,6 +10,7 @@ import {
 } from "./manager-expectations";
 // The same exclusive primary labels are available to discovery and saved searches.
 import { primaryGemSignals } from "./label-rules";
+import type { FilterableTrade, TradeFilters } from "./trade-filters";
 import {
   surfaceAppeal,
   type SurfaceEvidence,
@@ -203,6 +204,13 @@ export interface SearchMatch {
   give?: string[];
 }
 export interface SearchRow extends SearchMatch {
+  // Captured filter evidence belongs to this evaluated trade, not to the current live selection.
+  filterEvidence?: FilterableTrade;
+  // Core-swap grouping and distinct packages are presentation metadata only.
+  coreSwap?: string;
+  related?: SearchRow[];
+  // Equivalent larger packages stay attached to the smallest fully evaluated trade.
+  variants?: SearchRow[];
   deficitProtection?: DeficitProtectionEvidence[];
   manager?: ManagerAssessment;
   surface?: SurfaceEvidence;
@@ -276,6 +284,8 @@ export type SearchRequest =
       roleWeight: string;
       lineupsRaw?: string;
       query: TradeSearchQuery;
+      // The new broad search is opt-in until its filter interface replaces the legacy controls.
+      useful?: { protectedIds: string[] };
       // Workers always value the live source first, then apply the same frozen-index ownership overlay as the UI.
       scenario?: RosterScenario;
     }
@@ -287,16 +297,25 @@ export type SearchRequest =
       token: string;
       options: TradeBrowseOptions;
     }
-  | { type: "details"; id: string; context: string; key: string };
+  | { type: "details"; id: string; context: string; key: string }
+  // Filter and sort change only the captured results; they never start another scoring job.
+  | { type: "filter"; id: string; context: string; filters: TradeFilters; sort: SearchFilterSort; showHidden: boolean; limit?: number }
+  | { type: "sort"; id: string; context: string; sort: SearchFilterSort };
+export type SearchFilterSort = "own" | "other" | "week" | "both" | "balance" | "acceptance";
 export type SearchResponse = { id: string; context: string } & (
   | { type: "progress"; progress: SearchProgress }
+  | { type: "filtered"; rows: SearchRow[]; total: number; visibleTotal: number; groupsTotal: number; view: TradeResultView;
+      counts: Record<string, number>; hidden: { row: SearchRow; reasons: string[] }[]; stats: SearchStats }
   | {
-      type: "complete" | "browse";
+      type: "complete" | "browse" | "partial";
       rows: SearchRow[];
       total: number;
       view: TradeResultView;
       token?: string;
       stats: SearchStats;
+      // Measured coverage is separate from the result count and legacy numeric statistics.
+      coverage?: { singles: number; extensions: number; opponents: number; beamCutoffs: number;
+        beamCutoffsByTeam: Record<string, Record<string, number>> };
       suggestions?: SearchRow[];
     }
   | {
@@ -871,7 +890,7 @@ export function offeredUpgrades(
 }
 
 // Count only players satisfying every enabled category, so a WR and an unrelated Gem cannot qualify together.
-export function matchesIncoming(players: Player[], filter?: IncomingFilter) {
+export function matchesIncoming(players: Pick<Player, "pos" | "gem">[], filter?: IncomingFilter) {
   const signals = filter?.signals ?? [],
     selected = filter?.positions ?? [];
   const count = players.filter(
@@ -1447,6 +1466,7 @@ export function searchLineupDetails(
   q: TradeSearchQuery,
   match: SearchMatch,
   lineupsRaw?: string,
+  withWaivers = true,
 ): SearchLineupDetails {
   // Expanded replacements must describe the same outgoing subset that produced this result.
   if (match.give) q = { ...q, give: [...match.give] };
@@ -1458,7 +1478,7 @@ export function searchLineupDetails(
       give: [...q.give],
       get: [...match.get],
     },
-    true,
+    withWaivers,
     lineupsRaw,
   );
   if (!r.valid) throw Error(r.errors.join(" "));

@@ -56,7 +56,7 @@ const sliders: Slider[] = [
   },
 ];
 
-// The four shared limits as sliders with an "edited" marker on each changed one; one set for Find trades and the Chain planner.
+// The four shared limits as sliders with an "edited" marker on each changed one; used by the Chain planner.
 export function LimitsEditor({
   limits,
   update,
@@ -91,8 +91,7 @@ export function LimitsEditor({
         </label>
       ))}
       <p className="gd-quiet">
-        One set for Find trades and the Chain planner. Presets never change
-        these and saved presets do not store them. If a search finds nothing it
+        These limits steer the Chain planner. If a chain search finds nothing it
         widens from these values and tags the results with what moved.
       </p>
       <button

@@ -39,6 +39,7 @@ import {
   type SearchResponse,
   type SearchRow,
   type SearchStats,
+  type SearchFilterSort,
   type UpgradeFilter,
   type WeeklyRange,
   type TradeSearchQuery,
@@ -50,6 +51,8 @@ import {
 import { searchCue, useFeedback } from "../../../ui/feel/feedback";
 
 import { mergeTradeSettings, readTradeSettings } from "./tradeSettings";
+import { defaultTradeFilters, type TradeFilters } from "../../../domain/trade-filters";
+import { migrateLegacyTradeQuery } from "../../../domain/trade-query-migration";
 
 // Keep exploratory controls local until an evaluated package is explicitly loaded or saved.
 export interface DiscoveryState {
@@ -83,6 +86,14 @@ interface SearchJob {
   suggestions?: SearchRow[];
   total: number;
   stats?: SearchStats;
+  // Preserve measured broad-search coverage while paging through the same results.
+  coverage?: { singles: number; extensions: number; opponents: number; beamCutoffs: number;
+    beamCutoffsByTeam: Record<string, Record<string, number>> };
+  // Hidden reasons and per-filter counts are tied to the same retained result set.
+  filterCounts?: Record<string, number>;
+  hiddenRows?: { row: SearchRow; reasons: string[] }[];
+  visibleTotal?: number;
+  groupsTotal?: number;
   error?: string;
   paging?: boolean;
   // Recovery previews belong to this captured search and cannot silently modify its filters.
@@ -175,6 +186,26 @@ export function useTradeSearch({
   // The Gameday Plus Trade room supplies one shared set of limits; without it the current controls apply.
   const limits = useSearchLimits();
   const [initialSettings] = useState(() => readTradeSettings(settingsRaw));
+  // Older saved searches are translated once; unsupported options are disclosed to the user.
+  const [legacyBroad] = useState(() => {
+    const old = initialSettings.standard as { query?: TradeSearchQuery; broadTeams?: unknown } | undefined;
+    return old?.query && !old.broadTeams ? migrateLegacyTradeQuery(old.query) : undefined;
+  });
+  const [migrationNote, setMigrationNote] = useState(legacyBroad?.ignored.join(", ") ?? "");
+  // Save only broad-search preferences by team; worker results remain session-only.
+  const [broadTeams, setBroadTeams] = useState<Record<string, { filters: TradeFilters; protectedIds: string[] }>>(
+    () => {
+      const saved = initialSettings.standard as { broadTeams?: Record<string, { filters: TradeFilters; protectedIds: string[] }>; query?: TradeSearchQuery } | undefined;
+      return saved?.broadTeams ?? (saved?.query && legacyBroad ? { [saved.query.teamA]: { filters: legacyBroad.filters, protectedIds: [] } } : {});
+    },
+  );
+  const broad = broadTeams[draft.teamA] ?? { filters: defaultTradeFilters(), protectedIds: [] };
+  const [broadSort, setBroadSort] = useState<SearchFilterSort>("own");
+  const [showHidden, setShowHidden] = useState(false);
+  const [broadLimit, setBroadLimit] = useState(50);
+  const appliedBroad = useRef(false);
+  const updateBroad = (patch: Partial<{ filters: TradeFilters; protectedIds: string[] }>) =>
+    setBroadTeams((previous) => ({ ...previous, [draft.teamA]: { ...(previous[draft.teamA] ?? { filters: defaultTradeFilters(), protectedIds: [] }), ...patch } }));
   const notify = useFeedback();
   const resultPlans = useRef<string | undefined>(undefined);
   const lastSettings = useRef(settingsRaw ?? "");
@@ -435,7 +466,7 @@ export function useTradeSearch({
     gradeImpacts,
   };
   // The chain planner owns its own part of the saved settings; this hook writes only the standard part and keeps the rest as stored.
-  const standardPart = JSON.stringify({ query, controls: standardControls });
+  const standardPart = JSON.stringify({ query, controls: standardControls, broadTeams });
   const settingsText = mergeTradeSettings(
     settingsRaw,
     "standard",
@@ -461,7 +492,8 @@ export function useTradeSearch({
   const bounds = tradeSearchBounds(m, query);
   if (manager && !journal.ready)
     bounds.errors.push("Saved manager profiles are still loading.");
-  const context = tradeSearchContext(m, query, lineupsRaw);
+  // Changing protected players invalidates the captured roster search, while filter edits do not.
+  const context = tradeSearchContext(m, query, lineupsRaw) + JSON.stringify([...broad.protectedIds].sort());
   // Editing filters dismisses the open result drawer; the captured result remains available to inspect again.
   const drawerContext = useRef(context);
   useEffect(() => {
@@ -641,6 +673,9 @@ export function useTradeSearch({
   useEffect(() => {
     if (!restore || appliedRestore.current === restore.id) return;
     appliedRestore.current = restore.id;
+    const migrated = migrateLegacyTradeQuery(restore.query);
+    setBroadTeams((previous) => ({ ...previous, [restore.query.teamA]: { filters: migrated.filters, protectedIds: [] } }));
+    setMigrationNote(migrated.ignored.join(", "));
     onLineupBasisChange?.(readLineupBasis(restore.query.lineupBasis));
     restoreQuery(restore.query);
     setAdvanced(true);
@@ -652,15 +687,20 @@ export function useTradeSearch({
   }, [context]);
 
   // Start a captured immutable request; request/context checks reject late messages after cancel or restart.
-  function search() {
-    if (bounds.errors.length) return;
+  function search(protectedIds?: string[]) {
+    if (!protectedIds && bounds.errors.length) return;
+    // The broad request carries no legacy goals or limits; only the selected team and protected players affect it.
+    const executedQuery: TradeSearchQuery = protectedIds ? { teamA: draft.teamA, give: [], count: 1,
+      below: 0, above: 0, lineupBasis } : query;
+    appliedBroad.current = !!protectedIds;
+    setBroadLimit(50);
     const id = crypto.randomUUID();
     // Clear feedback from the previous captured result set.
     setSavedRow("");
     setDiagnostic("");
     browseToken.current = "";
     setResultBrowse(emptyTradeBrowse());
-    appliedSearch.current = { query: structuredClone(query), context };
+    appliedSearch.current = { query: structuredClone(executedQuery), context };
     resultModel.current = m;
     resultPlans.current = lineupsRaw;
     try {
@@ -719,14 +759,19 @@ export function useTradeSearch({
                 },
               },
             };
+          if (message.type === "filtered")
+            return { ...previous, rows: message.rows, view: message.view, total: message.total,
+              visibleTotal: message.visibleTotal, groupsTotal: message.groupsTotal, filterCounts: message.counts, hiddenRows: message.hidden, stats: message.stats };
           // Each browse response is a complete bounded view, not another raw slice to append.
           return {
             ...previous,
-            status: "complete",
+            // First results do not end the running session while larger packages are evaluated.
+            status: message.type === "partial" ? "running" : "complete",
             rows: message.rows,
             view: message.view,
             total: message.total,
             stats: message.stats,
+            coverage: message.coverage ?? previous.coverage,
             suggestions: message.suggestions ?? previous.suggestions,
             paging: false,
           };
@@ -764,7 +809,8 @@ export function useTradeSearch({
         evidence: m.evidenceRaw,
         roleWeight: String(m.roleScenarioWeight),
         lineupsRaw,
-        query,
+        query: executedQuery,
+        ...(protectedIds ? { useful: { protectedIds } } : {}),
       };
       sessions.post("find", id, request);
     } catch (error) {
@@ -782,6 +828,14 @@ export function useTradeSearch({
       });
     }
   }
+
+  // Refilter the retained worker results after completion or preference edits without starting a new search.
+  const broadFilterKey = JSON.stringify(broad.filters);
+  useEffect(() => {
+    if (!appliedBroad.current || !job || (job.status !== "complete" && !(job.status === "running" && job.view)) || current()?.id !== job.id) return;
+    sessions.post("find", job.id, { type: "filter", id: job.id, context: job.context,
+      filters: broad.filters, sort: broadSort, showHidden, limit: broadLimit } satisfies SearchRequest);
+  }, [job?.id, job?.status, !!job?.view, broadFilterKey, broadSort, showHidden, broadLimit]);
 
   // Applying a preview restores all controls first, then starts the exact previewed query after context cleanup.
   useEffect(() => {
@@ -871,7 +925,8 @@ export function useTradeSearch({
         get: [...row.get],
       },
       summaryFromSearch(row),
-      captured,
+      // A saved result records its actual outgoing package, even when the broad search began with no fixed offer.
+      { ...captured, give: [...(row.give ?? captured.give)], count: row.get.length },
       model,
     );
     if (success !== false) setSavedRow(row.key);
@@ -936,6 +991,7 @@ export function useTradeSearch({
   }
 
   return {
+    broad, broadSort, setBroadSort, showHidden, setShowHidden, updateBroad, migrationNote, broadLimit, setBroadLimit,
     above,
     advanced,
     appliedSearch,

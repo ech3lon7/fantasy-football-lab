@@ -125,6 +125,29 @@ export interface Lineup {
   value: number;
   unfilled: number;
 }
+// Opt-in memo for bulk searches. A lineup is a pure function of the model and its arguments, so the cached value is exactly what a
+// fresh call returns; it is off everywhere else, so no caller can ever receive a shared object by surprise.
+const lineupMemo = new WeakMap<Model, Map<string, Lineup>>();
+let memoDepth = 0;
+export function withLineupMemo<T>(run: () => T): T {
+  memoDepth++;
+  try {
+    return run();
+  } finally {
+    memoDepth--;
+  }
+}
+// The async form keeps the memo on across awaits, for searches that yield to the event loop.
+export async function withLineupMemoAsync<T>(run: () => Promise<T>): Promise<T> {
+  memoDepth++;
+  try {
+    return await run();
+  } finally {
+    memoDepth--;
+  }
+}
+// The same roster array is scored for every remaining week, so its key and its IR assignment are worked out once per array.
+const idsKeys = new WeakMap<string[], { key: string; len: number; first?: string; last?: string; ir?: string[] }>();
 export function lineup(
   m: Model,
   ids: string[],
@@ -133,7 +156,32 @@ export function lineup(
   healthy = false,
   basis: "value" | "expected" = "value",
 ): Lineup {
-  const ir = new Set(healthy ? [] : irAssignments(m, ids)),
+  if (memoDepth === 0) return buildLineup(m, ids, week, downside, healthy, basis);
+  let memo = lineupMemo.get(m);
+  if (!memo) lineupMemo.set(m, (memo = new Map()));
+  let entry = idsKeys.get(ids);
+  // A roster array that was changed after it was keyed is keyed again.
+  if (!entry || entry.len !== ids.length || entry.first !== ids[0] || entry.last !== ids[ids.length - 1])
+    idsKeys.set(ids, (entry = { key: ids.join(","), len: ids.length, first: ids[0], last: ids[ids.length - 1] }));
+  // Order is part of the key: the result must match a fresh call for exactly these arguments.
+  const key = `${week}|${downside ? 1 : 0}${healthy ? 1 : 0}${basis}|${entry.key}`;
+  let found = memo.get(key);
+  if (!found) {
+    if (!healthy) entry.ir ??= irAssignments(m, ids);
+    memo.set(key, (found = buildLineup(m, ids, week, downside, healthy, basis, entry.ir)));
+  }
+  return found;
+}
+function buildLineup(
+  m: Model,
+  ids: string[],
+  week: number,
+  downside = false,
+  healthy = false,
+  basis: "value" | "expected" = "value",
+  irPrecomputed?: string[],
+): Lineup {
+  const ir = new Set(healthy ? [] : (irPrecomputed ?? irAssignments(m, ids))),
     ctx = m.dataset.tables.ModelContext[0];
   const bag = ids
     .map((id) => m.byId.get(id))

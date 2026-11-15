@@ -1,0 +1,55 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { defaults } from "../src/domain/contracts";
+import { defaultTradeFilters } from "../src/domain/trade-filters";
+import { tradeSearchFixture } from "./fixtures";
+
+// Exercise the actual worker handler with a fake message port and a small synthetic league.
+afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
+it("streams one-for-ones before completing the broad search and reports measured coverage", async () => {
+  const messages: any[] = [];
+  const port: { postMessage: (message: any) => void; onmessage?: (event: any) => void } = { postMessage: (message) => messages.push(message) };
+  vi.stubGlobal("self", port);
+  await import("../src/workers/trade-search.worker");
+  await port.onmessage!({ data: { type: "start", id: "1", context: "ctx", dataset: await tradeSearchFixture(),
+    settings: defaults, evidence: "", roleWeight: "0", useful: { protectedIds: [] },
+    query: { teamA: "1", give: [], count: 1, below: 0, above: 0, lineupBasis: "best-available" } } });
+  expect(messages.map((message) => message.type)).toEqual(["partial", "complete"]);
+  const result = messages[1];
+  expect(result.id).toBe("1"); expect(result.context).toBe("ctx");
+  expect(result.coverage.singles).toBeGreaterThan(0);
+  expect(result.stats.scored).toBe(result.coverage.singles + result.coverage.extensions);
+  // Filtering must use the retained search and reject messages for an obsolete context.
+  port.onmessage!({ data: { type: "filter", id: "1", context: "obsolete", filters: defaultTradeFilters(), sort: "own", showHidden: true } });
+  expect(messages).toHaveLength(2);
+  port.onmessage!({ data: { type: "filter", id: "1", context: "ctx", filters: defaultTradeFilters(), sort: "own", showHidden: true, limit: 1 } });
+  expect(messages[2].type).toBe("filtered");
+  expect(messages[2].total).toBe(result.total);
+  expect(messages[2].rows.length).toBeLessThanOrEqual(1);
+  expect(messages[2].counts).toBeDefined();
+  const visibleBefore = messages[2].visibleTotal;
+  port.onmessage!({ data: { type: "sort", id: "1", context: "ctx", sort: "acceptance" } });
+  expect(messages[3].type).toBe("filtered");
+  expect(messages[3].visibleTotal).toBe(visibleBefore);
+});
+
+
+
+
+
+
+// A running worker must respond to a filter before the extension phase completes.
+it("filters streamed singles while larger packages are still being evaluated", async () => {
+  const messages: any[] = [];
+  const port: { postMessage: (message: any) => void; onmessage?: (event: any) => Promise<void> } = { postMessage: (message) => messages.push(message) };
+  vi.stubGlobal("self", port);
+  await import("../src/workers/trade-search.worker");
+  const dataset = await tradeSearchFixture();
+  const running = port.onmessage!({ data: { type: "start", id: "2", context: "ctx", dataset, settings: defaults,
+    evidence: "", roleWeight: "0", useful: { protectedIds: [] },
+    query: { teamA: "1", give: [], count: 1, below: 0, above: 0, lineupBasis: "best-available" } } });
+  expect(messages.map((message) => message.type)).toEqual(["partial"]);
+  await port.onmessage!({ data: { type: "filter", id: "2", context: "ctx", filters: defaultTradeFilters(), sort: "own", showHidden: false } });
+  expect(messages.map((message) => message.type)).toEqual(["partial", "filtered"]);
+  await running;
+  expect(messages.at(-1).type).toBe("complete");
+});

@@ -18,7 +18,6 @@ import {
   type DeficitProtection,
 } from "../../../domain/trade-safeguards";
 import { useFeedback } from "../../../ui/feel/feedback";
-import { ManagerControls } from "../../Negotiations";
 import { Check, Field, Group } from "./controls";
 import { GradeGoals } from "./GradeGoals";
 import type { ChainSearchState } from "./useChainSearch";
@@ -499,71 +498,12 @@ function LegSettings({
       <Group
         title="Positional grade goals"
         summary={
-          value.gradeLimit || value.gradeImpacts?.length
-            ? `${(value.gradeImpacts?.length ?? 0) + (value.gradeLimit ? 1 : 0)} on`
+          value.gradeImpacts?.length
+            ? `${value.gradeImpacts?.length ?? 0} on`
             : "None"
         }
-        edited={!!value.gradeLimit || !!value.gradeImpacts?.length}
+        edited={!!value.gradeImpacts?.length}
       >
-        <Check
-          checked={!!value.gradeLimit}
-          onChange={(on) =>
-            change({
-              ...value,
-              gradeLimit: on ? { side: "other", maximumDrop: 2 } : undefined,
-            })
-          }
-        >
-          <span aria-label={`${label}: Limit positional grade drops`}>
-            Limit positional grade drops
-          </span>
-        </Check>
-        {value.gradeLimit && (
-          <>
-            <Field label={`${label}: Protect grades for`}>
-              <select
-                className="gd-sel"
-                value={value.gradeLimit.side}
-                onChange={(e) =>
-                  change({
-                    ...value,
-                    gradeLimit: {
-                      ...value.gradeLimit!,
-                      side: e.target.value as "own" | "other" | "both",
-                    },
-                  })
-                }
-              >
-                <option value="other">The other team</option>
-                <option value="own">Your team</option>
-                <option value="both">Both teams</option>
-              </select>
-            </Field>
-            <Field label={`${label}: Maximum grade steps lost`}>
-              <select
-                className="gd-sel"
-                value={value.gradeLimit.maximumDrop}
-                onChange={(e) =>
-                  change({
-                    ...value,
-                    gradeLimit: {
-                      ...value.gradeLimit!,
-                      maximumDrop: Number(e.target.value),
-                    },
-                  })
-                }
-              >
-                {positionGradeScale.map((_, i) => (
-                  <option key={i} value={i}>
-                    {i === 0
-                      ? "0 — no grade drops"
-                      : `${i} grade step${i === 1 ? "" : "s"}`}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </>
-        )}
         <GradeGoals
           m={m}
           draft={{ teamA: s.team, teamB: "", give: [], get: [] }}
@@ -579,17 +519,7 @@ function LegSettings({
         </p>
       </Group>
 
-      <Group
-        title="Manager profiles & acceptance"
-        summary={value.manager ? "Surface Trading on" : "League baseline"}
-        edited={!!value.manager}
-      >
-        <ManagerControls
-          label={`${label}: Enable Surface Trading`}
-          value={value.manager}
-          change={(manager) => change({ ...value, manager })}
-        />
-      </Group>
+
     </div>
   );
 }
@@ -791,8 +721,8 @@ export function ChainWhole({ m, s }: { m: Model; s: ChainSearchState }) {
         </Group>
 
         <Group
-          title="Dependency & ranking"
-          summary={`${d.sequences === "connected" ? "Connected chains" : d.sequences === "both" ? "Both types" : "Sequential upgrades"} · ${d.ranking === "own" ? "your gain" : d.ranking === "mutual" ? "both sides" : "recipient appeal"}`}
+          title="Dependency"
+          summary={`${d.sequences === "connected" ? "Connected chains" : d.sequences === "both" ? "Both types" : "Sequential upgrades"}`}
         >
           <Field label="Sequence types">
             <select
@@ -809,19 +739,6 @@ export function ChainWhole({ m, s }: { m: Model; s: ChainSearchState }) {
                 Independent sequential upgrades
               </option>
               <option value="both">Both types</option>
-            </select>
-          </Field>
-          <Field label="Rank plans by">
-            <select
-              className="gd-sel"
-              value={d.ranking}
-              onChange={(e) =>
-                setD({ ranking: e.target.value as ChainDiscovery["ranking"] })
-              }
-            >
-              <option value="own">Your EPPG gain</option>
-              <option value="mutual">Benefit to both sides</option>
-              <option value="appeal">Apparent recipient appeal</option>
             </select>
           </Field>
           <Field label="Dependency route">
@@ -979,3 +896,5 @@ export function ChainWhole({ m, s }: { m: Model; s: ChainSearchState }) {
     </section>
   );
 }
+
+
