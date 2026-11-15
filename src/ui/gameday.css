@@ -2027,8 +2027,12 @@
   box-shadow: none;
   opacity: 0.68;
 }
+/* Keep the whole bust inside the panel: the hero's contain rule, bottom-aligned, with headroom. */
 :root[data-gameday] .gd-fc-portrait .gd-fc-photo img {
-  object-position: 50% 20% !important;
+  height: 92% !important;
+  align-self: end;
+  object-fit: contain !important;
+  object-position: 50% 100% !important;
 }
 :root[data-gameday] .gd-fc-ph .gd-fc-nm {
   position: relative;

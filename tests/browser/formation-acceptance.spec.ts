@@ -20,6 +20,51 @@ test("formation portraits fill the card and preserve controls", async ({ page })
   await expect(panel.getByRole("button", { name: /Pin Jalen Mercer/ })).toBeVisible();
 });
 
+// The portrait shows the whole head-and-shoulders bust inside the panel, resting on its bottom edge.
+test("roster card portraits keep the whole bust", async ({ page }) => {
+  // A 600×436 bust keeps the check deterministic and independent of the headshot CDN.
+  await page.route("https://a.espncdn.com/i/headshots/nfl/players/full/**", (route) =>
+    route.fulfill({
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="436"><rect width="600" height="436" fill="#14342b"/></svg>',
+    }),
+  );
+  await seedFormation(page);
+  const area = page.locator('.gd-fs[data-slot="QB"] .gd-fc-ph');
+  const image = area.locator(".gd-fc-photo img");
+  await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(600);
+  const framing = await image.evaluate((el) => {
+    const photo = el as HTMLImageElement;
+    const rect = photo.getBoundingClientRect();
+    const panel = photo.closest(".gd-fc-ph")!.getBoundingClientRect();
+    // Under object-fit: contain the drawn image keeps its natural ratio inside the element box.
+    const scale = Math.min(rect.width / photo.naturalWidth, rect.height / photo.naturalHeight);
+    const height = photo.naturalHeight * scale;
+    const width = photo.naturalWidth * scale;
+    const [, positionY = "50%"] = getComputedStyle(photo).objectPosition.split(" ");
+    const anchorY = positionY === "bottom" ? 1 : positionY === "top" ? 0 : parseFloat(positionY) / 100;
+    const contentTop = rect.top + (rect.height - height) * anchorY;
+    return {
+      fit: getComputedStyle(photo).objectFit,
+      height,
+      width,
+      panelHeight: panel.height,
+      panelWidth: panel.width,
+      bottomGap: panel.bottom - (contentTop + height),
+      headroom: contentTop - panel.top,
+    };
+  });
+  expect(framing.fit).toBe("contain");
+  // Nothing is cropped: the whole bust fits inside the photo area.
+  expect(framing.height).toBeLessThanOrEqual(framing.panelHeight + 0.5);
+  expect(framing.width).toBeLessThanOrEqual(framing.panelWidth + 0.5);
+  // Limit the minimum by the panel width so a landscape bust can fit without cropping.
+  expect(framing.height).toBeGreaterThan(Math.min(framing.panelHeight * 0.8, framing.panelWidth * 436 / 600 * 0.99));
+  // Shoulders rest on the bottom edge, and the head has room above it.
+  expect(Math.abs(framing.bottomGap)).toBeLessThan(1);
+  expect(framing.headroom).toBeGreaterThanOrEqual(4);
+});
+
 // Roster cards reuse the profile gradient and dot texture with the matchup color substituted.
 test("roster card uses the player profile background and texture", async ({ page }) => {
   await seedFormation(page);
