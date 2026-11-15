@@ -73,10 +73,9 @@ test("Sound off produces no audio calls; Sound on produces oscillator starts on 
   // Navigate to Roster and click tabs
   const prevCount = startsAfterEnable;
   await nav.getByRole("link", { name: "Roster" }).click();
-  const startsAfterNav = await page.evaluate(
-    () => (window as any).__audioStarts,
-  );
-  expect(startsAfterNav).toBeGreaterThan(prevCount);
+  // Navigation feedback runs in a React effect, so wait for that effect before asserting its sound.
+  await expect.poll(() => page.evaluate(() => (window as any).__audioStarts))
+    .toBeGreaterThan(prevCount);
 
   // Turn Sound back off
   await page.getByRole("button", { name: "Feel", exact: true }).click();
@@ -94,3 +93,4 @@ test("Sound off produces no audio calls; Sound on produces oscillator starts on 
   );
   expect(countAfterMutedNav).toBe(countAfterDisable);
 });
+
