@@ -44,8 +44,11 @@ export function useFlipList(
               row,
               streaming ? chalkSpecs.streamRow : chalkSpecs.rowIn,
               {
+                // The stagger is only for Full; Reduced is one fade of 150 ms or less.
                 delay:
-                  Math.min(entered, MAX_ANIMATED_ROWS) * (streaming ? 15 : 20),
+                  level === "full"
+                    ? Math.min(entered, MAX_ANIMATED_ROWS) * (streaming ? 15 : 20)
+                    : 0,
               },
             );
         } else if (!streaming) {

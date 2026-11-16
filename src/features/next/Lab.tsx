@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { labTabs, type LabTab } from "../../domain/view/shell";
 import { FeelSettings, type FeelValues } from "./Shell";
 import { KeyboardList } from "./KeyboardReference";
 import { defaultFilterShortcut, filterShortcut, filterShortcutProblem } from "./trade/filter-shortcut";
+import { motion, useBoardMotion } from "./trade/board/board-motion";
 
 // The Lab: model settings, evidence sources, audits, data and account, the keyboard reference and Feel, each a short page.
 export function Lab({
@@ -32,6 +33,14 @@ export function Lab({
 }) {
   const [editingShortcut, setEditingShortcut] = useState(false);
   const [shortcutError, setShortcutError] = useState("");
+  const bm = useBoardMotion();
+  const errorRef = useRef<HTMLSpanElement>(null);
+  // M26: a shortcut that is taken shakes its message and a chalk line is drawn under it.
+  useLayoutEffect(() => {
+    if (!shortcutError) return;
+    bm.play("shortcut-shake", errorRef.current, motion.shake);
+    bm.play("shortcut-line", errorRef.current?.querySelector(".gd-error-line path"), motion.errorLine, { silent: true });
+  }, [shortcutError]);
   // Capture a new shortcut only while Change is active; Escape cancels it.
   useEffect(() => {
     if (!editingShortcut) return;
@@ -90,7 +99,15 @@ export function Lab({
               <button type="button" onClick={() => setEditingShortcut(true)}>Change</button>{" "}
               <button type="button" onClick={() => changeShortcut(defaultFilterShortcut)}>Reset to Shift+Space</button>
               {editingShortcut && <span>Press a key combination; Escape cancels.</span>}
-              {shortcutError && <span role="alert">{shortcutError}</span>}
+              {shortcutError && (
+                <span role="alert" ref={errorRef} data-motion="M26" style={{ position: "relative", display: "inline-block", paddingBottom: 6 }}>
+                  {shortcutError}
+                  <svg className="gd-error-line" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"
+                    style={{ position: "absolute", left: 0, bottom: 0, width: "100%", height: 6, overflow: "visible", fill: "none", stroke: "currentColor", strokeWidth: 2.5, strokeLinecap: "round" }}>
+                    <path d="M2 3 C25 0 40 6 60 3 S90 2 98 3" pathLength={1} strokeDasharray={1} />
+                  </svg>
+                </span>
+              )}
             </div>
           </div>
         )}

@@ -4,8 +4,8 @@ import { seedTradeLeague } from "./trade-seed";
 const wheel = (page: Page) => page.getByRole("dialog", { name: "Trade filters" });
 const segment = (page: Page, name: RegExp | string) =>
   wheel(page).getByRole("menuitem", { name });
-const done = (page: Page) =>
-  wheel(page).getByRole("button", { name: "done", exact: true }).click();
+// Changed selector: Back is the hub of the polished board (there is no done link).
+const done = (page: Page) => wheel(page).locator(".gd-zb-hub").click();
 
 // Verify the broad finder at each approved breakpoint against real worker results. Find trades has one filter control, the inline
 // wheel, at every width.

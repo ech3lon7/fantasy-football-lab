@@ -13,11 +13,11 @@ const wheel = (page: Page) =>
   page.getByRole("dialog", { name: "Trade filters" });
 const segment = (page: Page, name: RegExp | string) =>
   wheel(page).getByRole("menuitem", { name });
-const hub = (page: Page) => wheel(page).locator(".gd-wheel-hub");
-const done = (page: Page) =>
-  wheel(page)
-    .getByRole("button", { name: "done", exact: true })
-    .click();
+// The polished board (docs/filter-wheel-polish-proposal.md): the hub is display-only and clicking it goes back one level (there is no
+// done / back footer); the filters-on count lives in the left rail.
+const hub = (page: Page) => wheel(page).locator(".gd-zb-hub");
+const rail = (page: Page) => wheel(page).locator('[data-zone="rail"]');
+const done = (page: Page) => hub(page).click();
 
 // Open Find trades: the inline wheel is there before any search.
 async function openFind(
@@ -82,10 +82,9 @@ test.describe("filter wheel behaviour (motion off)", () => {
     await expect(
       wheel(page).getByRole("button", { name: "Search", exact: true }),
     ).toBeVisible();
-    await expect(hub(page)).toContainText("0 filters on");
-    await expect(wheel(page).locator(".gd-wheel-count")).toHaveText(
-      /^[\d,]+ \/ [\d,]+$/,
-    );
+    // Changed: the filters-on count is in the left rail, and the count reads "—" before a search.
+    await expect(rail(page)).toContainText("0 filters on");
+    await expect(wheel(page).locator(".gd-wheel-count")).toHaveText("—");
   });
 
   test("R1: the retired F key no longer touches the wheel; Shift+Space focuses it", async ({
@@ -122,16 +121,13 @@ test.describe("filter wheel behaviour (motion off)", () => {
     await expect(segment(page, /^Grades/)).toBeFocused();
     await page.keyboard.press("ArrowLeft");
     await expect(segment(page, /^Size/)).toBeFocused();
-    await expect(wheel(page).locator(".gd-hub-name")).toHaveText("SIZE");
-    await expect(wheel(page).locator(".gd-hub-line")).toHaveText(
+    // Changed selectors: the hub's setting is its value line, and before a search its hides line and the count read "—".
+    await expect(wheel(page).locator(".gd-zh-name")).toHaveText("SIZE");
+    await expect(wheel(page).locator(".gd-zh-value")).toHaveText(
       "Give 1–3 · get 1–3",
     );
-    await expect(wheel(page).locator(".gd-hub-hides")).toHaveText(
-      /^[\d,]+ of [\d,]+$/,
-    );
-    await expect(wheel(page).locator(".gd-wheel-count")).toHaveText(
-      /^[\d,]+ \/ [\d,]+$/,
-    );
+    await expect(wheel(page).locator(".gd-zh-hides")).toHaveText("hides —");
+    await expect(wheel(page).locator(".gd-wheel-count")).toHaveText("—");
   });
 
   test("number keys jump to a category", async ({ page }) => {
@@ -165,8 +161,8 @@ test.describe("filter wheel behaviour (motion off)", () => {
     await handle.focus();
     await page.keyboard.press("ArrowLeft");
     await expect(handle).toHaveAttribute("aria-valuenow", "0.5");
-    await expect(wheel(page).locator(".gd-hub-value")).toHaveText("+0.5");
-    await expect(wheel(page).locator(".gd-hub-hides")).toHaveText(
+    await expect(wheel(page).locator(".gd-zh-value")).toHaveText("+0.5");
+    await expect(wheel(page).locator(".gd-zh-hides")).toHaveText(
       /^hides [\d,]+ · also blocks [\d,]+$/,
     );
     // It stops at both ends of the range and moves in half steps.
@@ -181,7 +177,7 @@ test.describe("filter wheel behaviour (motion off)", () => {
     await done(page);
     // The ring marks the setting and the hub counts the active filters.
     await expect(segment(page, /^Gains/)).toContainText("1 set");
-    await expect(hub(page)).toContainText("1 filters on");
+    await expect(rail(page)).toContainText("1 filters on");
   });
 
   test("R3: dragging the handle along the arc changes the value, and the hub − and + buttons step it", async ({
@@ -193,7 +189,7 @@ test.describe("filter wheel behaviour (motion off)", () => {
       .getByRole("menuitem", { name: "Their EPPG", exact: true })
       .click();
     // Aim at the arc through the SVG's own coordinates: the top of the track is at 12 o'clock, radius 214, which is -0.5.
-    const svg = (await wheel(page).locator(".gd-wheel-svg").boundingBox())!;
+    const svg = (await wheel(page).locator(".gd-zb-svg").boundingBox())!;
     const at = (px: number, py: number) => ({
       x: svg.x + (px / 640) * svg.width,
       y: svg.y + (py / 640) * svg.height,
@@ -222,7 +218,8 @@ test.describe("filter wheel behaviour (motion off)", () => {
     await wheel(page)
       .getByRole("menuitem", { name: "Their EPPG", exact: true })
       .click();
-    await wheel(page).locator(".gd-hub-value").click();
+    // Changed selector: the number is typed from the value card in the right zone (the hub is display-only).
+    await wheel(page).getByRole("button", { name: /Their EPPG value/ }).click();
     const input = wheel(page).getByRole("spinbutton", { name: "Exact value" });
     await input.fill("-1.5");
     await input.press("Enter");
@@ -264,23 +261,21 @@ test.describe("filter wheel behaviour (motion off)", () => {
     await done(page);
     await done(page);
     await expect(segment(page, /^Positions/)).toContainText("1 set");
-    await expect(hub(page)).toContainText("1 filters on");
+    await expect(rail(page)).toContainText("1 filters on");
   });
 
-  test("R5: more than eight teams rotate, with a page indicator", async ({
+  test("R5: more than eight teams are all listed and the list scrolls inside the zone", async ({
     page,
   }) => {
+    // Replaced: the old wheel rotated the teams in pages of eight; the polished board lists them all and scrolls (proposal 2.1).
     await openFind(page, "big");
     await segment(page, /^Teams/).click();
     await wheel(page)
       .getByRole("menuitem", { name: "Opponents", exact: true })
       .click();
-    const bubbles = wheel(page).getByRole("menuitemcheckbox");
-    await expect(bubbles).toHaveCount(8);
-    await expect(wheel(page).locator(".gd-hub-page")).toHaveText("1/2");
-    await wheel(page).getByRole("button", { name: "Next page" }).click();
-    await expect(wheel(page).locator(".gd-hub-page")).toHaveText("2/2");
-    await expect(bubbles).toHaveCount(3);
+    const list = wheel(page).getByRole("menu", { name: "Opponents options" });
+    await expect(list.getByRole("menuitemcheckbox")).toHaveCount(11);
+    expect(await list.evaluate((el) => getComputedStyle(el).overflowY)).toMatch(/auto|scroll/);
   });
 
   test("R6: Esc, Backspace and Back each go up one level; Esc on Ring 1 leaves the inline wheel open", async ({
@@ -303,7 +298,8 @@ test.describe("filter wheel behaviour (motion off)", () => {
     ).toHaveCount(0);
     await expect(segment(page, /^Gains/)).toBeFocused();
     await segment(page, /^Size/).click();
-    await wheel(page).getByRole("button", { name: "← back" }).click();
+    // Changed selector: Back is the hub.
+    await hub(page).click();
     await expect(
       wheel(page).getByRole("menu", { name: "Size settings" }),
     ).toHaveCount(0);
@@ -330,7 +326,7 @@ test.describe("filter wheel behaviour (motion off)", () => {
     await wheel(page)
       .getByRole("button", { name: "Reset to defaults", exact: true })
       .click();
-    await expect(hub(page)).toContainText("0 filters on");
+    await expect(rail(page)).toContainText("0 filters on");
     await segment(page, /^Gains/).click();
     await wheel(page)
       .getByRole("menuitem", { name: "Their EPPG", exact: true })
@@ -406,9 +402,7 @@ test.describe("filter wheel behaviour (motion off)", () => {
     await expect(
       wheel(page).getByRole("menu", { name: "Filter categories" }),
     ).toBeVisible();
-    await expect(wheel(page).getByRole("status")).toHaveText(
-      /^[\d,]+ \/ [\d,]+$/,
-    );
+    await expect(wheel(page).getByRole("status")).toHaveText("—");
   });
 });
 
@@ -420,7 +414,7 @@ const running = (page: Page) =>
       .filter((a) => {
         const el = (a.effect as KeyframeEffect | null)
           ?.target as Element | null;
-        return !!el?.closest(".gd-wheel-inline");
+        return !!el?.closest(".gd-zb");
       })
       .map((a) =>
         Number((a.effect as KeyframeEffect).getComputedTiming().duration),
@@ -443,7 +437,7 @@ test.describe("filter wheel motion levels", () => {
           tab.click();
           requestAnimationFrame(() =>
             requestAnimationFrame(() =>
-              resolve(document.querySelectorAll(".chalk-puff").length),
+              resolve(document.querySelectorAll(".gd-zb .chalk-particle").length),
             ),
           );
         }),
@@ -772,8 +766,8 @@ test.describe("inline wheel on a phone (390px)", () => {
     page,
   }) => {
     await openFind(page);
-    // The phone crops the board to its middle, so the visible wheel is the fit frame around it, not the whole 960px board.
-    const box = (await page.locator(".gd-wheel-fit").boundingBox())!;
+    // Changed selector: the wheel's column of the polished board, which is the full width on a phone.
+    const box = (await page.locator(".gd-zb-wheelzone").boundingBox())!;
     expect(box.width).toBeLessThanOrEqual(390);
     const results = (await page
       .getByRole("region", { name: "Trade search results" })
@@ -794,10 +788,10 @@ test.describe("inline wheel on a phone (390px)", () => {
     await expect(
       wheel(page).getByRole("menu", { name: "Gains settings" }),
     ).toBeVisible();
-    // Ring 1 is swapped out for the settings.
+    // Replaced: the ring is no longer swapped out; the settings open as a panel below the wheel (proposal 2.4).
     await expect(
       wheel(page).getByRole("menu", { name: "Filter categories" }),
-    ).toHaveCount(0);
+    ).toBeVisible();
   });
 
   test("a tap sets Their EPPG with the − and + buttons and the arc, and the hub agrees", async ({
@@ -805,9 +799,9 @@ test.describe("inline wheel on a phone (390px)", () => {
   }) => {
     await openFind(page);
     await segment(page, /^Gains/).locator(".gd-seg-hit").tap();
+    // Changed selector: the options are chalk pills in the panel, not ring segments.
     await wheel(page)
       .getByRole("menuitem", { name: "Their EPPG", exact: true })
-      .locator(".gd-seg-hit")
       .tap();
     const slider = wheel(page).getByRole("slider", {
       name: "Their EPPG at least",
@@ -818,7 +812,7 @@ test.describe("inline wheel on a phone (390px)", () => {
     await expect(hub(page)).toContainText("+0.5");
     await done(page);
     await done(page);
-    await expect(hub(page)).toContainText("1 filters on");
+    await expect(rail(page)).toContainText("1 filters on");
   });
 
   test("toggles and players are tappable; nothing is hover-only", async ({
@@ -828,17 +822,16 @@ test.describe("inline wheel on a phone (390px)", () => {
     await segment(page, /^Positions/).locator(".gd-seg-hit").tap();
     await wheel(page)
       .getByRole("menuitem", { name: "I get", exact: true })
-      .locator(".gd-seg-hit")
       .tap();
     const wr = wheel(page).getByRole("menuitemcheckbox", { name: "WR" });
     await wr.tap();
     await expect(wr).toHaveAttribute("aria-checked", "true");
-    await wheel(page).getByRole("button", { name: "← back" }).tap();
-    await wheel(page).getByRole("button", { name: "← back" }).tap();
+    // Changed selectors: Back is the hub (there is no back link), and the options are pills, not ring segments.
+    await hub(page).tap();
+    await hub(page).tap();
     await segment(page, /^Players/).locator(".gd-seg-hit").tap();
     await wheel(page)
       .getByRole("menuitem", { name: "I get", exact: true })
-      .locator(".gd-seg-hit")
       .tap();
     await wheel(page)
       .getByRole("searchbox", { name: "Search players" })

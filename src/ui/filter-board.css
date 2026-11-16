@@ -1,0 +1,565 @@
+/* The Find trades chalk board: a left rail, the wheel and a right zone on one chalkboard. It is the filter wheel's Chalk Playbook look
+   (colours and fonts are the board's own, defined in filter-wheel.css) laid out in three zones. Nothing here positions with a CSS
+   transform: Reduced motion clears every transform, so layout must not depend on one. */
+:root[data-gameday] .gd-zb-wrap {
+  container: zb / inline-size;
+  width: min(100%, 1320px);
+  margin: 0 auto 14px;
+}
+:root[data-gameday] .gd-zb {
+  position: relative;
+  overflow: hidden;
+  font-family: var(--gw-hand);
+  color: var(--gw-chalk);
+  background: radial-gradient(90% 80% at 50% 45%, var(--gw-board-1) 0%, var(--gw-board-2) 70%, var(--gw-board-3) 100%);
+  box-shadow: inset 0 0 0 14px var(--gw-wood), inset 0 0 0 18px var(--gw-wood-dark), 0 24px 60px rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+}
+:root[data-gameday] .gd-zb-stage {
+  position: relative;
+  padding: 18px;
+}
+:root[data-gameday] .gd-zb button:focus-visible,
+:root[data-gameday] .gd-zb input:focus-visible,
+:root[data-gameday] .gd-zb select:focus-visible {
+  outline: 3px solid var(--gw-yellow);
+  outline-offset: 2px;
+}
+
+/* Header: the title, what is open, and the shown / found count. */
+:root[data-gameday] .gd-zb-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 18px 0;
+}
+:root[data-gameday] .gd-zb .gd-wheel-title {
+  position: static;
+  font-family: var(--gw-marker);
+  font-size: 26px;
+  line-height: 1.1;
+}
+:root[data-gameday] .gd-zb .gd-wheel-sub {
+  position: static;
+  font-size: 16px;
+  color: var(--gw-muted);
+}
+:root[data-gameday] .gd-zb .gd-wheel-count {
+  position: static;
+  font-family: var(--gw-marker);
+  font-size: 22px;
+  color: var(--gw-yellow);
+}
+
+/* Stacked (phones and narrow boards): rail rows above and below the wheel, the right zone as a panel below it. */
+:root[data-gameday] .gd-zb-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 18px;
+}
+:root[data-gameday] .gd-zb-rail {
+  display: contents;
+}
+:root[data-gameday] .gd-rail-block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 18px;
+}
+:root[data-gameday] .gd-rail-block[data-rail="top"] { order: 1; }
+:root[data-gameday] .gd-zb-wheelzone { order: 2; width: min(calc(100% + 28px), 560px); display: grid; place-items: center; }
+:root[data-gameday] .gd-rail-block[data-rail="bottom"] { order: 3; }
+:root[data-gameday] .gd-zr { order: 4; width: 100%; max-width: 560px; box-sizing: border-box; }
+:root[data-gameday] .gd-zr:empty { display: none; }
+
+/* Three columns: rail 240, wheel, right zone 360, with 24px gaps; the board is 720px tall. */
+@container zb (min-width: 1248px) {
+  :root[data-gameday] .gd-zb { height: 720px; }
+  :root[data-gameday] .gd-zb-stage { height: 100%; padding: 0; }
+  :root[data-gameday] .gd-zb-head {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 2;
+    padding: 34px 44px 0;
+    pointer-events: none;
+  }
+  :root[data-gameday] .gd-zb-grid {
+    display: grid;
+    grid-template-columns: 240px minmax(600px, 1fr) 360px;
+    column-gap: 24px;
+    align-items: center;
+    height: 100%;
+    padding: 0;
+  }
+  :root[data-gameday] .gd-zb-rail {
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+    justify-content: flex-start;
+    gap: 22px;
+    box-sizing: border-box;
+    padding: 130px 8px 0 40px;
+  }
+  :root[data-gameday] .gd-rail-block { flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 14px; }
+  :root[data-gameday] .gd-rail-block[data-rail="top"],
+  :root[data-gameday] .gd-rail-block[data-rail="bottom"] { order: 0; }
+  :root[data-gameday] .gd-zb-wheelzone { order: 0; width: 100%; }
+  :root[data-gameday] .gd-zr {
+    order: 0;
+    width: 360px;
+    max-width: none;
+    max-height: 620px;
+    overflow-y: auto;
+    padding: 0 30px 0 6px;
+  }
+  /* In three columns the right zone stays in the grid even when nothing is open. */
+  :root[data-gameday] .gd-zr:empty { display: block; }
+}
+
+/* The wheel: a 640 x 640 view box that scales with its column. --zb-s is the size of one design pixel. */
+:root[data-gameday] .gd-zb-wheelbox {
+  position: relative;
+  width: min(100%, 640px);
+  aspect-ratio: 1 / 1;
+  --zb-s: 1;
+}
+:root[data-gameday] .gd-zb-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+/* The hub: display-only text in the inner circle; clicking it (while a category is open) goes back. */
+:root[data-gameday] .gd-zb-hub {
+  position: absolute;
+  left: 37.5%;
+  top: 37.5%;
+  width: 25%;
+  height: 25%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--gw-chalk);
+  font-family: var(--gw-hand);
+  overflow: hidden;
+}
+:root[data-gameday] button.gd-zb-hub { cursor: pointer; }
+:root[data-gameday] .gd-zh-idle { font-size: calc(20 * var(--zb-s, 1) * 1px); line-height: 1.15; }
+:root[data-gameday] .gd-zh-name {
+  font-family: var(--gw-marker);
+  font-size: calc(16 * var(--zb-s, 1) * 1px);
+  color: var(--gw-yellow);
+  letter-spacing: 0.04em;
+}
+:root[data-gameday] .gd-zh-line {
+  display: block;
+  max-width: 100%;
+  font-size: calc(12 * var(--zb-s, 1) * 1px);
+  line-height: 1.15;
+  color: var(--gw-muted);
+}
+:root[data-gameday] .gd-zh-value {
+  display: block;
+  max-width: calc(140 * var(--zb-s, 1) * 1px);
+  font-family: var(--gw-marker);
+  font-size: calc(var(--zb-fs, 48) * var(--zb-s, 1) * 1px);
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--gw-chalk);
+}
+:root[data-gameday] .gd-zh-hides {
+  font-size: calc(13 * var(--zb-s, 1) * 1px);
+  line-height: 1.15;
+  color: var(--gw-muted);
+}
+
+/* The arrow from the chosen segment to the right zone, the eraser band and the chalk dust. */
+:root[data-gameday] .gd-zb-arrow {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+:root[data-gameday] .gd-zb-arrow-path {
+  fill: none;
+  stroke: var(--gw-yellow);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+}
+:root[data-gameday] .gd-zb-eraser {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 160px;
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(244, 241, 230, 0.16) 50%, transparent);
+  z-index: 3;
+}
+:root[data-gameday] .gd-zb-dust { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 4; }
+
+/* The left rail. */
+:root[data-gameday] .gd-team { position: relative; }
+:root[data-gameday] .gd-team-button {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid var(--gw-chalk);
+  color: var(--gw-chalk);
+  font-family: var(--gw-hand);
+  font-size: 18px;
+  padding: 4px 2px;
+  min-height: 36px;
+  cursor: pointer;
+  text-align: left;
+}
+:root[data-gameday] .gd-team-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+  min-width: 190px;
+  background: var(--gw-board-2);
+  border: 2px dashed var(--gw-muted);
+  border-radius: 12px;
+}
+:root[data-gameday] .gd-team-list button {
+  position: relative;
+  width: 100%;
+  background: none;
+  border: 0;
+  color: var(--gw-yellow);
+  font-family: var(--gw-hand);
+  font-size: 17px;
+  padding: 6px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-team-circle {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: var(--gw-yellow);
+  stroke-width: 2.5;
+  pointer-events: none;
+}
+:root[data-gameday] .gd-team-circle path { stroke-dasharray: 1; stroke-dashoffset: 1; }
+:root[data-gameday] .gd-team-list [aria-selected="true"] .gd-team-circle path { stroke-dashoffset: 0; }
+:root[data-gameday] .gd-search-wrap { position: relative; width: 200px; height: 68px; }
+:root[data-gameday] .gd-search-circle {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: var(--gw-yellow);
+  stroke-width: 3;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+:root[data-gameday] .gd-search-circle path { stroke-dasharray: 1; }
+:root[data-gameday] .gd-search-button {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 56px;
+  background: none;
+  border: 0;
+  color: var(--gw-chalk);
+  font-family: var(--gw-marker);
+  font-size: 26px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-search-button:disabled { opacity: 0.5; cursor: default; }
+:root[data-gameday] .gd-search-progress { font-size: 15px; color: var(--gw-muted); }
+:root[data-gameday] .gd-search-error { position: relative; padding-bottom: 8px; font-size: 15px; color: #ff9a8a; max-width: 220px; }
+:root[data-gameday] .gd-error-line {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 6px;
+  overflow: visible;
+  fill: none;
+  stroke: #ff9a8a;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+:root[data-gameday] .gd-error-line path { stroke-dasharray: 1; }
+:root[data-gameday] .gd-rail-count { font-size: 17px; color: var(--gw-chalk); }
+:root[data-gameday] .gd-rail-link {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--gw-yellow);
+  font-family: var(--gw-hand);
+  font-size: 17px;
+  text-transform: lowercase;
+  padding: 4px 0;
+  min-height: 32px;
+  cursor: pointer;
+  text-align: left;
+}
+:root[data-gameday] .gd-rail-link:hover,
+:root[data-gameday] .gd-rail-link:focus-visible { border-bottom-color: var(--gw-yellow); }
+
+/* The right zone: the options of the open category in yellow chalk, number cards and chalk panels. */
+:root[data-gameday] .gd-zr { scrollbar-width: thin; scrollbar-color: var(--gw-faint) transparent; }
+:root[data-gameday] .gd-zr-content { display: flex; flex-direction: column; gap: 16px; }
+:root[data-gameday] .gd-zr-options { display: flex; flex-direction: column; gap: 10px; }
+:root[data-gameday] .gd-zpill {
+  position: relative;
+  min-height: 44px;
+  padding: 10px 18px;
+  background: none;
+  border: 0;
+  color: var(--gw-yellow);
+  font-family: var(--gw-marker);
+  font-size: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-zpill-border { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+:root[data-gameday] .gd-zpill-dashed { stroke: var(--gw-muted); stroke-width: 2; stroke-dasharray: 6 5; }
+:root[data-gameday] .gd-zpill-solid { stroke: var(--gw-yellow); stroke-width: 3; stroke-dasharray: 1; opacity: 0; }
+:root[data-gameday] .gd-zpill[data-on="true"] .gd-zpill-solid { opacity: 1; }
+:root[data-gameday] .gd-zr-toggles { display: flex; flex-direction: column; gap: 2px; max-height: 420px; overflow-y: auto; scrollbar-width: thin; }
+:root[data-gameday] .gd-zr-toggles[data-long] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+}
+:root[data-gameday] .gd-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 2px;
+  background: none;
+  border: 0;
+  color: var(--gw-yellow);
+  font-family: var(--gw-marker);
+  font-size: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-ctick {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 18px;
+  fill: none;
+  stroke: var(--gw-yellow);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+:root[data-gameday] .gd-ctick[data-on="true"] { opacity: 1; }
+:root[data-gameday] .gd-ctick path { stroke-dasharray: 1; }
+
+/* The value card of a number filter. */
+:root[data-gameday] .gd-value-card { display: flex; flex-direction: column; gap: 12px; }
+:root[data-gameday] .gd-minmax { display: flex; gap: 10px; }
+:root[data-gameday] .gd-minmax-button {
+  min-height: 44px;
+  min-width: 72px;
+  background: none;
+  border: 2px dashed var(--gw-muted);
+  border-radius: 12px;
+  color: var(--gw-chalk);
+  font-family: var(--gw-marker);
+  font-size: 16px;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-minmax-button[aria-pressed="true"] { border-style: solid; border-color: var(--gw-yellow); color: var(--gw-yellow); }
+:root[data-gameday] .gd-value-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+:root[data-gameday] .gd-step-button {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  background: none;
+  border: 2.5px solid var(--gw-chalk);
+  border-radius: 50%;
+  color: var(--gw-chalk);
+  font-family: var(--gw-marker);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-value-big {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  background: none;
+  border: 0;
+  color: var(--gw-yellow);
+  font-family: var(--gw-marker);
+  font-size: 32px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+:root[data-gameday] .gd-value-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid var(--gw-yellow);
+  color: var(--gw-yellow);
+  font-family: var(--gw-marker);
+  font-size: 28px;
+  text-align: center;
+}
+:root[data-gameday] .gd-value-hint { margin: 0; font-size: 14px; color: var(--gw-muted); }
+
+/* A chalk panel: board-coloured, a dashed chalk border that draws itself, a Permanent Marker heading and Kalam text. */
+:root[data-gameday] .gd-chalk-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 18px 16px;
+  background: var(--gw-board-2);
+  border-radius: 14px;
+  color: var(--gw-chalk);
+  font-family: var(--gw-hand);
+}
+:root[data-gameday] .gd-chalk-border { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+:root[data-gameday] .gd-chalk-border-rect { stroke: var(--gw-chalk); stroke-width: 2.5; stroke-dasharray: 8 6; opacity: 0.85; }
+:root[data-gameday] .gd-chalk-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--gw-marker);
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--gw-yellow);
+}
+:root[data-gameday] .gd-chalk-count { font-family: var(--gw-hand); font-size: 14px; color: var(--gw-muted); }
+:root[data-gameday] .gd-chalk-panel input.gd-chalk-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  border-bottom: 2px solid var(--gw-faint) !important;
+  border-radius: 0 !important;
+  color: var(--gw-chalk) !important;
+  font-family: var(--gw-hand);
+  font-size: 17px;
+  padding: 6px 2px;
+  outline: 0;
+}
+:root[data-gameday] .gd-chalk-panel input.gd-chalk-input:focus { border-bottom-color: var(--gw-yellow) !important; }
+:root[data-gameday] .gd-chalk-panel input.gd-chalk-input::placeholder { color: var(--gw-faint); }
+:root[data-gameday] .gd-zp-empty { margin: 0; color: var(--gw-muted); font-size: 15px; }
+:root[data-gameday] .gd-zp-row { display: flex; gap: 10px; flex-wrap: wrap; }
+:root[data-gameday] .gd-chalk-panel select,
+:root[data-gameday] .gd-chalk-panel input {
+  background: transparent;
+  border: 0 !important;
+  border-bottom: 2px solid var(--gw-faint) !important;
+  border-radius: 0 !important;
+  color: var(--gw-chalk);
+  font-family: var(--gw-hand);
+  font-size: 16px;
+  padding: 4px 2px;
+  min-height: 36px;
+}
+:root[data-gameday] .gd-chalk-panel option { background: var(--gw-board-2); color: var(--gw-chalk); }
+:root[data-gameday] .gd-goals-body { position: relative; }
+:root[data-gameday] .gd-goals-chalk { background: none; border: 0; box-shadow: none; padding: 0; color: var(--gw-chalk); }
+:root[data-gameday] .gd-goals-chalk .gd-rule { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px dashed var(--gw-faint); }
+:root[data-gameday] .gd-goals-chalk .gd-quiet { margin: 4px 0 0; color: var(--gw-muted); font-size: 14px; }
+:root[data-gameday] .gd-goals-chalk .gd-goal-line { flex-basis: 100%; }
+:root[data-gameday] .gd-goals-chalk .gd-cbtn {
+  background: none;
+  border: 2px dashed var(--gw-muted);
+  border-radius: 10px;
+  color: var(--gw-yellow);
+  font-family: var(--gw-hand);
+  font-size: 16px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+/* Player rows: 52px, a 40px round photo with the shared head-and-shoulders framing, the name, POS and NFL, EPPG and Surplus. */
+:root[data-gameday] .gd-prow-list { position: relative; display: flex; flex-direction: column; max-height: 390px; overflow-y: auto; scrollbar-width: thin; }
+:root[data-gameday] .gd-prow,
+:root[data-gameday] .gd-prow-ghost {
+  position: relative;
+  flex: 0 0 52px;
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  height: 52px;
+  padding: 0 8px;
+  background: none;
+  border: 0;
+  color: var(--gw-chalk);
+  font-family: var(--gw-hand);
+  text-align: left;
+  cursor: pointer;
+}
+:root[data-gameday] .gd-prow-hatch {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: repeating-linear-gradient(35deg, rgba(255, 228, 92, 0.22) 0 2px, transparent 2px 7px);
+  opacity: 0;
+  pointer-events: none;
+}
+:root[data-gameday] .gd-prow-hatch[data-on="true"] { opacity: 1; }
+:root[data-gameday] .gd-prow-photo { position: relative; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; display: block; }
+:root[data-gameday] .gd-prow-photo .gd-photo { display: flex !important; align-items: flex-end !important; justify-content: center !important; width: 100% !important; height: 100% !important; }
+:root[data-gameday] .gd-prow-photo .gd-photo img { width: auto !important; max-width: 100% !important; height: 92% !important; object-fit: contain !important; object-position: 50% 100% !important; }
+:root[data-gameday] .gd-prow-photo .gd-photo-fallback { align-self: center; }
+:root[data-gameday] .gd-prow-text { position: relative; display: flex; flex-direction: column; min-width: 0; }
+:root[data-gameday] .gd-prow-name { position: relative; display: inline-flex; align-items: center; gap: 6px; font-size: 17px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; align-self: flex-start; max-width: 100%; }
+:root[data-gameday] .gd-prow-name .gd-ctick { flex: 0 0 18px; width: 18px; height: 14px; }
+:root[data-gameday] .gd-prow-meta { font-size: 13px; color: var(--gw-muted); }
+:root[data-gameday] .gd-prow-underline { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--gw-yellow); opacity: 0; transform-origin: left; }
+:root[data-gameday] .gd-prow:hover .gd-prow-underline,
+:root[data-gameday] .gd-prow:focus-visible .gd-prow-underline { opacity: 1; }
+:root[data-gameday] .gd-prow:hover .gd-prow-photo,
+:root[data-gameday] .gd-prow:focus-visible .gd-prow-photo { transform: translateY(-2px); }
+:root[data-gameday] .gd-prow-nums { display: flex; flex-direction: column; align-items: flex-end; font-size: 14px; line-height: 1.2; color: var(--gw-muted); white-space: nowrap; }
+:root[data-gameday] .gd-prow-nums b { color: var(--gw-yellow); font-weight: 700; }
+:root[data-gameday] .gd-prow-search { margin-bottom: 2px; }
+
+/* The play-call scene and the notice toast live inside the board. */
+:root[data-gameday] .gd-zb-stage > .gd-playcall { position: relative; margin: 0 14px 14px; z-index: 5; }
+@container zb (min-width: 1248px) {
+  :root[data-gameday] .gd-zb-stage > .gd-playcall { position: absolute; left: 280px; right: 400px; bottom: 28px; margin: 0; }
+}
+:root[data-gameday] .gd-zb-stage > .gd-wheel-toast { position: absolute; left: 40px; bottom: 28px; z-index: 6; }
+

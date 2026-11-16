@@ -51,7 +51,7 @@ export const variantFor = (
 ): Variant | null =>
   level === "off" ? null : level === "reduced" ? spec.reduced : spec.full;
 
-const v = (
+export const v = (
   keyframes: Keyframe[],
   duration: number,
   easing: string = EASE.out,
@@ -60,14 +60,14 @@ const v = (
   keyframes,
   options: { easing, fill: "both", ...more, duration },
 });
-const fade = (duration: number, out = false): Variant =>
+export const fade = (duration: number, out = false): Variant =>
   v(
     out ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 0 }, { opacity: 1 }],
     duration,
     "linear",
   );
 
-const spec = (
+export const spec = (
   id: string,
   full: Variant | null,
   reduced: Variant | null,

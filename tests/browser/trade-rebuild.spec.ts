@@ -12,8 +12,8 @@ const wheel = (page: Page) =>
   page.getByRole("dialog", { name: "Trade filters" });
 const segment = (page: Page, name: RegExp | string) =>
   wheel(page).getByRole("menuitem", { name });
-const done = (page: Page) =>
-  wheel(page).getByRole("button", { name: "done", exact: true }).click();
+// Changed selector: Back is the hub of the polished board (there is no done link).
+const done = (page: Page) => wheel(page).locator(".gd-zb-hub").click();
 // The two gain options are the frame every other test changes.
 async function openTheirGain(page: Page) {
   await segment(page, /^Gains/).click();
@@ -53,19 +53,20 @@ async function counts(page: Page) {
 // "hides N" under the option in the hub.
 const hides = async (page: Page) =>
   Number(
-    (await wheel(page).locator(".gd-hub-hides").innerText()).match(/hides\s+([\d,]+)/)![1].replace(/,/g, ""),
+    (await wheel(page).locator(".gd-zh-hides").innerText()).match(/hides\s+([\d,]+)/)![1].replace(/,/g, ""),
   );
 
 test.describe("Find trades: one search", () => {
   test("the wheel holds Team, Never trade and one Search button; the retired options are gone", async ({ page }) => {
     await openFind(page);
     const panel = page.getByRole("tabpanel", { name: "Find trades" });
-    await expect(wheel(page).getByRole("combobox", { name: "Team" })).toHaveCount(1);
+    // Changed selector: the team chooser is a chalk button in the left rail ("for <team>") that opens a list of teams.
+    await expect(wheel(page).getByRole("button", { name: /^for / })).toHaveCount(1);
     await expect(segment(page, /^Never trade/)).toBeVisible();
     const visible: string[] = [];
     const buttons = panel.getByRole("button", { name: /search/i });
     for (let i = 0; i < (await buttons.count()); i++)
-      if (await buttons.nth(i).isVisible()) visible.push((await buttons.nth(i).innerText()).trim());
+      if (await buttons.nth(i).isVisible()) visible.push(((await buttons.nth(i).textContent()) ?? "").trim()); // Changed: textContent, because SEARCH is drawn in capitals by the board's CSS.
     expect(visible).toEqual(["Search"]);
     for (const retired of [
       "Search goal", "Rank by", "Manager profiles", "Surface Trading", "Search limits", "Use strict index range",
@@ -77,7 +78,8 @@ test.describe("Find trades: one search", () => {
 
   test("before a search there is a prompt and no results", async ({ page }) => {
     await openFind(page);
-    await expect(page.getByText("Press Search all trades to check every legal trade for your team")).toBeVisible();
+    // Changed copy (polish proposal 2.5): the button is "Search", so the prompt says so.
+    await expect(page.getByText("Press Search to check every legal trade for your team.")).toBeVisible();
     await expect(page.locator(".gd-res-row")).toHaveCount(0);
   });
 
@@ -125,10 +127,10 @@ test.describe("Find trades: one search", () => {
     await done(page);
     await done(page);
     await expect(handle).toHaveCount(0);
-    await expect(wheel(page).locator(".gd-wheel-hub")).toContainText("1 filters on");
+    await expect(wheel(page).locator('[data-zone="rail"]')).toContainText("1 filters on");
     // Reset to defaults puts their gain back to +1 and your gain back to 0.
     await wheel(page).getByRole("button", { name: "Reset to defaults", exact: true }).click();
-    await expect(wheel(page).locator(".gd-wheel-hub")).toContainText("0 filters on");
+    await expect(wheel(page).locator('[data-zone="rail"]')).toContainText("0 filters on");
     await expect(await openTheirGain(page)).toHaveAttribute("aria-valuenow", "1");
     await expect(await openYourGain(page)).toHaveAttribute("aria-valuenow", "0");
   });

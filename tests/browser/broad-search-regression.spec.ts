@@ -10,7 +10,8 @@ async function openFind(page: Page, filters: Record<string, string> = {}) {
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
   await expect(page.locator(".gd-find")).toBeVisible();
 }
-const wheel = (page: Page) => page.locator(".gd-find .gd-wheel-board:visible");
+// Changed selector: the polished board (it is the wheel board, with its rail and right zone).
+const wheel = (page: Page) => page.locator(".gd-find .gd-zb:visible");
 const results = (page: Page) => page.getByRole("region", { name: "Trade search results" });
 
 // Read the filtered and retained totals, including the grouping prefix in the revised header.
@@ -95,7 +96,7 @@ test("full league keeps streamed trades and explains filter totals", async ({ pa
   await expect.poll(async () => (await counts(page)).shown).toBe(before.shown);
   await wheel(page).getByRole("menuitem", { name: /^Gains/ }).click();
   await wheel(page).getByRole("menuitem", { name: /^Their EPPG/ }).click();
-  const hides = Number((await wheel(page).locator(".gd-hub-hides").innerText()).match(/hides\s+([\d,]+)/)![1].replace(/,/g, ""));
+  const hides = Number((await wheel(page).locator(".gd-zh-hides").innerText()).match(/hides\s+([\d,]+)/)![1].replace(/,/g, ""));
   const slider = wheel(page).getByRole("slider", { name: /Their EPPG/i });
   await slider.focus(); await page.keyboard.press("Home");
   await expect.poll(async () => (await counts(page)).shown).toBe(before.shown + hides);

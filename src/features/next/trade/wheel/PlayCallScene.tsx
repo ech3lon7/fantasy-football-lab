@@ -3,6 +3,9 @@ import { str } from "../../../../domain/contracts";
 import type { Model } from "../../../../domain/valuation";
 import { useFeedback } from "../../../../ui/feel/feedback";
 import { MotionRunner, chalkSpecs, motionLevel } from "./chalk-motion";
+import { motion as boardMotion } from "../board/board-motion";
+
+const routesErase = boardMotion.routesErase;
 
 interface Progress {
   singles: number;
@@ -19,6 +22,7 @@ export function PlayCallScene({
   teams,
   running,
   failed,
+  cancelled = false,
   onGone,
 }: {
   m: Model;
@@ -26,6 +30,8 @@ export function PlayCallScene({
   teams: Record<string, Progress> | undefined;
   running: boolean;
   failed: boolean;
+  // The search was cancelled: the routes are erased with an eraser wipe (M19) instead of folding into the coverage line.
+  cancelled?: boolean;
   // Called once the diagram has folded away (or at once at Off).
   onGone: () => void;
 }) {
@@ -109,6 +115,15 @@ export function PlayCallScene({
   // Step 5: when the search ends the diagram shrinks into the coverage line; a failed search says so instead.
   useEffect(() => {
     if (running) return;
+    if (cancelled) {
+      notify("caution");
+      if (level === "off" || !root.current) return setGone(true);
+      setLeaving(true);
+      const erase = runner.current.play("erase", root.current.querySelector("svg") ?? root.current, routesErase);
+      if (!erase) return setGone(true);
+      erase.finished.then(() => setGone(true), () => setGone(true));
+      return;
+    }
     notify(failed ? "caution" : "success");
     if (level === "off" || !root.current) return setGone(true);
     setLeaving(true);
@@ -145,6 +160,7 @@ export function PlayCallScene({
     <div
       ref={root}
       className="gd-playcall"
+      data-motion="M17 M18 M19"
       data-leaving={leaving || undefined}
       aria-hidden="true"
     >

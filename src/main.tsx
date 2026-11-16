@@ -7,6 +7,7 @@ import "./ui/trade-tabs.css";
 import "./ui/gameday.css";
 import "./ui/player-hero.css";
 import "./ui/filter-wheel.css";
+import "./ui/filter-board.css";
 // Notify the independent HTML startup guard only after the application actually mounts.
 function Startup() {
   useEffect(() => {

@@ -7,9 +7,8 @@ import type { TradeSearchQuery } from "../../../domain/trade-search";
 import type { SavedTradeSummary } from "../../../domain/saved-trades";
 import { defaultTradeFilters, showAllTradeFilters } from "../../../domain/trade-filters";
 import { GradeGoals } from "./GradeGoals";
-import { FilterWheel } from "./wheel/FilterWheel";
+import { WheelBoard } from "./board/WheelBoard";
 import { findWheelData } from "./wheel/wheel-data";
-import { activeFilterCount } from "./wheel/wheel-model";
 import { BroadResults } from "./BroadResults";
 import { useTradeSearch } from "./useTradeSearch";
 import { PlayCallScene } from "./wheel/PlayCallScene";
@@ -76,11 +75,13 @@ export function FindTrades({
           target?.closest('input, select, textarea, [contenteditable="true"]') ||
           Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).some((dialog) => dialog.getClientRects().length > 0) ||
           filterShortcut(event) !== (shortcut || defaultFilterShortcut)) return;
-      const board = root.current.querySelector<HTMLElement>(".gd-wheel-board");
+      const board = root.current.querySelector<HTMLElement>(".gd-zb");
       if (!board) return;
       event.preventDefault();
       board.scrollIntoView({ block: "center" });
       board.querySelector<HTMLElement>('.gd-wheel-seg[tabindex="0"]')?.focus();
+      // The board answers with a short chalk tap and sweeps the focused segment's hatch (M23).
+      board.dispatchEvent(new CustomEvent("zb-shortcut"));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -98,8 +99,7 @@ export function FindTrades({
   return (
     <div ref={root} className="gd-find gd-broad-search">
       <div className="gd-find-wheel">
-        <FilterWheel
-          inline
+        <WheelBoard
           data={findWheelData({
             m: model, teamA: draft.teamA, filters: f, update,
             clear: () => s.updateBroad({ filters: defaultTradeFilters() }),
@@ -109,22 +109,24 @@ export function FindTrades({
             counts: { total: s.job?.total ?? 0, visible: s.job?.visibleTotal ?? 0,
               hides: s.job?.filterCounts ?? {}, blocks: s.job?.filterBlocks ?? {} },
           })}
-          hub={<>
-            <label>for <select aria-label="Team" value={draft.teamA} onChange={(event) => change({ ...draft, teamA: event.target.value, teamB: "", give: [], get: [] })}>
-              {teams.map((team) => <option key={str(team.TeamID)} value={str(team.TeamID)}>{str(team.TeamName)}</option>)}
-            </select></label>
-            <span>{activeFilterCount(f)} filters on</span>
-            {s.running ? <button type="button" onClick={s.cancel}>Cancel</button> :
-              <button type="button" disabled={!draft.teamA} onClick={() => s.search(selected)}>Search</button>}
-            <button type="button" onClick={() => s.updateBroad({ filters: showAllTradeFilters() })}>Show all</button>
-            <button type="button" onClick={() => s.updateBroad({ filters: defaultTradeFilters() })}>Reset to defaults</button>
-          </>}
-          goalsEditor={<GradeGoals m={model} draft={draft} rules={f.gradeGoals} onChange={(gradeGoals) => update({ gradeGoals })} />}
-          onClose={() => undefined}
-          onListView={() => undefined}
+          searched={!!s.job}
+          goalsEditor={<GradeGoals chalk m={model} draft={draft} rules={f.gradeGoals} onChange={(gradeGoals) => update({ gradeGoals })} />}
+          rail={{
+            teams: teams.map((team) => ({ id: str(team.TeamID), name: str(team.TeamName) })),
+            teamId: draft.teamA,
+            onTeam: (id) => change({ ...draft, teamA: id, teamB: "", give: [], get: [] }),
+            running: s.running,
+            canSearch: !!draft.teamA,
+            onSearch: () => s.search(selected),
+            onCancel: s.cancel,
+            progress: s.running ? { done: Object.values(s.job?.teams ?? {}).filter((t) => t.done).length, total: Math.max(0, teams.length - 1) } : null,
+            error: s.job?.status === "error" ? (s.job.error ?? "Trade search failed.") : "",
+          }}
+          onShowAll={() => s.updateBroad({ filters: showAllTradeFilters() })}
+          onReset={() => s.updateBroad({ filters: defaultTradeFilters() })}
+          notice={notice && <div className="gd-wheel-toast" role="status">{notice}</div>}
+          scene={scene && <PlayCallScene m={model} ownTeam={draft.teamA} teams={s.job?.teams} running={s.running} failed={s.job?.status === "error"} cancelled={s.job?.status === "cancelled"} onGone={() => setScene(false)} />}
         />
-        {notice && <div className="gd-wheel-toast" role="status">{notice}</div>}
-        {scene && <PlayCallScene m={model} ownTeam={draft.teamA} teams={s.job?.teams} running={s.running} failed={s.job?.status === "error"} onGone={() => setScene(false)} />}
       </div>
       <BroadResults m={model} s={s} canSave={!!save} onAnalyze={onAnalyze} />
     </div>

@@ -32,8 +32,8 @@ describe("wheel categories", () => {
     expect(categoriesFor("find")[0].options.map((o) => o.label)).toEqual([
       "Your EPPG",
       "Their EPPG",
-      "Your week",
-      "Their week",
+      "Your MPPG",
+      "Their MPPG",
     ]);
   });
 

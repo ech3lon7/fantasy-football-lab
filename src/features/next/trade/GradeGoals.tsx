@@ -24,6 +24,7 @@ export function GradeGoals({
   rules,
   onChange,
   scope,
+  chalk,
   children,
 }: {
   m: Model;
@@ -32,6 +33,8 @@ export function GradeGoals({
   onChange: (rules: PositionalGradeImpactRule[]) => void;
   // Names the trade whose goals these are (Chain planner); the editor then folds into its group instead of being a card.
   scope?: string;
+  // Drawn in chalk inside the filter board: no card, and the board's own heading replaces this one.
+  chalk?: boolean;
   // The primary action sits at the foot of the card.
   children?: ReactNode;
 }) {
@@ -45,7 +48,7 @@ export function GradeGoals({
     onChange(rules.map((r, i) => (i === index ? next : r)));
   return (
     <section
-      className={scope ? "gd-goals" : "gd-card gd-goals"}
+      className={scope ? "gd-goals" : chalk ? "gd-goals gd-goals-chalk" : "gd-card gd-goals"}
       aria-label={
         scope ? `${scope} positional grade goals` : "Positional grade goals"
       }
@@ -53,6 +56,8 @@ export function GradeGoals({
       <div className="gd-chips" style={{ justifyContent: "space-between" }}>
         {scope ? (
           <span className="gd-quiet">Goals for {scope.toLowerCase()}</span>
+        ) : chalk ? (
+          <span />
         ) : (
           <h3>Positional grade goals</h3>
         )}

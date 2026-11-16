@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useDeferredValue, useRef, useState, type ReactNode } from "react";
 import type { Model } from "../../../domain/valuation";
 import type { SearchRow } from "../../../domain/trade-search";
 import { defaultTradeFilters, showAllTradeFilters } from "../../../domain/trade-filters";
@@ -44,7 +44,9 @@ export function BroadResults({
   canSave: boolean;
   onAnalyze: () => void;
 }) {
-  const job = s.job,
+  // The results are rendered from a deferred copy of the job, so a big batch of rows is built in short slices between frames and never
+  // freezes the board's animations in one long task.
+  const job = useDeferredValue(s.job),
     model = s.resultModel.current ?? m;
   const listRef = useRef<HTMLDivElement>(null);
   // Rows slide, collapse and draw in as filters, sort and the search change them (A11, A13).
@@ -63,8 +65,8 @@ export function BroadResults({
   const reason: Record<string, string> = {
     yourGain: "Your EPPG gain",
     theirGain: "Their EPPG gain",
-    ownWeek: "Your this-week MPPG gain",
-    otherWeek: "Their this-week MPPG gain",
+    ownWeek: "Your MPPG gain",
+    otherWeek: "Their MPPG gain",
     receiveStarts: "Incoming players do not all start every week",
     giveStarts: "Outgoing players do not all start every week",
     gradeGoals: "Positional grade goals",
@@ -141,7 +143,7 @@ export function BroadResults({
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
   if (!job)
-    return <section aria-label="Trade search results"><p>Press Search all trades to check every legal trade for your team</p></section>;
+    return <section aria-label="Trade search results"><p>Press Search to check every legal trade for your team.</p></section>;
   if (s.stale)
     return (
       <p role="status">
@@ -203,7 +205,7 @@ export function BroadResults({
           {job.coverage.missingTeams?.length ? ` · Couldn't search: ${job.coverage.missingTeams.map((id) => String(m.dataset.tables.ModelTeams.find((team) => String(team.TeamID) === id)?.TeamName ?? id)).join(", ")}` : ""}
         </p>
       )}
-      <div ref={listRef} className="gd-card gd-res">
+      <div ref={listRef} className="gd-card gd-res" data-motion="M22">
         <div className="gd-res-grid gd-res-head">
           <span>You give → You get</span>
           <span>Your EPPG gain</span>
