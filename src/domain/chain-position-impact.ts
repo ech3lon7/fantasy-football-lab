@@ -72,6 +72,7 @@ export function chainPositionImpact(
   draft: Draft,
   result: TradeResult,
   targetPositions?: Iterable<string>,
+  cachedBefore?: Map<string, { position: string; grade: string }[]>,
 ): ChainPositionImpact {
   if (!result.valid || !result.legality) return { own: [], other: [] };
   const own = new Set(result.legalA),
@@ -91,7 +92,7 @@ export function chainPositionImpact(
       slot: ir.has(p.id) ? 21 : owner !== p.owner ? 20 : p.slot,
     };
   });
-  const before = teamsAssessment(m),
+  const before = cachedBefore ?? teamsAssessment(m),
     after = teamsAssessment({
       ...m,
       players,

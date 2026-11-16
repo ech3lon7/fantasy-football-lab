@@ -148,6 +148,16 @@ export async function withLineupMemoAsync<T>(run: () => Promise<T>): Promise<T> 
 }
 // The same roster array is scored for every remaining week, so its key and its IR assignment are worked out once per array.
 const idsKeys = new WeakMap<string[], { key: string; len: number; first?: string; last?: string; ir?: string[] }>();
+export function lineupUncached(
+  m: Model,
+  ids: string[],
+  week: number,
+  downside = false,
+  healthy = false,
+  basis: "value" | "expected" = "value",
+): Lineup {
+  return buildLineup(m, ids, week, downside, healthy, basis);
+}
 export function lineup(
   m: Model,
   ids: string[],

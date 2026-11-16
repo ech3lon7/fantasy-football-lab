@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { positionGradeScale } from "../../../../domain/trade-search";
 import { positions } from "../../../../domain/contracts";
+import type { Player } from "../../../../domain/valuation";
 import type { WheelData } from "../wheel/wheel-data";
 import type { WheelCategory, WheelOption } from "../wheel/wheel-model";
 import { motion, useBoardMotion } from "./board-motion";
@@ -175,9 +176,135 @@ function ValueCard({
   );
 }
 
+function MustButton({
+  required,
+  disabled,
+  onToggle,
+}: {
+  required: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  const bm = useBoardMotion();
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const mounted = useRef(false);
+
+  useLayoutEffect(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    if (!mounted.current) {
+      mounted.current = true;
+      bm.play("must-ghost", el, motion.ghost);
+    }
+  }, []);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const el = btnRef.current;
+    if (el) {
+      bm.play("must-pulse", el, motion.ringPulse);
+    }
+    onToggle();
+  };
+
+  return (
+    <button
+      ref={btnRef}
+      type="button"
+      className="gd-must"
+      data-motion="M1 M8 M2"
+      aria-pressed={required}
+      disabled={disabled}
+      aria-disabled={disabled ? "true" : undefined}
+      onClick={handleClick}
+    >
+      must
+    </button>
+  );
+}
+
+function ProwWrap({
+  player,
+  selected,
+  required,
+  mustDisabled,
+  onToggleRow,
+  onToggleMust,
+  isNeverTrade,
+}: {
+  player: Player;
+  selected: boolean;
+  required: boolean;
+  mustDisabled: boolean;
+  onToggleRow: () => void;
+  onToggleMust: () => void;
+  isNeverTrade?: boolean;
+}) {
+  const bm = useBoardMotion();
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const wasSelected = useRef(selected);
+
+  useLayoutEffect(() => {
+    if (wasSelected.current && !selected) {
+      const host = wrapRef.current;
+      if (host && bm.level() !== "off") {
+        const copy = document.createElement("button");
+        copy.type = "button";
+        copy.className = "gd-must";
+        copy.textContent = "must";
+        copy.setAttribute("data-motion", "M2");
+        copy.setAttribute("aria-hidden", "true");
+        copy.setAttribute("inert", "");
+        Object.assign(copy.style, {
+          position: "absolute",
+          right: "0",
+          pointerEvents: "none",
+        });
+        host.appendChild(copy);
+        const anim = bm.play("must-smudge", copy, motion.smudge);
+        if (anim) anim.finished.then(() => copy.remove(), () => copy.remove());
+        else copy.remove();
+      }
+    }
+    wasSelected.current = selected;
+  }, [selected]);
+
+  return (
+    <div ref={wrapRef} className="gd-prow-wrap" data-key={player.id}>
+      <PlayerChalkRow
+        player={player}
+        selected={selected}
+        onToggle={onToggleRow}
+        disabled={isNeverTrade}
+        metaSuffix={isNeverTrade ? "never trade" : undefined}
+      />
+      {selected && (
+        <MustButton
+          required={required}
+          disabled={mustDisabled}
+          onToggle={onToggleMust}
+        />
+      )}
+    </div>
+  );
+}
+
 // A search over players (Never trade, I get, I give, Exclude): a chalk panel with an underline-only search box and one row per player.
 function PlayerPanel({ data, option, query, setQuery }: { data: WheelData; option: WheelOption; query: string; setQuery: (q: string) => void }) {
-  const { players, selected } = data.getPlayers(option.id);
+  const { players, selected, required = [] } = data.getPlayers(option.id);
+  const isGive = option.id === "mustGive";
+  const isGet = option.id === "mustGet";
+  const hasMust = isGive || isGet;
+
+  const atLimit = required.length >= 3;
+  const requiredTeam = isGet && required.length >= 1 ? players.find((p) => required.includes(p.id))?.owner : undefined;
+  const teamRuleDisablesAny = isGet && !!requiredTeam && selected.some((id) => { const p = players.find((x) => x.id === id); return p && p.owner !== requiredTeam; });
+
+  const notes: string[] = [];
+  if (isGive && atLimit) notes.push("A trade gives at most 3 players.");
+  if (isGet && atLimit) notes.push("A trade gets at most 3 players.");
+  if (isGet && teamRuleDisablesAny) notes.push("A trade is with one team.");
+
   const q = query.trim().toLowerCase();
   const list = useMemo(() => {
     const matches = players.filter((p) => selected.includes(p.id) || !q || `${p.name} ${p.pos} ${p.nfl}`.toLowerCase().includes(q));
@@ -190,6 +317,9 @@ function PlayerPanel({ data, option, query, setQuery }: { data: WheelData; optio
   const label = option.id === "never" ? "Never trade" : option.label;
   return (
     <ChalkPanel label={option.label} heading={label} count={<RollText motionId="M12" text={`${selected.length} selected`} />}>
+      {notes.map((note) => (
+        <p key={note} className="gd-prow-note">{note}</p>
+      ))}
       <div className="gd-prow-search" data-slide="">
         <input
           className="gd-chalk-input"
@@ -201,9 +331,30 @@ function PlayerPanel({ data, option, query, setQuery }: { data: WheelData; optio
         />
       </div>
       <div ref={container} className="gd-prow-list" data-motion="M10">
-        {list.map((p) => (
-          <PlayerChalkRow key={p.id} player={p} selected={selected.includes(p.id)} onToggle={() => data.togglePlayer(option.id, p.id)} />
-        ))}
+        {list.map((p) => {
+          const isSelected = selected.includes(p.id);
+          const isReq = required.includes(p.id);
+          const isNeverTrade = isGive && (data.protectedIds?.includes(p.id) ?? false);
+          let mustDisabled = false;
+          if (hasMust && isSelected) {
+            if (atLimit && !isReq) mustDisabled = true;
+            if (isGet && requiredTeam && p.owner !== requiredTeam && !isReq) mustDisabled = true;
+          }
+          return hasMust ? (
+            <ProwWrap
+              key={p.id}
+              player={p}
+              selected={isSelected}
+              required={isReq}
+              mustDisabled={mustDisabled}
+              onToggleRow={() => data.togglePlayer(option.id, p.id)}
+              onToggleMust={() => data.toggleRequired?.(option.id, p.id)}
+              isNeverTrade={isNeverTrade}
+            />
+          ) : (
+            <PlayerChalkRow key={p.id} player={p} selected={isSelected} onToggle={() => data.togglePlayer(option.id, p.id)} />
+          );
+        })}
         {!list.length && <p className="gd-zp-empty">no players match</p>}
       </div>
     </ChalkPanel>

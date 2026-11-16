@@ -198,6 +198,12 @@ export function useTradeSearch({
     const old = initialSettings.standard as { query?: TradeSearchQuery; broadTeams?: Record<string, { filters: TradeFilters; protectedIds: string[] }>; broadMigrationChecked?: boolean } | undefined;
     const teams = { ...(old?.broadTeams ?? {}) };
     let repaired = false;
+    for (const entry of Object.values(teams)) {
+      if (entry?.filters) {
+        if (!entry.filters.mustGiveRequired) entry.filters.mustGiveRequired = [];
+        if (!entry.filters.mustGetRequired) entry.filters.mustGetRequired = [];
+      }
+    }
     if (!old?.broadMigrationChecked) {
       for (const [team, entry] of Object.entries(teams)) {
         if (entry.filters.mustGive?.length) {
@@ -225,7 +231,30 @@ export function useTradeSearch({
   const [broadLimit, setBroadLimit] = useState(50);
   const appliedBroad = useRef(false);
   const updateBroad = (patch: Partial<{ filters: TradeFilters; protectedIds: string[] }>) =>
-    setBroadTeams((previous) => ({ ...previous, [draft.teamA]: { ...(previous[draft.teamA] ?? { filters: defaultTradeFilters(), protectedIds: [] }), ...patch } }));
+    setBroadTeams((previous) => {
+      const current = previous[draft.teamA] ?? { filters: defaultTradeFilters(), protectedIds: [] };
+      const nextProtectedIds = patch.protectedIds ?? current.protectedIds;
+      let nextFilters = patch.filters ? { ...patch.filters } : { ...current.filters };
+
+      if (patch.protectedIds) {
+        const added = patch.protectedIds.filter((id) => !current.protectedIds.includes(id));
+        if (added.length) {
+          nextFilters = {
+            ...nextFilters,
+            mustGive: nextFilters.mustGive.filter((id) => !added.includes(id)),
+            mustGiveRequired: nextFilters.mustGiveRequired.filter((id) => !added.includes(id)),
+          };
+        }
+      }
+
+      return {
+        ...previous,
+        [draft.teamA]: {
+          filters: nextFilters,
+          protectedIds: nextProtectedIds,
+        },
+      };
+    });
   const notify = useFeedback();
   const resultPlans = useRef<string | undefined>(undefined);
   const lastSettings = useRef(settingsRaw ?? "");
@@ -512,8 +541,18 @@ export function useTradeSearch({
   const bounds = tradeSearchBounds(m, query);
   if (manager && !journal.ready)
     bounds.errors.push("Saved manager profiles are still loading.");
-  // Changing protected players invalidates the captured roster search, while filter edits do not.
-  const context = tradeSearchContext(m, query, lineupsRaw) + JSON.stringify([...broad.protectedIds].sort());
+  // Changing protected players or search inputs invalidates the captured roster search, while filter edits do not.
+  const context =
+    tradeSearchContext(m, query, lineupsRaw) +
+    JSON.stringify([
+      [...broad.protectedIds].sort(),
+      [...broad.filters.mustGive].sort(),
+      [...(broad.filters.mustGiveRequired ?? [])].sort(),
+      [...broad.filters.mustGet].sort(),
+      [...(broad.filters.mustGetRequired ?? [])].sort(),
+      [...broad.filters.exclude].sort(),
+      broad.filters.teams ? [...broad.filters.teams].sort() : null,
+    ]);
   // Editing filters dismisses the open result drawer; the captured result remains available to inspect again.
   const drawerContext = useRef(context);
   useEffect(() => {
@@ -848,7 +887,26 @@ export function useTradeSearch({
         lineupsRaw,
         query: executedQuery,
         // Start streaming with the current filters instead of waiting for the first reply.
-        ...(protectedIds ? { useful: { protectedIds, filters: broad.filters, sort: broadSort, showHidden, limit: broadLimit } } : {}),
+        ...(protectedIds
+          ? {
+              useful: {
+                protectedIds,
+                inputs: {
+                  protectedIds,
+                  givePool: broad.filters.mustGive,
+                  giveRequired: broad.filters.mustGiveRequired ?? [],
+                  getPool: broad.filters.mustGet,
+                  getRequired: broad.filters.mustGetRequired ?? [],
+                  exclude: broad.filters.exclude,
+                  teams: broad.filters.teams,
+                },
+                filters: broad.filters,
+                sort: broadSort,
+                showHidden,
+                limit: broadLimit,
+              },
+            }
+          : {}),
       };
       sessions.post("find", id, request);
     } catch (error) {

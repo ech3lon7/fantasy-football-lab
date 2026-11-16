@@ -16,26 +16,43 @@ type Range = { minimum: number | null; maximum: number | null };
 export interface TradeFilters {
   yourGain: Range; theirGain: number; ownWeek: Range; otherWeek: Range;
   receiveStarts: boolean; giveStarts: boolean; gradeGoals: PositionalGradeImpactRule[];
-  mustGet: string[]; mustGive: string[]; exclude: string[];
+  mustGet: string[]; mustGetRequired: string[]; mustGive: string[]; mustGiveRequired: string[]; exclude: string[];
   getPositions: NonNullable<IncomingFilter["positions"]>; givePositions: string[];
   labels: NonNullable<IncomingFilter["signals"]>; teams: string[] | null;
   teamGrade: { position: string; ceiling: string } | null;
   giveSize: Range; getSize: Range;
 }
 // Fresh defaults avoid sharing mutable filter arrays between screens or saved settings.
-export function defaultTradeFilters(): TradeFilters {
-  return { yourGain: { minimum: 0, maximum: null }, theirGain: 1,
-    ownWeek: { minimum: null, maximum: null }, otherWeek: { minimum: null, maximum: null },
-    receiveStarts: false, giveStarts: false, gradeGoals: [],
-    mustGet: [], mustGive: [], exclude: [], getPositions: [], givePositions: [], labels: [], teams: null,
-    teamGrade: null, giveSize: { minimum: 1, maximum: 3 }, getSize: { minimum: 1, maximum: 3 } };
+// Show all and Reset to defaults keep search-input fields (mustGive, mustGet, exclude, teams, required).
+export function defaultTradeFilters(current?: TradeFilters): TradeFilters {
+  return {
+    yourGain: { minimum: 0, maximum: null },
+    theirGain: 1,
+    ownWeek: { minimum: null, maximum: null },
+    otherWeek: { minimum: null, maximum: null },
+    receiveStarts: false,
+    giveStarts: false,
+    gradeGoals: [],
+    mustGet: current ? [...current.mustGet] : [],
+    mustGetRequired: current ? [...current.mustGetRequired] : [],
+    mustGive: current ? [...current.mustGive] : [],
+    mustGiveRequired: current ? [...current.mustGiveRequired] : [],
+    exclude: current ? [...current.exclude] : [],
+    getPositions: [],
+    givePositions: [],
+    labels: [],
+    teams: current ? (current.teams ? [...current.teams] : null) : null,
+    teamGrade: null,
+    giveSize: { minimum: 1, maximum: 3 },
+    getSize: { minimum: 1, maximum: 3 },
+  };
 }
 // Clearing filters restores the approved gain defaults instead of removing them.
-export function clearTradeFilters(): TradeFilters { return defaultTradeFilters(); }
+export function clearTradeFilters(current?: TradeFilters): TradeFilters { return defaultTradeFilters(current); }
 
 // Show every trade retained by the asymmetric search floor.
-export function showAllTradeFilters(): TradeFilters {
-  return { ...defaultTradeFilters(), yourGain: { minimum: null, maximum: null }, theirGain: -2 };
+export function showAllTradeFilters(current?: TradeFilters): TradeFilters {
+  return { ...defaultTradeFilters(current), yourGain: { minimum: null, maximum: null }, theirGain: -2 };
 }
 
 // Keep typed and slider values in the same approved recipient-gain range and step size.
@@ -60,12 +77,9 @@ export function tradeFilterReasons(row: FilterableTrade, f: TradeFilters): strin
     ["receiveStarts", !f.receiveStarts || row.get.every((id) => row.ownStarters.includes(id))],
     ["giveStarts", !f.giveStarts || row.give.every((id) => row.otherStarters.includes(id))],
     ["gradeGoals", !f.gradeGoals.length || (!!row.positionImpact && gradeImpactFailures(row.positionImpact, f.gradeGoals).length === 0)],
-    ["mustGet", f.mustGet.every((id) => row.get.includes(id))], ["mustGive", f.mustGive.every((id) => row.give.includes(id))],
-    ["exclude", f.exclude.every((id) => !row.give.includes(id) && !row.get.includes(id))],
     ["getPositions", matchesIncoming(row.incomingPlayers, { positions: f.getPositions })],
     ["givePositions", !f.givePositions.length || row.givePositions.some((pos) => f.givePositions.includes(pos))],
     ["labels", matchesIncoming(row.incomingPlayers, { positions: f.getPositions, signals: f.labels })],
-    ["teams", f.teams === null || f.teams.includes(row.team)],
     ["teamGrade", !f.teamGrade || gradeAtOrBelow(row.opponentGrades[f.teamGrade.position] ?? "", f.teamGrade.ceiling)],
     ["giveSize", inRange(row.give.length, f.giveSize)], ["getSize", inRange(row.get.length, f.getSize)],
   ];

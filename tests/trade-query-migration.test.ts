@@ -21,3 +21,16 @@ it("migrates a saved find query and lists its removed controls", () => {
   expect(result.ignored).toContain("goal");
   expect(result.ignored).toContain("their maximum gain");
 });
+
+it("ignores grade goals from old query and lists them as ignored", () => {
+  const result = migrateLegacyTradeQuery({
+    teamA: "1",
+    give: [],
+    count: 1,
+    below: 0,
+    above: 0,
+    gradeImpacts: [{ id: "g1", side: "own", position: "QB", steps: 1 }],
+  });
+  expect(result.filters.gradeGoals).toEqual([]);
+  expect(result.ignored).toContain("grade goals");
+});

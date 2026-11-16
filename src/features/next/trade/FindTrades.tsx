@@ -102,8 +102,8 @@ export function FindTrades({
         <WheelBoard
           data={findWheelData({
             m: model, teamA: draft.teamA, filters: f, update,
-            clear: () => s.updateBroad({ filters: defaultTradeFilters() }),
-            showAll: () => s.updateBroad({ filters: showAllTradeFilters() }),
+            clear: () => s.updateBroad({ filters: defaultTradeFilters(f) }),
+            showAll: () => s.updateBroad({ filters: showAllTradeFilters(f) }),
             protectedIds: selected,
             setProtectedIds: (protectedIds) => s.updateBroad({ protectedIds }),
             counts: { total: s.job?.total ?? 0, visible: s.job?.visibleTotal ?? 0,
@@ -122,8 +122,8 @@ export function FindTrades({
             progress: s.running ? { done: Object.values(s.job?.teams ?? {}).filter((t) => t.done).length, total: Math.max(0, teams.length - 1) } : null,
             error: s.job?.status === "error" ? (s.job.error ?? "Trade search failed.") : "",
           }}
-          onShowAll={() => s.updateBroad({ filters: showAllTradeFilters() })}
-          onReset={() => s.updateBroad({ filters: defaultTradeFilters() })}
+          onShowAll={() => s.updateBroad({ filters: showAllTradeFilters(f) })}
+          onReset={() => s.updateBroad({ filters: defaultTradeFilters(f) })}
           notice={notice && <div className="gd-wheel-toast" role="status">{notice}</div>}
           scene={scene && <PlayCallScene m={model} ownTeam={draft.teamA} teams={s.job?.teams} running={s.running} failed={s.job?.status === "error"} cancelled={s.job?.status === "cancelled"} onGone={() => setScene(false)} />}
         />

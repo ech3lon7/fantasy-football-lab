@@ -18,7 +18,7 @@ self.onmessage = async (event: MessageEvent<PartRequest>) => {
     const result = await runUsefulTradeSearch(
       model,
       request.teamA,
-      request.protectedIds,
+      request.inputs ?? request.protectedIds,
       readLineupBasis(request.basis),
       request.lineupsRaw,
       (singles) => send({ type: "singles", rows: singles.map((row) => ({ ...row.searchRow, seedKey: row.seedKey })) }),

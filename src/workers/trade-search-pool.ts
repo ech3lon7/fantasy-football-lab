@@ -1,5 +1,5 @@
 import type { SearchRow } from "../domain/trade-search";
-import type { TeamProgress, UsefulCoverage } from "../domain/useful-move-search";
+import type { SearchInputs, TeamProgress, UsefulCoverage } from "../domain/useful-move-search";
 import type { evaluate } from "../domain/valuation";
 import type { applyRosterScenario } from "../domain/roster-scenarios";
 
@@ -14,6 +14,7 @@ export interface PartRequest {
   teamA: string;
   basis: string | undefined;
   protectedIds: string[];
+  inputs?: SearchInputs;
   opponents: string[];
   beam?: number;
 }
@@ -40,13 +41,19 @@ export function partition<T>(items: T[], parts: number): T[][] {
 
 export function mergeCoverage(parts: UsefulCoverage[]): UsefulCoverage {
   const byTeam: UsefulCoverage["beamCutoffsByTeam"] = {};
-  for (const part of parts) Object.assign(byTeam, part.beamCutoffsByTeam);
+  const floorByTeam: UsefulCoverage["floorSkippedByTeam"] = {};
+  for (const part of parts) {
+    if (part.beamCutoffsByTeam) Object.assign(byTeam, part.beamCutoffsByTeam);
+    if (part.floorSkippedByTeam) Object.assign(floorByTeam, part.floorSkippedByTeam);
+  }
   return {
     singles: parts.reduce((n, p) => n + p.singles, 0),
     extensions: parts.reduce((n, p) => n + p.extensions, 0),
     opponents: parts.reduce((n, p) => n + p.opponents, 0),
     beamCutoffs: parts.reduce((n, p) => n + p.beamCutoffs, 0),
     beamCutoffsByTeam: byTeam,
+    floorSkipped: parts.reduce((n, p) => n + (p.floorSkipped ?? 0), 0),
+    floorSkippedByTeam: floorByTeam,
   };
 }
 

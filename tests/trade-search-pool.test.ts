@@ -10,7 +10,7 @@ describe("search pool sizing and partitioning", () => {
   it("retries a failed helper without losing an opponent", async () => {
     let index = 0;
     const retried: string[][] = [];
-    const coverage = { singles: 1, extensions: 0, opponents: 1, beamCutoffs: 0, beamCutoffsByTeam: {} };
+    const coverage = { singles: 1, extensions: 0, opponents: 1, beamCutoffs: 0, beamCutoffsByTeam: {}, floorSkipped: 0, floorSkippedByTeam: {} };
     const spawn = () => {
       const fail = index++ === 1;
       const worker = { onmessage: null as ((event: { data: unknown }) => void) | null,
@@ -45,10 +45,10 @@ describe("search pool sizing and partitioning", () => {
 
   it("adds coverage counts and keeps each team's beam cut-offs", () => {
     const merged = mergeCoverage([
-      { singles: 10, extensions: 5, opponents: 2, beamCutoffs: 3, beamCutoffsByTeam: { "2": { "1:2": 3 } } },
-      { singles: 7, extensions: 1, opponents: 1, beamCutoffs: 0, beamCutoffsByTeam: {} },
+      { singles: 10, extensions: 5, opponents: 2, beamCutoffs: 3, beamCutoffsByTeam: { "2": { "1:2": 3 } }, floorSkipped: 1, floorSkippedByTeam: { "2": { "1:2": 1 } } },
+      { singles: 7, extensions: 1, opponents: 1, beamCutoffs: 0, beamCutoffsByTeam: {}, floorSkipped: 0, floorSkippedByTeam: {} },
     ]);
-    expect(merged).toEqual({ singles: 17, extensions: 6, opponents: 3, beamCutoffs: 3, beamCutoffsByTeam: { "2": { "1:2": 3 } } });
+    expect(merged).toEqual({ singles: 17, extensions: 6, opponents: 3, beamCutoffs: 3, beamCutoffsByTeam: { "2": { "1:2": 3 } }, floorSkipped: 1, floorSkippedByTeam: { "2": { "1:2": 1 } } });
   });
 });
 

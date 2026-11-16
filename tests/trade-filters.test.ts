@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearTradeFilters, defaultTradeFilters, showAllTradeFilters, filterTradeRows, sortTradeRows, clampTheirGain } from "../src/domain/trade-filters";
+import { clearTradeFilters, defaultTradeFilters, showAllTradeFilters, filterTradeRows, sortTradeRows, clampTheirGain, type TradeFilters } from "../src/domain/trade-filters";
 import type { FilterableTrade } from "../src/domain/trade-filters";
 
 // A compact, precomputed result makes every filter and its hidden count independently observable.
@@ -55,9 +55,41 @@ describe("instant trade filters", () => {
       give: ["x", "z"], get: ["y", "z"], givePositions: ["RB"], incomingPlayers: [{ pos: "TE", gem: "Watch" }],
       team: "3", opponentGrades: { QB: "A" } });
     expect(filterTradeRows([failed], filters).hidden[0].reasons).toEqual([
-      "ownWeek", "otherWeek", "receiveStarts", "giveStarts", "gradeGoals", "mustGet", "mustGive", "exclude",
-      "getPositions", "givePositions", "labels", "teams", "teamGrade", "giveSize", "getSize",
+      "ownWeek", "otherWeek", "receiveStarts", "giveStarts", "gradeGoals",
+      "getPositions", "givePositions", "labels", "teamGrade", "giveSize", "getSize",
     ]);
+  });
+  it("Show all and Reset keep the six search-input fields", () => {
+    const custom: TradeFilters = {
+      ...defaultTradeFilters(),
+      yourGain: { minimum: 3, maximum: null },
+      theirGain: 0.5,
+      mustGive: ["p1"],
+      mustGiveRequired: ["p1"],
+      mustGet: ["p2"],
+      mustGetRequired: ["p2"],
+      exclude: ["p3"],
+      teams: ["team2"],
+    };
+    const reset = defaultTradeFilters(custom);
+    expect(reset.yourGain).toEqual({ minimum: 0, maximum: null });
+    expect(reset.theirGain).toBe(1);
+    expect(reset.mustGive).toEqual(["p1"]);
+    expect(reset.mustGiveRequired).toEqual(["p1"]);
+    expect(reset.mustGet).toEqual(["p2"]);
+    expect(reset.mustGetRequired).toEqual(["p2"]);
+    expect(reset.exclude).toEqual(["p3"]);
+    expect(reset.teams).toEqual(["team2"]);
+
+    const showAll = showAllTradeFilters(custom);
+    expect(showAll.yourGain).toEqual({ minimum: null, maximum: null });
+    expect(showAll.theirGain).toBe(-2);
+    expect(showAll.mustGive).toEqual(["p1"]);
+    expect(showAll.mustGiveRequired).toEqual(["p1"]);
+    expect(showAll.mustGet).toEqual(["p2"]);
+    expect(showAll.mustGetRequired).toEqual(["p2"]);
+    expect(showAll.exclude).toEqual(["p3"]);
+    expect(showAll.teams).toEqual(["team2"]);
   });
   it("hides N is what one filter alone hides: relaxing it raises the count by exactly N (R6)", () => {
     const rows = [

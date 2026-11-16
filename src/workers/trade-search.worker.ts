@@ -229,7 +229,7 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
           found = await runPooled(
             { dataset: request.dataset, settings: request.settings, evidence: request.evidence, roleWeight: request.roleWeight,
               scenario: request.scenario, lineupsRaw: request.lineupsRaw, teamA: own, basis: request.query.lineupBasis,
-              protectedIds: request.useful.protectedIds },
+              protectedIds: request.useful.protectedIds, inputs: request.useful.inputs },
             partition(opponents, size),
             () => new Worker(new URL("./trade-search-part.worker.ts", import.meta.url), { type: "module" }),
             partial,
@@ -238,7 +238,8 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
               // Retry one failed slice at a time because lineup memoization is worker-scoped.
               for (const team of slice) completedTeams.delete(team);
               const task = retryQueue.then(async () => {
-                const result = await runUsefulTradeSearch(model, own, request.useful!.protectedIds, basis, request.lineupsRaw,
+                const searchInputs = request.useful!.inputs ?? request.useful!.protectedIds;
+                const result = await runUsefulTradeSearch(model, own, searchInputs, basis, request.lineupsRaw,
                   (singles) => publish(singles.map((row) => ({ ...row.searchRow, seedKey: row.seedKey }))), undefined, slice, reportTeam);
                 return { rows: result.rows.map(({ trade, variants }) => ({ ...trade.searchRow, seedKey: trade.seedKey,
                   variants: variants.map((v) => ({ ...v.searchRow, seedKey: v.seedKey })) })), coverage: result.coverage };
@@ -251,7 +252,8 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
           found = undefined;
         }
       if (!found) {
-        const result = await runUsefulTradeSearch(model, own, request.useful.protectedIds, basis, request.lineupsRaw,
+        const searchInputs = request.useful.inputs ?? request.useful.protectedIds;
+        const result = await runUsefulTradeSearch(model, own, searchInputs, basis, request.lineupsRaw,
           (singles) => partial(singles.map((row) => ({ ...row.searchRow, seedKey: row.seedKey }))), undefined, undefined,
           reportTeam);
         found = {

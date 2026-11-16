@@ -11,11 +11,13 @@ export function useFlipList(
   container: RefObject<HTMLElement | null>,
   keys: string[],
   streaming: boolean,
+  filterToken?: unknown,
 ) {
   const runner = useRef(new MotionRunner());
   const before = useRef<{
     top: Map<string, number>;
     clones: Map<string, { node: HTMLElement; top: number; height: number }>;
+    filterToken?: unknown;
   }>({ top: new Map(), clones: new Map() });
 
   useLayoutEffect(() => {
@@ -28,6 +30,10 @@ export function useFlipList(
       rows.map((r) => [r.dataset.key!, r.getBoundingClientRect().top]),
     );
     const last = before.current;
+    const filterChanged =
+      last.filterToken !== undefined &&
+      filterToken !== undefined &&
+      last.filterToken !== filterToken;
 
     if (level !== "off" && last.top.size) {
       let entered = 0;
@@ -95,6 +101,25 @@ export function useFlipList(
             );
           else copy.remove();
         }
+        if (
+          filterChanged &&
+          entered === 0 &&
+          moved === 0 &&
+          left === 0 &&
+          rows.length > 0
+        ) {
+          const count = Math.min(rows.length, MAX_ANIMATED_ROWS);
+          for (let i = 0; i < count; i++) {
+            runner.current.play(
+              `in-${rows[i].dataset.key!}`,
+              rows[i],
+              chalkSpecs.rowIn,
+              {
+                delay: level === "full" ? i * 20 : 0,
+              },
+            );
+          }
+        }
       }
     }
 
@@ -113,8 +138,8 @@ export function useFlipList(
         height: rect.height,
       });
     });
-    before.current = { top: now, clones };
+    before.current = { top: now, clones, filterToken };
     return undefined;
-    // The list of keys, not each render, is what changed.
-  }, [keys.join("|")]);
+    // The list of keys or filter settings, not each render, is what changed.
+  }, [keys.join("|"), filterToken]);
 }

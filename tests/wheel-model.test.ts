@@ -90,7 +90,13 @@ describe("hub wording", () => {
     );
     expect(
       hubSummary({ ...defaultTradeFilters(), mustGet: ["a", "b"] }, "players"),
-    ).toBe("2 required to get");
+    ).toBe("2 wanted");
+    expect(
+      hubSummary({ ...defaultTradeFilters(), mustGet: ["a", "b"], mustGetRequired: ["a"] }, "players"),
+    ).toBe("2 wanted · 1 required");
+    expect(
+      hubSummary({ ...defaultTradeFilters(), mustGive: ["x"], mustGiveRequired: ["x"] }, "players"),
+    ).toBe("1 offered · 1 required");
     expect(hubSummary(defaultTradeFilters(), "positions")).toBe("Any position");
   });
 });

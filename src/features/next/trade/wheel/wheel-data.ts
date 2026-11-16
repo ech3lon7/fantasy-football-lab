@@ -34,8 +34,10 @@ export interface WheelData {
   setNumber: (optionId: string, lo: number | null, hi: number | null) => void;
   getToggles: (optionId: string) => WheelToggle[];
   setToggle: (optionId: string, key: string, on: boolean) => void;
-  getPlayers: (optionId: string) => { players: Player[]; selected: string[] };
+  getPlayers: (optionId: string) => { players: Player[]; selected: string[]; required?: string[] };
   togglePlayer: (optionId: string, id: string) => void;
+  toggleRequired?: (optionId: string, id: string) => void;
+  protectedIds?: string[];
   teamGrade: TradeFilters["teamGrade"];
   setTeamGrade: (value: TradeFilters["teamGrade"]) => void;
   goals: PositionalGradeImpactRule[];
@@ -201,20 +203,40 @@ export function findWheelData({
     },
     getPlayers(id) {
       if (id === "never") return { players: mine, selected: protectedIds };
-      if (id === "mustGet") return { players: theirs, selected: f.mustGet };
-      if (id === "mustGive") return { players: mine, selected: f.mustGive };
+      if (id === "mustGet") return { players: theirs, selected: f.mustGet, required: f.mustGetRequired };
+      if (id === "mustGive") return { players: mine, selected: f.mustGive, required: f.mustGiveRequired };
       return { players: [...mine, ...theirs], selected: f.exclude };
     },
     togglePlayer(id, playerId) {
       if (id === "never") return setProtectedIds?.(toggle(protectedIds, playerId, !protectedIds.includes(playerId)));
       const key = id as "mustGet" | "mustGive" | "exclude";
       const list = f[key];
-      update({
-        [key]: list.includes(playerId)
-          ? list.filter((x) => x !== playerId)
-          : [...list, playerId],
-      } as Partial<TradeFilters>);
+      const isSelected = list.includes(playerId);
+      const next = isSelected
+        ? list.filter((x) => x !== playerId)
+        : [...list, playerId];
+      const patch: Partial<TradeFilters> = { [key]: next };
+      if (isSelected) {
+        if (id === "mustGive" && f.mustGiveRequired?.includes(playerId)) {
+          patch.mustGiveRequired = f.mustGiveRequired.filter((x) => x !== playerId);
+        } else if (id === "mustGet" && f.mustGetRequired?.includes(playerId)) {
+          patch.mustGetRequired = f.mustGetRequired.filter((x) => x !== playerId);
+        }
+      }
+      update(patch);
     },
+    toggleRequired(id, playerId) {
+      if (id === "mustGive") {
+        const list = f.mustGiveRequired ?? [];
+        const next = list.includes(playerId) ? list.filter((x) => x !== playerId) : [...list, playerId];
+        update({ mustGiveRequired: next });
+      } else if (id === "mustGet") {
+        const list = f.mustGetRequired ?? [];
+        const next = list.includes(playerId) ? list.filter((x) => x !== playerId) : [...list, playerId];
+        update({ mustGetRequired: next });
+      }
+    },
+    protectedIds,
     teamGrade: f.teamGrade,
     setTeamGrade: (teamGrade) => update({ teamGrade }),
     goals: f.gradeGoals,

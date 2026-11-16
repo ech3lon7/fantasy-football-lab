@@ -555,6 +555,31 @@
 :root[data-gameday] .gd-prow-nums { display: flex; flex-direction: column; align-items: flex-end; font-size: 14px; line-height: 1.2; color: var(--gw-muted); white-space: nowrap; }
 :root[data-gameday] .gd-prow-nums b { color: var(--gw-yellow); font-weight: 700; }
 :root[data-gameday] .gd-prow-search { margin-bottom: 2px; }
+:root[data-gameday] .gd-prow-note { font-family: var(--gw-hand); font-size: 14px; color: var(--gw-muted); margin: 0 0 6px 0; padding: 0 8px; }
+:root[data-gameday] .gd-prow-wrap { position: relative; display: flex; align-items: center; gap: 8px; }
+:root[data-gameday] .gd-prow-wrap > .gd-prow { flex: 1; min-width: 0; }
+:root[data-gameday] .gd-must {
+  flex: 0 0 auto;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 10px;
+  background: none;
+  border: 2px dashed var(--gw-muted);
+  border-radius: 12px;
+  color: var(--gw-chalk);
+  font-family: var(--gw-marker);
+  font-size: 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+:root[data-gameday] .gd-must[aria-pressed="true"] { border-style: solid; border-color: var(--gw-yellow); color: var(--gw-yellow); }
+:root[data-gameday] .gd-must:disabled,
+:root[data-gameday] .gd-must[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+:root[data-gameday] .gd-prow:disabled,
+:root[data-gameday] .gd-prow[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 
 /* The play-call scene and the notice toast live inside the board. */
 :root[data-gameday] .gd-zb-stage > .gd-playcall { position: relative; margin: 0 14px 14px; z-index: 5; }

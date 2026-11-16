@@ -13,10 +13,14 @@ export function PlayerChalkRow({
   player,
   selected,
   onToggle,
+  disabled,
+  metaSuffix,
 }: {
   player: Player;
   selected: boolean;
   onToggle: () => void;
+  disabled?: boolean;
+  metaSuffix?: string;
 }) {
   const bm = useBoardMotion();
   const root = useRef<HTMLButtonElement>(null);
@@ -46,10 +50,12 @@ export function PlayerChalkRow({
       type="button"
       className="gd-prow"
       aria-pressed={selected}
+      disabled={disabled}
+      aria-disabled={disabled ? "true" : undefined}
       data-key={player.id}
-      onMouseEnter={enter}
-      onFocus={enter}
-      onClick={onToggle}
+      onMouseEnter={disabled ? undefined : enter}
+      onFocus={disabled ? undefined : enter}
+      onClick={disabled ? undefined : onToggle}
     >
       <span className="gd-prow-hatch" data-on={selected} data-motion="M12" aria-hidden="true" />
       <span className="gd-prow-photo" data-motion="M11" aria-hidden="true">
@@ -64,7 +70,7 @@ export function PlayerChalkRow({
           <span className="gd-prow-underline" data-motion="M11" aria-hidden="true" />
         </span>
         <span className="gd-prow-meta">
-          {player.pos} · {player.nfl || "—"}
+          {player.pos} · {player.nfl || "—"}{metaSuffix ? ` · ${metaSuffix}` : ""}
         </span>
       </span>
       <span className="gd-prow-nums">

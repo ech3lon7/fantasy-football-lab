@@ -108,8 +108,8 @@ const findCategories: WheelCategory[] = [
     label: "Players",
     icon: "o",
     options: [
-      { id: "mustGet", label: "I get", kind: "players", hides: "mustGet" },
-      { id: "mustGive", label: "I give", kind: "players", hides: "mustGive" },
+      { id: "mustGet", label: "I get", kind: "players" },
+      { id: "mustGive", label: "I give", kind: "players" },
       { id: "exclude", label: "Exclude", kind: "players", hides: "exclude" },
       { id: "roles", label: "Roles", kind: "toggles" },
     ],
@@ -292,13 +292,24 @@ export function hubSummary(f: TradeFilters, id: CategoryId): string {
           )
         : "No grade goals";
     case "players": {
-      const parts = [
-        f.mustGet.length && `${f.mustGet.length} required to get`,
-        f.mustGive.length && `${f.mustGive.length} required to give`,
-        f.exclude.length && `${f.exclude.length} excluded`,
-      ].filter(Boolean);
+      const getSummary = f.mustGet.length
+        ? (f.mustGetRequired?.length ? `${f.mustGet.length} wanted · ${f.mustGetRequired.length} required` : `${f.mustGet.length} wanted`)
+        : null;
+      const giveSummary = f.mustGive.length
+        ? (f.mustGiveRequired?.length ? `${f.mustGive.length} offered · ${f.mustGiveRequired.length} required` : `${f.mustGive.length} offered`)
+        : null;
+      const excludeSummary = f.exclude.length ? `${f.exclude.length} excluded` : null;
+      const parts = [getSummary, giveSummary, excludeSummary].filter(Boolean);
       return parts.length ? parts.join(" · ") : "Any players";
     }
+    case "mustGet" as CategoryId:
+      return f.mustGetRequired?.length
+        ? `${f.mustGet.length} wanted · ${f.mustGetRequired.length} required`
+        : `${f.mustGet.length} wanted`;
+    case "mustGive" as CategoryId:
+      return f.mustGiveRequired?.length
+        ? `${f.mustGive.length} offered · ${f.mustGiveRequired.length} required`
+        : `${f.mustGive.length} offered`;
     case "positions":
       return f.getPositions.length || f.givePositions.length
         ? [

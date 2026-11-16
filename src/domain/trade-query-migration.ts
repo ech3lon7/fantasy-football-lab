@@ -13,10 +13,9 @@ export function migrateLegacyTradeQuery(query: TradeSearchQuery) {
   if (query.weekly?.other?.maximum != null) ignored.push("their maximum gain");
   filters.getPositions = query.incoming?.positions ?? [];
   filters.labels = query.incoming?.signals ?? [];
-  filters.gradeGoals = query.gradeImpacts ?? [];
   if (filters.getPositions.length) applied.push("incoming positions");
   if (filters.labels.length) applied.push("incoming labels");
-  if (filters.gradeGoals.length) applied.push("grade goals");
+  if (query.gradeImpacts?.length) ignored.push("grade goals");
   if (query.discovery?.teams) { filters.teams = [...query.discovery.teams]; applied.push("team scope"); }
   if (query.discovery?.target) { filters.mustGet = [query.discovery.target]; applied.push("incoming target"); }
   if (query.indexMode === "strict") ignored.push("index window");

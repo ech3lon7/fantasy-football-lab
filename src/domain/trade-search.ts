@@ -12,6 +12,7 @@ import {
 // The same exclusive primary labels are available to discovery and saved searches.
 import { primaryGemSignals } from "./label-rules";
 import type { FilterableTrade, TradeFilters } from "./trade-filters";
+import type { SearchInputs } from "./useful-move-search";
 import {
   surfaceAppeal,
   type SurfaceEvidence,
@@ -288,7 +289,7 @@ export type SearchRequest =
       lineupsRaw?: string;
       query: TradeSearchQuery;
       // The new broad search is opt-in until its filter interface replaces the legacy controls.
-      useful?: { protectedIds: string[]; filters?: TradeFilters; sort?: SearchFilterSort; showHidden?: boolean; limit?: number };
+      useful?: { protectedIds: string[]; inputs?: SearchInputs; filters?: TradeFilters; sort?: SearchFilterSort; showHidden?: boolean; limit?: number };
       // Workers always value the live source first, then apply the same frozen-index ownership overlay as the UI.
       scenario?: RosterScenario;
     }

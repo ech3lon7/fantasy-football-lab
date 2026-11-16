@@ -50,7 +50,12 @@ export function BroadResults({
     model = s.resultModel.current ?? m;
   const listRef = useRef<HTMLDivElement>(null);
   // Rows slide, collapse and draw in as filters, sort and the search change them (A11, A13).
-  useFlipList(listRef, job?.rows.map((r) => r.key) ?? [], s.running);
+  useFlipList(
+    listRef,
+    job?.rows.map((r) => r.key) ?? [],
+    s.running,
+    JSON.stringify(s.broad.filters),
+  );
   const names = (ids: string[]) =>
     ids.map((id, i) => {
       const p = model.byId.get(id);
@@ -228,14 +233,14 @@ export function BroadResults({
       )}
       {/* Explain whether the search found nothing or filters hid its retained trades. */}
       {job.status === "complete" && job.total === 0 && (
-        <p>No legal trades change anyone's lineup for this team. Try removing players from Never trade.</p>
+        <p>No legal trades change anyone's lineup with these players and teams. Try loosening I give, I get, Exclude, Teams or Never trade.</p>
       )}
       {job.status === "complete" && job.total > 0 && job.visibleTotal === 0 && (
         <div>
           <p>Found {job.total.toLocaleString()} trades · your filters hide all of them.</p>
           <p>{Object.entries(job.filterBlocks ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([key, count]) => `${reason[key] ?? key} hides ${count.toLocaleString()}`).join(" · ")}</p>
-          <button type="button" className="gd-cbtn" onClick={() => s.updateBroad({ filters: showAllTradeFilters() })}>Show all</button>{" "}
-          <button type="button" className="gd-cbtn" onClick={() => s.updateBroad({ filters: defaultTradeFilters() })}>Reset to defaults</button>
+          <button type="button" className="gd-cbtn" onClick={() => s.updateBroad({ filters: showAllTradeFilters(s.broad.filters) })}>Show all</button>{" "}
+          <button type="button" className="gd-cbtn" onClick={() => s.updateBroad({ filters: defaultTradeFilters(s.broad.filters) })}>Reset to defaults</button>
         </div>
       )}
       {s.showHidden &&

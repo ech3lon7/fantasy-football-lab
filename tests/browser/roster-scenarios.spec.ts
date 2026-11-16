@@ -124,13 +124,6 @@ async function broadSearch(
   search: Locator,
   focus: { give?: string; get?: string; single?: boolean } = {},
 ) {
-  await searchAll(page, search);
-  // Lift the default floors: your gain down to the low end of its track, their gain down to -2.
-  await wheel(page).getByRole("menuitem", { name: /^Gains/ }).click();
-  await wheel(page).getByRole("menuitem", { name: "Your EPPG", exact: true }).click();
-  await wheel(page).getByRole("slider", { name: "Your EPPG minimum" }).press("Home");
-  await wheel(page).getByRole("menuitem", { name: "Their EPPG", exact: true }).click();
-  await wheel(page).getByRole("slider", { name: "Their EPPG at least" }).press("Home");
   const player = async (side: "I give" | "I get", name: string) => {
     await wheel(page).getByRole("menuitem", { name: side, exact: true }).click();
     await wheel(page).getByRole("searchbox", { name: "Search players" }).fill(name);
@@ -144,6 +137,13 @@ async function broadSearch(
     if (focus.give) await player("I give", focus.give);
     if (focus.get) await player("I get", focus.get);
   }
+  await searchAll(page, search);
+  // Lift the default floors: your gain down to the low end of its track, their gain down to -2.
+  await wheel(page).getByRole("menuitem", { name: /^Gains/ }).click();
+  await wheel(page).getByRole("menuitem", { name: "Your EPPG", exact: true }).click();
+  await wheel(page).getByRole("slider", { name: "Your EPPG minimum" }).press("Home");
+  await wheel(page).getByRole("menuitem", { name: "Their EPPG", exact: true }).click();
+  await wheel(page).getByRole("slider", { name: "Their EPPG at least" }).press("Home");
   if (focus.single) {
     await wheel(page).getByRole("menuitem", { name: /^Size/ }).click();
     for (const side of ["Players I give", "Players I get"] as const) {
