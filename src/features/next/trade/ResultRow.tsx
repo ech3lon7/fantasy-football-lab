@@ -52,8 +52,11 @@ export function ResultRow({
   const query = s.appliedSearch.current?.query;
   const plans = s.resultPlans.current;
   const give = row.give ?? query?.give ?? [];
+  // The worker has already scored most rows for display; any other row is scored here.
+  const sent = s.job?.views?.[row.key];
   const view = useMemo(
     () =>
+      sent ??
       resultRowView(model, row, {
         teamA: query?.teamA ?? "",
         give,
@@ -61,7 +64,7 @@ export function ResultRow({
         lineupsRaw: plans,
       }),
     // The row and the executed context define the view.
-    [model, row.key],
+    [model, row.key, sent],
   );
   const people = (ids: string[]) =>
     ids.map((id, i) => {

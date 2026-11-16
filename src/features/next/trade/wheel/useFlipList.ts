@@ -3,7 +3,6 @@ import { MotionRunner, chalkSpecs, motionLevel } from "./chalk-motion";
 
 // How many rows are animated in one go; the rest simply appear. Keeps a long list smooth.
 export const MAX_ANIMATED_ROWS = 20;
-const MAX_TRACKED = 40;
 
 // Results that move like the chalk board: when a filter or the sort changes (A11) the kept rows slide to their new places, removed
 // rows collapse where they were and new rows draw in; while a search streams (A13) new rows slide up and fade in. Every row is a
@@ -104,7 +103,9 @@ export function useFlipList(
       string,
       { node: HTMLElement; top: number; height: number }
     >();
-    rows.slice(0, MAX_TRACKED).forEach((r) => {
+    // Copies of rows are only needed to collapse a removed row later, which happens when the filters change, never while a search
+    // streams: so none are taken while it runs, and only the rows that can be animated are copied.
+    rows.slice(0, streaming ? 0 : MAX_ANIMATED_ROWS).forEach((r) => {
       const rect = r.getBoundingClientRect();
       clones.set(r.dataset.key!, {
         node: r.cloneNode(true) as HTMLElement,

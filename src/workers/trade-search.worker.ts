@@ -10,6 +10,7 @@ import { runUsefulTradeSearch } from "../domain/useful-trade-adapter";
 import type { TeamProgress, UsefulCoverage } from "../domain/useful-move-search";
 import { partition, poolSize, runPooled } from "./trade-search-pool";
 import { readLineupBasis } from "../domain/trade-impact";
+import { resultRowView, type ResultRowView } from "../domain/view/search-rows";
 import { defaultTradeFilters, type TradeFilters } from "../domain/trade-filters";
 import { tradeFilterView } from "../domain/trade-filter-view";
 import {
@@ -54,6 +55,29 @@ const send = (message: SearchResponse) => self.postMessage(message);
 // Worker callbacks can update the current search while its asynchronous work yields.
 const currentRetained = (): typeof retained => retained;
 
+// The display view of every row shown so far is scored here, once, and sent once: scoring a trade for display is heavy, and doing it
+// while the screen renders would hold up every animation. Rows the screen has not been sent a view for score themselves there.
+let viewState = { id: "", views: new Map<string, ResultRowView>(), sent: new Set<string>() };
+function newViews(state: NonNullable<typeof retained>, rows: SearchRow[]) {
+  if (viewState.id !== state.id) viewState = { id: state.id, views: new Map(), sent: new Set() };
+  const out: Record<string, ResultRowView> = {};
+  const context = { teamA: state.query.teamA, give: state.query.give ?? [], basis: readLineupBasis(state.query.lineupBasis), lineupsRaw: state.lineupsRaw };
+  for (const row of rows) {
+    if (viewState.sent.has(row.key)) continue;
+    let view = viewState.views.get(row.key);
+    if (!view) {
+      try {
+        view = resultRowView(state.model, row, context);
+      } catch {
+        continue;
+      }
+      viewState.views.set(row.key, view);
+    }
+    out[row.key] = view;
+    viewState.sent.add(row.key);
+  }
+  return out;
+}
 // Produce the same sorted, filtered page for live batches and completed searches.
 function filteredPayload(state: NonNullable<typeof retained>) {
       const all = state.rows.flatMap((row) => [row, ...(row.variants ?? [])]);
@@ -75,8 +99,9 @@ function filteredPayload(state: NonNullable<typeof retained>) {
         const original = byKey.get(row.key);
         return original ? [{ row: original, reasons }] : [];
       });
+      const page = state.filteredRows.slice(0, state.limit ?? 50);
       return { ...browseTradeResults(state.model, state.filteredRows, undefined, []),
-        rows: state.filteredRows.slice(0, state.limit ?? 50), groupsTotal: state.filteredRows.length,
+        rows: page, views: newViews(state, page), groupsTotal: state.filteredRows.length,
         total: result.total, visibleTotal: result.visible.length, counts: result.only, blocks: result.counts, hidden, stats: state.stats };
  }
 self.onmessage = async (event: MessageEvent<SearchRequest>) => {

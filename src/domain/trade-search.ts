@@ -1,3 +1,4 @@
+import type { ResultRowView } from "./view/search-rows";
 import type {
   TradeBrowseOptions,
   TradeResultView,
@@ -309,6 +310,8 @@ export type SearchResponse = { id: string; context: string } & (
   // One opponent finished its one-for-ones, or all its packages: drives the search scene.
   | { type: "team"; team: string; singles: number; extensions: number; done: boolean }
   | { type: "filtered"; rows: SearchRow[]; total: number; visibleTotal: number; groupsTotal: number; view: TradeResultView;
+      // The display views of the rows that were not sent before, computed in the worker so the screen does not score them again.
+      views?: Record<string, ResultRowView>;
       counts: Record<string, number>; blocks: Record<string, number>; hidden: { row: SearchRow; reasons: string[] }[]; stats: SearchStats }
   | {
       type: "complete" | "browse" | "partial";
@@ -319,6 +322,7 @@ export type SearchResponse = { id: string; context: string } & (
       counts?: Record<string, number>;
       blocks?: Record<string, number>;
       hidden?: { row: SearchRow; reasons: string[] }[];
+      views?: Record<string, ResultRowView>;
       view: TradeResultView;
       token?: string;
       stats: SearchStats;

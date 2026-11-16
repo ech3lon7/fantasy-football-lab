@@ -1,3 +1,4 @@
+import type { ResultRowView } from "../../../domain/view/search-rows";
 import {
   availableStarterPositions,
   type PositionalGradeImpactRule,
@@ -98,6 +99,8 @@ interface SearchJob {
   visibleTotal?: number;
   groupsTotal?: number;
   error?: string;
+  // The display view of each row shown so far, scored in the worker (rows without one are scored when they are drawn).
+  views?: Record<string, ResultRowView>;
   paging?: boolean;
   // Recovery previews belong to this captured search and cannot silently modify its filters.
   recovery?: {
@@ -788,7 +791,8 @@ export function useTradeSearch({
             };
           if (message.type === "filtered")
             return { ...previous, rows: message.rows, view: message.view, total: message.total,
-              visibleTotal: message.visibleTotal, groupsTotal: message.groupsTotal, filterCounts: message.counts, filterBlocks: message.blocks, hiddenRows: message.hidden, stats: message.stats };
+              visibleTotal: message.visibleTotal, groupsTotal: message.groupsTotal, filterCounts: message.counts, filterBlocks: message.blocks, hiddenRows: message.hidden, stats: message.stats,
+              views: message.views ? { ...previous.views, ...message.views } : previous.views };
           // Each browse response is a complete bounded view, not another raw slice to append.
           return {
             ...previous,
@@ -799,6 +803,7 @@ export function useTradeSearch({
             total: message.total,
             visibleTotal: message.visibleTotal ?? previous.visibleTotal,
             groupsTotal: message.groupsTotal ?? previous.groupsTotal,
+            views: message.views ? { ...previous.views, ...message.views } : previous.views,
             filterCounts: message.counts ?? previous.filterCounts,
             filterBlocks: message.blocks ?? previous.filterBlocks,
             hiddenRows: message.hidden ?? previous.hiddenRows,
