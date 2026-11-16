@@ -96,6 +96,14 @@ async function seedWorkspace(
   return dataset;
 }
 
+// The trade count in the results header ("N ideas · M trades of K found"); NaN while the header is between two states (a filter is being
+// applied and the list is rebuilt), so a poll keeps waiting instead of throwing.
+const tradeCount = async (page: import("@playwright/test").Page) => {
+  const text = await page.getByRole("region", { name: "Trade search results" }).locator(".gd-chips b").first().innerText();
+  const match = text.match(/([\d,]+) ideas · ([\d,]+) trades/);
+  return match ? Number(match[2].replace(/,/g, "")) : Number.NaN;
+};
+
 test.describe("Positional Grade Search E2E", () => {
   // Test 1: Find Trades with positional grade goals, applied to the retained results without a new search.
   test("Find Trades renders and applies positional grade impact goals", async ({
@@ -109,7 +117,7 @@ test.describe("Positional Grade Search E2E", () => {
     const topRows = page.locator(".gd-res > .gd-res-group > .gd-res-row");
     await expect(topRows.first()).toBeVisible();
     // Let the streamed list settle before measuring it.
-    const shown = async () => Number(((await page.getByRole("region", { name: "Trade search results" }).locator(".gd-chips b").first().innerText()).match(/([\d,]+) ideas · ([\d,]+) trades/)![2]).replace(/,/g, ""));
+    const shown = () => tradeCount(page);
     let before = await shown();
     await expect.poll(async () => { const now = await shown(); const same = now === before; before = now; return same; }, { intervals: [1500], timeout: 60000 }).toBe(true);
 
@@ -133,7 +141,7 @@ test.describe("Positional Grade Search E2E", () => {
 
     // The list narrows at once: no new search ran, and every row left shows the WR upgrade as a grade-step chip.
     await expect(page.getByText(/one-for-ones checked/)).toHaveCount(1);
-    await expect.poll(async () => Number(((await page.getByRole("region", { name: "Trade search results" }).locator(".gd-chips b").first().innerText()).match(/([\d,]+) ideas · ([\d,]+) trades/)![2]).replace(/,/g, ""))).toBeLessThanOrEqual(before);
+    await expect.poll(() => tradeCount(page).then((n) => (Number.isNaN(n) ? Infinity : n))).toBeLessThanOrEqual(before);
     await expect(topRows.first()).toBeVisible();
     const rows = await topRows.count();
     for (let i = 0; i < rows; i++) {
