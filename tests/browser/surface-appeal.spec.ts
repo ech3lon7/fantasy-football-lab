@@ -112,6 +112,9 @@ test("retires legacy surface restrictions from preferences and saved trades", as
   await page.getByRole("dialog", { name: "Trade filters" }).getByRole("button", { name: "Search", exact: true }).click();
   // The old minimum of 9999 cannot hide anything.
   await expect(panel.getByText(/[\d,]+ ideas · [\d,]+ trades/).first()).toBeVisible({ timeout: 60000 });
+  // The header shows from the first streamed batch, whose first row can differ from the final one on a slower machine: wait for the
+  // finished search before saving the first row, so the saved card is always the same trade.
+  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
   const row = panel.locator(".gd-res > .gd-res-group > .gd-res-row").first();
   await row.getByRole("button", { name: /^Save trade/ }).click();
   await expect
