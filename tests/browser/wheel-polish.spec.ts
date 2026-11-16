@@ -53,6 +53,8 @@ test.describe("R1: the left rail", () => {
   });
 
   test("SEARCH is at least 56px tall, reads CANCEL with a progress line while it runs, and returns to SEARCH", async ({ page }) => {
+    // The 12-team search takes over a minute on a two-core CI runner.
+    test.setTimeout(420000);
     await open(page, 1320, 1000, { feelAnimation: "off" }, "big");
     const button = rail(page).getByRole("button", { name: "Search", exact: true });
     expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(56);

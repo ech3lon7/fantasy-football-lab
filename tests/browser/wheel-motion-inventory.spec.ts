@@ -192,6 +192,8 @@ test.describe("Full: every interaction animates", () => {
   });
 
   test("M16 to M18: Search redraws its circle and morphs to CANCEL, the play call runs, then folds into the coverage line", async ({ page }) => {
+    // The 12-team search takes over a minute on a two-core CI runner.
+    test.setTimeout(420000);
     await open(page, "full", "big");
     await clear(page);
     await rail(page).getByRole("button", { name: "Search", exact: true }).click();
@@ -203,6 +205,7 @@ test.describe("Full: every interaction animates", () => {
   });
 
   test("M19: Cancel erases the routes and morphs the label back", async ({ page }) => {
+    test.setTimeout(420000);
     await open(page, "full", "big");
     await rail(page).getByRole("button", { name: "Search", exact: true }).click();
     await expect.poll(async () => withId(await seen(page), "M17").length, { timeout: 60000 }).toBeGreaterThan(0);
