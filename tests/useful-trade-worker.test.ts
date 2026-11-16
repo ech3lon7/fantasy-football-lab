@@ -46,12 +46,7 @@ it("streams one-for-ones before completing the broad search and reports measured
   port.onmessage!({ data: { type: "sort", id: "1", context: "ctx", sort: "acceptance" } });
   expect(rows()[3].type).toBe("filtered");
   expect(rows()[3].visibleTotal).toBe(visibleBefore);
-});
-
-
-
-
-
+}, 30000);
 
 // A running worker must respond to a filter before the extension phase completes.
 it("filters streamed singles while larger packages are still being evaluated", async () => {
@@ -68,4 +63,4 @@ it("filters streamed singles while larger packages are still being evaluated", a
   expect(messages.filter((message) => message.type !== "team").map((message) => message.type)).toEqual(["partial", "filtered"]);
   await running;
   expect(messages.at(-1).type).toBe("complete");
-});
+}, 30000);

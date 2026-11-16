@@ -54,7 +54,9 @@ export function BroadResults({
     listRef,
     job?.rows.map((r) => r.key) ?? [],
     s.running,
-    JSON.stringify(s.broad.filters),
+    job?.filters
+      ? `${job.visibleTotal}:${job.sort ?? "own"}:${JSON.stringify(job.filters)}`
+      : undefined,
   );
   const names = (ids: string[]) =>
     ids.map((id, i) => {

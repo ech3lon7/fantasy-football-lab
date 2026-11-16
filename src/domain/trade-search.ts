@@ -313,6 +313,7 @@ export type SearchResponse = { id: string; context: string } & (
   | { type: "filtered"; rows: SearchRow[]; total: number; visibleTotal: number; groupsTotal: number; view: TradeResultView;
       // The display views of the rows that were not sent before, computed in the worker so the screen does not score them again.
       views?: Record<string, ResultRowView>;
+      filters?: TradeFilters; sort?: SearchFilterSort;
       counts: Record<string, number>; blocks: Record<string, number>; hidden: { row: SearchRow; reasons: string[] }[]; stats: SearchStats }
   | {
       type: "complete" | "browse" | "partial";
@@ -320,6 +321,8 @@ export type SearchResponse = { id: string; context: string } & (
       total: number;
       visibleTotal?: number;
       groupsTotal?: number;
+      filters?: TradeFilters;
+      sort?: SearchFilterSort;
       counts?: Record<string, number>;
       blocks?: Record<string, number>;
       hidden?: { row: SearchRow; reasons: string[] }[];

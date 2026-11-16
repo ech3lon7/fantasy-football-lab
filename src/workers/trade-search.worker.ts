@@ -102,7 +102,8 @@ function filteredPayload(state: NonNullable<typeof retained>) {
       const page = state.filteredRows.slice(0, state.limit ?? 50);
       return { ...browseTradeResults(state.model, state.filteredRows, undefined, []),
         rows: page, views: newViews(state, page), groupsTotal: state.filteredRows.length,
-        total: result.total, visibleTotal: result.visible.length, counts: result.only, blocks: result.counts, hidden, stats: state.stats };
+        total: result.total, visibleTotal: result.visible.length, counts: result.only, blocks: result.counts, hidden, stats: state.stats,
+        filters: state.filters, sort: state.sort };
  }
 self.onmessage = async (event: MessageEvent<SearchRequest>) => {
   const request = event.data;

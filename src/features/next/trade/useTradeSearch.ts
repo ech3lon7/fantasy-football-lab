@@ -98,6 +98,8 @@ interface SearchJob {
   hiddenRows?: { row: SearchRow; reasons: string[] }[];
   visibleTotal?: number;
   groupsTotal?: number;
+  filters?: TradeFilters;
+  sort?: SearchFilterSort;
   error?: string;
   // The display view of each row shown so far, scored in the worker (rows without one are scored when they are drawn).
   views?: Record<string, ResultRowView>;
@@ -831,6 +833,7 @@ export function useTradeSearch({
           if (message.type === "filtered")
             return { ...previous, rows: message.rows, view: message.view, total: message.total,
               visibleTotal: message.visibleTotal, groupsTotal: message.groupsTotal, filterCounts: message.counts, filterBlocks: message.blocks, hiddenRows: message.hidden, stats: message.stats,
+              filters: message.filters, sort: message.sort,
               views: message.views ? { ...previous.views, ...message.views } : previous.views };
           // Each browse response is a complete bounded view, not another raw slice to append.
           return {
@@ -842,6 +845,8 @@ export function useTradeSearch({
             total: message.total,
             visibleTotal: message.visibleTotal ?? previous.visibleTotal,
             groupsTotal: message.groupsTotal ?? previous.groupsTotal,
+            filters: message.filters ?? previous.filters,
+            sort: message.sort ?? previous.sort,
             views: message.views ? { ...previous.views, ...message.views } : previous.views,
             filterCounts: message.counts ?? previous.filterCounts,
             filterBlocks: message.blocks ?? previous.filterBlocks,
