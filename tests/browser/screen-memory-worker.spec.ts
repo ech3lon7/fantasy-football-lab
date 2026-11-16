@@ -24,7 +24,7 @@ test("a running search receives progress while Trade room is hidden", async ({ p
   await seedTradeLeague(page, "search", { teamA: "1", teamB: "2", give: ["101"], get: [] }, { feelAnimation: "off" });
   await page.goto("./#/trade");
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-  await page.getByRole("button", { name: "Search all trades" }).click();
+  await page.getByRole("dialog", { name: "Trade filters" }).getByRole("button", { name: "Search", exact: true }).click();
   await page.goto("./#/teams");
   // The visible navigation announces a running background search.
   await expect(page.locator(".gd-nav .gd-search-running")).toBeVisible();
@@ -36,11 +36,11 @@ test("a running search receives progress while Trade room is hidden", async ({ p
   expect(retained).toBe(true);
   await page.goto("./#/trade");
   await expect(page.locator(".gd-search-running")).toHaveCount(0);
-  await expect(page.locator(".gd-find [role=status]")).toContainText("2 of 10 evaluated");
+  await expect(page.getByRole("region", { name: "Trade search results" }).getByRole("status").first()).toContainText("2 of 10 evaluated");
   // An inner-tab change also keeps the same running worker and its progress.
   await page.getByRole("tab", { name: "Chain planner", exact: true }).click();
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-  await expect(page.locator(".gd-find [role=status]")).toContainText("2 of 10 evaluated");
+  await expect(page.getByRole("region", { name: "Trade search results" }).getByRole("status").first()).toContainText("2 of 10 evaluated");
   expect(await page.evaluate(() => !(window as unknown as { screenMemoryWorker: { terminated: boolean } }).screenMemoryWorker.terminated)).toBe(true);
 });
 
@@ -50,7 +50,7 @@ for (const width of [1320, 390]) test(`find results survive inner tabs at ${widt
   await seedTradeLeague(page, "search", { teamA: "1", teamB: "2", give: ["101"], get: [] }, { feelAnimation: "off" });
   await page.goto("./#/trade");
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-  await page.getByRole("button", { name: "Search all trades" }).click();
+  await page.getByRole("dialog", { name: "Trade filters" }).getByRole("button", { name: "Search", exact: true }).click();
   const rows = page.locator(".gd-find .gd-res-row");
   await expect(rows.first()).toBeVisible({ timeout: 30000 });
   // Results stream in; count them once the search has finished.
@@ -104,7 +104,7 @@ test("section navigation restores scroll and hides inactive controls", async ({ 
   const before = await page.evaluate(() => window.scrollY);
   await page.goto("./#/teams");
   await expect(page.locator(".gd-find")).toBeHidden();
-  await expect(page.getByRole("button", { name: "Search all trades" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Trade filters" }).getByRole("button", { name: "Search", exact: true })).toHaveCount(0);
   await page.goto("./#/trade");
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before - 2);
 });

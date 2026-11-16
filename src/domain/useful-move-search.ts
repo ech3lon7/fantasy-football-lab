@@ -1,10 +1,15 @@
+import { cmpId } from "./contracts";
+
 // These limits are the approved search floor and the starting per-team, per-size beam.
-export const FLOOR_MAX_LOSS = 3;
+// Apply the approved loss floor independently to each side of a trade.
+export const FLOOR_MAX_LOSS_OWN = 3;
+export const FLOOR_MAX_LOSS_OTHER = 2;
 export const BEAM_PER_TEAM = 200;
 type Impacts = { add: Map<string, Map<string, number | null>>; leave: Map<string, Map<string, number | null>> };
 export interface UsefulCoverage {
   singles: number; extensions: number; opponents: number; beamCutoffs: number;
   beamCutoffsByTeam: Record<string, Record<string, number>>;
+  missingTeams?: string[];
 }
 // One opponent's progress: its one-for-ones are done (done false), or all its packages are (done true).
 export interface TeamProgress {
@@ -14,7 +19,7 @@ export interface TeamProgress {
   done: boolean;
 }
 export interface UsefulOffer { team: string; give: string[]; get: string[] }
-export interface UsefulEvaluation extends UsefulOffer { legal: boolean | null; changed: boolean; own: number | null; other: number | null }
+export interface UsefulEvaluation extends UsefulOffer { legal: boolean | null; changed: boolean; own: number | null; other: number | null; seedKey?: string }
 export interface UsefulRow<T extends UsefulEvaluation> { trade: T; variants: T[] }
 
 // Canonical player order prevents the same package from being evaluated repeatedly.
@@ -23,14 +28,14 @@ function subset(a: string[], b: string[]) { return a.every((id) => b.includes(id
 // Retain only legal trades with changed lineups and measurable gains within the agreed floor.
 function passesFloor(r: UsefulEvaluation) {
   return r.legal === true && r.changed && r.own !== null && r.other !== null &&
-    Number.isFinite(r.own) && Number.isFinite(r.other) && r.own >= -FLOOR_MAX_LOSS && r.other >= -FLOOR_MAX_LOSS;
+    Number.isFinite(r.own) && Number.isFinite(r.other) && r.own >= -FLOOR_MAX_LOSS_OWN && r.other >= -FLOOR_MAX_LOSS_OTHER;
 }
 
 // Evaluate all singles, then rank guided packages by their potential lineup impact before full evaluation.
 export async function buildUsefulMoves<T extends UsefulEvaluation>(
   roster: { own: string[]; opponents: Record<string, string[]> }, impacts: Impacts, protectedIds: string[],
   evaluate: (offer: UsefulOffer) => T, onSingles?: (rows: T[]) => void, beam = BEAM_PER_TEAM,
-  onTeam?: (event: TeamProgress) => void,
+  onTeam?: (event: TeamProgress) => void, metadata = true,
 ) {
   const ours = roster.own.filter((id) => !protectedIds.includes(id));
   const evaluated = new Set<string>(), retained: T[] = [], singles: T[] = [];
@@ -45,10 +50,13 @@ export async function buildUsefulMoves<T extends UsefulEvaluation>(
   };
   // Every one-for-one reaches the original evaluator, including players with unavailable impact estimates.
   const extByTeam: Record<string, number> = {};
+  // Each retained package carries its grouping single without affecting evaluation or ranking.
+  const singleSeed = (team: string, give: string, get: string) => JSON.stringify([team, [give], [get]]);
   for (const [team, theirs] of Object.entries(roster.opponents)) {
   for (const give of ours) for (const get of theirs) {
     const offer = { team, give: [give], get: [get] }; evaluated.add(offerKey(offer)); coverage.singles++;
-    const row = evaluate(offer); singles.push(row); if (passesFloor(row)) retained.push(row);
+    const row = evaluate(offer); if (metadata) row.seedKey = singleSeed(team, give, get);
+    singles.push(row); if (passesFloor(row)) retained.push(row);
     // Early batches let the first rows appear long before every one-for-one is checked.
     if (coverage.singles % 100 === 0) onSingles?.([...retained]);
   }
@@ -60,11 +68,22 @@ export async function buildUsefulMoves<T extends UsefulEvaluation>(
   // Grow only from retained packages; each size is capped independently for each opponent.
   for (let total = 3; total <= 6; total++) for (const [team] of Object.entries(roster.opponents)) {
     const candidates = new Map<string, { offer: UsefulOffer; score: number }>();
+    const seeds = new Map<string, string>();
     const teamRows = retained.filter((r) => r.team === team);
-    const addCandidate = (give: string[], get: string[]) => {
+    const addCandidate = (give: string[], get: string[], pathSeed?: string) => {
       if (give.length < 1 || get.length < 1 || give.length > 3 || get.length > 3 || give.length + get.length !== total) return;
       const offer = { team, give, get }, key = offerKey(offer), value = score(team, give, get);
-      if (!evaluated.has(key) && value !== null) candidates.set(key, { offer, score: value });
+      if (!evaluated.has(key) && value !== null) {
+        candidates.set(key, { offer, score: value });
+        if (metadata && pathSeed) {
+          // Every 2-for-1 uses the higher-departure-impact player, including sweeteners.
+          const seed = give.length === 2 && get.length === 1
+            ? singleSeed(team, [...give].sort((a, b) => (impacts.leave.get("own")?.get(b) ?? 0) - (impacts.leave.get("own")?.get(a) ?? 0) || cmpId(a, b))[0], get[0])
+            : pathSeed;
+          const previous = seeds.get(key);
+          if (!previous || seed < previous) seeds.set(key, seed);
+        }
+      }
     };
     const top = [...ours].filter((id) => (impacts.add.get(team)?.get(id) ?? 0) > 0)
       .sort((a, b) => (impacts.add.get(team)?.get(b) ?? 0) - (impacts.add.get(team)?.get(a) ?? 0) || a.localeCompare(b)).slice(0, 5);
@@ -73,16 +92,17 @@ export async function buildUsefulMoves<T extends UsefulEvaluation>(
     for (const row of extensionBases) {
       for (const id of top) if (!row.give.includes(id)) {
         const give = [...row.give, id];
-        addCandidate(give, row.get);
+        addCandidate(give, row.get, row.seedKey);
       }
       // Consolidations can use any second player when the incoming gain exceeds both departure losses.
       if (row.give.length === 1 && row.get.length === 1) for (const id of ours) if (!row.give.includes(id)) {
         const give = [...row.give, id], gain = impacts.add.get("own")?.get(row.get[0]);
         const first = impacts.leave.get("own")?.get(give[0]), second = impacts.leave.get("own")?.get(give[1]);
-        if (gain != null && first != null && second != null && gain > first + second) addCandidate(give, row.get);
+        if (gain != null && first != null && second != null && gain > first + second) addCandidate(give, row.get, row.seedKey);
       }
       for (const other of teamRows) if (teamRows.includes(row) && row !== other && !row.give.some((id) => other.give.includes(id)) && !row.get.some((id) => other.get.includes(id)))
-        addCandidate([...row.give, ...other.give], [...row.get, ...other.get]);
+        addCandidate([...row.give, ...other.give], [...row.get, ...other.get],
+          row.own! > other.own! ? row.seedKey : row.own! < other.own! ? other.seedKey : [row.seedKey, other.seedKey].filter((x): x is string => !!x).sort()[0]);
     }
     const ranked = [...candidates.values()].sort((a, b) => b.score - a.score || offerKey(a.offer).localeCompare(offerKey(b.offer)));
     // A separate beam for each give/get size avoids one package shape crowding out another.
@@ -96,7 +116,8 @@ export async function buildUsefulMoves<T extends UsefulEvaluation>(
         continue;
       }
       counts.set(size, count + 1); evaluated.add(offerKey(candidate.offer)); coverage.extensions++; extByTeam[team] = (extByTeam[team] ?? 0) + 1;
-      const row = evaluate(candidate.offer); if (passesFloor(row)) retained.push(row);
+      const row = evaluate(candidate.offer); if (metadata) row.seedKey = seeds.get(offerKey(candidate.offer));
+      if (passesFloor(row)) retained.push(row);
       // Regular yields keep filter messages responsive without reducing search coverage.
       if (coverage.extensions % 25 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }

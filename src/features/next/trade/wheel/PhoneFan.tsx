@@ -343,6 +343,7 @@ export function PhoneFan({
             </g>
           </svg>
         </div>
+        {option?.hides && data.blocks && <div className="gd-hub-hides">hides {(data.hides[option.hides] ?? 0).toLocaleString()} · also blocks {(data.blocks[option.hides] ?? 0).toLocaleString()}</div>}
         {number && option && (
           <div className="gd-fan-steps">
             <button type="button" aria-label="Lower" onClick={() => step(-1)}>
@@ -390,8 +391,9 @@ export function PhoneFan({
           <button type="button" onClick={() => close(onListView)}>
             list view
           </button>
+          {data.showAll && <button type="button" onClick={data.showAll}>Show all</button>}
           <button type="button" onClick={data.clear}>
-            clear all
+            {data.showAll ? "Reset to defaults" : "clear all"}
           </button>
         </div>
       </div>

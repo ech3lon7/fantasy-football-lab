@@ -34,23 +34,33 @@ const BOARD_H = 720;
 const shortTeam = (name: string) =>
   name.length > 7 ? `${name.slice(0, 6)}…` : name;
 
-// Fit the 960 x 720 board to the window, never larger than itself.
-function useFit() {
-  const [fit, setFit] = useState(1);
+// Fit the 960 x 720 board to the window, never larger than itself. The inline wheel on a phone shows only the 640-wide middle of the
+// board (where the ring is), so the ring fills the screen instead of a third of it.
+export const PHONE_MAX = 719;
+const PHONE_CROP = 160;
+function measureFit(inline: boolean) {
+  if (typeof window === "undefined") return { fit: 1, phone: false };
+  const phone = inline && window.innerWidth <= PHONE_MAX;
+  return {
+    phone,
+    fit: Math.min(
+      1,
+      // A phone keeps a margin on both sides (the page's own padding), so the wheel never widens the page.
+      (window.innerWidth - (phone ? 32 : 16)) / (phone ? BOARD_W - 2 * PHONE_CROP : BOARD_W),
+      inline ? 520 / BOARD_H : (window.innerHeight - 16) / BOARD_H,
+    ),
+  };
+}
+// The first render already uses the real window size: a 960px board on a phone would widen the page before the first measure ran.
+function useFit(inline = false) {
+  const [size, setSize] = useState(() => measureFit(inline));
   useEffect(() => {
-    const measure = () =>
-      setFit(
-        Math.min(
-          1,
-          (window.innerWidth - 16) / BOARD_W,
-          (window.innerHeight - 16) / BOARD_H,
-        ),
-      );
+    const measure = () => setSize(measureFit(inline));
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, []);
-  return fit;
+  }, [inline]);
+  return size;
 }
 
 const focusableSelector =
@@ -65,6 +75,8 @@ function DesktopWheel({
   onListView,
   opener,
   onHandoff,
+  inline = false,
+  hub,
 }: {
   data: WheelData;
   // The existing grade-goal editor, shown as a panel when Grades is chosen.
@@ -75,10 +87,12 @@ function DesktopWheel({
   opener?: RefObject<HTMLElement | null>;
   // The Chain planner hands categories it keeps per trade to its list.
   onHandoff?: (id: CategoryId) => void;
+  inline?: boolean;
+  hub?: ReactNode;
 }) {
   const { categories } = data;
   const count = categories.length;
-  const fit = useFit();
+  const { fit, phone: cropped } = useFit(inline);
   const hatchId = useId().replace(/:/g, "");
   const dialog = useRef<HTMLDivElement>(null);
   const fitRef = useRef<HTMLDivElement>(null);
@@ -97,9 +111,15 @@ function DesktopWheel({
   const [handle, setHandle] = useState<"lo" | "hi">("lo");
 
   const chosen = categories.find((c) => c.id === category) ?? null;
+  // The inline phone wheel swaps its category ring for the selected category's options.
+  const inlinePhone = inline && typeof window !== "undefined" && window.innerWidth <= 719;
   const option: WheelOption | null =
     chosen?.options.find((o) => o.id === optionId) ?? null;
   const shown = categories[focus];
+  // While a Ring 1 category has focus or the pointer, the inline hub names it with its setting and the live count; otherwise it holds Search.
+  const [onRing, setOnRing] = useState(false);
+  // Segments can unmount while pointed at (the phone swaps its ring), so a changed level always clears the pointer state.
+  useEffect(() => setOnRing(false), [category]);
 
   const doBack = () => {
     setEditing(false);
@@ -130,10 +150,15 @@ function DesktopWheel({
   };
 
   // Focus the first segment on open, and the right control after each level change.
+  // The inline wheel does not take focus when the page first shows it, but it does when a ring closes, so keyboard users land back on the category.
+  const firstRun = useRef(true);
   useEffect(() => {
+    const first = firstRun.current;
+    firstRun.current = false;
+    if (inline && !category && first) return;
     dialog.current
       ?.querySelector<HTMLElement>(
-        category ? ".gd-wheel-pill" : `.gd-wheel-seg[data-index="${focus}"]`,
+        category ? (inlinePhone ? '.gd-wheel-seg[data-option-index="0"]' : ".gd-wheel-pill") : `.gd-wheel-seg[data-index="${focus}"]`,
       )
       ?.focus();
     // Only the level (not each focus move) decides where focus lands.
@@ -147,11 +172,11 @@ function DesktopWheel({
       event.preventDefault();
       event.stopPropagation();
       if (category) back();
-      else closeWheel();
+      else if (!inline) closeWheel();
     } else if (event.key === "Backspace" && !typing && category) {
       event.preventDefault();
       back();
-    } else if (event.key === "Tab") {
+    } else if (event.key === "Tab" && !inline) {
       // A focus trap: Tab cycles inside the dialog.
       const items = [
         ...(dialog.current?.querySelectorAll<HTMLElement>(focusableSelector) ??
@@ -178,6 +203,7 @@ function DesktopWheel({
     }
   };
   const segmentKey = (index: number) => (event: KeyboardEvent<SVGGElement>) => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     const move = (to: number) => {
       event.preventDefault();
       const next = (to + count) % count;
@@ -185,6 +211,8 @@ function DesktopWheel({
       dialog.current
         ?.querySelector<HTMLElement>(`.gd-wheel-seg[data-index="${next}"]`)
         ?.focus();
+      // After the focus move, because the old segment's blur clears this.
+      setOnRing(true);
     };
     if (event.key === "ArrowRight" || event.key === "ArrowDown")
       move(index + 1);
@@ -293,29 +321,58 @@ function DesktopWheel({
     return () => window.clearTimeout(t);
   }, [undo]);
 
+  // The hub's category view: its name, its setting and the live count.
+  const nameView = (
+              <>
+      <div className="gd-hub-name">
+        {(chosen ?? shown)?.label.toUpperCase()}
+      </div>
+      <div className="gd-hub-line">{summary}</div>
+      {option ? (
+        <div className="gd-hub-hides">hides {fx.shownHides}</div>
+      ) : (
+        <div className="gd-hub-hides">
+          {data.visible.toLocaleString()} of{" "}
+          {data.total.toLocaleString()}
+        </div>
+      )}
+      {inline && !option && (
+        <div className="gd-hub-active">{data.activeCount} filters on</div>
+      )}
+    </>
+  );
+
   return (
     <div
       ref={scrimRef}
-      className="gd-wheel-scrim"
+      className={inline ? "gd-wheel-inline" : "gd-wheel-scrim"}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) closeWheel();
+        if (!inline && e.target === e.currentTarget) closeWheel();
       }}
     >
       <div
         ref={fitRef}
         className="gd-wheel-fit"
-        style={{ width: BOARD_W * fit, height: BOARD_H * fit }}
+        style={{
+          width: (cropped ? BOARD_W - 2 * PHONE_CROP : BOARD_W) * fit,
+          height: BOARD_H * fit,
+          overflow: cropped ? "hidden" : undefined,
+        }}
       >
         <div
           ref={dialog}
           className="gd-wheel-board"
+          data-cropped={cropped || undefined}
           role="dialog"
-          aria-modal="true"
+          aria-modal={inline ? undefined : "true"}
           aria-label="Trade filters"
           style={{
             width: BOARD_W,
             height: BOARD_H,
+            left: cropped ? -PHONE_CROP * fit : undefined,
             transform: `scale(${fit})`,
+            // Read by filter-wheel.css so the fit survives the Reduced-motion rule that clears every transform.
+            ["--wheel-fit" as string]: fit,
           }}
           onKeyDown={key}
           onPointerDownCapture={(e) => {
@@ -452,10 +509,28 @@ function DesktopWheel({
 
             <g
               role="menu"
-              aria-label="Filter categories"
+              aria-label={inlinePhone && chosen ? `${chosen.label} settings` : "Filter categories"}
               className="gd-wheel-ring1"
             >
-              {categories.map((c, i) => {
+              {inlinePhone && chosen ? chosen.options.map((item, i) => {
+                const optionCount = chosen.options.length;
+                const { from, to } = segmentBounds(i, optionCount);
+                const at = labelPoint(i, optionCount);
+                return <g key={item.id} className="gd-wheel-seg" data-option-index={i} role="menuitem"
+                  aria-label={item.label} tabIndex={item.id === optionId || (!optionId && i === 0) ? 0 : -1}
+                  onClick={() => { setOptionId(item.id); setPage(0); setQuery(""); setEditing(false); }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOptionId(item.id); }
+                    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+                      event.preventDefault();
+                      const next = (i + (event.key === "ArrowRight" ? 1 : -1) + optionCount) % optionCount;
+                      dialog.current?.querySelector<HTMLElement>(`[data-option-index="${next}"]`)?.focus();
+                    }
+                  }}>
+                  <path className="gd-seg-hit" d={wedgePath(RING.inner, RING.outer, from, to)} />
+                  <text className="gd-seg-label" x={at.x} y={at.y + 7} textAnchor="middle">{item.label}</text>
+                </g>;
+              }) : categories.map((c, i) => {
                 const { from, to } = segmentBounds(i, count);
                 const at = labelPoint(i, count);
                 const selected = c.id === category;
@@ -472,7 +547,13 @@ function DesktopWheel({
                     aria-label={`${c.label}${active ? `, ${active} set` : ""}`}
                     tabIndex={i === focus ? 0 : -1}
                     onFocus={() => setFocus(i)}
-                    onMouseEnter={() => !category && setFocus(i)}
+                    onBlur={() => setOnRing(false)}
+                    onMouseEnter={() => {
+                      if (category) return;
+                      setFocus(i);
+                      setOnRing(true);
+                    }}
+                    onMouseLeave={() => setOnRing(false)}
                     onClick={() => choose(c.id)}
                     onKeyDown={segmentKey(i)}
                   >
@@ -576,7 +657,13 @@ function DesktopWheel({
           </svg>
 
           <div className="gd-wheel-hub">
-            {panel ? null : option && number ? (
+            {inline && !category ? (
+              <>
+                {/* The Search, Team, Show all and Reset controls stay in place (so Tab still reaches them) and are covered while a category is pointed at. */}
+                <div className="gd-hub-controls" data-away={onRing || undefined}>{hub}</div>
+                {onRing && <div className="gd-hub-overlay">{nameView}</div>}
+              </>
+            ) : panel ? null : option && number ? (
               <>
                 <div className="gd-hub-line">{option.hubLine}</div>
                 {editing && option.kind === "slider" ? (
@@ -614,7 +701,7 @@ function DesktopWheel({
                     {valueText}
                   </button>
                 )}
-                <div className="gd-hub-hides">hides {fx.shownHides}</div>
+                <div className="gd-hub-hides">hides {fx.shownHides}{option.hides && data.blocks && ` · also blocks ${(data.blocks[option.hides] ?? 0).toLocaleString()}`}</div>
                 <div className="gd-hub-steps">
                   <button
                     type="button"
@@ -669,20 +756,7 @@ function DesktopWheel({
                 <div className="gd-hub-hides">hides {fx.shownHides}</div>
               </>
             ) : (
-              <>
-                <div className="gd-hub-name">
-                  {(chosen ?? shown)?.label.toUpperCase()}
-                </div>
-                <div className="gd-hub-line">{summary}</div>
-                {option ? (
-                  <div className="gd-hub-hides">hides {fx.shownHides}</div>
-                ) : (
-                  <div className="gd-hub-hides">
-                    {data.visible.toLocaleString()} of{" "}
-                    {data.total.toLocaleString()}
-                  </div>
-                )}
-              </>
+              nameView
             )}
           </div>
 
@@ -820,7 +894,7 @@ function DesktopWheel({
             </div>
           )}
 
-          {chosen && chosen.options.length > 1 && (
+          {chosen && chosen.options.length > 1 && !inlinePhone && (
             <div
               className="gd-wheel-pills"
               role="menu"
@@ -870,6 +944,7 @@ function DesktopWheel({
             </div>
           )}
           <div className="gd-wheel-foot">
+            {!inline && data.showAll && <button type="button" className="gd-foot-link" onClick={data.showAll}>Show all</button>}
             <button
               type="button"
               className="gd-foot-link"
@@ -878,10 +953,10 @@ function DesktopWheel({
             >
               ← back
             </button>
-            <button type="button" className="gd-foot-link" onClick={closeWheel}>
+            <button type="button" className="gd-foot-link" onClick={inline ? back : closeWheel}>
               done
             </button>
-            <button
+            {!inline && <button
               type="button"
               className="gd-foot-link"
               onClick={() =>
@@ -889,8 +964,8 @@ function DesktopWheel({
               }
             >
               list view
-            </button>
-            <button
+            </button>}
+            {!inline && <button
               type="button"
               className="gd-foot-link"
               onClick={() =>
@@ -900,8 +975,8 @@ function DesktopWheel({
                 })
               }
             >
-              clear all
-            </button>
+              {data.showAll ? "Reset to defaults" : "clear all"}
+            </button>}
           </div>
         </div>
       </div>
@@ -942,5 +1017,6 @@ function useIsPhone() {
 }
 
 export function FilterWheel(props: Parameters<typeof DesktopWheel>[0]) {
-  return useIsPhone() ? <PhoneFan {...props} /> : <DesktopWheel {...props} />;
+  const phone = useIsPhone();
+  return phone && !props.inline ? <PhoneFan {...props} /> : <DesktopWheel {...props} />;
 }

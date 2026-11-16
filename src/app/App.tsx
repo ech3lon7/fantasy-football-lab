@@ -1311,6 +1311,7 @@ export default function App() {
         onImport={() => fileRef.current?.click()}
         feel={feel}
         changeFeel={changeFeelSetting}
+        shortcut={w?.state.filters.filterWheelShortcut}
         onApplyDrop={applySimulationDrop}
         onSwitchToLive={switchToLiveRoster}
       />
@@ -1601,6 +1602,8 @@ export default function App() {
               account={accountView}
               feel={feel}
               changeFeel={changeFeelSetting}
+              shortcut={w?.state.filters.filterWheelShortcut}
+              changeShortcut={(value) => { if (wRef.current) updateState({ filters: { ...wRef.current.state.filters, filterWheelShortcut: value } }); }}
             />
           </Activity>}
           <Legend />

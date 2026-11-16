@@ -36,9 +36,10 @@ test("big find", async ({ page }) => {
   await page.screenshot({ path: test.info().outputPath("find-collapsed.png") });
   await page.waitForTimeout(400);
   await page.screenshot({ path: test.info().outputPath("find-open.png"), fullPage: true });
-  await page.getByRole("button", { name: "Search all trades" }).click();
-  await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
+  // The search starts from the wheel's hub (Search all trades is gone); Cancel is there while it runs and gone when it has finished.
+  await page.getByRole("dialog", { name: "Trade filters" }).getByRole("button", { name: "Search", exact: true }).click();
   await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+  await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath("find-results.png"), fullPage: true });
   await page.goto("./#/roster");
   await page.waitForTimeout(500);

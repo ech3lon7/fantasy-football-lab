@@ -81,7 +81,7 @@ export function ResultRow({
     >
       <span className="gd-who">
         <span className="gd-photos">
-          {row.get.slice(0, 3).map((id) => {
+          {[...give, ...row.get].map((id) => {
             const p = model.byId.get(id);
             return p ? (
               <PlayerPhoto key={id} player={p} size={30} className="gd-photo" />
@@ -91,29 +91,19 @@ export function ResultRow({
         <span>
           {people(give)} <span className="gd-quiet">→</span>{" "}
           <b>{people(row.get)}</b>
-          <br />
-          <span className="gd-quiet">{view.teamName}</span>
+          <span className="gd-quiet"> · {view.teamName}</span>
         </span>
       </span>
-      <Chips chips={view.ownChips} label="Your grade steps" />
-      <Chips chips={view.otherChips} label="Their grade steps" />
-      <span className="gd-gain" title={view.gain.reason || undefined}>
-        <b>{signedOne(view.gain.gain)}</b>
-        <small>
-          ± {view.gain.spread === null ? "n/a" : view.gain.spread.toFixed(1)}
-          {view.gain.sharesNflTeam && " (slightly understated)"}
-        </small>
-      </span>
-      <span>{view.surplus}</span>
+      {/* Keep each side's weekly gain and the current-week matchup result distinct. */}
+      <span className="gd-gain gd-gain-you" data-positive={row.own !== null && row.own > 0} aria-label={`Your EPPG gain ${signedOne(row.own)}`}><b>{signedOne(row.own)}</b></span>
+      <span className="gd-gain gd-gain-them" aria-label={`Their EPPG gain ${signedOne(row.other)}`}><b>{signedOne(row.other)}</b></span>
+      <span aria-label={`This week ${signedOne(row.filterEvidence?.ownWeekGain ?? null)}`}>{signedOne(row.filterEvidence?.ownWeekGain ?? null)}</span>
+      <span className="gd-grade-steps"><Chips chips={view.ownChips} label="Your grade steps" /><Chips chips={view.otherChips} label="Their grade steps" /></span>
       <span>
-        <span className="gd-stag" data-kind={view.status.kind}>
+        <button type="button" className="gd-stag" data-kind={view.status.kind} aria-label="Trade details" aria-expanded={open}
+          onClick={() => { setOpen(!open); if (!open) s.inspect(row); }}>
           {view.status.label}
-        </span>
-        {view.status.detail && (
-          <small className="gd-quiet" style={{ display: "block" }}>
-            {view.status.detail}
-          </small>
-        )}
+        </button>
       </span>
       <span className="gd-chips">
         <button
@@ -135,20 +125,20 @@ export function ResultRow({
             {s.savedRow === row.key ? "Saved" : "Save trade"}
           </button>
         )}
-        <button
-          type="button"
-          className="gd-cbtn"
-          aria-expanded={open}
-          onClick={() => {
-            setOpen(!open);
-            if (!open) s.inspect(row);
-          }}
-        >
-          Trade details
-        </button>
       </span>
       {open && (
         <div className="gd-row-detail">
+          <p>
+            Surplus: {view.surplus} · Lineup source: {s.starter.source}
+            {model.ignoreByeWeeks &&
+              " · Hypothetical: byes ignored; temporary injury absences ignored; IR excluded"}{" "}
+            · Weeks {model.current}–{model.final} · Source refreshed:{" "}
+            {model.dataset.sourceUTC
+              ? new Date(model.dataset.sourceUTC).toLocaleString()
+              : "Unavailable"}
+            .
+          </p>
+          {view.status.detail && <p>{view.status.detail}</p>}
           {details?.error ??
             (details?.details
               ? (["own", "other"] as const).map((side) => (

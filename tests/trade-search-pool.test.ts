@@ -2,10 +2,28 @@ import { describe, expect, it } from "vitest";
 import { evaluate } from "../src/domain/valuation";
 import { runUsefulTradeSearch } from "../src/domain/useful-trade-adapter";
 import { lineup, withLineupMemo } from "../src/domain/lineups";
-import { mergeCoverage, partition, poolSize, MAX_POOL } from "../src/workers/trade-search-pool";
+import { mergeCoverage, partition, poolSize, runPooled, MAX_POOL } from "../src/workers/trade-search-pool";
 import { fairChainFixture } from "./chain-fixture";
 
 describe("search pool sizing and partitioning", () => {
+  // A failed helper retries only its slice and still contributes to measured coverage.
+  it("retries a failed helper without losing an opponent", async () => {
+    let index = 0;
+    const retried: string[][] = [];
+    const coverage = { singles: 1, extensions: 0, opponents: 1, beamCutoffs: 0, beamCutoffsByTeam: {} };
+    const spawn = () => {
+      const fail = index++ === 1;
+      const worker = { onmessage: null as ((event: { data: unknown }) => void) | null,
+        onerror: null as (() => void) | null, terminate: () => undefined,
+        postMessage: () => queueMicrotask(() => fail ? worker.onerror?.() : worker.onmessage?.({ data: { type: "done", rows: [], coverage } })) };
+      return worker as unknown as Worker;
+    };
+    const result = await runPooled({} as never, [["a"], ["b"]], spawn, () => undefined, undefined,
+      async (slice) => { retried.push(slice); return { rows: [], coverage }; });
+    expect(retried).toEqual([["b"]]);
+    expect(result.coverage.opponents).toBe(2);
+    expect(result.missing).toEqual([]);
+  });
   it("uses one helper per core but one, at most four, never more than the opponents", () => {
     expect(poolSize(11, 8, true)).toBe(MAX_POOL);
     expect(poolSize(11, 4, true)).toBe(3);

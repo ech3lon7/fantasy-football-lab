@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearTradeFilters, defaultTradeFilters, filterTradeRows, sortTradeRows, clampTheirGain } from "../src/domain/trade-filters";
+import { clearTradeFilters, defaultTradeFilters, showAllTradeFilters, filterTradeRows, sortTradeRows, clampTheirGain } from "../src/domain/trade-filters";
 import type { FilterableTrade } from "../src/domain/trade-filters";
 
 // A compact, precomputed result makes every filter and its hidden count independently observable.
@@ -11,6 +11,14 @@ const row = (overrides: Partial<FilterableTrade> = {}): FilterableTrade => ({
 });
 
 describe("instant trade filters", () => {
+  // Show all includes both inclusive loss-floor boundaries without activating other filters.
+  it("shows all trades retained by the approved floor", () => {
+    const filters = showAllTradeFilters();
+    const trades = [row({ ownGain: -3, otherGain: 1 }), row({ key: "two", ownGain: 5, otherGain: -2 })];
+    expect(filterTradeRows(trades, filters).visible).toHaveLength(2);
+    expect(filters.yourGain).toEqual({ minimum: null, maximum: null });
+    expect(filters.theirGain).toBe(-2);
+  });
   it("restores both approved defaults and counts hidden rows for each active filter", () => {
     const filters = defaultTradeFilters();
     const result = filterTradeRows([row(), row({ key: "two", ownGain: -1, otherGain: 0 })], filters);

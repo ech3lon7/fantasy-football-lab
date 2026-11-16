@@ -14,7 +14,8 @@ it("migrates both-side grade limits to equivalent affected-position goals", () =
 // Retained criteria become filters and removed legacy controls are disclosed explicitly.
 it("migrates a saved find query and lists its removed controls", () => {
   const result = migrateLegacyTradeQuery({ teamA: "1", give: ["a"], count: 1, below: 5, above: 5, indexMode: "strict", goal: "surface", weekly: { other: { minimum: 0, maximum: 3 } } });
-  expect(result.filters.mustGive).toEqual(["a"]);
+  expect(result.filters.mustGive).toEqual([]);
+  expect(result.ignored).toContain("offered players");
   expect(result.filters.theirGain).toBe(0);
   expect(result.ignored).toContain("index window");
   expect(result.ignored).toContain("goal");

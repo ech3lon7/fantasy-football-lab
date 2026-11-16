@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { labTabs, type LabTab } from "../../domain/view/shell";
 import { FeelSettings, type FeelValues } from "./Shell";
 import { KeyboardList } from "./KeyboardReference";
+import { defaultFilterShortcut, filterShortcut, filterShortcutProblem } from "./trade/filter-shortcut";
 
 // The Lab: model settings, evidence sources, audits, data and account, the keyboard reference and Feel, each a short page.
 export function Lab({
@@ -12,6 +13,8 @@ export function Lab({
   account,
   feel,
   changeFeel,
+  shortcut,
+  changeShortcut,
 }: {
   tab: LabTab;
   // Pages that need an imported dataset are null until one exists.
@@ -20,11 +23,30 @@ export function Lab({
   audits: ReactNode | null;
   account: ReactNode;
   feel: FeelValues;
+  shortcut?: string;
+  changeShortcut: (value: string) => void;
   changeFeel: (
     key: "theme" | "animation" | "sound" | "haptics" | "cardEntrances",
     value: string,
   ) => void;
 }) {
+  const [editingShortcut, setEditingShortcut] = useState(false);
+  const [shortcutError, setShortcutError] = useState("");
+  // Capture a new shortcut only while Change is active; Escape cancels it.
+  useEffect(() => {
+    if (!editingShortcut) return;
+    const capture = (event: KeyboardEvent) => {
+      event.preventDefault(); event.stopPropagation();
+      if (event.key === "Escape") { setEditingShortcut(false); setShortcutError(""); return; }
+      const value = filterShortcut(event);
+      if (!value) { setShortcutError("Press a key together with Ctrl, Alt, Shift or Meta."); return; }
+      const problem = filterShortcutProblem(event);
+      if (problem) { setShortcutError(problem); return; }
+      changeShortcut(value); setShortcutError(""); setEditingShortcut(false);
+    };
+    window.addEventListener("keydown", capture, true);
+    return () => window.removeEventListener("keydown", capture, true);
+  }, [editingShortcut, changeShortcut]);
   const needsData = (
     <p className="gd-muted">Import a workbook to use this page.</p>
   );
@@ -63,7 +85,13 @@ export function Lab({
         {tab === "keys" && (
           <div className="gd-card">
             <h3>Keyboard reference</h3>
-            <KeyboardList />
+            <KeyboardList shortcut={shortcut} />
+            <div><span>Filter wheel shortcut</span> <kbd>{shortcut || defaultFilterShortcut}</kbd>{" "}
+              <button type="button" onClick={() => setEditingShortcut(true)}>Change</button>{" "}
+              <button type="button" onClick={() => changeShortcut(defaultFilterShortcut)}>Reset to Shift+Space</button>
+              {editingShortcut && <span>Press a key combination; Escape cancels.</span>}
+              {shortcutError && <span role="alert">{shortcutError}</span>}
+            </div>
           </div>
         )}
         {tab === "feel" && (

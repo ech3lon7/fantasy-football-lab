@@ -33,6 +33,11 @@ export function defaultTradeFilters(): TradeFilters {
 // Clearing filters restores the approved gain defaults instead of removing them.
 export function clearTradeFilters(): TradeFilters { return defaultTradeFilters(); }
 
+// Show every trade retained by the asymmetric search floor.
+export function showAllTradeFilters(): TradeFilters {
+  return { ...defaultTradeFilters(), yourGain: { minimum: null, maximum: null }, theirGain: -2 };
+}
+
 // Keep typed and slider values in the same approved recipient-gain range and step size.
 export function clampTheirGain(value: number) {
   return Number.isFinite(value) ? Math.max(-2, Math.min(1, Math.round(value * 2) / 2)) : 1;

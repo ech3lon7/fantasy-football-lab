@@ -107,6 +107,16 @@ async function openFind(page: Page) {
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
 }
 
+// The inline wheel's hub holds the one Search button Find trades now has.
+const wheel = (page: Page) =>
+  page.getByRole("dialog", { name: "Trade filters" });
+
+// Run the broad search from the inline wheel and wait for its coverage line.
+async function searchAll(page: Page, search: Locator) {
+  await wheel(page).getByRole("button", { name: "Search", exact: true }).click();
+  await expect(search.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+}
+
 // Run the broad search, then narrow the retained results (instantly, with no new search) to what the test inspects:
 // the default gain floors are lifted so every evaluated trade can be seen, and the named players can be required.
 async function broadSearch(
@@ -114,28 +124,34 @@ async function broadSearch(
   search: Locator,
   focus: { give?: string; get?: string; single?: boolean } = {},
 ) {
-  await search.getByRole("button", { name: "Search all trades" }).click();
-  await expect(search.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
-  const panel = page.locator(".gd-broad-filter-panel");
-  await expect(panel).toBeVisible();
-  await panel.getByRole("spinbutton", { name: "Your EPPG gain minimum" }).fill("");
-  await panel.getByRole("spinbutton", { name: "Their EPPG gain minimum" }).fill("-2");
-  const open = async (title: RegExp) => {
-    const group = panel.locator("details", { has: page.locator("summary", { hasText: title }) });
-    if ((await group.getAttribute("open")) === null) await group.locator("> summary").click();
-    return group;
+  await searchAll(page, search);
+  // Lift the default floors: your gain down to the low end of its track, their gain down to -2.
+  await wheel(page).getByRole("menuitem", { name: /^Gains/ }).click();
+  await wheel(page).getByRole("menuitem", { name: "Your EPPG", exact: true }).click();
+  await wheel(page).getByRole("slider", { name: "Your EPPG minimum" }).press("Home");
+  await wheel(page).getByRole("menuitem", { name: "Their EPPG", exact: true }).click();
+  await wheel(page).getByRole("slider", { name: "Their EPPG at least" }).press("Home");
+  const player = async (side: "I give" | "I get", name: string) => {
+    await wheel(page).getByRole("menuitem", { name: side, exact: true }).click();
+    await wheel(page).getByRole("searchbox", { name: "Search players" }).fill(name);
+    await wheel(page)
+      .getByRole("button", { name: new RegExp(name) })
+      .first()
+      .click();
   };
   if (focus.give || focus.get) {
-    const players = await open(/^Players$/);
-    if (focus.give)
-      await players.getByRole("group", { name: /I give must include/ }).getByRole("button", { name: new RegExp(focus.give) }).first().click();
-    if (focus.get)
-      await players.getByRole("group", { name: /I get must include/ }).getByRole("button", { name: new RegExp(focus.get) }).first().click();
+    await wheel(page).getByRole("menuitem", { name: /^Players/ }).click();
+    if (focus.give) await player("I give", focus.give);
+    if (focus.get) await player("I get", focus.get);
   }
   if (focus.single) {
-    const size = await open(/^Size$/);
-    await size.getByRole("combobox", { name: "Give maximum" }).selectOption("1");
-    await size.getByRole("combobox", { name: "Get maximum" }).selectOption("1");
+    await wheel(page).getByRole("menuitem", { name: /^Size/ }).click();
+    for (const side of ["Players I give", "Players I get"] as const) {
+      await wheel(page).getByRole("menuitem", { name: side, exact: true }).click();
+      await wheel(page)
+        .getByRole("slider", { name: `${side} maximum` })
+        .press("Home");
+    }
   }
 }
 // The first listed trade among the top-level rows whose players include the named link.
@@ -465,8 +481,7 @@ test("saved hypothetical trades restore their own recipe and debug exports conta
   );
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
   const search = page.locator(".gd-find");
-  await search.getByRole("button", { name: "Search all trades" }).click();
-  await expect(search.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+  await searchAll(page, search);
   await expect(search.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
   // The debug export lives in the Diagnostics disclosure, closed by default.
   await search.locator("details.gd-diag > summary").click();
@@ -655,9 +670,10 @@ test("hypothetical search ignores byes and returning to live restores scheduled 
   // Trading the Bye RB loses about ten points a week, beyond the approved search floor (nobody loses more than 3 EPPG a week),
   // so those exact scores are no longer listed by the search. What remains observable is the lineup-source line, which states
   // that byes are ignored in a hypothetical roster and drops that statement when the live roster is restored.
+  // The lineup source now sits in the details of a result row (trade-search fixes F0), so the first row's details are opened to read it.
   async function run() {
-    await search.getByRole("button", { name: "Search all trades" }).click();
-    await expect(search.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+    await searchAll(page, search);
+    await search.locator(".gd-res-row").first().getByRole("button", { name: "Trade details" }).click();
   }
   await run();
   await expect(search.getByText(/Hypothetical: byes ignored/)).toBeVisible();
@@ -719,8 +735,7 @@ test("forced trades update both simulated rosters and later searches and undo to
     await sendable(page, "Incoming QB").click();
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
   const search = page.locator(".gd-find");
-  await search.getByRole("button", { name: "Search all trades" }).click();
-  await expect(search.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+  await searchAll(page, search);
   // After the forced trade Incoming QB is on your roster, so the search offers him on your side of the trade. Bench QB moved to the
   // other team, whose loss of a 30-point quarterback is past the approved search floor, so no trade for him is kept.
   const results = search.getByRole("region", { name: "Trade search results" });

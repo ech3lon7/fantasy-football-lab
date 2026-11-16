@@ -699,3 +699,32 @@
   outline: 3px solid var(--gw-yellow);
   outline-offset: 2px;
 }
+
+/* The phone crops the board to its 640px middle, so the corner texts move inside the crop. */
+:root[data-gameday] .gd-wheel-board[data-cropped] .gd-wheel-title { left: 176px; top: 30px; }
+:root[data-gameday] .gd-wheel-board[data-cropped] .gd-wheel-sub { left: 180px; top: 68px; }
+:root[data-gameday] .gd-wheel-board[data-cropped] .gd-wheel-count { right: 176px; top: 34px; }
+
+/* Scaling the board to fit the window is layout, not motion, so Reduced (which clears every transform) must keep it. */
+:root[data-gameday][data-animation="reduced"] .gd-wheel-board { transform: scale(var(--wheel-fit, 1)) !important; }
+
+/* Find trades uses the same board inline, above the results rather than in a scrim. */
+:root[data-gameday] .gd-wheel-inline { display: grid; place-items: center; min-width: 0; }
+:root[data-gameday] .gd-find-wheel > .gd-playcall { position: absolute; left: 10%; right: 10%; bottom: 0; z-index: 4; }
+:root[data-gameday] .gd-find-wheel > .gd-wheel-toast { position: absolute; z-index: 5; }
+:root[data-gameday] .gd-wheel-inline .gd-wheel-hub select { max-width: 150px; }
+
+/* While a Ring 1 category is pointed at, its name view covers the hub's controls, which stay in the page for keyboard users. */
+:root[data-gameday] .gd-hub-controls { display: contents; }
+:root[data-gameday] .gd-hub-controls[data-away] { visibility: visible; }
+:root[data-gameday] .gd-hub-controls[data-away] > * { opacity: 0; pointer-events: none; }
+:root[data-gameday] .gd-hub-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}

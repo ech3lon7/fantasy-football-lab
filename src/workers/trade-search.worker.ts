@@ -7,7 +7,7 @@ import { findTradeRecoveries } from "../domain/trade-guidance";
 import { evaluate, type Model } from "../domain/valuation";
 import { applyRosterScenario } from "../domain/roster-scenarios";
 import { runUsefulTradeSearch } from "../domain/useful-trade-adapter";
-import type { UsefulCoverage } from "../domain/useful-move-search";
+import type { TeamProgress, UsefulCoverage } from "../domain/useful-move-search";
 import { partition, poolSize, runPooled } from "./trade-search-pool";
 import { readLineupBasis } from "../domain/trade-impact";
 import { defaultTradeFilters, type TradeFilters } from "../domain/trade-filters";
@@ -51,6 +51,34 @@ let retained:
     }
   | undefined;
 const send = (message: SearchResponse) => self.postMessage(message);
+// Worker callbacks can update the current search while its asynchronous work yields.
+const currentRetained = (): typeof retained => retained;
+
+// Produce the same sorted, filtered page for live batches and completed searches.
+function filteredPayload(state: NonNullable<typeof retained>) {
+      const all = state.rows.flatMap((row) => [row, ...(row.variants ?? [])]);
+      const byKey = new Map(all.map((row) => [row.key, row]));
+      const evidence = all.flatMap((row) => row.filterEvidence ? [row.filterEvidence] : []);
+      const result = tradeFilterView(evidence, state.filters ?? defaultTradeFilters(), state.sort ?? "own", !!state.showHidden);
+      // Group packages by the search engine's stable one-for-one seed, keeping the best sorted result first.
+      const grouped = new Map<string, SearchRow>();
+      for (const item of result.visible) {
+        const row = byKey.get(item.key);
+        if (!row) continue;
+        const group = row.seedKey ?? row.key;
+        const next = { ...row, variants: [], related: [] }, existingGroup = grouped.get(group);
+        if (existingGroup) existingGroup.related!.push(next);
+        else grouped.set(group, next);
+      }
+      state.filteredRows = [...grouped.values()];
+      const hidden = result.hidden.flatMap(({ row, reasons }) => {
+        const original = byKey.get(row.key);
+        return original ? [{ row: original, reasons }] : [];
+      });
+      return { ...browseTradeResults(state.model, state.filteredRows, undefined, []),
+        rows: state.filteredRows.slice(0, state.limit ?? 50), groupsTotal: state.filteredRows.length,
+        total: result.total, visibleTotal: result.visible.length, counts: result.only, blocks: result.counts, hidden, stats: state.stats };
+ }
 self.onmessage = async (event: MessageEvent<SearchRequest>) => {
   const request = event.data;
   const { id, context } = request;
@@ -64,32 +92,7 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
         retained.limit = Math.max(1, request.limit ?? 50);
       }
       retained.sort = request.sort;
-      const all = retained.rows.flatMap((row) => [row, ...(row.variants ?? [])]);
-      const byKey = new Map(all.map((row) => [row.key, row]));
-      const groupByKey = new Map(retained.rows.flatMap((core) => [core, ...(core.variants ?? [])].map((row) => [row.key, core.key] as const)));
-      const evidence = all.flatMap((row) => row.filterEvidence ? [row.filterEvidence] : []);
-      const result = tradeFilterView(evidence, retained.filters ?? defaultTradeFilters(), retained.sort, !!retained.showHidden);
-      // Group distinct packages by core swap, while retaining equal-gain throw-ins as variants.
-      const grouped = new Map<string, SearchRow>(), parents = new Map<string, SearchRow>();
-      for (const item of result.visible) {
-        const row = byKey.get(item.key);
-        if (!row) continue;
-        const parent = groupByKey.get(item.key) ?? item.key, group = row.coreSwap ?? parent;
-        const existingParent = parents.get(parent);
-        if (existingParent) { existingParent.variants!.push({ ...row, variants: [], related: [] }); continue; }
-        const next = { ...row, variants: [], related: [] }, existingGroup = grouped.get(group);
-        parents.set(parent, next);
-        if (existingGroup) existingGroup.related!.push(next);
-        else grouped.set(group, next);
-      }
-      retained.filteredRows = [...grouped.values()];
-      const hidden = result.hidden.flatMap(({ row, reasons }) => {
-        const original = byKey.get(row.key);
-        return original ? [{ row: original, reasons }] : [];
-      });
-      send({ id, context, type: "filtered", ...browseTradeResults(retained.model, retained.filteredRows, undefined, []),
-        rows: retained.filteredRows.slice(0, retained.limit ?? 50), groupsTotal: retained.filteredRows.length,
-        total: result.total, visibleTotal: result.visible.length, counts: result.only, hidden, stats: retained.stats });
+      send({ id, context, type: "filtered", ...filteredPayload(retained) });
       return;
     }
     // Detail requests reuse the captured model/query and affect neither the completed ranking nor draft.
@@ -176,15 +179,23 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
       const basis = readLineupBasis(request.query.lineupBasis);
       // Retain streamed one-for-ones so filters work before the larger packages finish.
       let lastPartial = -Infinity;
+      const initialFilters = request.useful.filters ?? defaultTradeFilters();
+      const initialSort = request.useful.sort ?? "own";
       const partial = (rows: SearchRow[], final = false) => {
         // Batches arrive often; the screen only needs a fresh list a couple of times a second.
         const now = performance.now();
         if (!final && now - lastPartial < 400) return;
         lastPartial = now;
-        retained = { id, context, rows, suggestions: [], stats, model, query: request.query, lineupsRaw: request.lineupsRaw, useful: true };
-        send({ id, context, type: "partial", ...browseTradeResults(model, rows, undefined, []), total: rows.length, stats });
+        retained = { id, context, rows, suggestions: [], stats, model, query: request.query, lineupsRaw: request.lineupsRaw, useful: true,
+          filters: retained?.filters ?? initialFilters, sort: retained?.sort ?? initialSort,
+          showHidden: retained?.showHidden ?? request.useful?.showHidden, limit: retained?.limit ?? request.useful?.limit };
+        send({ id, context, type: "partial", ...filteredPayload(retained) });
       };
-      const opponents = [...new Set(model.players.map((p) => p.owner))].filter((owner) => owner && owner !== "0" && owner !== own);
+      // Compare completed opponents with the authoritative league team list.
+      const opponents = model.dataset.tables.ModelTeams.map((team) => String(team.TeamID)).filter((team) => team && team !== "0" && team !== own);
+      const completedTeams = new Set<string>();
+      const reportTeam = (event: TeamProgress) => { if (event.done) completedTeams.add(event.team); send({ id, context, type: "team", ...event }); };
+      let retryQueue: Promise<unknown> = Promise.resolve();
       const size = poolSize(opponents.length, self.navigator?.hardwareConcurrency, typeof Worker !== "undefined");
       let found: { rows: SearchRow[]; coverage: UsefulCoverage } | undefined;
       // Opponents are searched in helper workers owned by this one; ending this worker ends them. No helpers means one thread.
@@ -197,25 +208,42 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
             partition(opponents, size),
             () => new Worker(new URL("./trade-search-part.worker.ts", import.meta.url), { type: "module" }),
             partial,
-            (event) => send({ id, context, type: "team", ...event }),
+            reportTeam,
+            (slice, publish) => {
+              // Retry one failed slice at a time because lineup memoization is worker-scoped.
+              for (const team of slice) completedTeams.delete(team);
+              const task = retryQueue.then(async () => {
+                const result = await runUsefulTradeSearch(model, own, request.useful!.protectedIds, basis, request.lineupsRaw,
+                  (singles) => publish(singles.map((row) => ({ ...row.searchRow, seedKey: row.seedKey }))), undefined, slice, reportTeam);
+                return { rows: result.rows.map(({ trade, variants }) => ({ ...trade.searchRow, seedKey: trade.seedKey,
+                  variants: variants.map((v) => ({ ...v.searchRow, seedKey: v.seedKey })) })), coverage: result.coverage };
+              });
+              retryQueue = task.catch(() => undefined);
+              return task;
+            },
           );
         } catch {
           found = undefined;
         }
       if (!found) {
         const result = await runUsefulTradeSearch(model, own, request.useful.protectedIds, basis, request.lineupsRaw,
-          (singles) => partial(singles.map((row) => row.searchRow)), undefined, undefined,
-          (event) => send({ id, context, type: "team", ...event }));
+          (singles) => partial(singles.map((row) => ({ ...row.searchRow, seedKey: row.seedKey }))), undefined, undefined,
+          reportTeam);
         found = {
-          rows: result.rows.map(({ trade, variants }) => ({ ...trade.searchRow, variants: variants.map((v) => v.searchRow) })),
+          rows: result.rows.map(({ trade, variants }) => ({ ...trade.searchRow, seedKey: trade.seedKey, variants: variants.map((v) => ({ ...v.searchRow, seedKey: v.seedKey })) })),
           coverage: result.coverage,
         };
       }
       const rows = found.rows;
+      // A missing completed team is reported explicitly, never counted as searched.
+      const missingTeams = opponents.filter((team) => !completedTeams.has(team));
+      if (missingTeams.length) found.coverage.missingTeams = missingTeams;
       Object.assign(stats, { teams: found.coverage.opponents, checked: found.coverage.singles,
         scored: found.coverage.singles + found.coverage.extensions, matched: rows.length });
-      retained = { id, context, rows, suggestions: [], stats, model, query: request.query, lineupsRaw: request.lineupsRaw, useful: true };
-      send({ id, context, type: "complete", ...browseTradeResults(model, rows, undefined, []), total: rows.length, stats, coverage: found.coverage });
+      retained = { id, context, rows, suggestions: [], stats, model, query: request.query, lineupsRaw: request.lineupsRaw, useful: true,
+        filters: currentRetained()?.filters ?? initialFilters, sort: currentRetained()?.sort ?? initialSort,
+        showHidden: currentRetained()?.showHidden ?? request.useful?.showHidden, limit: currentRetained()?.limit ?? request.useful?.limit };
+      send({ id, context, type: "complete", ...filteredPayload(retained), coverage: found.coverage });
       return;
     }
     let lastProgress = 0,

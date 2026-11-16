@@ -204,6 +204,8 @@ export interface SearchMatch {
   give?: string[];
 }
 export interface SearchRow extends SearchMatch {
+  // Identifies the originating one-for-one for presentation grouping.
+  seedKey?: string;
   // Captured filter evidence belongs to this evaluated trade, not to the current live selection.
   filterEvidence?: FilterableTrade;
   // Core-swap grouping and distinct packages are presentation metadata only.
@@ -285,7 +287,7 @@ export type SearchRequest =
       lineupsRaw?: string;
       query: TradeSearchQuery;
       // The new broad search is opt-in until its filter interface replaces the legacy controls.
-      useful?: { protectedIds: string[] };
+      useful?: { protectedIds: string[]; filters?: TradeFilters; sort?: SearchFilterSort; showHidden?: boolean; limit?: number };
       // Workers always value the live source first, then apply the same frozen-index ownership overlay as the UI.
       scenario?: RosterScenario;
     }
@@ -307,17 +309,22 @@ export type SearchResponse = { id: string; context: string } & (
   // One opponent finished its one-for-ones, or all its packages: drives the search scene.
   | { type: "team"; team: string; singles: number; extensions: number; done: boolean }
   | { type: "filtered"; rows: SearchRow[]; total: number; visibleTotal: number; groupsTotal: number; view: TradeResultView;
-      counts: Record<string, number>; hidden: { row: SearchRow; reasons: string[] }[]; stats: SearchStats }
+      counts: Record<string, number>; blocks: Record<string, number>; hidden: { row: SearchRow; reasons: string[] }[]; stats: SearchStats }
   | {
       type: "complete" | "browse" | "partial";
       rows: SearchRow[];
       total: number;
+      visibleTotal?: number;
+      groupsTotal?: number;
+      counts?: Record<string, number>;
+      blocks?: Record<string, number>;
+      hidden?: { row: SearchRow; reasons: string[] }[];
       view: TradeResultView;
       token?: string;
       stats: SearchStats;
       // Measured coverage is separate from the result count and legacy numeric statistics.
       coverage?: { singles: number; extensions: number; opponents: number; beamCutoffs: number;
-        beamCutoffsByTeam: Record<string, Record<string, number>> };
+        beamCutoffsByTeam: Record<string, Record<string, number>>; missingTeams?: string[] };
       suggestions?: SearchRow[];
     }
   | {

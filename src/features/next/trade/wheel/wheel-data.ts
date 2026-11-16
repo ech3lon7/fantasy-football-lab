@@ -42,9 +42,11 @@ export interface WheelData {
   setGoals: (goals: PositionalGradeImpactRule[]) => void;
   // How many trades each filter alone hides, the shown and total counts from the worker.
   hides: Record<string, number>;
+  blocks?: Record<string, number>;
   total: number;
   visible: number;
   clear: () => void;
+  showAll?: () => void;
   // What Clear all removes, so its Undo can put it back.
   snapshot: () => unknown;
   restore: (snapshot: unknown) => void;
@@ -72,6 +74,9 @@ export function findWheelData({
   filters: f,
   update,
   clear,
+  showAll,
+  protectedIds = [],
+  setProtectedIds,
   counts,
 }: {
   m: Model;
@@ -79,7 +84,10 @@ export function findWheelData({
   filters: TradeFilters;
   update: (patch: Partial<TradeFilters>) => void;
   clear: () => void;
-  counts: { total: number; visible: number; hides: Record<string, number> };
+  showAll?: () => void;
+  protectedIds?: string[];
+  setProtectedIds?: (ids: string[]) => void;
+  counts: { total: number; visible: number; hides: Record<string, number>; blocks?: Record<string, number> };
 }): WheelData {
   const mine = m.players.filter((p) => p.owner === teamA);
   const theirs = m.players.filter((p) => p.owner !== "0" && p.owner !== teamA);
@@ -89,10 +97,11 @@ export function findWheelData({
   const opponentIds = opponents.map((t) => str(t.TeamID));
   return {
     finder: "find",
-    categories: categoriesFor("find"),
-    active: (id) => categoryActive(f, id),
+    // Never trade is a search input, separate from the retained-result filters.
+    categories: [...categoriesFor("find"), { id: "never", label: "Never trade", icon: "o", options: [{ id: "never", label: "Never trade", kind: "players" }] }],
+    active: (id) => id === "never" ? protectedIds.length : categoryActive(f, id),
     activeCount: activeFilterCount(f),
-    summary: (id) => hubSummary(f, id),
+    summary: (id) => id === "never" ? `${protectedIds.length} protected` : hubSummary(f, id),
     getNumber(id) {
       if (id === "theirGain") return { lo: f.theirGain, hi: null };
       if (id === "giveSize")
@@ -191,11 +200,13 @@ export function findWheelData({
       }
     },
     getPlayers(id) {
+      if (id === "never") return { players: mine, selected: protectedIds };
       if (id === "mustGet") return { players: theirs, selected: f.mustGet };
       if (id === "mustGive") return { players: mine, selected: f.mustGive };
       return { players: [...mine, ...theirs], selected: f.exclude };
     },
     togglePlayer(id, playerId) {
+      if (id === "never") return setProtectedIds?.(toggle(protectedIds, playerId, !protectedIds.includes(playerId)));
       const key = id as "mustGet" | "mustGive" | "exclude";
       const list = f[key];
       update({
@@ -209,9 +220,11 @@ export function findWheelData({
     goals: f.gradeGoals,
     setGoals: (gradeGoals) => update({ gradeGoals }),
     hides: counts.hides,
+    blocks: counts.blocks,
     total: counts.total,
     visible: counts.visible,
     clear,
+    showAll,
     snapshot: () => f,
     restore: (snapshot) => update(snapshot as TradeFilters),
   };

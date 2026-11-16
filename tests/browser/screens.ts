@@ -67,7 +67,8 @@ const leaguePopover = async (page: Page) => {
 const findResults = async (page: Page) => {
   await tradeTab("Find trades")(page);
   await page
-    .getByRole("button", { name: "Search all trades" })
+    .getByRole("dialog", { name: "Trade filters" })
+    .getByRole("button", { name: "Search", exact: true })
     .click();
   await page.locator(".gd-res-row").first().waitFor({ timeout: 30000 });
   await settle(page);

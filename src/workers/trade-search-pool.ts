@@ -50,53 +50,40 @@ export function mergeCoverage(parts: UsefulCoverage[]): UsefulCoverage {
   };
 }
 
-// Run the slices in helper workers, streaming each slice's one-for-ones as they finish. Terminating the parent worker ends them all.
-export function runPooled(
+// Run independent slices and retry a failed helper's slice on the parent worker.
+export async function runPooled(
   base: Omit<PartRequest, "opponents">,
   slices: string[][],
   spawn: () => Worker,
   onSingles: (rows: SearchRow[]) => void,
   onTeam?: (event: TeamProgress) => void,
-): Promise<{ rows: SearchRow[]; coverage: UsefulCoverage }> {
-  return new Promise((resolve, reject) => {
-    const workers: Worker[] = [];
-    const singles = new Map<number, SearchRow[]>();
-    const done = new Map<number, { rows: SearchRow[]; coverage: UsefulCoverage }>();
-    const stop = () => workers.forEach((w) => w.terminate());
-    slices.forEach((opponents, index) => {
-      let worker: Worker;
-      try {
-        worker = spawn();
-      } catch (error) {
-        stop();
-        reject(error);
-        return;
-      }
-      workers.push(worker);
-      worker.onmessage = (event: MessageEvent<PartMessage>) => {
-        const message = event.data;
-        if (message.type === "singles") {
-          singles.set(index, message.rows);
-          onSingles([...singles.values()].flat());
-        } else if (message.type === "team") {
-          onTeam?.(message);
-        } else if (message.type === "done") {
-          done.set(index, { rows: message.rows, coverage: message.coverage });
-          worker.terminate();
-          if (done.size === slices.length) {
-            const parts = [...done.entries()].sort(([a], [b]) => a - b).map(([, v]) => v);
-            resolve({ rows: parts.flatMap((p) => p.rows), coverage: mergeCoverage(parts.map((p) => p.coverage)) });
-          }
-        } else {
-          stop();
-          reject(new Error(message.message));
-        }
-      };
-      worker.onerror = () => {
-        stop();
-        reject(new Error("A search helper failed."));
-      };
-      worker.postMessage({ ...base, opponents } satisfies PartRequest);
-    });
-  });
+  retry?: (opponents: string[], partial: (rows: SearchRow[]) => void) => Promise<{ rows: SearchRow[]; coverage: UsefulCoverage }>,
+): Promise<{ rows: SearchRow[]; coverage: UsefulCoverage; missing: string[] }> {
+  const singles = new Map<number, SearchRow[]>();
+  const publish = (index: number, rows: SearchRow[]) => { singles.set(index, rows); onSingles([...singles.values()].flat()); };
+  const parts = await Promise.all(slices.map((opponents, index) => new Promise<{ rows: SearchRow[]; coverage: UsefulCoverage; missing: string[] }>((resolve, reject) => {
+    let worker: Worker | undefined, settled = false;
+    const fail = () => {
+      if (settled) return;
+      settled = true; worker?.terminate(); singles.delete(index);
+      if (!retry) { reject(new Error("A search helper failed.")); return; }
+      retry(opponents, (rows) => publish(index, rows)).then(
+        (result) => resolve({ ...result, missing: [] }),
+        () => resolve({ rows: [], coverage: mergeCoverage([]), missing: opponents }),
+      );
+    };
+    try { worker = spawn(); } catch { fail(); return; }
+    worker.onmessage = (event: MessageEvent<PartMessage>) => {
+      if (settled) return;
+      const message = event.data;
+      if (message.type === "singles") publish(index, message.rows);
+      else if (message.type === "team") onTeam?.(message);
+      else if (message.type === "done") { settled = true; worker?.terminate(); resolve({ rows: message.rows, coverage: message.coverage, missing: [] }); }
+      else fail();
+    };
+    worker.onerror = fail;
+    try { worker.postMessage({ ...base, opponents } satisfies PartRequest); } catch { fail(); }
+  })));
+  return { rows: parts.flatMap((part) => part.rows), coverage: mergeCoverage(parts.map((part) => part.coverage)),
+    missing: parts.flatMap((part) => part.missing) };
 }

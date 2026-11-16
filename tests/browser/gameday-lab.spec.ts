@@ -111,7 +111,7 @@ test("keyboard and feel pages", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Keyboard reference" }),
   ).toBeVisible();
-  await expect(page.locator(".gd-keys kbd")).toHaveCount(5);
+  await expect(page.locator(".gd-keys kbd")).toHaveCount(6);
   await page.getByRole("tab", { name: "Feel" }).click();
   const feel = page.getByRole("group", { name: "Feel settings" });
   await feel

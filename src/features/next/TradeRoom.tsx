@@ -1760,6 +1760,7 @@ export function TradeRoom({
               basis={readLineupBasis(basisRaw)}
               onBasisChange={changeBasis}
               settingsRaw={filters.tradeSearchSettings}
+              shortcut={filters.filterWheelShortcut}
               saveSettings={(raw) => onFilters({ tradeSearchSettings: raw })}
               restore={restore}
               onAnalyze={() => setTab("manual")}

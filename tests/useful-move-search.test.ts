@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildUsefulMoves, FLOOR_MAX_LOSS } from "../src/domain/useful-move-search";
+import { buildUsefulMoves, FLOOR_MAX_LOSS_OWN, FLOOR_MAX_LOSS_OTHER, type UsefulEvaluation } from "../src/domain/useful-move-search";
 
 // This small deterministic league exposes every package passed to the evaluator.
 const roster = { own: ["a", "b", "c"], opponents: { other: ["x", "y"] } };
@@ -18,14 +18,23 @@ describe("useful trade search", () => {
     expect(partial).toEqual([4]);
   });
   it("uses only the legal, lineup-change and maximum-loss floor", async () => {
-    expect(FLOOR_MAX_LOSS).toBe(3);
+    expect(FLOOR_MAX_LOSS_OWN).toBe(3);
+    expect(FLOOR_MAX_LOSS_OTHER).toBe(2);
     const result = await buildUsefulMoves(roster, impacts, [], (offer) => ({ ...offer,
       legal: offer.get[0] !== "y", changed: offer.give[0] !== "c",
-      own: offer.give[0] === "b" ? -3.01 : -.5, other: -3,
+      own: offer.give[0] === "b" ? -3.01 : -.5, other: -2,
     }));
     expect(result.rows.some((r) => r.trade.give.length === 1 && r.trade.give[0] === "a" && r.trade.get[0] === "x")).toBe(true);
-    expect(result.rows.every((r) => r.trade.legal && r.trade.changed && r.trade.own >= -3 && r.trade.other >= -3)).toBe(true);
+    expect(result.rows.every((r) => r.trade.legal && r.trade.changed && r.trade.own >= -3 && r.trade.other >= -2)).toBe(true);
   });
+  // The two sides have independent inclusive loss limits.
+  it.each([[5, -2.5, false], [5, -2, true], [-3, 1, true]])(
+    "uses the approved floor for own %s and other %s", async (own, other, kept) => {
+      const result = await buildUsefulMoves({ own: ["a"], opponents: { other: ["x"] } }, impacts, [],
+        (offer) => ({ ...offer, legal: true, changed: true, own, other }));
+      expect(result.rows.length > 0).toBe(kept);
+    },
+  );
   it("can extend a single that fails the floor when the larger package qualifies", async () => {
     const result = await buildUsefulMoves(roster, impacts, [], (offer) => ({ ...offer, legal: true, changed: true,
       own: offer.give.length === 1 ? -4 : 1, other: 1 }));
@@ -48,6 +57,28 @@ describe("useful trade search", () => {
   it("folds added players that do not materially change either gain", async () => {
     const result = await buildUsefulMoves(roster, impacts, [], (offer) => ({ ...offer, legal: true, changed: true, own: 1, other: 2 }));
     expect(result.rows.some((r) => r.variants.length > 0)).toBe(true);
+  });
+  // Seed metadata must not change the evaluated trades, gains or order-independent grouping seeds.
+  it("keeps trades and gains identical with deterministic seeds across opponent order", async () => {
+    const map = { add: new Map(impacts.add), leave: new Map(impacts.leave) };
+    map.add.set("second", new Map([["a", 3], ["b", 2], ["c", 1]]));
+    map.leave.set("second", new Map([["x", 2], ["y", 1]]));
+    const fixture = { own: roster.own, opponents: { other: ["x", "y"], second: ["x", "y"] } };
+    const evaluate = (offer: { team: string; give: string[]; get: string[] }): UsefulEvaluation => ({ ...offer, legal: true, changed: true,
+      own: offer.give.length + offer.get.length / 10, other: 1 });
+    const run = (opponents: typeof fixture.opponents, metadata = true) =>
+      buildUsefulMoves({ own: fixture.own, opponents }, map, [], evaluate, undefined, undefined, undefined, metadata);
+    const flatten = (result: Awaited<ReturnType<typeof run>>) => result.rows.flatMap((row) => [row.trade, ...row.variants]);
+    const identity = (result: Awaited<ReturnType<typeof run>>) => flatten(result).map((row) =>
+      [row.team, [...row.give].sort(), [...row.get].sort(), row.own, row.other]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+    const seeds = (result: Awaited<ReturnType<typeof run>>) => flatten(result).map((row) =>
+      [row.team, [...row.give].sort(), [...row.get].sort(), row.seedKey]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+    const first = await run(fixture.opponents), again = await run(fixture.opponents),
+      reversed = await run({ second: ["x", "y"], other: ["x", "y"] }), without = await run(fixture.opponents, false);
+    expect(identity(first)).toEqual(identity(without));
+    expect(seeds(first)).toEqual(seeds(again));
+    expect(seeds(first)).toEqual(seeds(reversed));
+    expect(flatten(first).every((row) => !!row.seedKey)).toBe(true);
   });
 });
 

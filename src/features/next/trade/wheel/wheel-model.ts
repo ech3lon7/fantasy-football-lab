@@ -4,7 +4,7 @@ import type { TradeFilters } from "../../../../domain/trade-filters";
 
 export type Finder = "find" | "chain";
 export type CategoryId =
-  "gains" | "grades" | "players" | "positions" | "teams" | "size" | "chains";
+  "gains" | "grades" | "players" | "positions" | "teams" | "size" | "chains" | "never";
 export type IconKind = "arrow" | "bars" | "o" | "x" | "oo" | "lines" | "link";
 
 export type OptionKind =

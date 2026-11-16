@@ -104,18 +104,20 @@ test.describe("Positional Grade Search E2E", () => {
     // Seed standard starter fixture where all standard positions are active
     await seedWorkspace(page, "starter");
     await expect(page.locator(".gd-find")).toBeVisible();
-    await page.getByRole("button", { name: "Search all trades", exact: true }).click();
+    await page.getByRole("dialog", { name: "Trade filters" }).getByRole("button", { name: "Search", exact: true }).click();
     await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
     const topRows = page.locator(".gd-res > .gd-res-group > .gd-res-row");
     await expect(topRows.first()).toBeVisible();
     // Let the streamed list settle before measuring it.
-    const shown = async () => Number((await page.getByText(/^[\d,]+ of [\d,]+ trades$/).innerText()).match(/\d+/)![0]);
+    const shown = async () => Number(((await page.getByRole("region", { name: "Trade search results" }).locator(".gd-chips b").first().innerText()).match(/([\d,]+) ideas · ([\d,]+) trades/)![2]).replace(/,/g, ""));
     let before = await shown();
     await expect.poll(async () => { const now = await shown(); const same = now === before; before = now; return same; }, { intervals: [1500], timeout: 60000 }).toBe(true);
 
     // The Grades filter starts with no goals.
-    await page.locator("details", { has: page.locator("summary", { hasText: /^Grades/ }) }).locator("> summary").click();
-    const goals = page.locator(".gd-broad-filter-panel .gd-goals");
+    // (The filter list is gone, so the goals editor opens from the wheel's Grades category.)
+    const wheel = page.getByRole("dialog", { name: "Trade filters" });
+    await wheel.getByRole("menuitem", { name: /^Grades/ }).locator(".gd-seg-hit").click();
+    const goals = wheel.locator(".gd-goals");
     await expect(goals).toContainText("No positional grade goals configured.");
     await goals.getByRole("button", { name: "+ Add goal", exact: true }).click();
 
@@ -131,7 +133,7 @@ test.describe("Positional Grade Search E2E", () => {
 
     // The list narrows at once: no new search ran, and every row left shows the WR upgrade as a grade-step chip.
     await expect(page.getByText(/one-for-ones checked/)).toHaveCount(1);
-    await expect.poll(async () => Number((await page.getByText(/^[\d,]+ of [\d,]+ trades$/).innerText()).match(/\d+/)![0])).toBeLessThanOrEqual(before);
+    await expect.poll(async () => Number(((await page.getByRole("region", { name: "Trade search results" }).locator(".gd-chips b").first().innerText()).match(/([\d,]+) ideas · ([\d,]+) trades/)![2]).replace(/,/g, ""))).toBeLessThanOrEqual(before);
     await expect(topRows.first()).toBeVisible();
     const rows = await topRows.count();
     for (let i = 0; i < rows; i++) {
@@ -139,7 +141,8 @@ test.describe("Positional Grade Search E2E", () => {
       await expect(chip).toBeVisible();
       await expect(chip).toContainText("→");
     }
-    await expect(page.locator('.gd-hides[data-filter="gradeGoals"]')).toBeVisible();
+    // The goals now hide trades, and the results header says how many (the wheel's goals panel has no "hides N" marker of its own).
+    await expect(page.getByRole("region", { name: "Trade search results" }).getByText(/\d+ hidden by filters/)).toBeVisible();
 
     await captureScreenshot(page, "find-trades-grade-goals.png");
   });

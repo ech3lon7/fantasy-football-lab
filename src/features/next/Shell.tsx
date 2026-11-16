@@ -216,8 +216,10 @@ function ThemeToggle({
 function FeelMenu({
   feel,
   change,
+  shortcut,
 }: {
   feel: FeelValues;
+  shortcut?: string;
   change: (
     key: "theme" | "animation" | "sound" | "haptics" | "cardEntrances",
     value: string,
@@ -226,7 +228,7 @@ function FeelMenu({
   const [open, setOpen] = useState(false),
     ref = useRef<HTMLDivElement>(null),
     button = useRef<HTMLButtonElement>(null),
-    openReference = useKeyboardReference();
+    openReference = useKeyboardReference(shortcut);
   useEffect(() => {
     if (!open) return;
     const close = (e: KeyboardEvent) => {
@@ -274,18 +276,20 @@ function MoreMenu({
   onImport,
   feel,
   changeFeel,
+  shortcut,
 }: {
   syncStatus: string;
   busy: boolean;
   onImport: () => void;
   feel: FeelValues;
+  shortcut?: string;
   changeFeel: (
     key: "theme" | "animation" | "sound" | "haptics" | "cardEntrances",
     value: string,
   ) => void;
 }) {
   const [open, setOpen] = useState(false),
-    openReference = useKeyboardReference();
+    openReference = useKeyboardReference(shortcut);
   useEffect(() => {
     if (!open) return;
     const close = (e: KeyboardEvent) => {
@@ -387,6 +391,7 @@ export function GamedayHeader({
   changeFeel,
   onApplyDrop,
   onSwitchToLive,
+  shortcut,
 }: {
   route: string;
   model: Model | null;
@@ -405,6 +410,7 @@ export function GamedayHeader({
   ) => void;
   onApplyDrop?: (team: string, playerId: string) => void;
   onSwitchToLive?: () => void;
+  shortcut?: string;
 }) {
   const current = sectionForRoute(route),
     fresh = sourceFreshness(sourceUTC, Date.now());
@@ -499,7 +505,7 @@ export function GamedayHeader({
       </button>
       <ThemeToggle feel={feel} change={changeFeel} />
       <span className="gd-wide-only">
-        <FeelMenu feel={feel} change={changeFeel} />
+        <FeelMenu feel={feel} change={changeFeel} shortcut={shortcut} />
       </span>
       <MoreMenu
         syncStatus={syncStatus}
@@ -507,6 +513,7 @@ export function GamedayHeader({
         onImport={onImport}
         feel={feel}
         changeFeel={changeFeel}
+        shortcut={shortcut}
       />
     </header>
   );

@@ -88,11 +88,12 @@ interface SearchJob {
   stats?: SearchStats;
   // Preserve measured broad-search coverage while paging through the same results.
   coverage?: { singles: number; extensions: number; opponents: number; beamCutoffs: number;
-    beamCutoffsByTeam: Record<string, Record<string, number>> };
+    beamCutoffsByTeam: Record<string, Record<string, number>>; missingTeams?: string[] };
   // Each opponent's progress through the search, by team id, for the search scene.
   teams?: Record<string, { singles: number; extensions: number; done: boolean }>;
   // Hidden reasons and per-filter counts are tied to the same retained result set.
   filterCounts?: Record<string, number>;
+  filterBlocks?: Record<string, number>;
   hiddenRows?: { row: SearchRow; reasons: string[] }[];
   visibleTotal?: number;
   groupsTotal?: number;
@@ -189,16 +190,30 @@ export function useTradeSearch({
   const limits = useSearchLimits();
   const [initialSettings] = useState(() => readTradeSettings(settingsRaw));
   // Older saved searches are translated once; unsupported options are disclosed to the user.
-  const [legacyBroad] = useState(() => {
-    const old = initialSettings.standard as { query?: TradeSearchQuery; broadTeams?: unknown } | undefined;
-    return old?.query && !old.broadTeams ? migrateLegacyTradeQuery(old.query) : undefined;
+  // Repair old automatic migrations once; later user selections retain their saved filters.
+  const [initialBroad] = useState(() => {
+    const old = initialSettings.standard as { query?: TradeSearchQuery; broadTeams?: Record<string, { filters: TradeFilters; protectedIds: string[] }>; broadMigrationChecked?: boolean } | undefined;
+    const teams = { ...(old?.broadTeams ?? {}) };
+    let repaired = false;
+    if (!old?.broadMigrationChecked) {
+      for (const [team, entry] of Object.entries(teams)) {
+        if (entry.filters.mustGive?.length) {
+          teams[team] = { ...entry, filters: defaultTradeFilters() };
+          repaired = true;
+        }
+      }
+      if (old?.query && !old.broadTeams) {
+        teams[old.query.teamA] = { filters: defaultTradeFilters(), protectedIds: [] };
+        repaired = true;
+      }
+    }
+    return { teams, repaired };
   });
-  const [migrationNote, setMigrationNote] = useState(legacyBroad?.ignored.join(", ") ?? "");
+  const [migrationNote, setMigrationNote] = useState(initialBroad.repaired ? "Your old Find trades settings don't apply to the new search, so filters start at the defaults." : "");
   // Save only broad-search preferences by team; worker results remain session-only.
   const [broadTeams, setBroadTeams] = useState<Record<string, { filters: TradeFilters; protectedIds: string[] }>>(
     () => {
-      const saved = initialSettings.standard as { broadTeams?: Record<string, { filters: TradeFilters; protectedIds: string[] }>; query?: TradeSearchQuery } | undefined;
-      return saved?.broadTeams ?? (saved?.query && legacyBroad ? { [saved.query.teamA]: { filters: legacyBroad.filters, protectedIds: [] } } : {});
+      return initialBroad.teams;
     },
   );
   const broad = broadTeams[draft.teamA] ?? { filters: defaultTradeFilters(), protectedIds: [] };
@@ -468,7 +483,7 @@ export function useTradeSearch({
     gradeImpacts,
   };
   // The chain planner owns its own part of the saved settings; this hook writes only the standard part and keeps the rest as stored.
-  const standardPart = JSON.stringify({ query, controls: standardControls, broadTeams });
+  const standardPart = JSON.stringify({ query, controls: standardControls, broadTeams, broadMigrationChecked: true });
   const settingsText = mergeTradeSettings(
     settingsRaw,
     "standard",
@@ -677,7 +692,8 @@ export function useTradeSearch({
     appliedRestore.current = restore.id;
     const migrated = migrateLegacyTradeQuery(restore.query);
     setBroadTeams((previous) => ({ ...previous, [restore.query.teamA]: { filters: migrated.filters, protectedIds: [] } }));
-    setMigrationNote(migrated.ignored.join(", "));
+    // Explicit restores disclose both retained criteria and discarded legacy settings.
+    setMigrationNote(`Saved search: applied ${migrated.applied.length ? migrated.applied.join(", ") : "no filters"}; ignored ${migrated.ignored.length ? migrated.ignored.join(", ") : "nothing"}.`);
     onLineupBasisChange?.(readLineupBasis(restore.query.lineupBasis));
     restoreQuery(restore.query);
     setAdvanced(true);
@@ -772,7 +788,7 @@ export function useTradeSearch({
             };
           if (message.type === "filtered")
             return { ...previous, rows: message.rows, view: message.view, total: message.total,
-              visibleTotal: message.visibleTotal, groupsTotal: message.groupsTotal, filterCounts: message.counts, hiddenRows: message.hidden, stats: message.stats };
+              visibleTotal: message.visibleTotal, groupsTotal: message.groupsTotal, filterCounts: message.counts, filterBlocks: message.blocks, hiddenRows: message.hidden, stats: message.stats };
           // Each browse response is a complete bounded view, not another raw slice to append.
           return {
             ...previous,
@@ -781,6 +797,11 @@ export function useTradeSearch({
             rows: message.rows,
             view: message.view,
             total: message.total,
+            visibleTotal: message.visibleTotal ?? previous.visibleTotal,
+            groupsTotal: message.groupsTotal ?? previous.groupsTotal,
+            filterCounts: message.counts ?? previous.filterCounts,
+            filterBlocks: message.blocks ?? previous.filterBlocks,
+            hiddenRows: message.hidden ?? previous.hiddenRows,
             stats: message.stats,
             coverage: message.coverage ?? previous.coverage,
             suggestions: message.suggestions ?? previous.suggestions,
@@ -821,7 +842,8 @@ export function useTradeSearch({
         roleWeight: String(m.roleScenarioWeight),
         lineupsRaw,
         query: executedQuery,
-        ...(protectedIds ? { useful: { protectedIds } } : {}),
+        // Start streaming with the current filters instead of waiting for the first reply.
+        ...(protectedIds ? { useful: { protectedIds, filters: broad.filters, sort: broadSort, showHidden, limit: broadLimit } } : {}),
       };
       sessions.post("find", id, request);
     } catch (error) {

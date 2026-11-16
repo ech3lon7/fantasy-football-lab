@@ -21,14 +21,14 @@ self.onmessage = async (event: MessageEvent<PartRequest>) => {
       request.protectedIds,
       readLineupBasis(request.basis),
       request.lineupsRaw,
-      (singles) => send({ type: "singles", rows: singles.map((row) => row.searchRow) }),
+      (singles) => send({ type: "singles", rows: singles.map((row) => ({ ...row.searchRow, seedKey: row.seedKey })) }),
       request.beam,
       request.opponents,
       (event) => send({ type: "team", ...event }),
     );
     send({
       type: "done",
-      rows: result.rows.map(({ trade, variants }) => ({ ...trade.searchRow, variants: variants.map((v) => v.searchRow) })),
+      rows: result.rows.map(({ trade, variants }) => ({ ...trade.searchRow, seedKey: trade.seedKey, variants: variants.map((v) => ({ ...v.searchRow, seedKey: v.seedKey })) })),
       coverage: result.coverage,
     });
   } catch (error) {

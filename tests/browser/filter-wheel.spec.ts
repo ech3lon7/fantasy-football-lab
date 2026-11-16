@@ -1,11 +1,25 @@
 import { test, expect, type Page } from "@playwright/test";
 import { seedTradeLeague } from "./trade-seed";
 
-// Acceptance tests of the filter wheel (docs/filter-wheel-implementation-plan.md, R1 to R13). The wheel only sets the filter state
-// that the list view also edits, so most checks compare the two. Behaviour is checked with motion Off first; motion has its own tests.
+// Acceptance tests of the filter wheel (docs/filter-wheel-implementation-plan.md, R1 to R13, revised by F0/F4 in
+// docs/trade-search-fixes-implementation-plan.md). Find trades shows the wheel inline and always visible, so it is the only filter
+// control there; the Chain planner keeps the pop-up wheel and its phone fan. Behaviour is checked with motion Off first; motion has
+// its own tests.
 
 const draft = { teamA: "1", teamB: "2", give: ["101"], get: [] };
+const chainDraft = { teamA: "1", teamB: "2", give: ["3", "8", "9"], get: [] };
 
+const wheel = (page: Page) =>
+  page.getByRole("dialog", { name: "Trade filters" });
+const segment = (page: Page, name: RegExp | string) =>
+  wheel(page).getByRole("menuitem", { name });
+const hub = (page: Page) => wheel(page).locator(".gd-wheel-hub");
+const done = (page: Page) =>
+  wheel(page)
+    .getByRole("button", { name: "done", exact: true })
+    .click();
+
+// Open Find trades: the inline wheel is there before any search.
 async function openFind(
   page: Page,
   which: "search" | "big" = "search",
@@ -14,39 +28,47 @@ async function openFind(
   await seedTradeLeague(page, which, draft, filters);
   await page.goto("./#/trade");
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-  await page.getByRole("button", { name: "Search all trades" }).click();
-  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({
-    // The big league's full search takes over a minute on a two-core CI runner.
-    timeout: 240000,
-  });
+  await expect(wheel(page)).toBeVisible();
 }
-const wheel = (page: Page) =>
-  page.getByRole("dialog", { name: "Trade filters" });
-async function openWheel(
+
+// Search from the inline wheel's hub. The big league's full search takes over a minute on a two-core CI runner.
+async function runSearch(page: Page, timeout = 240000) {
+  await wheel(page)
+    .getByRole("button", { name: "Search", exact: true })
+    .click();
+  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout });
+}
+
+async function searchFind(
   page: Page,
   which: "search" | "big" = "search",
   filters?: Record<string, string>,
 ) {
   await openFind(page, which, filters);
+  await runSearch(page);
+}
+
+// Open the Chain planner's pop-up wheel, which still opens from its Filters button.
+async function openChainWheel(
+  page: Page,
+  filters: Record<string, string> = { feelAnimation: "off" },
+) {
+  await seedTradeLeague(page, "chain", chainDraft, filters);
+  await page.goto("./#/trade");
+  await page.getByRole("tab", { name: "Chain planner", exact: true }).click();
   await page.getByRole("button", { name: /^Filters · \d+$/ }).click();
   await expect(wheel(page)).toBeVisible();
 }
-const segment = (page: Page, name: RegExp | string) =>
-  wheel(page).getByRole("menuitem", { name });
-const listTheirGain = (page: Page) =>
-  page
-    .locator(".gd-broad-filter-panel")
-    .getByRole("spinbutton", { name: "Their EPPG gain minimum" });
 
 test.describe("filter wheel behaviour (motion off)", () => {
-  test("R1: Filters opens the wheel, six categories, focus on the first; the count marks start empty", async ({
+  test("R1: the inline wheel shows the seven categories and the hub, before any search", async ({
     page,
   }) => {
-    await openWheel(page);
+    await openFind(page);
     const items = wheel(page)
       .getByRole("menu", { name: "Filter categories" })
       .getByRole("menuitem");
-    await expect(items).toHaveCount(6);
+    await expect(items).toHaveCount(7);
     await expect(items).toHaveText([
       "Gains",
       "Players",
@@ -54,31 +76,52 @@ test.describe("filter wheel behaviour (motion off)", () => {
       "Teams",
       "Size",
       "Grades",
+      "Never trade",
     ]);
-    await expect(segment(page, "Gains")).toBeFocused();
     await expect(wheel(page).locator(".gd-seg-set")).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: /^Filters · 0$/ }),
+      wheel(page).getByRole("button", { name: "Search", exact: true }),
     ).toBeVisible();
+    await expect(hub(page)).toContainText("0 filters on");
+    await expect(wheel(page).locator(".gd-wheel-count")).toHaveText(
+      /^[\d,]+ \/ [\d,]+$/,
+    );
   });
 
-  test("R1: the F key opens it too", async ({ page }) => {
+  test("R1: the retired F key no longer touches the wheel; Shift+Space focuses it", async ({
+    page,
+  }) => {
     await openFind(page);
     await page.locator("body").press("f");
-    await expect(wheel(page)).toBeVisible();
+    await expect
+      .poll(() =>
+        wheel(page).evaluate((node) => node.contains(document.activeElement)),
+      )
+      .toBe(false);
+    await page.keyboard.press("Shift+Space");
+    await expect
+      .poll(() =>
+        wheel(page).evaluate((node) => node.contains(document.activeElement)),
+      )
+      .toBe(true);
+    await expect(segment(page, /^Gains/)).toBeFocused();
   });
 
   test("R2: arrow keys move around Ring 1 and the hub names the category with its setting and the live count", async ({
     page,
   }) => {
-    await openWheel(page);
+    await openFind(page);
+    await page.keyboard.press("Shift+Space");
     await page.keyboard.press("ArrowRight");
-    await expect(segment(page, "Players")).toBeFocused();
+    await expect(segment(page, /^Players/)).toBeFocused();
     await page.keyboard.press("ArrowLeft");
     await page.keyboard.press("ArrowLeft");
-    await expect(segment(page, "Grades")).toBeFocused();
+    // The ring now has seven categories, so Left from the first wraps to the last: Never trade (was Grades with six).
+    await expect(segment(page, /^Never trade/)).toBeFocused();
     await page.keyboard.press("ArrowLeft");
-    await expect(segment(page, "Size")).toBeFocused();
+    await expect(segment(page, /^Grades/)).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(segment(page, /^Size/)).toBeFocused();
     await expect(wheel(page).locator(".gd-hub-name")).toHaveText("SIZE");
     await expect(wheel(page).locator(".gd-hub-line")).toHaveText(
       "Give 1–3 · get 1–3",
@@ -92,19 +135,22 @@ test.describe("filter wheel behaviour (motion off)", () => {
   });
 
   test("number keys jump to a category", async ({ page }) => {
-    await openWheel(page);
+    await openFind(page);
+    await page.keyboard.press("Shift+Space");
     await page.keyboard.press("3");
     await expect(
       wheel(page).getByRole("menu", { name: "Positions settings" }),
     ).toBeVisible();
   });
 
-  test("R3: Gains → Their EPPG is an arc slider with one handle; moving it to +0.5 applies instantly and the list view agrees", async ({
+  test("R3: Gains → Their EPPG is an arc slider with one handle; moving it to +0.5 applies instantly and the count mark follows", async ({
     page,
   }) => {
-    await openWheel(page);
-    await segment(page, "Gains").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "Their EPPG" }).click();
+    await searchFind(page);
+    await segment(page, /^Gains/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "Their EPPG", exact: true })
+      .click();
     const handle = wheel(page).getByRole("slider", {
       name: "Their EPPG at least",
     });
@@ -121,7 +167,7 @@ test.describe("filter wheel behaviour (motion off)", () => {
     await expect(handle).toHaveAttribute("aria-valuenow", "0.5");
     await expect(wheel(page).locator(".gd-hub-value")).toHaveText("+0.5");
     await expect(wheel(page).locator(".gd-hub-hides")).toHaveText(
-      /^hides \d+$/,
+      /^hides [\d,]+ · also blocks [\d,]+$/,
     );
     // It stops at both ends of the range and moves in half steps.
     await page.keyboard.press("Home");
@@ -131,22 +177,21 @@ test.describe("filter wheel behaviour (motion off)", () => {
     await page.keyboard.press("End");
     await expect(handle).toHaveAttribute("aria-valuenow", "1");
     await page.keyboard.press("ArrowLeft");
-    await page.keyboard.press("Escape");
-    await page.keyboard.press("Escape");
-    await page.keyboard.press("Escape");
-    await expect(wheel(page)).toHaveCount(0);
-    await expect(listTheirGain(page)).toHaveValue("0.5");
-    await expect(
-      page.getByRole("button", { name: /^Filters · 1$/ }),
-    ).toBeVisible();
+    await done(page);
+    await done(page);
+    // The ring marks the setting and the hub counts the active filters.
+    await expect(segment(page, /^Gains/)).toContainText("1 set");
+    await expect(hub(page)).toContainText("1 filters on");
   });
 
   test("R3: dragging the handle along the arc changes the value, and the hub − and + buttons step it", async ({
     page,
   }) => {
-    await openWheel(page);
-    await segment(page, "Gains").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "Their EPPG" }).click();
+    await openFind(page);
+    await segment(page, /^Gains/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "Their EPPG", exact: true })
+      .click();
     // Aim at the arc through the SVG's own coordinates: the top of the track is at 12 o'clock, radius 214, which is -0.5.
     const svg = (await wheel(page).locator(".gd-wheel-svg").boundingBox())!;
     const at = (px: number, py: number) => ({
@@ -172,9 +217,11 @@ test.describe("filter wheel behaviour (motion off)", () => {
   test("clicking the number lets you type an exact value, clamped to the range", async ({
     page,
   }) => {
-    await openWheel(page);
-    await segment(page, "Gains").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "Their EPPG" }).click();
+    await openFind(page);
+    await segment(page, /^Gains/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "Their EPPG", exact: true })
+      .click();
     await wheel(page).locator(".gd-hub-value").click();
     const input = wheel(page).getByRole("spinbutton", { name: "Exact value" });
     await input.fill("-1.5");
@@ -185,9 +232,11 @@ test.describe("filter wheel behaviour (motion off)", () => {
   });
 
   test("a range (Your EPPG) has two handles", async ({ page }) => {
-    await openWheel(page);
-    await segment(page, "Gains").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "Your EPPG" }).click();
+    await openFind(page);
+    await segment(page, /^Gains/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "Your EPPG", exact: true })
+      .click();
     await expect(wheel(page).getByRole("slider")).toHaveCount(2);
     await expect(
       wheel(page).getByRole("slider", { name: "Your EPPG minimum" }),
@@ -197,34 +246,35 @@ test.describe("filter wheel behaviour (motion off)", () => {
     ).toHaveAttribute("aria-valuenow", "10");
   });
 
-  test("R4: toggling WR in Positions turns it on, updates the count mark, and the list view agrees", async ({
+  test("R4: toggling WR in Positions turns it on, updates the count mark, and the hub counts it", async ({
     page,
   }) => {
-    await openWheel(page);
-    await segment(page, "Positions").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "I get" }).click();
+    await openFind(page);
+    await segment(page, /^Positions/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "I get", exact: true })
+      .click();
     const wr = wheel(page).getByRole("menuitemcheckbox", { name: "WR" });
     await expect(wr).toHaveAttribute("aria-checked", "false");
     await wr.click();
     await expect(wr).toHaveAttribute("aria-checked", "true");
-    await expect(wheel(page).locator(".gd-seg-set")).toHaveText("1 set");
     await wr.click();
     await expect(wr).toHaveAttribute("aria-checked", "false");
     await wr.click();
-    await page.keyboard.press("Escape");
-    await page.keyboard.press("Escape");
-    await page.keyboard.press("Escape");
-    const list = page.locator(".gd-broad-filter-panel");
-    await list.locator("summary", { hasText: /^Positions$/ }).click();
-    await expect(list.getByRole("checkbox", { name: "Get WR" })).toBeChecked();
+    await done(page);
+    await done(page);
+    await expect(segment(page, /^Positions/)).toContainText("1 set");
+    await expect(hub(page)).toContainText("1 filters on");
   });
 
   test("R5: more than eight teams rotate, with a page indicator", async ({
     page,
   }) => {
-    await openWheel(page, "big");
-    await segment(page, "Teams").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "Opponents" }).click();
+    await openFind(page, "big");
+    await segment(page, /^Teams/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "Opponents", exact: true })
+      .click();
     const bubbles = wheel(page).getByRole("menuitemcheckbox");
     await expect(bubbles).toHaveCount(8);
     await expect(wheel(page).locator(".gd-hub-page")).toHaveText("1/2");
@@ -233,12 +283,14 @@ test.describe("filter wheel behaviour (motion off)", () => {
     await expect(bubbles).toHaveCount(3);
   });
 
-  test("R6: Esc, Backspace and Back each go up one level; Esc on Ring 1 closes", async ({
+  test("R6: Esc, Backspace and Back each go up one level; Esc on Ring 1 leaves the inline wheel open", async ({
     page,
   }) => {
-    await openWheel(page);
-    await segment(page, "Gains").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "Their EPPG" }).click();
+    await openFind(page);
+    await segment(page, /^Gains/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "Their EPPG", exact: true })
+      .click();
     await expect(wheel(page).getByRole("slider")).toHaveCount(1);
     await page.keyboard.press("Escape");
     await expect(wheel(page).getByRole("slider")).toHaveCount(0);
@@ -249,47 +301,59 @@ test.describe("filter wheel behaviour (motion off)", () => {
     await expect(
       wheel(page).getByRole("menu", { name: "Gains settings" }),
     ).toHaveCount(0);
-    await expect(segment(page, "Gains")).toBeFocused();
-    await segment(page, "Size").locator(".gd-seg-hit").click();
+    await expect(segment(page, /^Gains/)).toBeFocused();
+    await segment(page, /^Size/).click();
     await wheel(page).getByRole("button", { name: "← back" }).click();
     await expect(
       wheel(page).getByRole("menu", { name: "Size settings" }),
     ).toHaveCount(0);
     await page.keyboard.press("Escape");
-    await expect(wheel(page)).toHaveCount(0);
+    await expect(wheel(page)).toBeVisible();
     await expect(
-      page.getByRole("button", { name: /^Filters · \d+$/ }),
-    ).toBeFocused();
+      wheel(page).getByRole("menu", { name: "Filter categories" }),
+    ).toBeVisible();
   });
 
-  test("R7: Clear all restores the defaults, your gain 0 and their gain +1", async ({
+  test("R7: Reset to defaults restores your gain 0 and their gain +1", async ({
     page,
   }) => {
-    await openWheel(page);
-    await segment(page, "Gains").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "Their EPPG" }).click();
+    await openFind(page);
+    await segment(page, /^Gains/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "Their EPPG", exact: true })
+      .click();
     await wheel(page)
       .getByRole("slider", { name: "Their EPPG at least" })
       .press("Home");
-    await wheel(page).getByRole("button", { name: "clear all" }).click();
+    await done(page);
+    await done(page);
+    await wheel(page)
+      .getByRole("button", { name: "Reset to defaults", exact: true })
+      .click();
+    await expect(hub(page)).toContainText("0 filters on");
+    await segment(page, /^Gains/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "Their EPPG", exact: true })
+      .click();
     await expect(
       wheel(page).getByRole("slider", { name: "Their EPPG at least" }),
     ).toHaveAttribute("aria-valuenow", "1");
-    await wheel(page).getByRole("button", { name: "done" }).click();
-    await expect(listTheirGain(page)).toHaveValue("1");
+    await wheel(page)
+      .getByRole("menuitem", { name: "Your EPPG", exact: true })
+      .click();
     await expect(
-      page
-        .locator(".gd-broad-filter-panel")
-        .getByRole("spinbutton", { name: "Your EPPG gain minimum" }),
-    ).toHaveValue("0");
+      wheel(page).getByRole("slider", { name: "Your EPPG minimum" }),
+    ).toHaveAttribute("aria-valuenow", "0");
   });
 
-  test("Players: a search list in the hub includes a player, and the list view agrees", async ({
+  test("Players: a search list in the hub includes a player, and the choice survives the ring", async ({
     page,
   }) => {
-    await openWheel(page);
-    await segment(page, "Players").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "I get" }).click();
+    await openFind(page);
+    await segment(page, /^Players/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "I get", exact: true })
+      .click();
     const search = wheel(page).getByRole("searchbox", {
       name: "Search players",
     });
@@ -299,42 +363,46 @@ test.describe("filter wheel behaviour (motion off)", () => {
       .first();
     await item.click();
     await expect(item).toHaveAttribute("aria-pressed", "true");
-    await wheel(page).getByRole("button", { name: "done" }).click();
-    const list = page.locator(".gd-broad-filter-panel");
-    await list.locator("summary", { hasText: /^Players$/ }).click();
+    await done(page);
+    await done(page);
+    await expect(segment(page, /^Players/)).toContainText("1 set");
+    await segment(page, /^Players/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "I get", exact: true })
+      .click();
     await expect(
-      list.getByRole("button", { name: /Synthetic 2/ }).first(),
+      wheel(page).getByRole("button", { name: /Synthetic 2/ }).first(),
     ).toHaveAttribute("aria-pressed", "true");
   });
 
   test("Grades opens the existing grade-goal editor", async ({ page }) => {
-    await openWheel(page);
-    await segment(page, "Grades").locator(".gd-seg-hit").click();
+    await openFind(page);
+    await segment(page, /^Grades/).click();
     await wheel(page).getByRole("button", { name: "+ Add goal" }).click();
     await expect(wheel(page).locator(".gd-goal-line").first()).toBeVisible();
   });
 
-  test("R8: Done closes the wheel and returns focus to the Filters button; List view opens the list", async ({
+  test("R8: Done closes the sub-ring, keeps the wheel on screen, and there is no List view", async ({
     page,
   }) => {
-    await openWheel(page);
-    await wheel(page).getByRole("button", { name: "done" }).click();
-    await expect(wheel(page)).toHaveCount(0);
+    await openFind(page);
+    await segment(page, /^Gains/).click();
+    await done(page);
+    await done(page);
     await expect(
-      page.getByRole("button", { name: /^Filters · \d+$/ }),
-    ).toBeFocused();
+      wheel(page).getByRole("menu", { name: "Filter categories" }),
+    ).toBeVisible();
+    await expect(wheel(page)).toBeVisible();
+    await expect(
+      wheel(page).getByRole("button", { name: /list view/i }),
+    ).toHaveCount(0);
   });
 
-  test("R13: the dialog traps Tab, and each ring is a menu of menu items", async ({
+  test("R13: each ring is a menu of menu items, the count is a live status, and the inline wheel is not modal", async ({
     page,
   }) => {
-    await openWheel(page);
-    for (let i = 0; i < 25; i++) await page.keyboard.press("Tab");
-    expect(
-      await page.evaluate(
-        () => !!document.activeElement?.closest('[role="dialog"]'),
-      ),
-    ).toBe(true);
+    await openFind(page);
+    await expect(wheel(page)).not.toHaveAttribute("aria-modal", "true");
     await expect(
       wheel(page).getByRole("menu", { name: "Filter categories" }),
     ).toBeVisible();
@@ -344,7 +412,7 @@ test.describe("filter wheel behaviour (motion off)", () => {
   });
 });
 
-// What is animating inside the wheel (or its backdrop) right now, with each animation's duration.
+// What is animating inside the wheel right now, with each animation's duration.
 const running = (page: Page) =>
   page.evaluate(() =>
     document
@@ -352,7 +420,7 @@ const running = (page: Page) =>
       .filter((a) => {
         const el = (a.effect as KeyframeEffect | null)
           ?.target as Element | null;
-        return !!el?.closest(".gd-wheel-scrim");
+        return !!el?.closest(".gd-wheel-inline");
       })
       .map((a) =>
         Number((a.effect as KeyframeEffect).getComputedTiming().duration),
@@ -360,16 +428,19 @@ const running = (page: Page) =>
   );
 
 test.describe("filter wheel motion levels", () => {
-  test("Full: opening plays real animations and puffs chalk dust at the button", async ({
+  test("Full: opening plays real animations and puffs chalk dust", async ({
     page,
   }) => {
-    await openFind(page, "search", { feelAnimation: "full" });
+    await seedTradeLeague(page, "search", draft, { feelAnimation: "full" });
+    await page.goto("./#/trade");
+    await page.getByRole("tab", { name: "Find trades", exact: true }).waitFor();
     const puffs = await page.evaluate(
       () =>
         new Promise<number>((resolve) => {
-          (
-            document.querySelector("button.gd-wheel-open") as HTMLButtonElement
-          ).click();
+          const tab = Array.from(
+            document.querySelectorAll<HTMLElement>('[role="tab"]'),
+          ).find((node) => node.textContent === "Find trades")!;
+          tab.click();
           requestAnimationFrame(() =>
             requestAnimationFrame(() =>
               resolve(document.querySelectorAll(".chalk-puff").length),
@@ -387,9 +458,11 @@ test.describe("filter wheel motion levels", () => {
   test("Full: no interaction animation lasts longer than 420 ms", async ({
     page,
   }) => {
-    await openWheel(page, "search", { feelAnimation: "full" });
-    await segment(page, "Gains").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "Their EPPG" }).click();
+    await searchFind(page, "search", { feelAnimation: "full" });
+    await segment(page, /^Gains/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "Their EPPG", exact: true })
+      .click();
     expect(Math.max(0, ...(await running(page)))).toBeLessThanOrEqual(420);
     await wheel(page)
       .getByRole("slider", { name: "Their EPPG at least" })
@@ -400,9 +473,11 @@ test.describe("filter wheel motion levels", () => {
   test("Full: dragging the handle leaves at most eight crumbs of dust", async ({
     page,
   }) => {
-    await openWheel(page, "search", { feelAnimation: "full" });
-    await segment(page, "Gains").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "Their EPPG" }).click();
+    await searchFind(page, "search", { feelAnimation: "full" });
+    await segment(page, /^Gains/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "Their EPPG", exact: true })
+      .click();
     const handle = wheel(page).getByRole("slider", {
       name: "Their EPPG at least",
     });
@@ -414,26 +489,30 @@ test.describe("filter wheel motion levels", () => {
     expect(dust).toBeLessThanOrEqual(8);
   });
 
-  test("Full: nothing blocks input — Escape works at once while the opening is still playing", async ({
+  test("Full: nothing blocks input — choosing and backing out work at once while the opening is still playing", async ({
     page,
   }) => {
     await openFind(page, "search", { feelAnimation: "full" });
-    await page.getByRole("button", { name: /^Filters · \d+$/ }).click();
-    await expect(wheel(page)).toBeVisible();
+    await segment(page, /^Gains/).click();
+    await expect(
+      wheel(page).getByRole("menu", { name: "Gains settings" }),
+    ).toBeVisible();
     await page.keyboard.press("Escape");
-    // It collapses into the Filters button (260 ms) and is gone shortly after.
-    await expect(wheel(page)).toHaveCount(0, { timeout: 1500 });
+    // The eraser wipes the sub-ring away; it is gone shortly after and never blocks the next key.
+    await expect(
+      wheel(page).getByRole("menu", { name: "Gains settings" }),
+    ).toHaveCount(0, { timeout: 1500 });
   });
 
   test("Reduced: only short fades, no dust, no drawing", async ({ page }) => {
     await openFind(page, "search", { feelAnimation: "reduced" });
-    await page.getByRole("button", { name: /^Filters · \d+$/ }).click();
-    await expect(wheel(page)).toBeVisible();
     const durations = await running(page);
     for (const d of durations) expect(d).toBeLessThanOrEqual(150);
     await expect(page.locator(".chalk-particle")).toHaveCount(0);
-    await segment(page, "Gains").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "Their EPPG" }).click();
+    await segment(page, /^Gains/).locator(".gd-seg-hit").click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "Their EPPG", exact: true })
+      .click();
     for (const d of await running(page)) expect(d).toBeLessThanOrEqual(150);
     await wheel(page)
       .getByRole("slider", { name: "Their EPPG at least" })
@@ -444,10 +523,12 @@ test.describe("filter wheel motion levels", () => {
   test("Off: nothing animates, no particles, and the behaviour is the same", async ({
     page,
   }) => {
-    await openWheel(page, "search", { feelAnimation: "off" });
+    await openFind(page);
     expect(await running(page)).toEqual([]);
-    await segment(page, "Gains").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "Their EPPG" }).click();
+    await segment(page, /^Gains/).click();
+    await wheel(page)
+      .getByRole("menuitem", { name: "Their EPPG", exact: true })
+      .click();
     await wheel(page)
       .getByRole("slider", { name: "Their EPPG at least" })
       .press("ArrowLeft");
@@ -456,27 +537,9 @@ test.describe("filter wheel motion levels", () => {
     await expect(
       wheel(page).getByRole("slider", { name: "Their EPPG at least" }),
     ).toHaveAttribute("aria-valuenow", "0.5");
-    await page.keyboard.press("Escape");
-    await page.keyboard.press("Escape");
-    await page.keyboard.press("Escape");
-    await expect(wheel(page)).toHaveCount(0, { timeout: 300 });
-  });
-
-  test("Clear all can be undone", async ({ page }) => {
-    await openWheel(page, "search", { feelAnimation: "off" });
-    await segment(page, "Gains").locator(".gd-seg-hit").click();
-    await wheel(page).getByRole("menuitem", { name: "Their EPPG" }).click();
-    await wheel(page)
-      .getByRole("slider", { name: "Their EPPG at least" })
-      .press("Home");
-    await wheel(page).getByRole("button", { name: "clear all" }).click();
-    await expect(
-      wheel(page).getByRole("slider", { name: "Their EPPG at least" }),
-    ).toHaveAttribute("aria-valuenow", "1");
-    await wheel(page).getByRole("button", { name: "undo" }).click();
-    await expect(
-      wheel(page).getByRole("slider", { name: "Their EPPG at least" }),
-    ).toHaveAttribute("aria-valuenow", "-2");
+    await done(page);
+    await done(page);
+    await expect(wheel(page)).toBeVisible();
   });
 });
 
@@ -495,25 +558,38 @@ const rowAnimations = (page: Page) =>
         Number((a.effect as KeyframeEffect).getComputedTiming().duration),
       ),
   );
-const shownCount = async (page: Page) =>
-  Number(
-    (await page.getByText(/^[\d,]+ of [\d,]+ trades$/).innerText())
-      .match(/[\d,]+/)![0]
-      .replace(/,/g, ""),
+// The visible trade count from "X ideas · Y trades of N found".
+const shownCount = async (page: Page) => {
+  const text = await page
+    .getByRole("region", { name: "Trade search results" })
+    .locator(".gd-chips b")
+    .first()
+    .innerText();
+  return Number(
+    text.match(/([\d,]+) ideas · ([\d,]+) trades/)![2].replace(/,/g, ""),
   );
+};
+// Change one gain filter through the only filter control there is.
+async function setYourGain(page: Page, key: "Home" | "End") {
+  await segment(page, /^Gains/).locator(".gd-seg-hit").click();
+  await wheel(page)
+    .getByRole("menuitem", { name: "Your EPPG", exact: true })
+    .click();
+  await wheel(page).getByRole("slider", { name: "Your EPPG minimum" }).press(key);
+  await done(page);
+  await done(page);
+}
 
 test.describe("results move when filters change (A11, A13)", () => {
   test("Full: kept rows slide, new rows draw in (at most 20), and the list ends exactly as filtered", async ({
     page,
   }) => {
-    await openFind(page, "search", { feelAnimation: "full" });
+    await searchFind(page, "search", { feelAnimation: "full" });
     const before = await shownCount(page);
     // Let the search's own streaming animations finish so only the filter change is measured.
     await page.evaluate(() => Promise.all(document.getAnimations().filter((x) => Number.isFinite(Number(x.effect?.getComputedTiming().endTime))).map((x) => x.finished.catch(() => undefined))));
-    await page
-      .locator(".gd-broad-filter-panel")
-      .getByRole("spinbutton", { name: "Your EPPG gain minimum" })
-      .fill("");
+    // Your gain at −3 is no limit: rows come back instantly, without a new search.
+    await setYourGain(page, "Home");
     await expect.poll(() => shownCount(page)).toBeGreaterThan(before);
     const durations = await rowAnimations(page);
     expect(durations.length).toBeGreaterThan(0);
@@ -534,23 +610,18 @@ test.describe("results move when filters change (A11, A13)", () => {
   test("Full: a removed row collapses from a copy that is not a row, and the copy goes away", async ({
     page,
   }) => {
-    await openFind(page, "search", { feelAnimation: "full" });
-    await page
-      .locator(".gd-broad-filter-panel")
-      .getByRole("spinbutton", { name: "Your EPPG gain minimum" })
-      .fill("");
+    await searchFind(page, "search", { feelAnimation: "full" });
+    await setYourGain(page, "Home");
     await expect.poll(() => shownCount(page)).toBeGreaterThan(0);
     const rowsBefore = await page
       .locator(".gd-res > .gd-res-group > .gd-res-row")
       .count();
-    // Tighten the filter so rows are removed.
-    await page
-      .locator(".gd-broad-filter-panel")
-      .getByRole("spinbutton", { name: "Your EPPG gain minimum" })
-      .fill("100");
+    // Tighten the filter so rows are removed. The wheel's slider stops at +10 (the old list let you type 100), so the check is that
+    // rows are removed, not that none are left.
+    await setYourGain(page, "End");
     await expect
       .poll(() => page.locator(".gd-res > .gd-res-group > .gd-res-row").count())
-      .toBe(0);
+      .toBeLessThan(rowsBefore);
     // The copies carry no row class, are hidden from assistive technology, and are gone shortly after.
     await expect(
       page.locator(".gd-res [aria-hidden='true'][inert]"),
@@ -559,22 +630,17 @@ test.describe("results move when filters change (A11, A13)", () => {
   });
 
   test("Reduced: rows only fade, 150 ms at most", async ({ page }) => {
-    await openFind(page, "search", { feelAnimation: "reduced" });
-    await page
-      .locator(".gd-broad-filter-panel")
-      .getByRole("spinbutton", { name: "Your EPPG gain minimum" })
-      .fill("");
+    await searchFind(page, "search", { feelAnimation: "reduced" });
+    await setYourGain(page, "Home");
     await expect.poll(() => shownCount(page)).toBeGreaterThan(0);
     for (const d of await rowAnimations(page))
       expect(d).toBeLessThanOrEqual(150);
   });
 
   test("Off: rows change with no animation at all", async ({ page }) => {
-    await openFind(page, "search", { feelAnimation: "off" });
-    await page
-      .locator(".gd-broad-filter-panel")
-      .getByRole("spinbutton", { name: "Your EPPG gain minimum" })
-      .fill("");
+    await openFind(page);
+    await runSearch(page, 240000);
+    await setYourGain(page, "Home");
     await expect.poll(() => shownCount(page)).toBeGreaterThan(0);
     expect(await rowAnimations(page)).toEqual([]);
   });
@@ -586,7 +652,9 @@ test.describe("results move when filters change (A11, A13)", () => {
     await seedTradeLeague(page, "big", draft, { feelAnimation: "full" });
     await page.goto("./#/trade");
     await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-    await page.getByRole("button", { name: "Search all trades" }).click();
+    await wheel(page)
+      .getByRole("button", { name: "Search", exact: true })
+      .click();
     const seen = new Set<number>();
     const deadline = Date.now() + 30000;
     while (Date.now() < deadline && !seen.has(180)) {
@@ -597,13 +665,15 @@ test.describe("results move when filters change (A11, A13)", () => {
   });
 });
 
-// The play-call scene (A12) while Search all trades runs, on a 12-team league so the search takes a while.
+// The play-call scene (A12) while the search runs, on a 12-team league so the search takes a while.
 test.describe("the play-call scene while a search runs (A12)", () => {
   async function startSearch(page: Page, level: string) {
     await seedTradeLeague(page, "big", draft, { feelAnimation: level });
     await page.goto("./#/trade");
     await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-    await page.getByRole("button", { name: "Search all trades" }).click();
+    await wheel(page)
+      .getByRole("button", { name: "Search", exact: true })
+      .click();
   }
 
   test("Full: a chalk diagram with an X for each of the 11 opponents, routes drawn as teams are searched, circles when done", async ({
@@ -694,37 +764,127 @@ test.describe("the play-call scene while a search runs (A12)", () => {
   });
 });
 
-// R12: on a phone (390px) the wheel is a half-wheel fan; every control is reachable by tap.
-test.describe("phone fan (390px)", () => {
+// F0: on a phone (390px) Find trades keeps the inline wheel at full width and swaps its ring for a category; the results stay below.
+test.describe("inline wheel on a phone (390px)", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test("R12: the wheel spans the screen, sits above the results, and a tap swaps the ring to that category's settings", async ({
+    page,
+  }) => {
+    await openFind(page);
+    // The phone crops the board to its middle, so the visible wheel is the fit frame around it, not the whole 960px board.
+    const box = (await page.locator(".gd-wheel-fit").boundingBox())!;
+    expect(box.width).toBeLessThanOrEqual(390);
+    const results = (await page
+      .getByRole("region", { name: "Trade search results" })
+      .boundingBox())!;
+    expect(results.y).toBeGreaterThanOrEqual(box.y + box.height - 1);
+    const items = wheel(page)
+      .getByRole("menu", { name: "Filter categories" })
+      .getByRole("menuitem");
+    await expect(items).toHaveCount(7);
+    for (let i = 0; i < 7; i++) {
+      const wedge = (await items.nth(i).locator(".gd-seg-hit").boundingBox())!;
+      expect(
+        Math.min(wedge.width, wedge.height),
+        `segment ${i}`,
+      ).toBeGreaterThanOrEqual(48);
+    }
+    await items.nth(0).locator(".gd-seg-hit").tap();
+    await expect(
+      wheel(page).getByRole("menu", { name: "Gains settings" }),
+    ).toBeVisible();
+    // Ring 1 is swapped out for the settings.
+    await expect(
+      wheel(page).getByRole("menu", { name: "Filter categories" }),
+    ).toHaveCount(0);
+  });
+
+  test("a tap sets Their EPPG with the − and + buttons and the arc, and the hub agrees", async ({
+    page,
+  }) => {
+    await openFind(page);
+    await segment(page, /^Gains/).locator(".gd-seg-hit").tap();
+    await wheel(page)
+      .getByRole("menuitem", { name: "Their EPPG", exact: true })
+      .locator(".gd-seg-hit")
+      .tap();
+    const slider = wheel(page).getByRole("slider", {
+      name: "Their EPPG at least",
+    });
+    await expect(slider).toHaveAttribute("aria-valuenow", "1");
+    await wheel(page).getByRole("button", { name: "Lower" }).tap();
+    await expect(slider).toHaveAttribute("aria-valuenow", "0.5");
+    await expect(hub(page)).toContainText("+0.5");
+    await done(page);
+    await done(page);
+    await expect(hub(page)).toContainText("1 filters on");
+  });
+
+  test("toggles and players are tappable; nothing is hover-only", async ({
+    page,
+  }) => {
+    await openFind(page);
+    await segment(page, /^Positions/).locator(".gd-seg-hit").tap();
+    await wheel(page)
+      .getByRole("menuitem", { name: "I get", exact: true })
+      .locator(".gd-seg-hit")
+      .tap();
+    const wr = wheel(page).getByRole("menuitemcheckbox", { name: "WR" });
+    await wr.tap();
+    await expect(wr).toHaveAttribute("aria-checked", "true");
+    await wheel(page).getByRole("button", { name: "← back" }).tap();
+    await wheel(page).getByRole("button", { name: "← back" }).tap();
+    await segment(page, /^Players/).locator(".gd-seg-hit").tap();
+    await wheel(page)
+      .getByRole("menuitem", { name: "I get", exact: true })
+      .locator(".gd-seg-hit")
+      .tap();
+    await wheel(page)
+      .getByRole("searchbox", { name: "Search players" })
+      .fill("Synthetic 2");
+    const item = wheel(page)
+      .getByRole("button", { name: /Synthetic 2/ })
+      .first();
+    await item.tap();
+    await expect(item).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("Reduced: the opening only fades, 150 ms or less", async ({ page }) => {
+    await openFind(page, "search", { feelAnimation: "reduced" });
+    const durations = await running(page);
+    expect(durations.length).toBeGreaterThan(0);
+    for (const d of durations) expect(d).toBeLessThanOrEqual(150);
+  });
+});
+
+// The Chain planner keeps the pop-up wheel, so on a phone it keeps the half-wheel fan (R12).
+test.describe("phone fan on the Chain planner (390px)", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
   async function openFan(
     page: Page,
     filters: Record<string, string> = { feelAnimation: "off" },
   ) {
-    await seedTradeLeague(page, "search", draft, filters);
+    await seedTradeLeague(page, "chain", chainDraft, filters);
     await page.goto("./#/trade");
-    await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-    await page.getByRole("button", { name: "Search all trades" }).click();
-    await expect(page.getByText(/one-for-ones checked/)).toBeVisible({
-      timeout: 240000,
-    });
+    await page.getByRole("tab", { name: "Chain planner", exact: true }).tap();
     await page.getByRole("button", { name: /^Filters · \d+$/ }).tap();
     await expect(wheel(page)).toBeVisible();
   }
 
-  test("R12: the fan rises from the bottom with six segments of at least 48px, and a tap chooses one", async ({
+  test("R12: the fan rises from the bottom with seven segments of at least 48px, and a tap chooses one", async ({
     page,
   }) => {
     await openFan(page);
     const items = wheel(page)
       .getByRole("menu", { name: "Filter categories" })
       .getByRole("menuitem");
-    await expect(items).toHaveCount(6);
+    await expect(items).toHaveCount(7);
     const box = (await wheel(page).boundingBox())!;
     expect(box.y + box.height).toBeGreaterThan(830);
     expect(box.width).toBeLessThanOrEqual(390);
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 7; i++) {
       const wedge = (await items
         .nth(i)
         .locator(".gd-fan-wedge")
@@ -734,26 +894,21 @@ test.describe("phone fan (390px)", () => {
         `segment ${i}`,
       ).toBeGreaterThanOrEqual(48);
     }
+    // The Chain planner's Gains holds one setting, so the tap goes straight to it.
     await items.nth(0).locator(".gd-fan-wedge").tap();
     await expect(
-      wheel(page).getByRole("menu", { name: "Gains settings" }),
+      wheel(page).getByRole("slider", { name: "Their EPPG at least" }),
     ).toBeVisible();
-    // Ring 1 is swapped out for the settings; the hub pill leads back.
     await expect(
       wheel(page).getByRole("menu", { name: "Filter categories" }),
     ).toHaveCount(0);
   });
 
-  test("a tap sets Their EPPG with the − and + buttons and the arc, and the list view agrees", async ({
+  test("a tap sets Their EPPG with the − and + buttons, and the planner's field agrees", async ({
     page,
   }) => {
     await openFan(page);
-    await wheel(page)
-      .getByRole("menuitem", { name: "Gains" })
-      .locator(".gd-fan-wedge")
-      .tap();
-    await wheel(page)
-      .getByRole("menuitem", { name: "Their EPPG" })
+    await segment(page, /^Gains/)
       .locator(".gd-fan-wedge")
       .tap();
     const slider = wheel(page).getByRole("slider", {
@@ -766,43 +921,11 @@ test.describe("phone fan (390px)", () => {
     await wheel(page).getByRole("button", { name: "done" }).tap();
     await expect(wheel(page)).toHaveCount(0);
     await expect(
+      page.getByRole("spinbutton", { name: "Their EPPG gain minimum" }),
+    ).toHaveValue("0.5");
+    await expect(
       page.getByRole("button", { name: /^Filters · 1$/ }),
     ).toBeVisible();
-  });
-
-  test("toggles and players are tappable; nothing is hover-only", async ({
-    page,
-  }) => {
-    await openFan(page);
-    await wheel(page)
-      .getByRole("menuitem", { name: "Positions" })
-      .locator(".gd-fan-wedge")
-      .tap();
-    await wheel(page)
-      .getByRole("menuitem", { name: "I get" })
-      .locator(".gd-fan-wedge")
-      .tap();
-    const wr = wheel(page).getByRole("menuitemcheckbox", { name: "WR" });
-    await wr.tap();
-    await expect(wr).toHaveAttribute("aria-checked", "true");
-    await wheel(page).getByRole("button", { name: /^Back/ }).tap();
-    await wheel(page).getByRole("button", { name: /^Back/ }).tap();
-    await wheel(page)
-      .getByRole("menuitem", { name: "Players" })
-      .locator(".gd-fan-wedge")
-      .tap();
-    await wheel(page)
-      .getByRole("menuitem", { name: "I get" })
-      .locator(".gd-fan-wedge")
-      .tap();
-    await wheel(page)
-      .getByRole("searchbox", { name: "Search players" })
-      .fill("Synthetic 2");
-    const item = wheel(page)
-      .getByRole("button", { name: /Synthetic 2/ })
-      .first();
-    await item.tap();
-    await expect(item).toHaveAttribute("aria-pressed", "true");
   });
 
   test("Reduced: the fan fades in and out in 150 ms or less", async ({
@@ -826,13 +949,11 @@ test.describe("phone fan (390px)", () => {
   });
 
   test("Full: the fan rises over 280 ms", async ({ page }) => {
-    await seedTradeLeague(page, "search", draft, { feelAnimation: "full" });
-    await page.goto("./#/trade");
-    await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-    await page.getByRole("button", { name: "Search all trades" }).click();
-    await expect(page.getByText(/one-for-ones checked/)).toBeVisible({
-      timeout: 240000,
+    await seedTradeLeague(page, "chain", chainDraft, {
+      feelAnimation: "full",
     });
+    await page.goto("./#/trade");
+    await page.getByRole("tab", { name: "Chain planner", exact: true }).click();
     const durations = await page.evaluate(
       () =>
         new Promise<number[]>((resolve) => {
@@ -864,15 +985,6 @@ test.describe("phone fan (390px)", () => {
 
 // The Chain planner has the wheel too: Ring 1 plus Chains (R1 and the handoff). It sets the same state the planner's own lists do.
 test.describe("filter wheel on the Chain planner", () => {
-  const chainDraft = { teamA: "1", teamB: "2", give: ["3", "8", "9"], get: [] };
-  async function openChainWheel(page: Page) {
-    await seedTradeLeague(page, "chain", chainDraft, { feelAnimation: "off" });
-    await page.goto("./#/trade");
-    await page.getByRole("tab", { name: "Chain planner", exact: true }).click();
-    await page.getByRole("button", { name: /^Filters · \d+$/ }).click();
-    await expect(wheel(page)).toBeVisible();
-  }
-
   test("seven segments: the six plus Chains", async ({ page }) => {
     await openChainWheel(page);
     const items = wheel(page)
@@ -886,7 +998,9 @@ test.describe("filter wheel on the Chain planner", () => {
     page,
   }) => {
     await openChainWheel(page);
-    await segment(page, "Gains").locator(".gd-seg-hit").click();
+    await segment(page, /^Gains/)
+      .locator(".gd-seg-hit")
+      .click();
     const handle = wheel(page).getByRole("slider", {
       name: "Their EPPG at least",
     });
@@ -905,7 +1019,9 @@ test.describe("filter wheel on the Chain planner", () => {
     page,
   }) => {
     await openChainWheel(page);
-    await segment(page, "Chains").locator(".gd-seg-hit").click();
+    await segment(page, /^Chains/)
+      .locator(".gd-seg-hit")
+      .click();
     const connected = wheel(page).getByRole("menuitemcheckbox", {
       name: "Connected",
     });
@@ -922,11 +1038,28 @@ test.describe("filter wheel on the Chain planner", () => {
     await expect(sequential).toHaveAttribute("aria-checked", "true");
   });
 
+  test("Clear all restores the defaults and can be undone", async ({ page }) => {
+    await openChainWheel(page);
+    await segment(page, /^Gains/)
+      .locator(".gd-seg-hit")
+      .click();
+    const slider = wheel(page).getByRole("slider", {
+      name: "Their EPPG at least",
+    });
+    await slider.press("Home");
+    await wheel(page).getByRole("button", { name: "clear all" }).click();
+    await expect(slider).toHaveAttribute("aria-valuenow", "1");
+    await wheel(page).getByRole("button", { name: "undo" }).click();
+    await expect(slider).toHaveAttribute("aria-valuenow", "-2");
+  });
+
   test("a per-trade category points at the per-trade settings", async ({
     page,
   }) => {
     await openChainWheel(page);
-    await segment(page, "Size").locator(".gd-seg-hit").click();
+    await segment(page, /^Size/)
+      .locator(".gd-seg-hit")
+      .click();
     await wheel(page)
       .getByRole("button", { name: "open per-trade settings" })
       .click();

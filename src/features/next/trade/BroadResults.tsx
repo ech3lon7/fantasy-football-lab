@@ -1,13 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { Model } from "../../../domain/valuation";
 import type { SearchRow } from "../../../domain/trade-search";
-import { defaultTradeFilters } from "../../../domain/trade-filters";
+import { defaultTradeFilters, showAllTradeFilters } from "../../../domain/trade-filters";
 import { PlayerName } from "../../../ui/PlayerName";
 import { tradeDebugReport } from "../../../domain/trade-tools";
 import { ResultRow } from "./ResultRow";
 import { useFlipList } from "./wheel/useFlipList";
 import { TweenCount } from "./wheel/TweenCount";
-import { PlayCallScene } from "./wheel/PlayCallScene";
 import type { TradeSearchState } from "./useTradeSearch";
 
 // A disclosure that builds its rows only once it is open: each row is a fully evaluated trade, and a closed list of hundreds of
@@ -48,11 +47,6 @@ export function BroadResults({
   const job = s.job,
     model = s.resultModel.current ?? m;
   const listRef = useRef<HTMLDivElement>(null);
-  // The play-call scene starts with a search and folds away when it ends.
-  const [scene, setScene] = useState(false);
-  useEffect(() => {
-    if (s.running) setScene(true);
-  }, [s.running]);
   // Rows slide, collapse and draw in as filters, sort and the search change them (A11, A13).
   useFlipList(listRef, job?.rows.map((r) => r.key) ?? [], s.running);
   const names = (ids: string[]) =>
@@ -95,20 +89,21 @@ export function BroadResults({
         onAnalyze={onAnalyze}
         variant={variant}
       />
-      {!variant && !!row.variants?.length && (
-        <Lazy
-          className="gd-variants"
-          summary={`+${row.variants.length} variants`}
-        >
-          {() => row.variants!.map((v) => show(v, true))}
-        </Lazy>
-      )}
+      {/* One disclosure lists the differences for packages built from this seed. */}
       {!variant && !!row.related?.length && (
         <Lazy
           className="gd-variants"
-          summary={`More trades for this swap (${row.related.length})`}
+          summary={`${row.related.length} similar trade${row.related.length === 1 ? "" : "s"}`}
         >
-          {() => row.related!.map((v) => show(v))}
+          {() => row.related!.map((v) => {
+            const oldIds = [...(row.give ?? []), ...row.get], newIds = [...(v.give ?? []), ...v.get];
+            const added = newIds.filter((id) => !oldIds.includes(id)), removed = oldIds.filter((id) => !newIds.includes(id));
+            const difference = [...added.map((id) => `+ ${model.byId.get(id)?.name ?? id}`), ...removed.map((id) => `instead of ${model.byId.get(id)?.name ?? id}`)].join(" ");
+            const delta = (a: number | null, b: number | null) => a === null || b === null ? "—" : `${a - b > 0 ? "+" : ""}${(a - b).toFixed(1)}`;
+            return <div key={v.key} data-key={v.key} className="gd-res-group"><button type="button" className="gd-cbtn" onClick={() => { s.load(v); onAnalyze(); }}>
+              {difference} · you {delta(v.own, row.own)} · them {delta(v.other, row.other)}
+            </button></div>;
+          })}
         </Lazy>
       )}
     </div>
@@ -146,9 +141,7 @@ export function BroadResults({
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
   if (!job)
-    return (
-      <p>Press Search all trades to check every legal trade for your team</p>
-    );
+    return <section aria-label="Trade search results"><p>Press Search all trades to check every legal trade for your team</p></section>;
   if (s.stale)
     return (
       <p role="status">
@@ -157,16 +150,6 @@ export function BroadResults({
     );
   return (
     <section aria-label="Trade search results">
-      {scene && (
-        <PlayCallScene
-          m={m}
-          ownTeam={s.appliedSearch.current?.query.teamA ?? ""}
-          teams={job.teams}
-          running={s.running}
-          failed={job.status === "error"}
-          onGone={() => setScene(false)}
-        />
-      )}
       {s.running && (
         <p role="status">
           {job.progress?.phase ?? "Searching trades"}…
@@ -179,9 +162,13 @@ export function BroadResults({
       )}
       <div className="gd-chips" aria-live="polite">
         <b>
-          <TweenCount value={job.visibleTotal ?? job.rows.length} /> of{" "}
-          {job.total.toLocaleString()} trades
+          <TweenCount value={job.groupsTotal ?? job.rows.length} /> ideas ·{" "}
+          <TweenCount value={job.visibleTotal ?? job.rows.length} /> trades of{" "}
+          {job.total.toLocaleString()} found
         </b>
+        {job.visibleTotal !== undefined && job.total > job.visibleTotal && (
+          <button type="button" className="gd-cbtn" onClick={() => s.setShowHidden(true)}>{(job.total - job.visibleTotal).toLocaleString()} hidden by filters</button>
+        )}
         <label>
           Sort{" "}
           <select
@@ -207,31 +194,22 @@ export function BroadResults({
           Show hidden
         </label>
       </div>
-      <p className="gd-quiet">
-        Lineup source: {s.starter.source}
-        {m.ignoreByeWeeks &&
-          " · Hypothetical: byes ignored; temporary injury absences ignored; IR excluded"}{" "}
-        · Weeks {m.current}–{m.final} · Source refreshed:{" "}
-        {m.dataset.sourceUTC
-          ? new Date(m.dataset.sourceUTC).toLocaleString()
-          : "Unavailable"}
-        .
-      </p>
       {job.coverage && (
         <p>
           All {job.coverage.singles.toLocaleString()} one-for-ones checked ·{" "}
           {job.coverage.extensions.toLocaleString()} larger packages evaluated ·{" "}
           {job.coverage.opponents}{" "}
           {job.coverage.opponents === 1 ? "team" : "teams"}
+          {job.coverage.missingTeams?.length ? ` · Couldn't search: ${job.coverage.missingTeams.map((id) => String(m.dataset.tables.ModelTeams.find((team) => String(team.TeamID) === id)?.TeamName ?? id)).join(", ")}` : ""}
         </p>
       )}
       <div ref={listRef} className="gd-card gd-res">
         <div className="gd-res-grid gd-res-head">
-          <span>Offer → receive</span>
-          <span>Your grade steps</span>
-          <span>Their grade steps</span>
-          <span>Lineup / wk</span>
-          <span>Surplus</span>
+          <span>You give → You get</span>
+          <span>Your EPPG gain</span>
+          <span>Their EPPG gain</span>
+          <span>This week</span>
+          <span>Grade steps</span>
           <span>Status</span>
           <span />
         </div>
@@ -246,17 +224,17 @@ export function BroadResults({
           Show more
         </button>
       )}
-      {job.status === "complete" && !job.rows.length && (
-        <p>
-          No trades match these filters ·{" "}
-          <button
-            type="button"
-            className="gd-cbtn"
-            onClick={() => s.updateBroad({ filters: defaultTradeFilters() })}
-          >
-            Clear filters
-          </button>
-        </p>
+      {/* Explain whether the search found nothing or filters hid its retained trades. */}
+      {job.status === "complete" && job.total === 0 && (
+        <p>No legal trades change anyone's lineup for this team. Try removing players from Never trade.</p>
+      )}
+      {job.status === "complete" && job.total > 0 && job.visibleTotal === 0 && (
+        <div>
+          <p>Found {job.total.toLocaleString()} trades · your filters hide all of them.</p>
+          <p>{Object.entries(job.filterBlocks ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([key, count]) => `${reason[key] ?? key} hides ${count.toLocaleString()}`).join(" · ")}</p>
+          <button type="button" className="gd-cbtn" onClick={() => s.updateBroad({ filters: showAllTradeFilters() })}>Show all</button>{" "}
+          <button type="button" className="gd-cbtn" onClick={() => s.updateBroad({ filters: defaultTradeFilters() })}>Reset to defaults</button>
+        </div>
       )}
       {s.showHidden &&
         job.hiddenRows?.map(({ row, reasons }) => (

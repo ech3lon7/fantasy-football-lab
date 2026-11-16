@@ -1,32 +1,29 @@
 import { usePopovers } from "../../ui/popover/PopoverStack";
+import { defaultFilterShortcut } from "./trade/filter-shortcut";
 
-// Every keyboard rule in the design, in one place so it can be opened from the header and later from Lab.
-export const shortcuts: [string, string][] = [
-  ["Esc", "Close the top popover only, then the one beneath."],
-  ["Tab", "Stay inside an open popover."],
-  ["↑ ↓", "Move between players in lists; Enter opens the card."],
-  ["← →", "Step to the previous or next player in a card, keeping the tab."],
-  ["← → in versus", "Swap the two sides."],
-];
+import { shortcuts } from "./shortcut-list";
+
+// The list lives in its own module so the shortcut validator can read it without loading this screen.
+export { shortcuts };
 
 // Opens the keyboard reference; shared by the header menu and the Lab so both open the same popover.
-export function useKeyboardReference() {
+export function useKeyboardReference(shortcut = defaultFilterShortcut) {
   const popovers = usePopovers();
   return () =>
     popovers.open({
       title: "Keyboard reference",
       width: 560,
-      render: () => <KeyboardReference />,
+      render: () => <KeyboardReference shortcut={shortcut} />,
     });
 }
 
 // The keyboard reference popover; its second popover demonstrates that Escape peels back one layer at a time.
-function KeyboardReference() {
+function KeyboardReference({ shortcut }: { shortcut: string }) {
   const popovers = usePopovers();
   return (
     <div className="gd-popover-body">
       <h2>Keyboard reference</h2>
-      <KeyboardList />
+      <KeyboardList shortcut={shortcut} />
       <button
         type="button"
         className="gd-pill"
@@ -54,7 +51,7 @@ function KeyboardReference() {
 }
 
 // The shortcut list, shared by the popover and the Lab page.
-export function KeyboardList() {
+export function KeyboardList({ shortcut = defaultFilterShortcut }: { shortcut?: string }) {
   return (
     <dl className="gd-keys">
       {shortcuts.map(([key, what]) => (
@@ -65,6 +62,7 @@ export function KeyboardList() {
           <dd>{what}</dd>
         </div>
       ))}
+      <div><dt><kbd>{shortcut}</kbd></dt><dd>Focus the Find trades filter wheel.</dd></div>
     </dl>
   );
 }

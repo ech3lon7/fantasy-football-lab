@@ -5,22 +5,26 @@ import type { PositionalGradeImpactRule } from "./chain-position-impact";
 
 // Preserve supported saved criteria and identify settings that no longer affect broad discovery.
 export function migrateLegacyTradeQuery(query: TradeSearchQuery) {
-  const filters = defaultTradeFilters(), ignored: string[] = [];
-  filters.mustGive = [...query.give];
-  if (query.weekly?.own) filters.yourGain = { ...query.weekly.own };
-  if (query.weekly?.other?.minimum != null) filters.theirGain = clampTheirGain(query.weekly.other.minimum);
+  const filters = defaultTradeFilters(), ignored: string[] = [], applied: string[] = [];
+  // Offered players from an old query are never required by the new search.
+  if (query.give.length) ignored.push("offered players");
+  if (query.weekly?.own) { filters.yourGain = { ...query.weekly.own }; applied.push("your weekly gain"); }
+  if (query.weekly?.other?.minimum != null) { filters.theirGain = clampTheirGain(query.weekly.other.minimum); applied.push("their weekly gain"); }
   if (query.weekly?.other?.maximum != null) ignored.push("their maximum gain");
   filters.getPositions = query.incoming?.positions ?? [];
   filters.labels = query.incoming?.signals ?? [];
   filters.gradeGoals = query.gradeImpacts ?? [];
-  if (query.discovery?.teams) filters.teams = [...query.discovery.teams];
-  if (query.discovery?.target) filters.mustGet = [query.discovery.target];
+  if (filters.getPositions.length) applied.push("incoming positions");
+  if (filters.labels.length) applied.push("incoming labels");
+  if (filters.gradeGoals.length) applied.push("grade goals");
+  if (query.discovery?.teams) { filters.teams = [...query.discovery.teams]; applied.push("team scope"); }
+  if (query.discovery?.target) { filters.mustGet = [query.discovery.target]; applied.push("incoming target"); }
   if (query.indexMode === "strict") ignored.push("index window");
   if (query.goal && query.goal !== "explore") ignored.push("goal");
   if (query.manager || query.surface) ignored.push("surface trading");
   if (query.upgrade || query.usefulness || query.deficitProtection) ignored.push("old roster-fit settings");
   if (query.discovery?.ranking) ignored.push("ranking");
-  return { filters, ignored };
+  return { filters, applied, ignored };
 }
 
 // Represent each old team-specific limit as an affected-position goal with the same threshold.

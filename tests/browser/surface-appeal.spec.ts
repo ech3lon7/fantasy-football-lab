@@ -104,13 +104,14 @@ test("retires legacy surface restrictions from preferences and saved trades", as
 }) => {
   const panel = await seed(page);
   const original = await stored(page);
-  // The old saved query still loads: its retired settings are listed in one line and are not search controls any more.
-  await expect(panel.getByText(/^Saved search: ignored/)).toContainText(/surface trading/);
+  // The old saved query still loads, but its settings are not copied into filters (trade-search fixes F7): a one-time toast says so,
+  // replacing the old persistent line that listed the ignored settings, and they are not search controls any more.
+  await expect(page.getByText(/Your old Find trades settings don't apply to the new search, so filters start at the defaults/)).toBeVisible();
   for (const retired of ["Enable Surface Trading", "Search goal", "Find trades with surface appeal", "Minimum apparent lineup gain"])
     await expect(panel.getByText(retired, { exact: false }).filter({ visible: true })).toHaveCount(0);
-  await panel.getByRole("button", { name: "Search all trades", exact: true }).click();
+  await page.getByRole("dialog", { name: "Trade filters" }).getByRole("button", { name: "Search", exact: true }).click();
   // The old minimum of 9999 cannot hide anything.
-  await expect(panel.getByText(/^[\d,]+ of [\d,]+ trades$/)).toBeVisible({ timeout: 60000 });
+  await expect(panel.getByText(/[\d,]+ ideas · [\d,]+ trades/).first()).toBeVisible({ timeout: 60000 });
   const row = panel.locator(".gd-res > .gd-res-group > .gd-res-row").first();
   await row.getByRole("button", { name: /^Save trade/ }).click();
   await expect
@@ -152,15 +153,16 @@ test("retires legacy surface restrictions from preferences and saved trades", as
     .locator("details:not(.trade-saved-drawer):not(.trade-full-analysis)")
     .filter({
       has: page.locator("summary", {
-        hasText: "Chain Starter RB → Chain Bridge WR",
+        // The search now ranks a different package first (a two-player offer), so the saved card is matched by what it gets.
+        hasText: "→ Chain Bridge WR",
       }),
     });
   await card.locator(":scope > summary").click();
   await card
     .getByRole("button", { name: "Load saved trade", exact: true })
     .click();
-  await panel.getByRole("button", { name: "Search all trades", exact: true }).click();
-  await expect(panel.getByText(/^[\d,]+ of [\d,]+ trades$/)).toBeVisible({ timeout: 60000 });
+  await page.getByRole("dialog", { name: "Trade filters" }).getByRole("button", { name: "Search", exact: true }).click();
+  await expect(panel.getByText(/[\d,]+ ideas · [\d,]+ trades/).first()).toBeVisible({ timeout: 60000 });
   workspace = await stored(page);
   expect(workspace.dataset).toEqual(original.dataset);
   expect(
@@ -178,8 +180,8 @@ test("only the Manual analyzer has a Surface Trading control; Find trades and th
 }) => {
   const panel = await seed(page, true);
   const control = page.getByRole("checkbox", { name: /Surface Trading/ }).filter({ visible: true });
-  await panel.getByRole("button", { name: "Search all trades", exact: true }).click();
-  await expect(panel.getByText(/^[\d,]+ of [\d,]+ trades$/)).toBeVisible({ timeout: 60000 });
+  await page.getByRole("dialog", { name: "Trade filters" }).getByRole("button", { name: "Search", exact: true }).click();
+  await expect(panel.getByText(/[\d,]+ ideas · [\d,]+ trades/).first()).toBeVisible({ timeout: 60000 });
   await expect(control).toHaveCount(0);
   await page.getByRole("tab", { name: "Chain planner" }).click();
   await openTradeFilters(page, "Chain");

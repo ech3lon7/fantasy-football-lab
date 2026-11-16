@@ -22,6 +22,15 @@ it("streams one-for-ones before completing the broad search and reports measured
   expect(teamEvents[0].singles).toBeGreaterThan(0);
   expect(teamEvents[1].team).toBe(teamEvents[0].team);
   const result = rows()[1];
+  // Every streamed and completed page uses the same defaults and reports its filtered total.
+  for (const message of rows()) {
+    expect(message.visibleTotal).toBeLessThanOrEqual(message.total);
+    expect(message.rows.length).toBeLessThanOrEqual(50);
+    for (const row of message.rows) {
+      expect(row.filterEvidence.ownGain).toBeGreaterThanOrEqual(0);
+      expect(row.filterEvidence.otherGain).toBeGreaterThanOrEqual(1);
+    }
+  }
   expect(result.id).toBe("1"); expect(result.context).toBe("ctx");
   expect(result.coverage.singles).toBeGreaterThan(0);
   expect(result.stats.scored).toBe(result.coverage.singles + result.coverage.extensions);

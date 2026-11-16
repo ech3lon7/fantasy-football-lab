@@ -523,19 +523,9 @@
 /* Place the approved search header above the filter column and retained results. */
 :root[data-gameday] .gd-broad-search { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
 :root[data-gameday] .gd-broad-top { display: flex; flex-wrap: wrap; align-items: start; gap: 14px; }
-:root[data-gameday] .gd-broad-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 22px; align-items: start; }
-:root[data-gameday] .gd-broad-layout > section { display: grid; gap: 12px; min-width: 0; }
-:root[data-gameday] .gd-broad-filter-toggle { display: none; }
-@media (max-width: 1100px) {
-  :root[data-gameday] .gd-broad-layout { display: block; }
-  :root[data-gameday] .gd-broad-filter-toggle { display: block; }
-  :root[data-gameday] .gd-broad-filter-panel { display: none; position: fixed; z-index: 100; right: 0; top: 0; bottom: 0; width: min(380px, 100vw); overflow-y: auto; background: var(--gd-surface); padding: 12px; }
-  :root[data-gameday] .gd-broad-filter-panel[data-open="true"] { display: block; }
-}
-@media (max-width: 719px) {
-  :root[data-gameday] .gd-broad-filter-panel { top: auto; width: 100%; max-height: 85vh; }
-  :root[data-gameday] .gd-broad-layout > .gd-broad-filter-toggle { position: sticky; top: 0; z-index: 5; }
-}
+/* The inline wheel is centered above a full-width results section. */
+:root[data-gameday] .gd-find-wheel { position: relative; min-width: 0; }
+:root[data-gameday] .gd-find > section { display: grid; gap: 12px; min-width: 0; }
 
 /* Rows of the broad search: a swap, its variants and an expandable detail that spans the whole row. */
 :root[data-gameday] .gd-res-group { border-bottom: 1px solid var(--gd-line); }
@@ -545,24 +535,26 @@
 :root[data-gameday] .gd-res-row[data-variant] { background: var(--gd-surface-2); }
 :root[data-gameday] .gd-row-detail { grid-column: 1 / -1; display: grid; gap: 4px; padding-top: 6px; }
 
-/* Beside the 300px filter column the results are narrower, so the columns give a little and the buttons stack. */
-:root[data-gameday] .gd-broad-layout .gd-res-grid {
-  grid-template-columns: minmax(180px, 1.4fr) minmax(96px, 1fr) minmax(96px, 1fr) 80px 92px minmax(96px, 1fr) 100px;
-  column-gap: 8px;
-}
-:root[data-gameday] .gd-broad-layout .gd-res-row > .gd-chips:last-of-type { flex-direction: column; align-items: stretch; }
-
 /* The Filters button opens the wheel at every width; the list of filters beside the results is the List view. */
 :root[data-gameday] .gd-wheel-open {
   justify-self: start;
-}
-@media (max-width: 1100px) {
-  :root[data-gameday] .gd-broad-layout > .gd-wheel-open {
-    margin-bottom: 8px;
-  }
 }
 
 /* Removed rows collapse from a copy laid over their old place, so the list needs to be a positioning context. */
 :root[data-gameday] .gd-res {
   position: relative;
+}
+
+/* Full-width trade rows keep both teams' gains visible on desktop and phone. */
+:root[data-gameday] .gd-find .gd-res { overflow-x: hidden; }
+:root[data-gameday] .gd-find .gd-res-grid { min-width: 0; grid-template-columns: minmax(180px, 2fr) 90px 90px 70px minmax(110px, 1fr) 100px 145px; }
+:root[data-gameday] .gd-find .gd-who > span:last-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+:root[data-gameday] .gd-find .gd-gain[data-positive="true"] { color: var(--gd-positive-ink); }
+:root[data-gameday] .gd-find .gd-grade-steps { display: flex; flex-wrap: nowrap; overflow: hidden; }
+@media (max-width: 719px) {
+  :root[data-gameday] .gd-find .gd-res-head { display: none; }
+  :root[data-gameday] .gd-find .gd-res-row { grid-template-columns: 1fr 1fr; gap: 6px; }
+  :root[data-gameday] .gd-find .gd-who, :root[data-gameday] .gd-find .gd-grade-steps, :root[data-gameday] .gd-find .gd-row-detail { grid-column: 1 / -1; }
+  :root[data-gameday] .gd-find .gd-gain-you::before { content: "You "; }
+  :root[data-gameday] .gd-find .gd-gain-them::before { content: "Them "; }
 }

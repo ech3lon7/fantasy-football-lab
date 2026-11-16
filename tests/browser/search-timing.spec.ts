@@ -7,7 +7,7 @@ test("broad search timing on a 12-team league", async ({ page }) => {
   await seedTradeLeague(page, "big", { teamA: "1", teamB: "2", give: [], get: [] }, { feelAnimation: "off" });
   await page.goto("./#/trade");
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
-  await page.getByRole("button", { name: "Search all trades" }).click();
+  await page.getByRole("dialog", { name: "Trade filters" }).getByRole("button", { name: "Search", exact: true }).click();
   const t0 = Date.now();
   await expect(page.getByRole("region", { name: "Trade search results" }).locator("article").first()).toBeVisible({ timeout: 120000 });
   const firstRows = (Date.now() - t0) / 1000;

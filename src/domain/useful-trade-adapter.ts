@@ -3,7 +3,7 @@ import { tradeImpact, type LineupBasis } from "./trade-impact";
 import { evaluateTrade } from "./trades";
 import { scoreTradeMatch, type SearchRow, type TradeSearchQuery } from "./trade-search";
 import { buildTradeImpactMap } from "./trade-impact-map";
-import { buildUsefulMoves, FLOOR_MAX_LOSS, type TeamProgress, type UsefulEvaluation } from "./useful-move-search";
+import { buildUsefulMoves, FLOOR_MAX_LOSS_OWN, FLOOR_MAX_LOSS_OTHER, type TeamProgress, type UsefulEvaluation } from "./useful-move-search";
 import { chainPositionImpact } from "./chain-position-impact";
 import { lineupFilterEvidence } from "./trade-lineup-evidence";
 import type { FilterableTrade } from "./trade-filters";
@@ -21,7 +21,7 @@ export function runUsefulTradeSearch(m: Model, ownTeam: string, protectedIds: st
   const opponents: Record<string, string[]> = {};
   for (const team of original.leave.keys()) if (team !== ownTeam && (!only || only.includes(team))) opponents[team] = roster(m, team);
   // Every lineup is scored once per distinct roster and week; the same lineups recur across thousands of candidates.
-  return withLineupMemoAsync(() => buildUsefulMoves({ own: roster(m, ownTeam), opponents }, { add, leave }, protectedIds, (offer) => {
+  return withLineupMemoAsync(() => buildUsefulMoves({ own: roster(m, ownTeam), opponents }, { add, leave }, protectedIds, (offer): UsefulScoredTrade => {
     const query: TradeSearchQuery = { teamA: ownTeam, give: offer.give, count: offer.get.length, below: 0, above: 0, lineupBasis: basis };
     // Missing index data must not become a zero-valued balance estimate.
     const hasIndex = [...offer.get, ...offer.give].every((id) => m.byId.get(id)?.index != null);
@@ -41,7 +41,7 @@ export function runUsefulTradeSearch(m: Model, ownTeam: string, protectedIds: st
       JSON.stringify(week.beforeIds) !== JSON.stringify(week.ids)));
     // Capture filter data while the original evaluated lineups are available.
     if (impact && searchRow.legal === true && changed && searchRow.own !== null && searchRow.other !== null &&
-        searchRow.own >= -FLOOR_MAX_LOSS && searchRow.other >= -FLOOR_MAX_LOSS) {
+        searchRow.own >= -FLOOR_MAX_LOSS_OWN && searchRow.other >= -FLOOR_MAX_LOSS_OTHER) {
       const own = lineupFilterEvidence(impact.own.weekly, m.current, offer.get, mppg);
       const other = lineupFilterEvidence(impact.other.weekly, m.current, offer.give, mppg);
       const evidence: FilterableTrade = {
