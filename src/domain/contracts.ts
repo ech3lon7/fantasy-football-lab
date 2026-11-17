@@ -170,7 +170,7 @@ export const datasetSchema = z
             k,
             z
               .array(z.record(z.string(), cell))
-              .max(k === "ModelHistory" ? 40000 : 10000),
+              .max(k === "ModelHistory" ? 200000 : 50000),
           ]),
         ) as Record<
           (typeof tableNames)[number],

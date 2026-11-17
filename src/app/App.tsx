@@ -49,6 +49,7 @@ import {
   mppgSnapshotsKey,
   recordMppgSnapshot,
 } from "../domain/mppg-tuning";
+import { errorMessage } from "../domain/error";
 import { Activity, useState, useEffect, useRef, useMemo } from "react";
 import { X } from "lucide-react";
 import {
@@ -356,7 +357,7 @@ export default function App() {
           }
           setSyncStatus("Ready to sync");
         } catch (e) {
-          setError(e instanceof Error ? e.message : String(e));
+          setError(errorMessage(e));
           setSyncStatus("Sync failed");
         }
       } else setSyncStatus("Local only");
@@ -385,7 +386,7 @@ export default function App() {
     setModel(null);
     worker.onmessage = (e) => {
       if (e.data.id !== id) return;
-      if (e.data.error) setError(e.data.error);
+      if (e.data.error) setError(errorMessage(e.data.error));
       else {
         setModel(e.data.result.model);
         setGrades(new Map(e.data.result.grades));
@@ -498,7 +499,7 @@ export default function App() {
           setSyncStatus("Conflict");
         }
       } else {
-        setError(e instanceof Error ? e.message : String(e));
+        setError(errorMessage(e));
         setSyncStatus(
           navigator.onLine ? "Sync failed" : "Offline changes pending",
         );
@@ -1005,7 +1006,7 @@ export default function App() {
       if (e.data.id !== id) return;
       if (importTimer.current) clearTimeout(importTimer.current);
       setBusy(false);
-      if (e.data.error) setError(e.data.error);
+      if (e.data.error) setError(errorMessage(e.data.error));
       else setPreview(e.data.result);
       worker.terminate();
     };
@@ -1111,7 +1112,7 @@ export default function App() {
       try {
         await signOutFantasy(client);
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        setError(errorMessage(e));
         return;
       }
     }

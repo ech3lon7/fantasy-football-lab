@@ -229,6 +229,21 @@ it("rejects missing schemas and invalid model settings at the server boundary", 
       { ...state, settings: { ...defaults, GradeB: -0.9 } },
     ]),
   ).rejects.toThrow(/INVALID_GRADE_ORDER/);
+
+  // ModelHistory with 45,000 rows (greater than old 40,000 limit) passes server check
+  const history45k = {
+    ...dataset,
+    tables: {
+      ...dataset.tables,
+      ModelHistory: new Array(45000).fill(dataset.tables.ModelHistory[0]),
+    },
+  };
+  await expect(
+    db.query("select public.replace_fantasy_dataset(0,$1,$2)", [
+      crypto.randomUUID(),
+      history45k,
+    ]),
+  ).resolves.toBeDefined();
 });
 it("preserves existing fitness data, policies, grants and functions across migration and fantasy writes", async () => {
   await db.exec("reset role");

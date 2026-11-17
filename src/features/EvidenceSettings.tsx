@@ -5,6 +5,7 @@ import {
   roleScenarioKey,
   parseEvidence,
 } from "../domain/opportunity";
+import { errorMessage } from "../domain/error";
 import { Panel, Select } from "../ui/layout";
 import { DataTable, fmt } from "../ui/components";
 
@@ -39,7 +40,7 @@ export function EvidenceSettings({
         `Saved ${next.rows.length} player-week evidence rows for this snapshot.`,
       );
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e));
+      setMessage(errorMessage(e));
     }
   }
 
@@ -62,7 +63,7 @@ export function EvidenceSettings({
       );
       save(rows);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      setMessage(errorMessage(error));
     }
   }
 

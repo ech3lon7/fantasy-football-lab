@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Upload, CheckCircle2 } from "lucide-react";
 import type { Workspace } from "../domain/contracts";
 import type { cloudClient, CloudConfig } from "../sync/client";
+import { errorMessage } from "../domain/error";
 
 export function Account({
   w,
@@ -55,7 +56,7 @@ export function Account({
           : "",
       );
     } catch (e) {
-      notify(e instanceof Error ? e.message : String(e));
+      notify(errorMessage(e));
     } finally {
       setAuthBusy(false);
     }
@@ -178,7 +179,7 @@ export function Account({
               try {
                 configure({ url, key });
               } catch (e) {
-                notify(e instanceof Error ? e.message : String(e));
+                notify(errorMessage(e));
               }
             }}
           >

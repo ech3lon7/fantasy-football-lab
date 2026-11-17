@@ -67,13 +67,13 @@ begin
  if who is null then raise exception 'AUTH_REQUIRED';end if;
  select * into old from public.fantasy_workspaces where user_id=who for update;
  if not found then raise exception 'WORKSPACE_MISSING';end if;
- if p_request_id is null or p_dataset is null or jsonb_typeof(p_dataset)<>'object' or octet_length(p_dataset::text)>10485760 then raise exception 'INVALID_DATASET';end if;
+ if p_request_id is null or p_dataset is null or jsonb_typeof(p_dataset)<>'object' or octet_length(p_dataset::text)>52428800 then raise exception 'INVALID_DATASET';end if;
  if old.last_dataset_request_id=p_request_id then if old.dataset=p_dataset then return old;else raise exception 'REQUEST_ID_REUSED';end if;end if;
  if old.dataset_revision<>p_expected_revision then raise exception 'CONFLICT_DATASET';end if;
  if not(p_dataset ?& array['schemaVersion','adapterVersion','modelVersion','hash','importedAt','sourceUTC','tables','settings','issues']) or coalesce(p_dataset->>'schemaVersion','')<>'1' or coalesce(p_dataset->>'adapterVersion','')<>'v5.2' or coalesce(p_dataset->>'modelVersion','')<>'v5.2-port-1' or coalesce(jsonb_typeof(p_dataset->'tables'),'')<>'object' or coalesce(p_dataset->>'hash','')!~'^[a-f0-9]{64}$' then raise exception 'INVALID_DATASET_SCHEMA';end if;
  foreach table_name in array allowed loop
   if coalesce(jsonb_typeof(p_dataset->'tables'->table_name),'')<>'array' then raise exception 'INVALID_TABLE';end if;
-  if jsonb_array_length(p_dataset->'tables'->table_name)>(case when table_name='ModelHistory' then 40000 else 10000 end) then raise exception 'TOO_MANY_ROWS';end if;
+  if jsonb_array_length(p_dataset->'tables'->table_name)>(case when table_name='ModelHistory' then 200000 else 50000 end) then raise exception 'TOO_MANY_ROWS';end if;
  end loop;
  if jsonb_array_length(p_dataset#>'{tables,ModelContext}')<>1 or jsonb_array_length(p_dataset#>'{tables,ModelPlayers}')<1 then raise exception 'MISSING_MODEL_DATA';end if;
  -- Retain only still-owned draft selections; state revision changes if reconciliation changes state.

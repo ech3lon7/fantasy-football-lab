@@ -4,6 +4,7 @@ import {
   stateSchema,
   type Workspace,
 } from "../domain/contracts";
+import { toError } from "../domain/error";
 import { contentHash, validateSources } from "../import/workbook";
 export interface CloudConfig {
   url: string;
@@ -53,7 +54,7 @@ export function cloudClient(c: CloudConfig): SupabaseClient | null {
 export async function signOutFantasy(client: SupabaseClient) {
   // The default global scope would also revoke Trainwise's sessions.
   const { error } = await client.auth.signOut({ scope: "local" });
-  if (error) throw error;
+  if (error) throw toError(error, "Sign out failed.");
 }
 export class Conflict extends Error {
   constructor(public remote: Workspace | null) {
@@ -73,7 +74,7 @@ async function readCloud(
   owner: string,
 ): Promise<CloudSnapshot | null> {
   const { data, error } = await client.rpc("get_fantasy_workspace");
-  if (error) throw error;
+  if (error) throw toError(error, "Could not read cloud workspace.");
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;
   const dataset = row.dataset ? datasetSchema.parse(row.dataset) : null;
@@ -167,7 +168,7 @@ export async function sync(
     const { error } = await client.rpc("initialize_fantasy_workspace", {
       p_state: w.state,
     });
-    if (error) throw error;
+    if (error) throw toError(error, "Could not initialize cloud workspace.");
     snapshot = await readCloud(client, w.owner);
   }
   if (!snapshot) throw Error("Cloud initialization failed.");
@@ -199,7 +200,7 @@ export async function sync(
     if (error) {
       if (error.message.includes("CONFLICT"))
         throw new Conflict(await pull(client, w.owner));
-      throw error;
+      throw toError(error, "Could not replace cloud dataset.");
     }
     // Use the write's own returned row, never a later pull that could acknowledge somebody else's edits.
     const row = Array.isArray(data) ? data[0] : data;
@@ -228,7 +229,7 @@ export async function sync(
     if (error) {
       if (error.message.includes("CONFLICT"))
         throw new Conflict(await pull(client, w.owner));
-      throw error;
+      throw toError(error, "Could not replace cloud dataset.");
     }
     const row = Array.isArray(data) ? data[0] : data;
     committed = {

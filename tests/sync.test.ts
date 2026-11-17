@@ -298,3 +298,23 @@ it("does not overwrite state changed during dataset replacement", async () => {
     false,
   );
 });
+
+it("surfaces clean Error instances with human-readable messages when cloud RPC returns structured errors", async () => {
+  const { workspace, client, row, rpc } = await syncFixture();
+  workspace.pendingDataset = true;
+  rpc.mockImplementation(async (name) => {
+    if (name === "replace_fantasy_dataset") {
+      return { data: null, error: { message: "TOO_MANY_ROWS", details: "exceeded limit", code: "P0001" } };
+    }
+    return { data: [structuredClone(row)], error: null };
+  });
+
+  try {
+    await sync(client, workspace);
+    expect.unreachable("should have thrown");
+  } catch (err: any) {
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toBe("TOO_MANY_ROWS");
+    expect(String(err)).not.toBe("[object Object]");
+  }
+});

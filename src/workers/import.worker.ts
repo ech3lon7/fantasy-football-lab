@@ -1,4 +1,5 @@
 import { importWorkbook } from "../import/workbook";
+import { errorMessage } from "../domain/error";
 self.onmessage = async (e: MessageEvent<{ id: string; bytes: Uint8Array }>) => {
   try {
     self.postMessage({
@@ -8,7 +9,7 @@ self.onmessage = async (e: MessageEvent<{ id: string; bytes: Uint8Array }>) => {
   } catch (error) {
     self.postMessage({
       id: e.data.id,
-      error: error instanceof Error ? error.message : "Import failed",
+      error: errorMessage(error, "Import failed"),
     });
   }
 };

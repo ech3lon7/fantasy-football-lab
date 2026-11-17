@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Model } from "../domain/valuation";
 import { cmpId } from "../domain/contracts";
+import { errorMessage } from "../domain/error";
 import { roster, lineup, available } from "../domain/lineups";
 import {
   readStarterLineup,
@@ -107,9 +108,7 @@ export function StarterLineupEditor({
             try {
               persist(saveStarterLineup(m, team, ids, raw));
             } catch (error) {
-              setMessage(
-                error instanceof Error ? error.message : String(error),
-              );
+              setMessage(errorMessage(error));
             }
           }}
         >
@@ -123,9 +122,7 @@ export function StarterLineupEditor({
               setIds(readStarterLineup(m, team).ids);
               setMessage("");
             } catch (error) {
-              setMessage(
-                error instanceof Error ? error.message : String(error),
-              );
+              setMessage(errorMessage(error));
             }
           }}
         >

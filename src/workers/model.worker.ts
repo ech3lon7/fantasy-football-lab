@@ -6,6 +6,7 @@ import { evidenceKey, roleScenarioKey } from "../domain/opportunity";
 import { applyRosterScenario } from "../domain/roster-scenarios";
 import type { RosterScenario } from "../domain/roster-scenarios";
 import type { Draft } from "../domain/contracts";
+import { errorMessage } from "../domain/error";
 // Optional scoring sensitivity uses a separate request and never replaces the cached valuation model.
 import { evaluateStressTest } from "../domain/trade-stress";
 let model: Model | undefined,
@@ -63,10 +64,7 @@ self.onmessage = (e: MessageEvent) => {
           self.postMessage({
             id,
             savedId: trade.id,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Saved trade calculation failed",
+            error: errorMessage(error, "Saved trade calculation failed"),
           });
         }
       }
@@ -103,7 +101,7 @@ self.onmessage = (e: MessageEvent) => {
   } catch (error) {
     self.postMessage({
       id,
-      error: error instanceof Error ? error.message : "Calculation failed",
+      error: errorMessage(error, "Calculation failed"),
     });
   }
 };

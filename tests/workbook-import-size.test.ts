@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { unzipSync, zipSync, strToU8, strFromU8 } from "fflate";
 import { importWorkbook, preflight, contentHash } from "../src/import/workbook";
+import { datasetSchema } from "../src/domain/contracts";
 import { workbook } from "./workbook-label-parity.test";
 
 it("succeeds when an unused sheet exceeds 150 MiB uncompressed", async () => {
@@ -174,4 +175,49 @@ it("enforces 50 MiB extracted data limit in contentHash", async () => {
   await expect(contentHash(hugeTables, {} as any)).rejects.toThrow(
     "Extracted data exceeds 50 MiB.",
   );
+});
+
+it("datasetSchema validates table row limits up to 200,000 for ModelHistory and 50,000 for other tables", async () => {
+  const base = await workbook(true);
+  const { dataset } = await importWorkbook(base);
+
+  // ModelHistory with 50,000 rows (exceeds old 40,000 limit) must pass datasetSchema
+  const validDataset = {
+    ...dataset,
+    tables: {
+      ...dataset.tables,
+      ModelHistory: new Array(50000).fill(dataset.tables.ModelHistory[0]),
+    },
+  };
+  expect(() => datasetSchema.parse(validDataset)).not.toThrow();
+
+  // ModelHistory with 200,001 rows must fail
+  const overHistory = {
+    ...dataset,
+    tables: {
+      ...dataset.tables,
+      ModelHistory: new Array(200001).fill(dataset.tables.ModelHistory[0]),
+    },
+  };
+  expect(() => datasetSchema.parse(overHistory)).toThrow();
+
+  // Other table with 15,000 rows (exceeds old 10,000 limit) must pass datasetSchema
+  const validPlayers = {
+    ...dataset,
+    tables: {
+      ...dataset.tables,
+      ModelPlayers: new Array(15000).fill(dataset.tables.ModelPlayers[0]),
+    },
+  };
+  expect(() => datasetSchema.parse(validPlayers)).not.toThrow();
+
+  // Other table with 50,001 rows must fail
+  const overPlayers = {
+    ...dataset,
+    tables: {
+      ...dataset.tables,
+      ModelPlayers: new Array(50001).fill(dataset.tables.ModelPlayers[0]),
+    },
+  };
+  expect(() => datasetSchema.parse(overPlayers)).toThrow();
 });
