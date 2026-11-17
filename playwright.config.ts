@@ -5,6 +5,7 @@ const bundled =
   "/ms-playwright/chromium-1223/chrome-win64/chrome.exe";
 export default defineConfig({
   testDir: "tests/browser",
+  retries: process.env.CI ? 2 : 0,
   workers: process.env.PLAYWRIGHT_WORKERS
     ? Number(process.env.PLAYWRIGHT_WORKERS)
     : process.env.CI

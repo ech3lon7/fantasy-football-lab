@@ -564,12 +564,13 @@ const shownCount = async (page: Page) => {
   );
 };
 // Change one gain filter through the only filter control there is.
-async function setYourGain(page: Page, key: "Home" | "End") {
+async function setYourGain(page: Page, key: "Home" | "End", onSliderChange?: () => Promise<void>) {
   await segment(page, /^Gains/).locator(".gd-seg-hit").click();
   await wheel(page)
     .getByRole("menuitem", { name: "Your EPPG", exact: true })
     .click();
   await wheel(page).getByRole("slider", { name: "Your EPPG minimum" }).press(key);
+  if (onSliderChange) await onSliderChange();
   await done(page);
   await done(page);
 }
@@ -583,9 +584,20 @@ test.describe("results move when filters change (A11, A13)", () => {
     // Let the search's own streaming animations finish so only the filter change is measured.
     await page.evaluate(() => Promise.all(document.getAnimations().filter((x) => Number.isFinite(Number(x.effect?.getComputedTiming().endTime))).map((x) => x.finished.catch(() => undefined))));
     // Your gain at −3 is no limit: rows come back instantly, without a new search.
-    await setYourGain(page, "Home");
+    let durations: number[] = [];
+    await setYourGain(page, "Home", async () => {
+      await expect
+        .poll(
+          async () => {
+            const current = await rowAnimations(page);
+            if (current.length > 0) durations = current;
+            return durations.length;
+          },
+          { intervals: [20, 50, 100], timeout: 10000 },
+        )
+        .toBeGreaterThan(0);
+    });
     await expect.poll(() => shownCount(page)).toBeGreaterThan(before);
-    const durations = await rowAnimations(page);
     expect(durations.length).toBeGreaterThan(0);
     // At most twenty rows draw in and twenty slide; a row may carry a second small animation of its own.
     expect(durations.length).toBeLessThanOrEqual(60);
