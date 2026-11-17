@@ -28,8 +28,8 @@ const xml = new XMLParser({
 });
 const arr = <T>(x: T | T[] | undefined): T[] =>
   x === undefined ? [] : Array.isArray(x) ? x : [x];
-export function preflight(bytes: Uint8Array) {
-  if (bytes.length > 25 * 1024 * 1024) throw Error("Workbook exceeds 25 MiB.");
+export function preflight(bytes: Uint8Array): Set<string> {
+  if (bytes.length > 200 * 1024 * 1024) throw Error("Workbook exceeds 200 MiB.");
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let end = -1;
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--)
@@ -39,24 +39,98 @@ export function preflight(bytes: Uint8Array) {
     }
   if (end < 0) throw Error("Not a supported XLSX ZIP package.");
   const count = v.getUint16(end + 10, true);
-  let at = v.getUint32(end + 16, true),
-    expanded = 0;
+  let at = v.getUint32(end + 16, true);
   if (count === 65535 || at === 0xffffffff)
     throw Error("ZIP64 workbooks are unsupported.");
+
+  const entries = new Map<string, number>();
   for (let i = 0; i < count; i++) {
     if (at + 46 > bytes.length || v.getUint32(at, true) !== 0x02014b50)
       throw Error("Invalid workbook directory.");
     if (v.getUint16(at + 8, true) & 1)
       throw Error("Encrypted workbooks are unsupported.");
-    expanded += v.getUint32(at + 24, true);
-    if (expanded > 150 * 1024 * 1024)
-      throw Error("Expanded workbook exceeds 150 MiB.");
-    at +=
-      46 +
-      v.getUint16(at + 28, true) +
-      v.getUint16(at + 30, true) +
-      v.getUint16(at + 32, true);
+    const uncompressedSize = v.getUint32(at + 24, true);
+    const nameLen = v.getUint16(at + 28, true);
+    const extraLen = v.getUint16(at + 30, true);
+    const commentLen = v.getUint16(at + 32, true);
+    const name = strFromU8(bytes.subarray(at + 46, at + 46 + nameLen));
+    entries.set(name, uncompressedSize);
+    at += 46 + nameLen + extraLen + commentLen;
   }
+
+  const neededParts = new Set<string>();
+  const staticParts = [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/styles.xml",
+    "xl/sharedStrings.xml",
+    "xl/metadata.xml",
+  ];
+  for (const p of staticParts) {
+    if (entries.has(p)) neededParts.add(p);
+  }
+
+  if (entries.has("xl/workbook.xml") && entries.has("xl/_rels/workbook.xml.rels")) {
+    const base = unzipSync(bytes, {
+      filter: (f) =>
+        f.name === "xl/workbook.xml" || f.name === "xl/_rels/workbook.xml.rels",
+    });
+    const wbxml = xml.parse(strFromU8(base["xl/workbook.xml"]));
+    const rels = xml.parse(strFromU8(base["xl/_rels/workbook.xml.rels"]));
+    const neededSheets = new Set([
+      "ESPN_Model_Data",
+      "Valuation_Detail",
+      "Pillars_Valuation_Dashboard",
+    ]);
+
+    const relsList = arr<any>(rels?.Relationships?.Relationship);
+    const neededRelsPaths = new Set<string>();
+
+    for (const s of arr<any>(wbxml?.workbook?.sheets?.sheet)) {
+      if (!neededSheets.has(s["@_name"])) continue;
+      const rel = relsList.find((r) => r["@_Id"] === s["@_r:id"]);
+      if (rel) {
+        const target = rel["@_Target"];
+        const sheetPath = target.startsWith("/") ? target.slice(1) : `xl/${target}`;
+        if (entries.has(sheetPath)) neededParts.add(sheetPath);
+        const filename = sheetPath.split("/").at(-1);
+        const relPath = `xl/worksheets/_rels/${filename}.rels`;
+        if (entries.has(relPath)) {
+          neededParts.add(relPath);
+          neededRelsPaths.add(relPath);
+        }
+      }
+    }
+
+    if (neededRelsPaths.size > 0) {
+      const relsParts = unzipSync(bytes, {
+        filter: (f) => neededRelsPaths.has(f.name),
+      });
+      for (const content of Object.values(relsParts)) {
+        const parsed = xml.parse(strFromU8(content));
+        for (const rel of arr<any>(parsed?.Relationships?.Relationship)) {
+          if (str(rel["@_Type"]).endsWith("/table")) {
+            const target = str(rel["@_Target"]);
+            const tablePath = target.startsWith("/")
+              ? target.slice(1)
+              : `xl/${target.replace(/^\.\.\//, "")}`;
+            if (entries.has(tablePath)) neededParts.add(tablePath);
+          }
+        }
+      }
+    }
+  }
+
+  let expanded = 0;
+  for (const name of neededParts) {
+    expanded += entries.get(name) ?? 0;
+  }
+  if (expanded > 500 * 1024 * 1024)
+    throw Error("Expanded workbook exceeds 500 MiB.");
+
+  return neededParts;
 }
 const normalizeDate = (x: unknown) =>
   typeof x === "number"
@@ -81,8 +155,8 @@ export async function contentHash(
   const bytes = new TextEncoder().encode(
     JSON.stringify(canonical({ tables, settings })),
   );
-  if (bytes.length > 10 * 1024 * 1024)
-    throw Error("Extracted data exceeds 10 MiB.");
+  if (bytes.length > 50 * 1024 * 1024)
+    throw Error("Extracted data exceeds 50 MiB.");
   return Array.from(
     new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
   )
@@ -276,14 +350,8 @@ export function validateSources(d: Dataset) {
     d.issues.push("Source refresh timestamp is in the future.");
 }
 export async function importWorkbook(bytes: Uint8Array) {
-  preflight(bytes);
-  const allowed = (name: string) =>
-    /^xl\/(workbook\.xml|metadata\.xml|_rels\/workbook\.xml\.rels|styles\.xml|sharedStrings\.xml|worksheets\/(sheet\d+\.xml|_rels\/sheet\d+\.xml\.rels)|tables\/table\d+\.xml)$/.test(
-      name,
-    ) ||
-    name === "[Content_Types].xml" ||
-    name === "_rels/.rels";
-  const parts = unzipSync(bytes, { filter: (f) => allowed(f.name) }),
+  const needed = preflight(bytes);
+  const parts = unzipSync(bytes, { filter: (f) => needed.has(f.name) }),
     sheetParts = new Map<string, string>();
   const wbxml = xml.parse(strFromU8(parts["xl/workbook.xml"])),
     rels = xml.parse(strFromU8(parts["xl/_rels/workbook.xml.rels"]));
@@ -335,7 +403,7 @@ export async function importWorkbook(bytes: Uint8Array) {
     if (wanted.some((h) => !headers.includes(h)))
       throw Error(`Unsupported columns in ${name}.`);
     const range = XLSX.utils.decode_range(tx["@_ref"]);
-    if (range.e.r - range.s.r > (name === "ModelHistory" ? 40000 : 10000))
+    if (range.e.r - range.s.r > (name === "ModelHistory" ? 200000 : 50000))
       throw Error(`Too many rows in ${name}.`);
     const sheet = wb.Sheets.ESPN_Model_Data;
     tables[name] = [];

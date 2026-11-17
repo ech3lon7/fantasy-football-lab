@@ -982,8 +982,8 @@ export default function App() {
   }
   async function importFile(file: File) {
     setError("");
-    if (file.size > 25 * 1024 * 1024) {
-      setError("Workbook exceeds 25 MiB.");
+    if (file.size > 200 * 1024 * 1024) {
+      setError("Workbook exceeds 200 MiB.");
       return;
     }
     setBusy(true);

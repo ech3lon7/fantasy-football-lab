@@ -13,7 +13,7 @@ import { tableNames } from "../src/domain/contracts";
 import { fixture } from "./fixtures";
 
 // Build a real, anonymous XLSX package with model-table bindings and cached label outputs for either contract.
-async function workbook(current: boolean, tamper?: string, version?: string) {
+export async function workbook(current: boolean, tamper?: string, version?: string) {
   const d = await fixture();
   for (const row of d.tables.ModelHistory)
     Object.assign(row, {
