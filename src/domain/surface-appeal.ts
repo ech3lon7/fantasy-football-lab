@@ -8,6 +8,12 @@ import {
 import { readLineupBasis, type LineupBasis } from "./trade-impact";
 import type { Model, Player } from "./valuation";
 import type { TradeResult } from "./trades";
+
+export type MinimalSurfaceTrade = {
+  valid: boolean;
+  initialB: string[];
+  legalB: string[];
+};
 import type { SearchRow } from "./trade-search";
 
 // Retire legacy scoring restrictions at restoration boundaries without enabling the replacement or changing unrelated filters.
@@ -39,7 +45,7 @@ export interface SurfaceComparison {
   issues: string[];
 }
 export interface SurfaceEvidence {
-  filter: SurfaceFilter;
+  filter: Partial<SurfaceFilter>;
   basis: LineupBasis;
   week: number;
   sourceUTC: string | null;
@@ -152,8 +158,8 @@ function comparison(
 export function surfaceAppeal(
   m: Model,
   draft: Draft,
-  result: TradeResult,
-  filter: SurfaceFilter,
+  result: TradeResult | MinimalSurfaceTrade,
+  filter: Partial<SurfaceFilter> = {},
   basis?: LineupBasis,
   lineupsRaw?: string,
 ): SurfaceEvidence | undefined {

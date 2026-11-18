@@ -1,6 +1,7 @@
 import { useDeferredValue, useRef, useState, type ReactNode } from "react";
 import type { Model } from "../../../domain/valuation";
 import type { SearchRow } from "../../../domain/trade-search";
+import { readLineupBasis } from "../../../domain/trade-impact";
 import { defaultTradeFilters, showAllTradeFilters } from "../../../domain/trade-filters";
 import { PlayerName } from "../../../ui/PlayerName";
 import { tradeDebugReport } from "../../../domain/trade-tools";
@@ -87,6 +88,10 @@ export function BroadResults({
     teamGrade: "Opponent grade",
     giveSize: "Outgoing size",
     getSize: "Incoming size",
+    never: "Never trade player",
+    mustGiveStarts: "A must player you send doesn't start every week for them",
+    mustGetStarts: "A must player you get doesn't start every week for you",
+    looksBetter: "Doesn't look better to them",
   };
   const show = (row: SearchRow, variant = false): React.ReactNode => (
     <div key={row.key} data-key={row.key} className="gd-res-group">
@@ -186,12 +191,13 @@ export function BroadResults({
               s.setBroadSort(e.target.value as typeof s.broadSort)
             }
           >
+            <option value="acceptance">Acceptance</option>
+            <option value="surface">Looks better to them</option>
             <option value="own">Your EPPG gain</option>
             <option value="other">Their EPPG gain</option>
             <option value="week">Your this-week gain</option>
             <option value="both">Both sides</option>
             <option value="balance">Value balance</option>
-            <option value="acceptance">Acceptance</option>
           </select>
         </label>
         <label>
@@ -203,15 +209,38 @@ export function BroadResults({
           Show hidden
         </label>
       </div>
-      {job.coverage && (
-        <p>
-          All {job.coverage.singles.toLocaleString()} one-for-ones checked ·{" "}
-          {job.coverage.extensions.toLocaleString()} larger packages evaluated ·{" "}
-          {job.coverage.opponents}{" "}
-          {job.coverage.opponents === 1 ? "team" : "teams"}
-          {job.coverage.missingTeams?.length ? ` · Couldn't search: ${job.coverage.missingTeams.map((id) => String(m.dataset.tables.ModelTeams.find((team) => String(team.TeamID) === id)?.TeamName ?? id)).join(", ")}` : ""}
-        </p>
-      )}
+      {job.coverage && (() => {
+        const cov = job.coverage as { possible?: number; singles?: number; kept?: number; extensions?: number; opponents: number; missingTeams?: string[] };
+        const possible = cov.possible ?? cov.singles ?? 0;
+        const kept = cov.kept ?? cov.extensions ?? 0;
+        return (
+          <>
+            {readLineupBasis(s.query.lineupBasis) === "marked-starters" && (
+              <p className="gd-quiet">
+                Find trades uses best-available lineups. Your Marked starters
+                setting applies in the Trade analyzer.
+              </p>
+            )}
+            <p>
+              Checked all {possible.toLocaleString()} possible trades ·{" "}
+              {kept.toLocaleString()} raise your EPPG · {cov.opponents}{" "}
+              {cov.opponents === 1 ? "team" : "teams"}
+              {cov.missingTeams?.length
+                ? ` · Couldn't search: ${cov.missingTeams
+                    .map(
+                      (id) =>
+                        String(
+                          m.dataset.tables.ModelTeams.find(
+                            (team) => String(team.TeamID) === id,
+                          )?.TeamName ?? id,
+                        ),
+                    )
+                    .join(", ")}`
+                : ""}
+            </p>
+          </>
+        );
+      })()}
       <div ref={listRef} className="gd-card gd-res" data-motion="M22">
         <div className="gd-res-grid gd-res-head">
           <span>You give → You get</span>
@@ -235,7 +264,7 @@ export function BroadResults({
       )}
       {/* Explain whether the search found nothing or filters hid its retained trades. */}
       {job.status === "complete" && job.total === 0 && (
-        <p>No legal trades change anyone's lineup with these players and teams. Try loosening I give, I get, Exclude, Teams or Never trade.</p>
+        <p>No trade with any team raises your EPPG.</p>
       )}
       {job.status === "complete" && job.total > 0 && job.visibleTotal === 0 && (
         <div>
@@ -245,13 +274,21 @@ export function BroadResults({
           <button type="button" className="gd-cbtn" onClick={() => s.updateBroad({ filters: defaultTradeFilters(s.broad.filters) })}>Reset to defaults</button>
         </div>
       )}
-      {s.showHidden &&
-        job.hiddenRows?.map(({ row, reasons }) => (
-          <div className="gd-quiet" key={`hidden-${row.key}`}>
-            {names(row.give ?? [])} → {names(row.get)} · Hidden:{" "}
-            {reasons.map((key) => reason[key] ?? key).join(", ")}
-          </div>
-        ))}
+      {s.showHidden && (
+        <div className="gd-hidden-section">
+          <h4>
+            Showing {job.hiddenRows?.length ?? 0} of{" "}
+            {(job.hiddenTotal ?? job.hiddenRows?.length ?? 0).toLocaleString()} hidden
+            trades
+          </h4>
+          {job.hiddenRows?.map(({ row, reasons }) => (
+            <div className="gd-quiet" key={`hidden-${row.key}`}>
+              {names(row.give ?? [])} → {names(row.get)} · Hidden:{" "}
+              {reasons.map((key) => reason[key] ?? key).join(", ")}
+            </div>
+          ))}
+        </div>
+      )}
       <details className="gd-diag">
         <summary>Diagnostics</summary>
         <div className="gd-fg-body" style={{ marginTop: 10 }}>

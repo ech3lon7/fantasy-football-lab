@@ -1,29 +1,60 @@
 import { describe, expect, it } from "vitest";
 import { evaluate } from "../src/domain/valuation";
-import { runUsefulTradeSearch } from "../src/domain/useful-trade-adapter";
 import { lineup, withLineupMemo } from "../src/domain/lineups";
-import { mergeCoverage, partition, poolSize, runPooled, MAX_POOL } from "../src/workers/trade-search-pool";
+import {
+  mergeCoverage,
+  partition,
+  poolSize,
+  runPooled,
+  MAX_POOL,
+} from "../src/workers/trade-search-pool";
 import { fairChainFixture } from "./chain-fixture";
+import {
+  runCompleteTradeSearch,
+  type CompleteTrade,
+} from "../src/domain/complete-trade-search";
 
 describe("search pool sizing and partitioning", () => {
   // A failed helper retries only its slice and still contributes to measured coverage.
   it("retries a failed helper without losing an opponent", async () => {
     let index = 0;
     const retried: string[][] = [];
-    const coverage = { singles: 1, extensions: 0, opponents: 1, beamCutoffs: 0, beamCutoffsByTeam: {}, floorSkipped: 0, floorSkippedByTeam: {} };
+    const coverage = { possible: 10, scored: 5, kept: 2, opponents: 1 };
     const spawn = () => {
       const fail = index++ === 1;
-      const worker = { onmessage: null as ((event: { data: unknown }) => void) | null,
-        onerror: null as (() => void) | null, terminate: () => undefined,
-        postMessage: () => queueMicrotask(() => fail ? worker.onerror?.() : worker.onmessage?.({ data: { type: "done", rows: [], coverage } })) };
+      const worker = {
+        onmessage: null as ((event: { data: unknown }) => void) | null,
+        onerror: null as (() => void) | null,
+        terminate: () => undefined,
+        postMessage: () =>
+          queueMicrotask(() =>
+            fail
+              ? worker.onerror?.()
+              : worker.onmessage?.({
+                  data: { type: "done", rows: [], coverage },
+                }),
+          ),
+      };
       return worker as unknown as Worker;
     };
-    const result = await runPooled({} as never, [["a"], ["b"]], spawn, () => undefined, undefined,
-      async (slice) => { retried.push(slice); return { rows: [], coverage }; });
+    const result = await runPooled(
+      {} as never,
+      [["a"], ["b"]],
+      spawn,
+      () => undefined,
+      async (slice) => {
+        retried.push(slice);
+        return { rows: [], coverage };
+      },
+    );
     expect(retried).toEqual([["b"]]);
     expect(result.coverage.opponents).toBe(2);
+    expect(result.coverage.possible).toBe(20);
+    expect(result.coverage.scored).toBe(10);
+    expect(result.coverage.kept).toBe(4);
     expect(result.missing).toEqual([]);
   });
+
   it("uses one helper per core but one, at most four, never more than the opponents", () => {
     expect(poolSize(11, 8, true)).toBe(MAX_POOL);
     expect(poolSize(11, 4, true)).toBe(3);
@@ -43,12 +74,17 @@ describe("search pool sizing and partitioning", () => {
     expect(partition(["a"], 4)).toEqual([["a"]]);
   });
 
-  it("adds coverage counts and keeps each team's beam cut-offs", () => {
+  it("adds coverage counts", () => {
     const merged = mergeCoverage([
-      { singles: 10, extensions: 5, opponents: 2, beamCutoffs: 3, beamCutoffsByTeam: { "2": { "1:2": 3 } }, floorSkipped: 1, floorSkippedByTeam: { "2": { "1:2": 1 } } },
-      { singles: 7, extensions: 1, opponents: 1, beamCutoffs: 0, beamCutoffsByTeam: {}, floorSkipped: 0, floorSkippedByTeam: {} },
+      { possible: 100, scored: 50, kept: 10, opponents: 2 },
+      { possible: 70, scored: 30, kept: 5, opponents: 1 },
     ]);
-    expect(merged).toEqual({ singles: 17, extensions: 6, opponents: 3, beamCutoffs: 3, beamCutoffsByTeam: { "2": { "1:2": 3 } }, floorSkipped: 1, floorSkippedByTeam: { "2": { "1:2": 1 } } });
+    expect(merged).toEqual({
+      possible: 170,
+      scored: 80,
+      kept: 15,
+      opponents: 3,
+    });
   });
 });
 
@@ -56,18 +92,54 @@ describe("a pooled search equals the single-threaded search", () => {
   it("gives the same trades and the same numbers when opponents are searched in separate slices", async () => {
     const raw = await fairChainFixture();
     const m = evaluate(raw, raw.settings);
-    const opponents = [...new Set(m.players.map((p) => p.owner))].filter((o) => o && o !== "0" && o !== "1");
+    const opponents = [...new Set(m.players.map((p) => p.owner))].filter(
+      (o) => o && o !== "0" && o !== "1",
+    );
     expect(opponents.length).toBeGreaterThanOrEqual(2);
-    const summarize = (rows: Awaited<ReturnType<typeof runUsefulTradeSearch>>["rows"]) =>
+    const manager = { version: 1 as const, profiles: {} };
+
+    const wholeRows: CompleteTrade[] = [];
+    const wholeCov = await runCompleteTradeSearch(
+      m,
+      "1",
+      undefined,
+      manager,
+      opponents,
+      (ev) => {
+        if (ev.done) wholeRows.push(...ev.rows);
+      },
+    );
+
+    const sliceRows: CompleteTrade[] = [];
+    let slicePossible = 0;
+    let sliceScored = 0;
+    let sliceKept = 0;
+
+    for (const opp of opponents) {
+      const cov = await runCompleteTradeSearch(
+        m,
+        "1",
+        undefined,
+        manager,
+        [opp],
+        (ev) => {
+          if (ev.done) sliceRows.push(...ev.rows);
+        },
+      );
+      slicePossible += cov.possible;
+      sliceScored += cov.scored;
+      sliceKept += cov.kept;
+    }
+
+    const summarize = (rows: CompleteTrade[]) =>
       rows
-        .flatMap(({ trade, variants }) => [trade, ...variants])
-        .map((t) => `${t.searchRow.key}|${t.own?.toFixed(6)}|${t.other?.toFixed(6)}`)
+        .map((t) => `${t.key}|${t.own.toFixed(6)}|${t.other.toFixed(6)}`)
         .sort();
-    const whole = await runUsefulTradeSearch(m, "1", [], "best-available");
-    const slices = await Promise.all(opponents.map((o) => runUsefulTradeSearch(m, "1", [], "best-available", undefined, undefined, undefined, [o])));
-    expect(summarize(slices.flatMap((s) => s.rows))).toEqual(summarize(whole.rows));
-    expect(slices.reduce((n, s) => n + s.coverage.singles, 0)).toBe(whole.coverage.singles);
-    expect(slices.reduce((n, s) => n + s.coverage.extensions, 0)).toBe(whole.coverage.extensions);
+
+    expect(summarize(sliceRows)).toEqual(summarize(wholeRows));
+    expect(slicePossible).toBe(wholeCov.possible);
+    expect(sliceScored).toBe(wholeCov.scored);
+    expect(sliceKept).toBe(wholeCov.kept);
   });
 });
 
@@ -83,6 +155,8 @@ describe("the lineup memo", () => {
       expect(lineup(m, ids, m.current, false, false, "expected")).toBe(first);
     });
     // Outside the memo every call builds a new object, so no caller ever shares one.
-    expect(lineup(m, ids, m.current, false, false, "expected")).not.toBe(lineup(m, ids, m.current, false, false, "expected"));
+    expect(lineup(m, ids, m.current, false, false, "expected")).not.toBe(
+      lineup(m, ids, m.current, false, false, "expected"),
+    );
   });
 });

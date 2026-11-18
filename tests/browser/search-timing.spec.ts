@@ -11,7 +11,7 @@ test("broad search timing on a 12-team league", async ({ page }) => {
   const t0 = Date.now();
   await expect(page.getByRole("region", { name: "Trade search results" }).locator("article").first()).toBeVisible({ timeout: 120000 });
   const firstRows = (Date.now() - t0) / 1000;
-  const coverage = page.getByText(/one-for-ones checked/);
+  const coverage = page.getByText(/possible trades/);
   await expect(coverage).toBeVisible({ timeout: 540000 });
   const full = (Date.now() - t0) / 1000;
   const text = await coverage.innerText();

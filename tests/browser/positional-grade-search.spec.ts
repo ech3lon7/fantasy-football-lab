@@ -113,7 +113,7 @@ test.describe("Positional Grade Search E2E", () => {
     await seedWorkspace(page, "starter");
     await expect(page.locator(".gd-find")).toBeVisible();
     await page.getByRole("dialog", { name: "Trade filters" }).getByRole("button", { name: "Search", exact: true }).click();
-    await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+    await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 60000 });
     const topRows = page.locator(".gd-res > .gd-res-group > .gd-res-row");
     await expect(topRows.first()).toBeVisible();
     // Let the streamed list settle before measuring it.
@@ -140,7 +140,7 @@ test.describe("Positional Grade Search E2E", () => {
     await expect(goals.locator(".gd-goal-line")).toContainText(/^Your WR/);
 
     // The list narrows at once: no new search ran, and every row left shows the WR upgrade as a grade-step chip.
-    await expect(page.getByText(/one-for-ones checked/)).toHaveCount(1);
+    await expect(page.getByText(/possible trades/)).toHaveCount(1);
     await expect.poll(() => tradeCount(page).then((n) => (Number.isNaN(n) ? Infinity : n))).toBeLessThanOrEqual(before);
     await expect(topRows.first()).toBeVisible();
     const rows = await topRows.count();

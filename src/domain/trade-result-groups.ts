@@ -33,12 +33,12 @@ export interface TradeResultView {
 export const tradeResultPageSize = 50;
 
 // Filter the entire ranked result set before paging distinct incoming packages independently for each team.
-export function browseTradeResults(
+export function browseTradeResults<T extends Pick<SearchRow, "key" | "teamB" | "give" | "get">>(
   m: Model,
-  rows: SearchRow[],
+  rows: T[],
   options = emptyTradeBrowse(),
   defaultGive: string[] = [],
-) {
+): { rows: T[]; view: TradeResultView } {
   const normalize = (text: string) =>
     text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().trim();
   const terms = (text: string) =>
@@ -66,7 +66,7 @@ export function browseTradeResults(
     excluded.some((token) =>
       ids.some((id) => names.get(id)?.includes(token)),
     );
-  const teams = new Map<string, Map<string, SearchRow[]>>();
+  const teams = new Map<string, Map<string, T[]>>();
   for (const row of rows) {
     const give = row.give ?? defaultGive;
     if (
@@ -83,7 +83,7 @@ export function browseTradeResults(
     packages.get(key)!.push(row);
   }
   // Send one best-ranked offer per package initially; alternative pages are fetched only after an explicit expansion.
-  const visible: SearchRow[] = [];
+  const visible: T[] = [];
   const view: TradeResultView = { totalOffers: 0, totalPackages: 0, teams: [] };
   for (const [team, packages] of teams) {
     const group: TradeResultView["teams"][number] = {

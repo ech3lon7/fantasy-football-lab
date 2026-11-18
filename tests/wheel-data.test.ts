@@ -40,9 +40,9 @@ describe("the wheel sets the same filter state as the list", () => {
     const { data, state } = await setup();
     data().setNumber("yourGain", 1, null);
     expect(state().yourGain).toEqual({ minimum: 1, maximum: null });
-    data().setNumber("yourGain", -3, 4);
+    data().setNumber("yourGain", 0, 4);
     expect(state().yourGain).toEqual({ minimum: null, maximum: 4 });
-    expect(data().getNumber("yourGain")).toEqual({ lo: -3, hi: 4 });
+    expect(data().getNumber("yourGain")).toEqual({ lo: 0, hi: 4 });
   });
 
   it("toggles positions to get and to give, and incoming labels", async () => {
@@ -97,7 +97,7 @@ describe("the wheel sets the same filter state as the list", () => {
     data().setNumber("yourGain", 5, null);
     data().clear();
     expect(state()).toEqual(defaultTradeFilters());
-    expect(state().theirGain).toBe(1);
+    expect(state().theirGain).toBe(-2);
     expect(state().yourGain.minimum).toBe(0);
   });
 });

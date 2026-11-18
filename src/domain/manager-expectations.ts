@@ -4,6 +4,13 @@ import { surfaceAppeal, type SurfaceComparison } from "./surface-appeal";
 import type { Model } from "./valuation";
 import type { TradeResult } from "./trades";
 
+export type MinimalManagerTrade = {
+  valid: boolean;
+  legality?: boolean;
+  initialB: string[];
+  legalB: string[];
+};
+
 // Version these provisional operating assumptions independently from player values and app releases.
 export const managerRulesVersion = "surface-manager-1";
 export const managerPresetNames = [
@@ -206,14 +213,14 @@ const comparisonCache = new WeakMap<
 export function managerAssessment(
   m: Model,
   draft: Draft,
-  trade: TradeResult,
-  settings: ManagerSettings,
+  trade: TradeResult | MinimalManagerTrade,
+  settings?: ManagerSettings,
 ): ManagerAssessment {
-  const profile = settings.profiles[draft.teamB] ?? {
+  const profile = settings?.profiles?.[draft.teamB] ?? {
       preset: 2,
       cornerstones: [],
     },
-    preset = settings.override ?? profile.preset;
+    preset = settings?.override ?? profile.preset;
   const policy = managerPresets[preset],
     ranks = surfaceRanks(m);
   const result: ManagerAssessment = {

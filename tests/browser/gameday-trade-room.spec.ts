@@ -192,7 +192,7 @@ test("a positional grade goal shows a plain-language line", async ({ page }) => 
   await open(page);
   await page.getByRole("tab", { name: "Find trades" }).click();
   await page.getByRole("dialog", { name: "Trade filters" }).getByRole("button", { name: "Search", exact: true }).click();
-  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 60000 });
   // The filter list is gone: the goals editor opens from the wheel's Grades category.
   await page.getByRole("dialog", { name: "Trade filters" }).getByRole("menuitem", { name: /^Grades/ }).locator(".gd-seg-hit").click();
   await page.locator(".gd-goals").getByRole("button", { name: "+ Add goal" }).click();

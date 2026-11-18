@@ -209,8 +209,7 @@ export function PlayCallScene({
           you
         </text>
         <text className="gd-pc-count" x="320" y="192" textAnchor="middle">
-          {doneCount}/{opponents.length} teams · {singles.toLocaleString()}{" "}
-          one-for-ones · {packages.toLocaleString()} packages
+          {doneCount}/{opponents.length} teams · {singles.toLocaleString()} possible trades · {packages.toLocaleString()} raise your EPPG
         </text>
       </svg>
     </div>

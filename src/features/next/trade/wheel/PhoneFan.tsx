@@ -61,8 +61,13 @@ export function PhoneFan({
     option && (option.kind === "slider" || option.kind === "range")
       ? data.getNumber(option.id)
       : null;
+  const isPanelToggles =
+    option?.kind === "toggles" &&
+    (option.id === "roles" ||
+      option.id === "listRules" ||
+      option.id === "looksBetter");
   const toggles =
-    option?.kind === "toggles" && option.id !== "roles"
+    option?.kind === "toggles" && !isPanelToggles
       ? data.getToggles(option.id)
       : [];
   const shownToggles = toggles.slice(page * 8, page * 8 + 8);
@@ -403,20 +408,28 @@ export function PhoneFan({
   // Lists and editors that do not fit on a circle sit above the fan.
   function panelFor() {
     if (!option) return null;
-    if (option.id === "roles")
+    if (option.id === "roles" || option.id === "listRules" || option.id === "looksBetter")
       return (
-        <div className="gd-fan-panel" role="group" aria-label="Roles">
-          {data.getToggles("roles").map((t) => (
+        <div className="gd-fan-panel" role="group" aria-label={option.label}>
+          {data.getToggles(option.id).map((t) => (
             <button
               key={t.key}
               type="button"
               role="menuitemcheckbox"
               aria-checked={t.on}
               className="gd-panel-item"
-              onClick={() => data.setToggle("roles", t.key, !t.on)}
+              aria-disabled={t.disabled}
+              disabled={t.disabled}
+              title={t.hint}
+              onClick={() =>
+                !t.disabled && data.setToggle(option.id, t.key, !t.on)
+              }
             >
-              {t.on ? "✓ " : ""}
-              {t.label}
+              <span>
+                {t.on ? "✓ " : ""}
+                {t.label}
+              </span>
+              {t.hint && <span className="gd-panel-hint">{t.hint}</span>}
             </button>
           ))}
         </div>

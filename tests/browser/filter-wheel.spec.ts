@@ -36,7 +36,7 @@ async function runSearch(page: Page, timeout = 240000) {
   await wheel(page)
     .getByRole("button", { name: "Search", exact: true })
     .click();
-  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout });
+  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout });
 }
 
 async function searchFind(
@@ -695,7 +695,7 @@ test.describe("the play-call scene while a search runs (A12)", () => {
     await expect(
       scene.locator('.gd-pc-route[data-on="true"]').first(),
     ).toBeAttached({ timeout: 30000 });
-    await expect(scene.getByText(/teams ·.*one-for-ones/)).toBeVisible();
+    await expect(scene.getByText(/teams ·.*possible trades/)).toBeVisible();
     // The scene is decoration: hidden from assistive technology, while the plain progress status stays.
     await expect(scene).toHaveAttribute("aria-hidden", "true");
     await expect(
@@ -705,7 +705,7 @@ test.describe("the play-call scene while a search runs (A12)", () => {
         .first(),
     ).toBeVisible();
     // It ends by folding into the coverage line.
-    await expect(page.getByText(/one-for-ones checked/)).toBeVisible({
+    await expect(page.getByText(/possible trades/)).toBeVisible({
       timeout: 240000,
     });
     await expect(scene).toHaveCount(0, { timeout: 3000 });
@@ -751,7 +751,7 @@ test.describe("the play-call scene while a search runs (A12)", () => {
     await expect(
       scene.locator(".gd-pc-x, .gd-pc-route, .gd-pc-circle"),
     ).toHaveCount(0);
-    await expect(page.getByText(/one-for-ones checked/)).toBeVisible({
+    await expect(page.getByText(/possible trades/)).toBeVisible({
       timeout: 240000,
     });
     await expect(scene).toHaveCount(0, { timeout: 3000 });
@@ -763,7 +763,7 @@ test.describe("the play-call scene while a search runs (A12)", () => {
     test.setTimeout(420000);
     await startSearch(page, "off");
     await expect(page.locator(".gd-playcall")).toHaveCount(0);
-    await expect(page.getByText(/one-for-ones checked/)).toBeVisible({
+    await expect(page.getByText(/possible trades/)).toBeVisible({
       timeout: 240000,
     });
     await expect(page.locator(".gd-playcall")).toHaveCount(0);

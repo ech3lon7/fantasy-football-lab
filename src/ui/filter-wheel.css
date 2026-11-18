@@ -353,6 +353,19 @@
   color: var(--gw-yellow);
   border-color: var(--gw-yellow);
 }
+:root[data-gameday] .gd-panel-item:disabled,
+:root[data-gameday] .gd-panel-item[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: transparent;
+  color: var(--gw-chalk);
+}
+:root[data-gameday] .gd-panel-hint {
+  display: block;
+  font-size: 13px;
+  color: var(--gw-faint);
+  font-family: var(--gw-hand);
+}
 :root[data-gameday] .gd-panel-row {
   display: flex;
   gap: 8px;

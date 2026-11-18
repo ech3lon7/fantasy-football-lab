@@ -75,7 +75,7 @@ test("full league keeps streamed trades and explains filter totals", async ({ pa
   await openFind(page);
   await recordStream(page);
   await page.getByRole("button", { name: /^(Search|Search all trades)$/ }).click();
-  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 360000 });
+  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 360000 });
   const before = await counts(page);
   expect(before.total).toBeGreaterThan(0);
   if (before.shown === 0) {
@@ -109,7 +109,7 @@ test("old offered-player settings start at defaults", async ({ page }) => {
   await openFind(page, { tradeSearchSettings: old });
   await expect(page.getByText("Your old Find trades settings don't apply to the new search, so filters start at the defaults.")).toBeVisible();
   await page.getByRole("button", { name: /^(Search|Search all trades)$/ }).click();
-  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 360000 });
+  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 360000 });
   expect((await counts(page)).shown).toBeGreaterThan(0);
   await wheel(page).getByRole("menuitem", { name: /^Gains/ }).click();
   await wheel(page).getByRole("menuitem", { name: /^Their EPPG/ }).click();

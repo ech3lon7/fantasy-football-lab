@@ -353,7 +353,223 @@ export interface PositionGrade {
   advice: string;
   status: string;
 }
-export function teamsAssessment(m: Model): Map<string, PositionGrade[]> {
+export interface TeamsAssessmentCache {
+  baseRows: Map<string, PositionGrade[]>;
+  baseValuesByPos?: Map<string, { team: string; value: number }[]>;
+  fastScorer?: (ids: string[]) => Record<string, number | null>;
+}
+
+export function buildTeamPositionRows(
+  m: Model,
+  ids: string[],
+  gradesOnly?: boolean,
+): PositionGrade[] {
+  const ls = horizon(m, ids),
+    core = gradesOnly ? null : new Set(lineup(m, ids, m.current, false, true).ids),
+    bag = ids.map((id) => m.byId.get(id)!);
+  return [...positions.slice(0, 4), "FLEX", "K", "D/ST"].map((pos) => {
+    const count = num(
+        m.dataset.tables.ModelContext[0][
+          pos === "FLEX" ? "FlexSlots" : fields[pos as Position]
+        ],
+      ),
+      eligible = bag.filter((p) =>
+        pos === "FLEX" ? ["RB", "WR", "TE"].includes(p.pos) : p.pos === pos,
+      ),
+      denom = count * m.weeks.length;
+    const starterValue = denom
+        ? sum(
+            ls.map((l) =>
+              sum(
+                l.ids.map((id, i) =>
+                  l.slots[i] === pos && id ? (m.byId.get(id)?.value ?? 0) : 0,
+                ),
+              ),
+            ),
+          ) / denom
+        : null;
+    if (gradesOnly) {
+      return {
+        position: pos,
+        grade: "n.a.",
+        rostered: eligible.length,
+        usable: eligible.filter((p) => p.value !== null).length,
+        injuries: 0,
+        starterValue,
+        median: null,
+        versus: null,
+        coverage: null,
+        reserves: [],
+        balance: "",
+        advice: "",
+        status: "Available",
+      } as PositionGrade;
+    }
+    const coverage = denom
+      ? sum(
+          ls.map(
+            (l) => l.ids.filter((id, i) => id && l.slots[i] === pos).length,
+          ),
+        ) / denom
+      : null;
+    const reserves =
+      pos === "FLEX"
+        ? []
+        : eligible
+            .filter(
+              (p) =>
+                p.value !== null &&
+                p.baseline !== null &&
+                p.value > p.baseline &&
+                !p.uncertain &&
+                p.available > 0 &&
+                !core!.has(p.id),
+            )
+            .sort((a, b) => b.value! - a.value! || cmpId(a.id, b.id));
+    return {
+      position: pos,
+      grade: "n.a.",
+      rostered: eligible.length,
+      usable: eligible.filter((p) => p.value !== null).length,
+      injuries: eligible.filter((p) => p.uncertain).length,
+      starterValue,
+      median: null,
+      versus: null,
+      coverage,
+      reserves,
+      balance: "",
+      advice: "",
+      status: eligible.some((p) => p.value === null)
+        ? "CONDITIONAL - missing player values"
+        : eligible.some((p) => p.uncertain)
+          ? "CONDITIONAL - injury availability"
+          : "Available",
+    } as PositionGrade;
+  });
+}
+
+export function createTeamsAssessmentCache(m: Model): TeamsAssessmentCache {
+  const baseRows = new Map<string, PositionGrade[]>();
+  const baseValuesByPos = new Map<string, { team: string; value: number }[]>();
+  for (const t of m.dataset.tables.ModelTeams) {
+    const team = String(t.TeamID);
+    const rows = buildTeamPositionRows(m, roster(m, team));
+    baseRows.set(team, rows);
+    for (const r of rows) {
+      if (r.usable === r.rostered && r.starterValue !== null) {
+        let arr = baseValuesByPos.get(r.position);
+        if (!arr) {
+          arr = [];
+          baseValuesByPos.set(r.position, arr);
+        }
+        arr.push({ team, value: r.starterValue });
+      }
+    }
+  }
+
+  const ctx = m.dataset.tables.ModelContext[0];
+  const slotPlan: [string, number][] = [
+    ["QB", num(ctx.QBSlots)],
+    ["RB", num(ctx.RBSlots)],
+    ["WR", num(ctx.WRSlots)],
+    ["TE", num(ctx.TESlots)],
+    ["FLEX", num(ctx.FlexSlots)],
+    ["K", num(ctx.KSlots)],
+    ["D/ST", num(ctx.DSTSlots)],
+  ];
+  const weeks = m.weeks;
+  const numWeeks = weeks.length;
+  const curWeekIdx = weeks.indexOf(m.current);
+
+  interface FastP {
+    id: string;
+    pos: string;
+    value: number;
+    availMask: number;
+  }
+  const playerMap = new Map<string, FastP>();
+  for (const p of m.players) {
+    let mask = 0;
+    if (p.value !== null) {
+      for (let i = 0; i < numWeeks; i++) {
+        if (available(m, p, weeks[i], false)) mask |= 1 << i;
+      }
+    }
+    playerMap.set(p.id, {
+      id: p.id,
+      pos: p.pos,
+      value: p.value ?? 0,
+      availMask: mask,
+    });
+  }
+
+  const fastScorer = (teamIds: string[]): Record<string, number | null> => {
+    const ir = new Set(irAssignments(m, teamIds));
+    const bag: FastP[] = [];
+    for (let i = 0; i < teamIds.length; i++) {
+      const p = playerMap.get(teamIds[i]);
+      if (p && m.byId.get(teamIds[i])?.value !== null) bag.push(p);
+    }
+    bag.sort((a, b) => b.value - a.value || cmpId(a.id, b.id));
+
+    const posTotals: Record<string, number> = {
+      QB: 0,
+      RB: 0,
+      WR: 0,
+      TE: 0,
+      FLEX: 0,
+      K: 0,
+      "D/ST": 0,
+    };
+
+    for (let wi = 0; wi < numWeeks; wi++) {
+      const bit = 1 << wi;
+      const isCur = wi === curWeekIdx;
+      const used = new Set<string>();
+
+      for (let s = 0; s < slotPlan.length; s++) {
+        const pos = slotPlan[s][0];
+        const count = slotPlan[s][1];
+        let filled = 0;
+
+        for (let j = 0; j < bag.length; j++) {
+          if (filled >= count) break;
+          const p = bag[j];
+          if (used.has(p.id)) continue;
+          if (!(p.availMask & bit)) continue;
+          if (isCur && ir.has(p.id)) continue;
+          if (
+            pos === "FLEX"
+              ? p.pos !== "RB" && p.pos !== "WR" && p.pos !== "TE"
+              : p.pos !== pos
+          )
+            continue;
+
+          used.add(p.id);
+          posTotals[pos] += p.value;
+          filled++;
+        }
+      }
+    }
+
+    const res: Record<string, number | null> = {};
+    for (let s = 0; s < slotPlan.length; s++) {
+      const pos = slotPlan[s][0];
+      const count = slotPlan[s][1];
+      const denom = count * numWeeks;
+      res[pos] = denom ? posTotals[pos] / denom : null;
+    }
+    return res;
+  };
+
+  return { baseRows, baseValuesByPos, fastScorer };
+}
+
+export function applyPositionGrades(
+  m: Model,
+  result: Map<string, PositionGrade[]>,
+  gradesOnly?: boolean,
+) {
   const s = m.settings,
     bands: [number, string][] = [
       [-Infinity, "F"],
@@ -370,98 +586,46 @@ export function teamsAssessment(m: Model): Map<string, PositionGrade[]> {
       [s.GradeA, "A"],
       [s.GradeAPlus, "A+"],
     ];
-  const result = new Map<string, PositionGrade[]>();
-  for (const t of m.dataset.tables.ModelTeams) {
-    const team = String(t.TeamID),
-      ids = roster(m, team),
-      ls = horizon(m, ids),
-      core = new Set(lineup(m, ids, m.current, false, true).ids),
-      bag = ids.map((id) => m.byId.get(id)!);
-    const rows = [...positions.slice(0, 4), "FLEX", "K", "D/ST"].map((pos) => {
-      const count = num(
-          m.dataset.tables.ModelContext[0][
-            pos === "FLEX" ? "FlexSlots" : fields[pos as Position]
-          ],
-        ),
-        eligible = bag.filter((p) =>
-          pos === "FLEX" ? ["RB", "WR", "TE"].includes(p.pos) : p.pos === pos,
-        ),
-        denom = count * m.weeks.length;
-      const starterValue = denom
-          ? sum(
-              ls.map((l) =>
-                sum(
-                  l.ids.map((id, i) =>
-                    l.slots[i] === pos && id ? (m.byId.get(id)?.value ?? 0) : 0,
-                  ),
-                ),
-              ),
-            ) / denom
-          : null,
-        coverage = denom
-          ? sum(
-              ls.map(
-                (l) => l.ids.filter((id, i) => id && l.slots[i] === pos).length,
-              ),
-            ) / denom
-          : null;
-      const reserves =
-        pos === "FLEX"
-          ? []
-          : eligible
-              .filter(
-                (p) =>
-                  p.value !== null &&
-                  p.baseline !== null &&
-                  p.value > p.baseline &&
-                  !p.uncertain &&
-                  p.available > 0 &&
-                  !core.has(p.id),
-              )
-              .sort((a, b) => b.value! - a.value! || cmpId(a.id, b.id));
-      return {
-        position: pos,
-        grade: "n.a.",
-        rostered: eligible.length,
-        usable: eligible.filter((p) => p.value !== null).length,
-        injuries: eligible.filter((p) => p.uncertain).length,
-        starterValue,
-        median: null,
-        versus: null,
-        coverage,
-        reserves,
-        balance: "",
-        advice: "",
-        status: eligible.some((p) => p.value === null)
-          ? "CONDITIONAL - missing player values"
-          : eligible.some((p) => p.uncertain)
-            ? "CONDITIONAL - injury availability"
-            : "Available",
-      } as PositionGrade;
-    });
-    result.set(team, rows);
-  }
-  for (const rows of result.values())
+
+  // Precompute medians by position once across all teams
+  const samplesByPos = new Map<string, number[]>();
+  for (const rows of result.values()) {
     for (const row of rows) {
-      const sample = [...result.values()]
-          .flat()
-          .filter(
-            (x) =>
-              x.position === row.position &&
-              x.usable === x.rostered &&
-              x.starterValue !== null,
-          )
-          .map((x) => x.starterValue!),
-        median = quantile(sample, 0.5);
+      if (row.usable === row.rostered && row.starterValue !== null) {
+        let arr = samplesByPos.get(row.position);
+        if (!arr) {
+          arr = [];
+          samplesByPos.set(row.position, arr);
+        }
+        arr.push(row.starterValue);
+      }
+    }
+  }
+
+  const mediansByPos = new Map<string, number | null>();
+  for (const [pos, sample] of samplesByPos) {
+    mediansByPos.set(pos, quantile(sample, 0.5));
+  }
+
+  for (const rows of result.values()) {
+    for (const row of rows) {
+      const median = mediansByPos.get(row.position) ?? null;
       row.median = median;
       row.versus =
         median !== null && median > 0 && row.starterValue !== null
           ? row.starterValue / median - 1
           : null;
-      if (row.usable === row.rostered && row.versus !== null)
-        row.grade = [...bands]
-          .reverse()
-          .find(([minimum]) => row.versus! >= minimum)![1];
+      if (row.usable === row.rostered && row.versus !== null) {
+        for (let b = bands.length - 1; b >= 0; b--) {
+          if (row.versus >= bands[b][0]) {
+            row.grade = bands[b][1];
+            break;
+          }
+        }
+      }
+
+      if (gradesOnly) continue;
+
       const pool =
         row.position === "FLEX"
           ? m.pools.find((p) => p.status !== "Available")
@@ -505,7 +669,133 @@ export function teamsAssessment(m: Model): Map<string, PositionGrade[]> {
                       ? "Check opponent and current-week ESPN projection."
                       : "Protect starters; no healthy above-replacement spare after FLEX.";
     }
+  }
+}
+
+export function teamsAssessmentWith(
+  m: Model,
+  changed?: Map<string, string[]>,
+  cache?: TeamsAssessmentCache,
+  gradesOnly?: boolean,
+): Map<string, PositionGrade[]> {
+  const c = cache ?? createTeamsAssessmentCache(m);
+  if (gradesOnly && changed && c.baseValuesByPos) {
+    const result = new Map<string, PositionGrade[]>();
+    const changedTeams = new Set(changed.keys());
+
+    const posList = ["QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"];
+    for (const [team, ids] of changed.entries()) {
+      const starterValues = c.fastScorer ? c.fastScorer(ids) : null;
+      if (starterValues) {
+        const bag = ids.map((id) => m.byId.get(id)!);
+        const rows: PositionGrade[] = posList.map((pos) => {
+          const eligible = bag.filter((p) =>
+            pos === "FLEX" ? ["RB", "WR", "TE"].includes(p.pos) : p.pos === pos,
+          );
+          return {
+            position: pos,
+            grade: "n.a.",
+            rostered: eligible.length,
+            usable: eligible.filter((p) => p.value !== null).length,
+            injuries: 0,
+            starterValue: starterValues[pos] ?? null,
+            median: null,
+            versus: null,
+            coverage: null,
+            reserves: [],
+            balance: "",
+            advice: "",
+            status: "Available",
+          };
+        });
+        result.set(team, rows);
+      } else {
+        result.set(team, buildTeamPositionRows(m, ids, true));
+      }
+    }
+
+    const s = m.settings,
+      bands: [number, string][] = [
+        [-Infinity, "F"],
+        [s.GradeDMinus, "D−"],
+        [s.GradeD, "D"],
+        [s.GradeDPlus, "D+"],
+        [s.GradeCMinus, "C−"],
+        [s.GradeC, "C"],
+        [s.GradeCPlus, "C+"],
+        [s.GradeBMinus, "B−"],
+        [s.GradeB, "B"],
+        [s.GradeBPlus, "B+"],
+        [s.GradeAMinus, "A−"],
+        [s.GradeA, "A"],
+        [s.GradeAPlus, "A+"],
+      ];
+
+    const medians = new Map<string, number | null>();
+    for (let p = 0; p < posList.length; p++) {
+      const pos = posList[p];
+      const baseEntries = c.baseValuesByPos.get(pos) ?? [];
+      const sample: number[] = [];
+      for (let i = 0; i < baseEntries.length; i++) {
+        const entry = baseEntries[i];
+        if (!changedTeams.has(entry.team)) {
+          sample.push(entry.value);
+        }
+      }
+      for (const chRows of result.values()) {
+        for (let i = 0; i < chRows.length; i++) {
+          const chRow = chRows[i];
+          if (chRow.position === pos && chRow.usable === chRow.rostered && chRow.starterValue !== null) {
+            sample.push(chRow.starterValue);
+          }
+        }
+      }
+      medians.set(pos, quantile(sample, 0.5));
+    }
+
+    for (const rows of result.values()) {
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const median = medians.get(row.position) ?? null;
+        row.median = median;
+        row.versus =
+          median !== null && median > 0 && row.starterValue !== null
+            ? row.starterValue / median - 1
+            : null;
+        if (row.usable === row.rostered && row.versus !== null) {
+          for (let b = bands.length - 1; b >= 0; b--) {
+            if (row.versus >= bands[b][0]) {
+              row.grade = bands[b][1];
+              break;
+            }
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  const result = new Map<string, PositionGrade[]>();
+  for (const t of m.dataset.tables.ModelTeams) {
+    const team = String(t.TeamID);
+    if (changed?.has(team)) {
+      result.set(team, buildTeamPositionRows(m, changed.get(team)!, gradesOnly));
+    } else {
+      const cached = c.baseRows.get(team);
+      result.set(
+        team,
+        cached
+          ? (gradesOnly ? cached.map((r) => ({ ...r })) : cached.map((r) => ({ ...r, reserves: [...r.reserves] })))
+          : buildTeamPositionRows(m, roster(m, team), gradesOnly),
+      );
+    }
+  }
+  applyPositionGrades(m, result, gradesOnly);
   return result;
+}
+
+export function teamsAssessment(m: Model): Map<string, PositionGrade[]> {
+  return teamsAssessmentWith(m);
 }
 
 export interface SuggestedSwap {

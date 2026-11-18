@@ -17,7 +17,7 @@ for (const width of [1320, 1000, 390]) test(`broad search filters retained resul
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
   await expect(wheel(page).getByRole("button", { name: "Search", exact: true })).toBeVisible();
   await wheel(page).getByRole("button", { name: "Search", exact: true }).click();
-  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 30000 });
   await expect(page.locator("[aria-label=\"Trade search results\"] article").first()).toBeVisible();
   // Their EPPG gain starts at +1 wherever the wheel is, and the arc sets it without a new search.
   await segment(page, /^Gains/).click();

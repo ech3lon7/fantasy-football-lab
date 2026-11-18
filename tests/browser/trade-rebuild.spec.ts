@@ -35,7 +35,7 @@ async function openFind(page: Page) {
 }
 async function runSearch(page: Page) {
   await wheel(page).getByRole("button", { name: "Search", exact: true }).click();
-  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 60000 });
 }
 // "212 ideas · 188 trades of 221 found" → { shown: 188, total: 221 }
 async function counts(page: Page) {
@@ -101,7 +101,7 @@ test.describe("Find trades: one search", () => {
       await expect(row.getByRole("button", { name: "Analyze" })).toBeVisible();
     }
     expect(await rows.locator(".gd-chipg").count()).toBeGreaterThan(0);
-    await expect(page.getByText(/^All [\d,]+ one-for-ones checked · [\d,]+ larger packages evaluated · \d+ teams?$/)).toBeVisible();
+    await expect(page.getByText(/^Checked all [\d,]+ possible trades · [\d,]+ raise your EPPG · \d+ teams?$/)).toBeVisible();
     const { shown, total } = await counts(page);
     expect(shown).toBeLessThanOrEqual(total);
   });
@@ -148,7 +148,7 @@ test.describe("Find trades: one search", () => {
     await expect.poll(async () => (await counts(page)).shown).toBe(before.shown + n);
     expect((await counts(page)).total).toBe(before.total);
     // No new search ran: there is still one coverage line, from the first search.
-    await expect(page.getByText(/one-for-ones checked/)).toHaveCount(1);
+    await expect(page.getByText(/possible trades/)).toHaveCount(1);
     // Putting the default back hides them again.
     for (let i = 0; i < 6; i++) await handle.press("ArrowRight");
     await expect(handle).toHaveAttribute("aria-valuenow", "0");

@@ -21,6 +21,8 @@ export interface WheelToggle {
   key: string;
   label: string;
   on: boolean;
+  disabled?: boolean;
+  hint?: string;
 }
 
 // Everything the wheel reads and writes. It is only a view of the filter state; nothing here is stored anywhere else.
@@ -64,7 +66,7 @@ const RANGES: Record<
   string,
   { min: number; max: number; key: "yourGain" | "ownWeek" | "otherWeek" }
 > = {
-  yourGain: { min: -3, max: 10, key: "yourGain" },
+  yourGain: { min: 0, max: 10, key: "yourGain" },
   ownWeek: { min: -10, max: 20, key: "ownWeek" },
   otherWeek: { min: -10, max: 20, key: "otherWeek" },
 };
@@ -158,7 +160,29 @@ export function findWheelData({
           label: str(t.TeamName),
           on: f.teams === null || f.teams.includes(str(t.TeamID)),
         }));
-      if (id === "roles")
+      if (id === "listRules") {
+        const giveEmpty = f.mustGive.length === 0;
+        const getEmpty = f.mustGet.length === 0;
+        return [
+          {
+            key: "giveOnly",
+            label: "I give: only these players",
+            on: f.giveOnly,
+            disabled: giveEmpty,
+            hint: giveEmpty ? "Add players to I give first" : undefined,
+          },
+          {
+            key: "getOnly",
+            label: "I get: only these players",
+            on: f.getOnly,
+            disabled: getEmpty,
+            hint: getEmpty ? "Add players to I get first" : undefined,
+          },
+        ];
+      }
+      if (id === "roles") {
+        const noGetMust = (f.mustGetRequired?.length ?? 0) === 0;
+        const noGiveMust = (f.mustGiveRequired?.length ?? 0) === 0;
         return [
           {
             key: "receiveStarts",
@@ -169,6 +193,29 @@ export function findWheelData({
             key: "giveStarts",
             label: "Everyone I send starts for them",
             on: f.giveStarts,
+          },
+          {
+            key: "mustGetStarts",
+            label: "My must incoming players start for me",
+            on: f.mustGetStarts,
+            disabled: noGetMust,
+            hint: noGetMust ? "Mark a player as must in I get" : undefined,
+          },
+          {
+            key: "mustGiveStarts",
+            label: "My must players start for them",
+            on: f.mustGiveStarts,
+            disabled: noGiveMust,
+            hint: noGiveMust ? "Mark a player as must in I give" : undefined,
+          },
+        ];
+      }
+      if (id === "looksBetter")
+        return [
+          {
+            key: "looksBetter",
+            label: "Their ESPN-average lineup goes up",
+            on: f.looksBetter,
           },
         ];
       return [];
@@ -192,7 +239,9 @@ export function findWheelData({
             on,
           ) as TradeFilters["labels"],
         });
+      if (id === "listRules") return update({ [key]: on } as Partial<TradeFilters>);
       if (id === "roles") return update({ [key]: on } as Partial<TradeFilters>);
+      if (id === "looksBetter") return update({ looksBetter: on });
       if (id === "teams") {
         const selected = f.teams ?? opponentIds;
         const next = on

@@ -114,7 +114,7 @@ const wheel = (page: Page) =>
 // Run the broad search from the inline wheel and wait for its coverage line.
 async function searchAll(page: Page, search: Locator) {
   await wheel(page).getByRole("button", { name: "Search", exact: true }).click();
-  await expect(search.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+  await expect(search.getByText(/possible trades/)).toBeVisible({ timeout: 60000 });
 }
 
 // Run the broad search, then narrow the retained results (instantly, with no new search) to what the test inspects:

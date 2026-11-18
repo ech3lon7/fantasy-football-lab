@@ -34,6 +34,7 @@ describe("wheel categories", () => {
       "Their EPPG",
       "Your MPPG",
       "Their MPPG",
+      "Looks better to them",
     ]);
   });
 
@@ -44,7 +45,7 @@ describe("wheel categories", () => {
 });
 
 describe("what counts as set", () => {
-  it("counts nothing at the defaults, which are your gain at least 0 and their gain at least +1", () => {
+  it("counts nothing at the defaults, which are your gain at least 0 and their gain at least -2", () => {
     const f = defaultTradeFilters();
     expect(activeFilterCount(f)).toBe(0);
     for (const c of categoriesFor("find"))
@@ -86,7 +87,7 @@ describe("hub wording", () => {
 
   it("summarises the category setting", () => {
     expect(hubSummary(defaultTradeFilters(), "gains")).toBe(
-      "Their EPPG at least +1",
+      "Their EPPG at least -2",
     );
     expect(
       hubSummary({ ...defaultTradeFilters(), mustGet: ["a", "b"] }, "players"),

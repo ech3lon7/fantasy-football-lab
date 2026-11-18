@@ -5,14 +5,18 @@ import { deficitProtectionFailures } from "../domain/trade-safeguards";
 import { gradeImpactFailures } from "../domain/chain-position-impact";
 import { findTradeRecoveries } from "../domain/trade-guidance";
 import { evaluate, type Model } from "../domain/valuation";
+import { withLineupMemo } from "../domain/lineups";
 import { applyRosterScenario } from "../domain/roster-scenarios";
-import { runUsefulTradeSearch } from "../domain/useful-trade-adapter";
-import type { TeamProgress, UsefulCoverage } from "../domain/useful-move-search";
+import {
+  runCompleteTradeSearch,
+  type CompleteTrade,
+  type CompleteCoverage,
+} from "../domain/complete-trade-search";
 import { partition, poolSize, runPooled } from "./trade-search-pool";
-import { readLineupBasis } from "../domain/trade-impact";
 import { resultRowView, type ResultRowView } from "../domain/view/search-rows";
 import { defaultTradeFilters, type TradeFilters } from "../domain/trade-filters";
 import { tradeFilterView } from "../domain/trade-filter-view";
+import { evaluateTrade } from "../domain/trades";
 import {
   scoreTradeMatch,
   matchesWeekly,
@@ -37,32 +41,160 @@ let retained:
   | {
       id: string;
       context: string;
-      rows: SearchRow[];
-      suggestions: SearchRow[];
+      rows: CompleteTrade[];
+      suggestions?: SearchRow[];
       stats: SearchStats;
       model: Model;
       query: TradeSearchQuery;
       lineupsRaw?: string;
-      filteredRows?: SearchRow[];
+      filteredRows?: CompleteTrade[];
       filters?: TradeFilters;
       sort?: SearchFilterSort;
+      protectedIds?: string[];
       showHidden?: boolean;
       limit?: number;
+      hydratedCache: Map<string, SearchRow>;
+      // Legacy fallback fields
+      legacyRows?: SearchRow[];
       useful?: boolean;
     }
   | undefined;
+
 const send = (message: SearchResponse) => self.postMessage(message);
+
 // Worker callbacks can update the current search while its asynchronous work yields.
-const currentRetained = (): typeof retained => retained;
+
+function hydrateTrade(
+  m: Model,
+  query: TradeSearchQuery,
+  lineupsRaw: string | undefined,
+  trade: CompleteTrade,
+  cache: Map<string, SearchRow>,
+): SearchRow {
+  const existing = cache.get(trade.key);
+  if (existing) return existing;
+
+  const queryWithBestAvailable: TradeSearchQuery = {
+    ...query,
+    give: trade.give,
+    count: trade.get.length,
+    below: 0,
+    above: 0,
+    lineupBasis: "best-available",
+  };
+  const incoming = trade.get.reduce(
+    (s, id) => s + (m.byId.get(id)?.index ?? 0),
+    0,
+  );
+  const outgoing = trade.give.reduce(
+    (s, id) => s + (m.byId.get(id)?.index ?? 0),
+    0,
+  );
+  const draft = {
+    teamA: query.teamA,
+    teamB: trade.teamB,
+    give: trade.give,
+    get: trade.get,
+  };
+  const evaluated = evaluateTrade(m, draft, false, lineupsRaw);
+  const searchRow = scoreTradeMatch(
+    m,
+    queryWithBestAvailable,
+    {
+      key: trade.key,
+      teamB: trade.teamB,
+      give: trade.give,
+      get: trade.get,
+      incoming,
+      outgoing,
+      difference: incoming - outgoing,
+    },
+    lineupsRaw,
+    evaluated,
+  );
+  searchRow.coreSwap = trade.seedKey;
+  searchRow.seedKey = trade.seedKey;
+  searchRow.filterEvidence = trade.filterEvidence;
+  searchRow.positionImpact = trade.filterEvidence.positionImpact;
+  cache.set(trade.key, searchRow);
+  return searchRow;
+}
+
+function hydrateRelatedTrade(
+  m: Model,
+  trade: CompleteTrade,
+  cache: Map<string, SearchRow>,
+): SearchRow {
+  const existing = cache.get(trade.key);
+  if (existing) return existing;
+
+  const incoming = trade.get.reduce(
+    (s, id) => s + (m.byId.get(id)?.index ?? 0),
+    0,
+  );
+  const outgoing = trade.give.reduce(
+    (s, id) => s + (m.byId.get(id)?.index ?? 0),
+    0,
+  );
+  const W = m.weeks.length || 1;
+  const searchRow: SearchRow = {
+    key: trade.key,
+    teamB: trade.teamB,
+    give: trade.give,
+    get: trade.get,
+    incoming,
+    outgoing,
+    difference: incoming - outgoing,
+    seedKey: trade.seedKey,
+    coreSwap: trade.seedKey,
+    filterEvidence: trade.filterEvidence,
+    positionImpact: trade.filterEvidence.positionImpact,
+    lineupBasis: "best-available",
+    own: trade.own,
+    other: trade.other,
+    ownTotal: trade.own * W,
+    otherTotal: trade.other * W,
+    grade: "Good deal",
+    surplus: "PASS",
+    points: "PASS",
+    legal: true,
+    warnings: [],
+    dropsA: [],
+    dropsB: [],
+    irA: [],
+    irB: [],
+  };
+  cache.set(trade.key, searchRow);
+  return searchRow;
+}
 
 // The display view of every row shown so far is scored here, once, and sent once: scoring a trade for display is heavy, and doing it
 // while the screen renders would hold up every animation. Rows the screen has not been sent a view for score themselves there.
-let viewState = { id: "", views: new Map<string, ResultRowView>(), sent: new Set<string>() };
-function newViews(state: NonNullable<typeof retained>, rows: SearchRow[]) {
-  if (viewState.id !== state.id) viewState = { id: state.id, views: new Map(), sent: new Set() };
+let viewState = {
+  id: "",
+  views: new Map<string, ResultRowView>(),
+  sent: new Set<string>(),
+};
+
+function newViews(
+  state: NonNullable<typeof retained>,
+  rows: SearchRow[],
+  hidden: { row: SearchRow; reasons: string[] }[] = [],
+) {
+  if (viewState.id !== state.id)
+    viewState = { id: state.id, views: new Map(), sent: new Set() };
   const out: Record<string, ResultRowView> = {};
-  const context = { teamA: state.query.teamA, give: state.query.give ?? [], basis: readLineupBasis(state.query.lineupBasis), lineupsRaw: state.lineupsRaw };
-  for (const row of rows) {
+  const context = {
+    teamA: state.query.teamA,
+    give: state.query.give ?? [],
+    basis: "best-available" as const,
+    lineupsRaw: state.lineupsRaw,
+  };
+  const allRows = [
+    ...rows,
+    ...hidden.map((h) => h.row),
+  ];
+  for (const row of allRows) {
     if (viewState.sent.has(row.key)) continue;
     let view = viewState.views.get(row.key);
     if (!view) {
@@ -78,59 +210,142 @@ function newViews(state: NonNullable<typeof retained>, rows: SearchRow[]) {
   }
   return out;
 }
+
 // Produce the same sorted, filtered page for live batches and completed searches.
 function filteredPayload(state: NonNullable<typeof retained>) {
-      const all = state.rows.flatMap((row) => [row, ...(row.variants ?? [])]);
-      const byKey = new Map(all.map((row) => [row.key, row]));
-      const evidence = all.flatMap((row) => row.filterEvidence ? [row.filterEvidence] : []);
-      const result = tradeFilterView(evidence, state.filters ?? defaultTradeFilters(), state.sort ?? "own", !!state.showHidden);
-      // Group packages by the search engine's stable one-for-one seed, keeping the best sorted result first.
-      const grouped = new Map<string, SearchRow>();
-      for (const item of result.visible) {
-        const row = byKey.get(item.key);
-        if (!row) continue;
-        const group = row.seedKey ?? row.key;
-        const next = { ...row, variants: [], related: [] }, existingGroup = grouped.get(group);
-        if (existingGroup) existingGroup.related!.push(next);
-        else grouped.set(group, next);
-      }
-      state.filteredRows = [...grouped.values()];
-      const hidden = result.hidden.flatMap(({ row, reasons }) => {
-        const original = byKey.get(row.key);
-        return original ? [{ row: original, reasons }] : [];
-      });
-      const page = state.filteredRows.slice(0, state.limit ?? 50);
-      return { ...browseTradeResults(state.model, state.filteredRows, undefined, []),
-        rows: page, views: newViews(state, page), groupsTotal: state.filteredRows.length,
-        total: result.total, visibleTotal: result.visible.length, counts: result.only, blocks: result.counts, hidden, stats: state.stats,
-        filters: state.filters, sort: state.sort };
- }
+  return withLineupMemo(() => {
+    const byKey = new Map(state.rows.map((row) => [row.key, row]));
+    const evidence = state.rows.map((row) => row.filterEvidence);
+    const result = tradeFilterView(
+      evidence,
+      state.filters ?? defaultTradeFilters(),
+      state.sort ?? "acceptance",
+      !!state.showHidden,
+      state.protectedIds ?? [],
+    );
+
+    // Group packages by the search engine's stable one-for-one seed, keeping the best sorted result first.
+    const grouped = new Map<
+      string,
+      CompleteTrade & { related: CompleteTrade[] }
+    >();
+    for (const item of result.visible) {
+      const row = byKey.get(item.key);
+      if (!row) continue;
+      const groupKey = row.seedKey ?? row.key;
+      const existingGroup = grouped.get(groupKey);
+      if (existingGroup) existingGroup.related.push(row);
+      else grouped.set(groupKey, { ...row, related: [] });
+    }
+
+    const groupedRows = [...grouped.values()];
+    state.filteredRows = groupedRows;
+
+    const pageLimit = state.limit ?? 50;
+    const page = groupedRows.slice(0, pageLimit);
+    const hydratedPage: SearchRow[] = page.map((group) => {
+      const main = hydrateTrade(
+        state.model,
+        state.query,
+        state.lineupsRaw,
+        group,
+        state.hydratedCache,
+      );
+      const related = group.related.map((r) =>
+        hydrateRelatedTrade(
+          state.model,
+          r,
+          state.hydratedCache,
+        ),
+      );
+      return { ...main, variants: [], related };
+    });
+
+    const hiddenTotal = result.hidden.length;
+    const hidden = state.showHidden
+      ? result.hidden
+          .slice(0, pageLimit)
+          .map(({ row, reasons }) => {
+            const original = byKey.get(row.key);
+            return original
+              ? {
+                  row: hydrateTrade(
+                    state.model,
+                    state.query,
+                    state.lineupsRaw,
+                    original,
+                    state.hydratedCache,
+                  ),
+                  reasons,
+                }
+              : null;
+          })
+          .filter((x): x is NonNullable<typeof x> => x !== null)
+      : [];
+
+    const browse = browseTradeResults(state.model, groupedRows, undefined, []);
+
+    return {
+      ...browse,
+      rows: hydratedPage,
+      views: newViews(state, hydratedPage, hidden),
+      groupsTotal: groupedRows.length,
+      total: result.total,
+      visibleTotal: result.visible.length,
+      counts: result.only,
+      blocks: result.counts,
+      hidden,
+      hiddenTotal,
+      stats: state.stats,
+      filters: state.filters,
+      sort: state.sort,
+    };
+  });
+}
+
 self.onmessage = async (event: MessageEvent<SearchRequest>) => {
   const request = event.data;
   const { id, context } = request;
   try {
     // Filter and sort the captured evidence only; stale worker messages are ignored.
     if (request.type === "filter" || request.type === "sort") {
-      if (!retained || retained.id !== id || retained.context !== context) return;
+      if (!retained || retained.id !== id || retained.context !== context)
+        return;
       if (request.type === "filter") {
         retained.filters = request.filters;
         retained.showHidden = request.showHidden;
         retained.limit = Math.max(1, request.limit ?? 50);
+        if (request.protectedIds) retained.protectedIds = request.protectedIds;
       }
       retained.sort = request.sort;
       send({ id, context, type: "filtered", ...filteredPayload(retained) });
       return;
     }
+
     // Detail requests reuse the captured model/query and affect neither the completed ranking nor draft.
     if (request.type === "details") {
       if (!retained || retained.id !== id || retained.context !== context)
         return;
       try {
-        // Expanded variants share the same captured model and must remain inspectable by their own keys.
-        const rows = [...retained.rows, ...retained.suggestions];
-        const row = [...rows, ...rows.flatMap((candidate) => candidate.variants ?? [])].find(
-          (candidate) => candidate.key === request.key,
-        );
+        let row = retained.hydratedCache?.get(request.key);
+        if (!row) {
+          const comp = retained.rows?.find(
+            (candidate) => candidate.key === request.key,
+          );
+          if (comp) {
+            row = hydrateTrade(
+              retained.model,
+              retained.query,
+              retained.lineupsRaw,
+              comp,
+              retained.hydratedCache,
+            );
+          } else if (retained.legacyRows) {
+            row = retained.legacyRows.find(
+              (candidate) => candidate.key === request.key,
+            );
+          }
+        }
         if (!row)
           throw Error("This trade is no longer in the completed search.");
         send({
@@ -141,14 +356,14 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
           details: {
             ...searchLineupDetails(
               retained.model,
-              retained.query,
+              { ...retained.query, lineupBasis: "best-available" },
               row,
               retained.lineupsRaw,
               !retained.useful,
             ),
             incentive: opponentIncentive(
               retained.model,
-              retained.query,
+              { ...retained.query, lineupBasis: "best-available" },
               row,
               retained.lineupsRaw,
             ),
@@ -168,26 +383,43 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
       }
       return;
     }
+
     // Browse only the captured completed set; names, package pages and outgoing alternatives never rerun scoring.
     if (request.type === "browse") {
       if (!retained || retained.id !== id || retained.context !== context)
         return;
+      const state = retained;
+      const rows = state.filteredRows ?? state.rows;
+      const browse = browseTradeResults(
+        state.model,
+        rows,
+        request.options,
+        state.query.give,
+      );
+      const hydratedVisible = browse.rows.map((r) =>
+        "ownTotal" in r
+          ? (r as SearchRow)
+          : hydrateTrade(
+              state.model,
+              state.query,
+              state.lineupsRaw,
+              r,
+              state.hydratedCache,
+            ),
+      );
       send({
         id,
         context,
         type: "browse",
         token: request.token,
-        ...browseTradeResults(
-          retained.model,
-          retained.filteredRows ?? retained.rows,
-          request.options,
-          retained.query.give,
-        ),
-        total: (retained.filteredRows ?? retained.rows).length,
-        stats: retained.stats,
+        view: browse.view,
+        rows: hydratedVisible,
+        total: rows.length,
+        stats: state.stats,
       });
       return;
     }
+
     retained = undefined;
     const model = applyRosterScenario(
       evaluate(request.dataset, request.settings, {
@@ -197,53 +429,135 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
       request.scenario,
       request.lineupsRaw,
     );
-    const started = performance.now();
-    // Keep the existing path intact until the broad-search controls are enabled.
+
+    // Complete trade search (broad Find trades)
     if (request.useful) {
-      const stats: SearchStats = { teams: 0, checked: 0, excluded: 0, thinTeams: 0, matched: 0, scored: 0 };
       const own = request.query.teamA;
-      const basis = readLineupBasis(request.query.lineupBasis);
-      // Retain streamed one-for-ones so filters work before the larger packages finish.
-      let lastPartial = -Infinity;
+      const manager = request.useful.manager ?? { version: 1, profiles: {} };
       const initialFilters = request.useful.filters ?? defaultTradeFilters();
-      const initialSort = request.useful.sort ?? "own";
-      const partial = (rows: SearchRow[], final = false) => {
-        // Batches arrive often; the screen only needs a fresh list a couple of times a second.
-        const now = performance.now();
-        if (!final && now - lastPartial < 400) return;
-        lastPartial = now;
-        retained = { id, context, rows, suggestions: [], stats, model, query: request.query, lineupsRaw: request.lineupsRaw, useful: true,
-          filters: retained?.filters ?? initialFilters, sort: retained?.sort ?? initialSort,
-          showHidden: retained?.showHidden ?? request.useful?.showHidden, limit: retained?.limit ?? request.useful?.limit };
-        send({ id, context, type: "partial", ...filteredPayload(retained) });
+      const initialSort = request.useful.sort ?? "acceptance";
+      const initialProtectedIds = request.useful.protectedIds ?? [];
+
+      const stats: SearchStats = {
+        teams: 0,
+        checked: 0,
+        excluded: 0,
+        thinTeams: 0,
+        matched: 0,
+        scored: 0,
       };
-      // Compare completed opponents with the authoritative league team list.
-      const opponents = model.dataset.tables.ModelTeams.map((team) => String(team.TeamID)).filter((team) => team && team !== "0" && team !== own);
+
+      retained = {
+        id,
+        context,
+        rows: [],
+        suggestions: [],
+        stats,
+        model,
+        query: request.query,
+        lineupsRaw: request.lineupsRaw,
+        useful: true,
+        filters: initialFilters,
+        sort: initialSort,
+        protectedIds: initialProtectedIds,
+        showHidden: request.useful.showHidden,
+        limit: request.useful.limit ?? 50,
+        hydratedCache: new Map(),
+      };
+
+      const opponents = model.dataset.tables.ModelTeams.map((team) =>
+        String(team.TeamID),
+      ).filter((team) => team && team !== "0" && team !== own);
       const completedTeams = new Set<string>();
-      const reportTeam = (event: TeamProgress) => { if (event.done) completedTeams.add(event.team); send({ id, context, type: "team", ...event }); };
+
+      const reportTeam = (event: {
+        team: string;
+        singles: number;
+        extensions: number;
+        done: boolean;
+      }) => {
+        if (event.done) completedTeams.add(event.team);
+        send({ id, context, type: "team", ...event });
+      };
+
+      const onOpponentDone = (
+        team: string,
+        possible: number,
+        scored: number,
+        kept: number,
+        rows: CompleteTrade[],
+      ) => {
+        reportTeam({ team, singles: possible, extensions: kept, done: true });
+        retained!.rows.push(...rows);
+        stats.teams = completedTeams.size;
+        stats.checked += possible;
+        stats.scored += scored;
+        stats.matched += kept;
+        send({ id, context, type: "partial", ...filteredPayload(retained!) });
+      };
+
+      const size = poolSize(
+        opponents.length,
+        self.navigator?.hardwareConcurrency,
+        typeof Worker !== "undefined",
+      );
+      let found:
+        | { rows: CompleteTrade[]; coverage: CompleteCoverage }
+        | undefined;
       let retryQueue: Promise<unknown> = Promise.resolve();
-      const size = poolSize(opponents.length, self.navigator?.hardwareConcurrency, typeof Worker !== "undefined");
-      let found: { rows: SearchRow[]; coverage: UsefulCoverage } | undefined;
-      // Opponents are searched in helper workers owned by this one; ending this worker ends them. No helpers means one thread.
-      if (size > 1)
+
+      if (size > 1) {
         try {
           found = await runPooled(
-            { dataset: request.dataset, settings: request.settings, evidence: request.evidence, roleWeight: request.roleWeight,
-              scenario: request.scenario, lineupsRaw: request.lineupsRaw, teamA: own, basis: request.query.lineupBasis,
-              protectedIds: request.useful.protectedIds, inputs: request.useful.inputs },
+            {
+              dataset: request.dataset,
+              settings: request.settings,
+              evidence: request.evidence,
+              roleWeight: request.roleWeight,
+              scenario: request.scenario,
+              lineupsRaw: request.lineupsRaw,
+              teamA: own,
+              manager,
+            },
             partition(opponents, size),
-            () => new Worker(new URL("./trade-search-part.worker.ts", import.meta.url), { type: "module" }),
-            partial,
-            reportTeam,
-            (slice, publish) => {
-              // Retry one failed slice at a time because lineup memoization is worker-scoped.
+            () =>
+              new Worker(
+                new URL("./trade-search-part.worker.ts", import.meta.url),
+                { type: "module" },
+              ),
+            (event) => {
+              onOpponentDone(
+                event.team,
+                event.possible,
+                event.scored,
+                event.kept,
+                event.rows,
+              );
+            },
+            (slice) => {
               for (const team of slice) completedTeams.delete(team);
               const task = retryQueue.then(async () => {
-                const searchInputs = request.useful!.inputs ?? request.useful!.protectedIds;
-                const result = await runUsefulTradeSearch(model, own, searchInputs, basis, request.lineupsRaw,
-                  (singles) => publish(singles.map((row) => ({ ...row.searchRow, seedKey: row.seedKey }))), undefined, slice, reportTeam);
-                return { rows: result.rows.map(({ trade, variants }) => ({ ...trade.searchRow, seedKey: trade.seedKey,
-                  variants: variants.map((v) => ({ ...v.searchRow, seedKey: v.seedKey })) })), coverage: result.coverage };
+                const partRows: CompleteTrade[] = [];
+                const cov = await runCompleteTradeSearch(
+                  model,
+                  own,
+                  request.lineupsRaw,
+                  manager,
+                  slice,
+                  (event) => {
+                    if (event.done) {
+                      partRows.push(...event.rows);
+                      onOpponentDone(
+                        event.team,
+                        event.possible,
+                        event.scored,
+                        event.kept,
+                        event.rows,
+                      );
+                    }
+                  },
+                );
+                return { rows: partRows, coverage: cov };
               });
               retryQueue = task.catch(() => undefined);
               return task;
@@ -252,40 +566,66 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
         } catch {
           found = undefined;
         }
-      if (!found) {
-        const searchInputs = request.useful.inputs ?? request.useful.protectedIds;
-        const result = await runUsefulTradeSearch(model, own, searchInputs, basis, request.lineupsRaw,
-          (singles) => partial(singles.map((row) => ({ ...row.searchRow, seedKey: row.seedKey }))), undefined, undefined,
-          reportTeam);
-        found = {
-          rows: result.rows.map(({ trade, variants }) => ({ ...trade.searchRow, seedKey: trade.seedKey, variants: variants.map((v) => ({ ...v.searchRow, seedKey: v.seedKey })) })),
-          coverage: result.coverage,
-        };
       }
-      const rows = found.rows;
-      // A missing completed team is reported explicitly, never counted as searched.
-      const missingTeams = opponents.filter((team) => !completedTeams.has(team));
+
+      if (!found) {
+        const partRows: CompleteTrade[] = [];
+        const cov = await runCompleteTradeSearch(
+          model,
+          own,
+          request.lineupsRaw,
+          manager,
+          opponents,
+          (event) => {
+            if (event.done) {
+              partRows.push(...event.rows);
+              onOpponentDone(
+                event.team,
+                event.possible,
+                event.scored,
+                event.kept,
+                event.rows,
+              );
+            }
+          },
+        );
+        found = { rows: partRows, coverage: cov };
+      }
+
+      const missingTeams = opponents.filter(
+        (team) => !completedTeams.has(team),
+      );
       if (missingTeams.length) found.coverage.missingTeams = missingTeams;
-      Object.assign(stats, { teams: found.coverage.opponents, checked: found.coverage.singles,
-        scored: found.coverage.singles + found.coverage.extensions, matched: rows.length });
-      retained = { id, context, rows, suggestions: [], stats, model, query: request.query, lineupsRaw: request.lineupsRaw, useful: true,
-        filters: currentRetained()?.filters ?? initialFilters, sort: currentRetained()?.sort ?? initialSort,
-        showHidden: currentRetained()?.showHidden ?? request.useful?.showHidden, limit: currentRetained()?.limit ?? request.useful?.limit };
-      send({ id, context, type: "complete", ...filteredPayload(retained), coverage: found.coverage });
+
+      stats.teams = found.coverage.opponents;
+      stats.checked = found.coverage.possible;
+      stats.scored = found.coverage.scored;
+      stats.matched = found.coverage.kept;
+
+      send({
+        id,
+        context,
+        type: "complete",
+        ...filteredPayload(retained!),
+        coverage: found.coverage,
+      });
       return;
     }
+
+    // Legacy discovery path (for non-useful searches like Trade analyzer or Chain planner discovery)
+    const started = performance.now();
     let lastProgress = 0,
       evaluationStarted = started;
-    // Throttle expensive structured-clone messages while keeping phase changes immediately visible.
     const progress = (
       phase:
-        "Finding matching packages" | "Evaluating trades" | "Sorting results",
+        | "Finding matching packages"
+        | "Evaluating trades"
+        | "Sorting results",
       stats: SearchStats,
       force = false,
     ) => {
       const now = performance.now();
       if (force || now - lastProgress >= 150) {
-        // Estimate only the bounded evaluation phase; later, more complex packages may change this estimate.
         const remainingMs =
           phase === "Evaluating trades" && stats.scored > 0
             ? ((now - evaluationStarted) / stats.scored) *
@@ -312,7 +652,6 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
       },
       true,
     );
-    // Forward saved starters for the optional opponent-fit check; unfiltered enumeration is unchanged.
     const { matches, stats } = findDiscoveryMatches(
       model,
       request.query,
@@ -321,22 +660,18 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
     );
     evaluationStarted = performance.now();
     progress("Evaluating trades", stats, true);
-    // Cache authoritative scores for exact zero-result recovery previews.
     const evaluated = new Map<string, SearchRow>();
     const rows: SearchRow[] = [];
     const suggestions: SearchRow[] = [];
-    // Weekly screening uses the evaluator's averages after every complete trade evaluation.
     if (request.query.weekly) stats.weeklyExcluded = 0;
-    // Report surface exclusions separately from modeled weekly-gain failures and raw index enumeration.
     if (request.query.surface) stats.surfaceExcluded = 0;
     if (request.query.manager) stats.managerExcluded = 0;
-    // This filter needs each complete evaluated package, including its required drops.
     if (request.query.usefulness) stats.usefulnessExcluded = 0;
     if (request.query.deficitProtection?.enabled)
       stats.deficitProtectionExcluded = 0;
     if (request.query.gradeImpacts?.length)
       stats.gradeImpactExcluded = 0;
-    // Every exact match receives the same authoritative evaluation as a manually entered trade.
+
     for (const match of matches) {
       const row = scoreTradeMatch(
         model,
@@ -345,11 +680,9 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
         request.lineupsRaw,
       );
       evaluated.set(match.key, row);
-      // Exact matches keep every enabled limit; nearby evaluated packages are a separate, explicitly explained list.
       const failures = discoveryFailures(row, request.query);
       if (!failures.length && !row.nearMiss) rows.push(row);
       else {
-        // Diagnose this safeguard independently from overall weekly gain and positional-deficit targeting.
         if (
           deficitProtectionFailures(
             row.deficitProtection,
@@ -367,7 +700,6 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
           row.usefulness?.length !== (row.give ?? request.query.give).length
         )
           stats.usefulnessExcluded = (stats.usefulnessExcluded ?? 0) + 1;
-        // Report positional failures separately; they must not masquerade as failed total weekly-gain limits.
         if (
           request.query.goal === "position" &&
           !(row.positionGain != null && row.positionGain > 0)
@@ -380,7 +712,6 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
             .length
         )
           stats.gradeImpactExcluded = (stats.gradeImpactExcluded ?? 0) + 1;
-        // Drop warnings do not suppress exact matches or otherwise useful near misses.
         if (request.query.discovery?.nearMisses)
           retainSuggestion(
             suggestions,
@@ -396,16 +727,17 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
     rows.sort((a, b) =>
       compareDiscoveryRows(a, b, request.query.discovery?.ranking),
     );
-    // Keep the complete ranked offers in the worker; the first response represents distinct packages for every team.
     retained = {
       id,
       context,
-      rows,
+      rows: [],
+      legacyRows: rows,
       suggestions,
       stats,
       model,
       query: request.query,
       lineupsRaw: request.lineupsRaw,
+      hydratedCache: new Map(),
     };
     send({
       id,
@@ -416,7 +748,6 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
       stats,
       suggestions,
     });
-    // Recovery runs only after an empty completed search; separate messages preserve its original filters and totals.
     if (!rows.length) {
       send({ id, context, type: "recovery", checked: 0, total: 0 });
       let lastRecovery = 0;
@@ -446,7 +777,6 @@ self.onmessage = async (event: MessageEvent<SearchRequest>) => {
       }
     }
   } catch (error) {
-    // Fail explicitly rather than publishing an incomplete list as a completed search.
     retained = undefined;
     send({
       id,

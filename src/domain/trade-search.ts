@@ -12,7 +12,7 @@ import {
 // The same exclusive primary labels are available to discovery and saved searches.
 import { primaryGemSignals } from "./label-rules";
 import type { FilterableTrade, TradeFilters } from "./trade-filters";
-import type { SearchInputs } from "./useful-move-search";
+import type { CompleteCoverage } from "./complete-trade-search";
 import {
   surfaceAppeal,
   type SurfaceEvidence,
@@ -289,7 +289,7 @@ export type SearchRequest =
       lineupsRaw?: string;
       query: TradeSearchQuery;
       // The new broad search is opt-in until its filter interface replaces the legacy controls.
-      useful?: { protectedIds: string[]; inputs?: SearchInputs; filters?: TradeFilters; sort?: SearchFilterSort; showHidden?: boolean; limit?: number };
+      useful?: { manager: ManagerSettings; protectedIds: string[]; filters?: TradeFilters; sort?: SearchFilterSort; showHidden?: boolean; limit?: number };
       // Workers always value the live source first, then apply the same frozen-index ownership overlay as the UI.
       scenario?: RosterScenario;
     }
@@ -303,9 +303,9 @@ export type SearchRequest =
     }
   | { type: "details"; id: string; context: string; key: string }
   // Filter and sort change only the captured results; they never start another scoring job.
-  | { type: "filter"; id: string; context: string; filters: TradeFilters; sort: SearchFilterSort; showHidden: boolean; limit?: number }
+  | { type: "filter"; id: string; context: string; filters: TradeFilters; sort: SearchFilterSort; showHidden: boolean; limit?: number; protectedIds?: string[] }
   | { type: "sort"; id: string; context: string; sort: SearchFilterSort };
-export type SearchFilterSort = "own" | "other" | "week" | "both" | "balance" | "acceptance";
+export type SearchFilterSort = "own" | "other" | "week" | "both" | "balance" | "acceptance" | "surface";
 export type SearchResponse = { id: string; context: string } & (
   | { type: "progress"; progress: SearchProgress }
   // One opponent finished its one-for-ones, or all its packages: drives the search scene.
@@ -314,7 +314,7 @@ export type SearchResponse = { id: string; context: string } & (
       // The display views of the rows that were not sent before, computed in the worker so the screen does not score them again.
       views?: Record<string, ResultRowView>;
       filters?: TradeFilters; sort?: SearchFilterSort;
-      counts: Record<string, number>; blocks: Record<string, number>; hidden: { row: SearchRow; reasons: string[] }[]; stats: SearchStats }
+      counts: Record<string, number>; blocks: Record<string, number>; hidden: { row: SearchRow; reasons: string[] }[]; hiddenTotal?: number; stats: SearchStats }
   | {
       type: "complete" | "browse" | "partial";
       rows: SearchRow[];
@@ -330,8 +330,9 @@ export type SearchResponse = { id: string; context: string } & (
       view: TradeResultView;
       token?: string;
       stats: SearchStats;
+      hiddenTotal?: number;
       // Measured coverage is separate from the result count and legacy numeric statistics.
-      coverage?: { singles: number; extensions: number; opponents: number; beamCutoffs: number;
+      coverage?: CompleteCoverage | { singles: number; extensions: number; opponents: number; beamCutoffs: number;
         beamCutoffsByTeam: Record<string, Record<string, number>>; missingTeams?: string[] };
       suggestions?: SearchRow[];
     }

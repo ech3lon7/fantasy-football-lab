@@ -224,9 +224,15 @@ function DesktopWheel({
     }
   };
 
+  const isPanelToggles =
+    option?.kind === "toggles" &&
+    (option.id === "roles" ||
+      option.id === "listRules" ||
+      option.id === "looksBetter");
+
   // The toggles of an option, paged eight at a time for long lists such as teams.
   const toggles =
-    option?.kind === "toggles" && option.id !== "roles"
+    option?.kind === "toggles" && !isPanelToggles
       ? data.getToggles(option.id)
       : [];
   const paged = pageSlice(toggles, page);
@@ -804,20 +810,26 @@ function DesktopWheel({
                   </div>
                 </>
               )}
-              {option.id === "roles" &&
-                data.getToggles("roles").map((t) => (
+              {isPanelToggles &&
+                data.getToggles(option.id).map((t) => (
                   <button
                     key={t.key}
                     type="button"
                     role="menuitemcheckbox"
                     aria-checked={t.on}
+                    aria-disabled={t.disabled}
+                    disabled={t.disabled}
                     className="gd-panel-item"
-                    onClick={() => data.setToggle("roles", t.key, !t.on)}
+                    title={t.hint}
+                    onClick={() =>
+                      !t.disabled && data.setToggle(option.id, t.key, !t.on)
+                    }
                   >
                     <span>
                       {t.on ? "✓ " : ""}
                       {t.label}
                     </span>
+                    {t.hint && <span className="gd-panel-hint">{t.hint}</span>}
                   </button>
                 ))}
               {option.kind === "teamgrade" && (

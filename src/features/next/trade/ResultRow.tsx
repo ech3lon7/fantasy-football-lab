@@ -92,9 +92,15 @@ export function ResultRow({
           })}
         </span>
         <span>
-          {people(give)} <span className="gd-quiet">→</span>{" "}
-          <b>{people(row.get)}</b>
-          <span className="gd-quiet"> · {view.teamName}</span>
+          <span>
+            {people(give)} <span className="gd-quiet">→</span>{" "}
+            <b>{people(row.get)}</b>
+            <span className="gd-quiet"> · {view.teamName}</span>
+          </span>
+          <span className="gd-quiet gd-looks">
+            Looks better to them: {signedOne(row.filterEvidence?.surfaceAverage ?? null)} avg ·{" "}
+            {signedOne(row.filterEvidence?.surfaceProjection ?? null)} proj
+          </span>
         </span>
       </span>
       {/* Keep each side's weekly gain and the current-week matchup result distinct. */}

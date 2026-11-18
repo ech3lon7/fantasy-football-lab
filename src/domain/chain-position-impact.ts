@@ -1,8 +1,24 @@
 import { positions, type Draft } from "./contracts";
-import { teamsAssessment } from "./lineups";
-import { positionGradeScale } from "./trade-search";
+import {
+  teamsAssessment,
+  teamsAssessmentWith,
+  type TeamsAssessmentCache,
+} from "./lineups";
+import { positionGradeScale } from "./trade-safeguards";
 import type { TradeResult } from "./trades";
 import type { Model } from "./valuation";
+
+export type MinimalTradeResult = {
+  valid: boolean;
+  legality?: boolean;
+  legalA: string[];
+  legalB: string[];
+  dropsA?: string[];
+  dropsB?: string[];
+  initialB?: string[];
+  irA?: string[];
+  irB?: string[];
+};
 
 // Grade limits are optional preferences and never change the existing scoring, valuation, or grading formulas.
 export interface ChainGradeLimit {
@@ -41,11 +57,18 @@ export interface ChainPositionImpact {
   other: ChainPositionChange[];
 }
 
-// Calculate the signed grade step delta between two grades on the standard position grade scale.
+let _gradeIndexMap: Map<string, number> | null = null;
+function getGradeIndexMap(): Map<string, number> {
+  if (!_gradeIndexMap) {
+    _gradeIndexMap = new Map<string, number>(positionGradeScale.map((g, i) => [g, i]));
+  }
+  return _gradeIndexMap;
+}
 // Positive = upgrade, negative = downgrade, null = grade unavailable ("n.a.").
 export function gradeStepDelta(before: string, after: string): number | null {
-  const first = positionGradeScale.findIndex((g) => g === before);
-  const last = positionGradeScale.findIndex((g) => g === after);
+  const map = getGradeIndexMap();
+  const first = map.get(before) ?? -1;
+  const last = map.get(after) ?? -1;
   return first < 0 || last < 0 ? null : last - first;
 }
 
@@ -70,39 +93,29 @@ export function availableStarterPositions(m: Model): string[] {
 export function chainPositionImpact(
   m: Model,
   draft: Draft,
-  result: TradeResult,
+  result: MinimalTradeResult | TradeResult,
   targetPositions?: Iterable<string>,
   cachedBefore?: Map<string, { position: string; grade: string }[]>,
+  teamsCache?: TeamsAssessmentCache,
 ): ChainPositionImpact {
-  if (!result.valid || !result.legality) return { own: [], other: [] };
-  const own = new Set(result.legalA),
-    other = new Set(result.legalB),
-    ir = new Set([...result.irA, ...result.irB]);
-  const players = m.players.map((p) => {
-    const owner = own.has(p.id)
-      ? draft.teamA
-      : other.has(p.id)
-        ? draft.teamB
-        : [draft.teamA, draft.teamB].includes(p.owner)
-          ? "0"
-          : p.owner;
-    return {
-      ...p,
-      owner,
-      slot: ir.has(p.id) ? 21 : owner !== p.owner ? 20 : p.slot,
-    };
-  });
+  if (!result.valid || result.legality === false) return { own: [], other: [] };
   const before = cachedBefore ?? teamsAssessment(m),
-    after = teamsAssessment({
-      ...m,
-      players,
-      byId: new Map(players.map((p) => [p.id, p])),
-    });
+    after = teamsAssessmentWith(
+      m,
+      new Map([
+        [draft.teamA, result.legalA],
+        [draft.teamB, result.legalB],
+      ]),
+      teamsCache,
+      true,
+    );
   const hasOverall = Array.from(targetPositions ?? []).some(
     (p: string) => p.toUpperCase() === "OVERALL",
   );
+  const dropsA = result.dropsA ?? [];
+  const dropsB = result.dropsB ?? [];
   const affected = new Set([
-    ...[...draft.give, ...draft.get, ...result.dropsA, ...result.dropsB].map(
+    ...[...draft.give, ...draft.get, ...dropsA, ...dropsB].map(
       (id) => m.byId.get(id)!.pos,
     ),
     ...(targetPositions ?? []),
@@ -135,8 +148,9 @@ export function chainPositionImpact(
           b =
             after.get(team)?.find((g) => g.position === position)?.grade ??
             "n.a.";
-        const first = positionGradeScale.findIndex((g) => g === a),
-          last = positionGradeScale.findIndex((g) => g === b);
+        const map = getGradeIndexMap();
+        const first = map.get(a) ?? -1,
+          last = map.get(b) ?? -1;
         return {
           position,
           before: a,

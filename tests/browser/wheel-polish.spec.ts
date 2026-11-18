@@ -21,7 +21,7 @@ async function open(page: Page, width = 1320, height = 1000, feel: Record<string
 }
 const search = async (page: Page) => {
   await rail(page).getByRole("button", { name: "Search", exact: true }).click();
-  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 90000 });
+  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 90000 });
 };
 const boxOf = async (page: Page, selector: string) =>
   page.evaluate((s) => [...document.querySelectorAll(s)].map((el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }), selector);
@@ -61,7 +61,7 @@ test.describe("R1: the left rail", () => {
     await button.click();
     await expect(rail(page).getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
     await expect(rail(page).getByText(/searching… \d+ \/ \d+ teams/)).toBeVisible();
-    await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 240000 });
+    await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 240000 });
     await expect(rail(page).getByRole("button", { name: "Search", exact: true })).toBeVisible();
   });
 

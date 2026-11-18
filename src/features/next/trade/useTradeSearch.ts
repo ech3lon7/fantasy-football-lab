@@ -96,6 +96,7 @@ interface SearchJob {
   filterCounts?: Record<string, number>;
   filterBlocks?: Record<string, number>;
   hiddenRows?: { row: SearchRow; reasons: string[] }[];
+  hiddenTotal?: number;
   visibleTotal?: number;
   groupsTotal?: number;
   filters?: TradeFilters;
@@ -197,7 +198,12 @@ export function useTradeSearch({
   // Older saved searches are translated once; unsupported options are disclosed to the user.
   // Repair old automatic migrations once; later user selections retain their saved filters.
   const [initialBroad] = useState(() => {
-    const old = initialSettings.standard as { query?: TradeSearchQuery; broadTeams?: Record<string, { filters: TradeFilters; protectedIds: string[] }>; broadMigrationChecked?: boolean } | undefined;
+    const old = initialSettings.standard as {
+      query?: TradeSearchQuery;
+      broadTeams?: Record<string, { filters: TradeFilters; protectedIds: string[] }>;
+      broadMigrationChecked?: boolean;
+      broadDefaultsV2?: boolean;
+    } | undefined;
     const teams = { ...(old?.broadTeams ?? {}) };
     let repaired = false;
     for (const entry of Object.values(teams)) {
@@ -218,6 +224,25 @@ export function useTradeSearch({
         repaired = true;
       }
     }
+    if (!old?.broadDefaultsV2) {
+      for (const entry of Object.values(teams)) {
+        if (entry?.filters) {
+          if (entry.filters.theirGain === 1) {
+            entry.filters.theirGain = -2;
+            repaired = true;
+          }
+          if (entry.filters.yourGain?.minimum === null || (entry.filters.yourGain?.minimum ?? 0) < 0) {
+            entry.filters.yourGain = { minimum: 0, maximum: entry.filters.yourGain?.maximum ?? null };
+            repaired = true;
+          }
+          entry.filters.giveOnly = entry.filters.giveOnly ?? false;
+          entry.filters.getOnly = entry.filters.getOnly ?? false;
+          entry.filters.mustGiveStarts = entry.filters.mustGiveStarts ?? false;
+          entry.filters.mustGetStarts = entry.filters.mustGetStarts ?? false;
+          entry.filters.looksBetter = entry.filters.looksBetter ?? false;
+        }
+      }
+    }
     return { teams, repaired };
   });
   const [migrationNote, setMigrationNote] = useState(initialBroad.repaired ? "Your old Find trades settings don't apply to the new search, so filters start at the defaults." : "");
@@ -228,7 +253,7 @@ export function useTradeSearch({
     },
   );
   const broad = broadTeams[draft.teamA] ?? { filters: defaultTradeFilters(), protectedIds: [] };
-  const [broadSort, setBroadSort] = useState<SearchFilterSort>("own");
+  const [broadSort, setBroadSort] = useState<SearchFilterSort>("acceptance");
   const [showHidden, setShowHidden] = useState(false);
   const [broadLimit, setBroadLimit] = useState(50);
   const appliedBroad = useRef(false);
@@ -517,7 +542,7 @@ export function useTradeSearch({
     gradeImpacts,
   };
   // The chain planner owns its own part of the saved settings; this hook writes only the standard part and keeps the rest as stored.
-  const standardPart = JSON.stringify({ query, controls: standardControls, broadTeams, broadMigrationChecked: true });
+  const standardPart = JSON.stringify({ query, controls: standardControls, broadTeams, broadMigrationChecked: true, broadDefaultsV2: true });
   const settingsText = mergeTradeSettings(
     settingsRaw,
     "standard",
@@ -544,17 +569,7 @@ export function useTradeSearch({
   if (manager && !journal.ready)
     bounds.errors.push("Saved manager profiles are still loading.");
   // Changing protected players or search inputs invalidates the captured roster search, while filter edits do not.
-  const context =
-    tradeSearchContext(m, query, lineupsRaw) +
-    JSON.stringify([
-      [...broad.protectedIds].sort(),
-      [...broad.filters.mustGive].sort(),
-      [...(broad.filters.mustGiveRequired ?? [])].sort(),
-      [...broad.filters.mustGet].sort(),
-      [...(broad.filters.mustGetRequired ?? [])].sort(),
-      [...broad.filters.exclude].sort(),
-      broad.filters.teams ? [...broad.filters.teams].sort() : null,
-    ]);
+  const context = tradeSearchContext(m, query, lineupsRaw);
   // Editing filters dismisses the open result drawer; the captured result remains available to inspect again.
   const drawerContext = useRef(context);
   useEffect(() => {
@@ -832,7 +847,7 @@ export function useTradeSearch({
             };
           if (message.type === "filtered")
             return { ...previous, rows: message.rows, view: message.view, total: message.total,
-              visibleTotal: message.visibleTotal, groupsTotal: message.groupsTotal, filterCounts: message.counts, filterBlocks: message.blocks, hiddenRows: message.hidden, stats: message.stats,
+              visibleTotal: message.visibleTotal, groupsTotal: message.groupsTotal, filterCounts: message.counts, filterBlocks: message.blocks, hiddenRows: message.hidden, hiddenTotal: message.hiddenTotal, stats: message.stats,
               filters: message.filters, sort: message.sort,
               views: message.views ? { ...previous.views, ...message.views } : previous.views };
           // Each browse response is a complete bounded view, not another raw slice to append.
@@ -851,6 +866,7 @@ export function useTradeSearch({
             filterCounts: message.counts ?? previous.filterCounts,
             filterBlocks: message.blocks ?? previous.filterBlocks,
             hiddenRows: message.hidden ?? previous.hiddenRows,
+            hiddenTotal: message.hiddenTotal ?? previous.hiddenTotal,
             stats: message.stats,
             coverage: message.coverage ?? previous.coverage,
             suggestions: message.suggestions ?? previous.suggestions,
@@ -895,16 +911,8 @@ export function useTradeSearch({
         ...(protectedIds
           ? {
               useful: {
+                manager: { version: 1, profiles: journal.profiles },
                 protectedIds,
-                inputs: {
-                  protectedIds,
-                  givePool: broad.filters.mustGive,
-                  giveRequired: broad.filters.mustGiveRequired ?? [],
-                  getPool: broad.filters.mustGet,
-                  getRequired: broad.filters.mustGetRequired ?? [],
-                  exclude: broad.filters.exclude,
-                  teams: broad.filters.teams,
-                },
                 filters: broad.filters,
                 sort: broadSort,
                 showHidden,
@@ -932,11 +940,12 @@ export function useTradeSearch({
 
   // Refilter the retained worker results after completion or preference edits without starting a new search.
   const broadFilterKey = JSON.stringify(broad.filters);
+  const protectedIdsKey = JSON.stringify(broad.protectedIds);
   useEffect(() => {
     if (!appliedBroad.current || !job || (job.status !== "complete" && !(job.status === "running" && job.view)) || current()?.id !== job.id) return;
     sessions.post("find", job.id, { type: "filter", id: job.id, context: job.context,
-      filters: broad.filters, sort: broadSort, showHidden, limit: broadLimit } satisfies SearchRequest);
-  }, [job?.id, job?.status, !!job?.view, broadFilterKey, broadSort, showHidden, broadLimit]);
+      filters: broad.filters, sort: broadSort, showHidden, limit: broadLimit, protectedIds: broad.protectedIds } satisfies SearchRequest);
+  }, [job?.id, job?.status, !!job?.view, broadFilterKey, broadSort, showHidden, broadLimit, protectedIdsKey]);
 
   // Applying a preview restores all controls first, then starts the exact previewed query after context cleanup.
   useEffect(() => {

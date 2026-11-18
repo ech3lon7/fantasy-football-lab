@@ -142,7 +142,7 @@ test("desktop: M1 to M23 and M26", async ({ page }) => {
   await rail(page).getByRole("option", { name: "Test B" }).click(); // M15
   await pause(page, 1200);
   await rail(page).getByRole("button", { name: "Search", exact: true }).click(); // M16 to M18
-  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 90000 });
+  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 90000 });
   await pause(page, 1500);
   await rail(page).getByRole("button", { name: "Show all", exact: true }).click(); // M20 to M22
   await pause(page, 1400);
@@ -170,7 +170,7 @@ test("desktop: M17 to M19 on the 12-team league, with Cancel", async ({ page }) 
   await rail(page).getByRole("button", { name: "Cancel", exact: true }).click(); // M19
   await pause(page, 1800);
   await rail(page).getByRole("button", { name: "Search", exact: true }).click();
-  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 240000 }); // M18
+  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 240000 }); // M18
   await pause(page, 2000);
   const result = await recorder.stop();
   console.log("VIDEO", JSON.stringify(result));

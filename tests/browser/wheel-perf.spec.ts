@@ -141,7 +141,7 @@ test("M16 to M18 and M22: search, play call, results, a filter change", async ({
   await prepare(page);
   await measure(page, "M16-M18 search", async () => {
     await board(page).getByRole("button", { name: "Search", exact: true }).click();
-    await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 90000 });
+    await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 90000 });
     await page.evaluate(() => { (window as unknown as { __mark?: number }).__mark = performance.now(); });
   }, 800);
   accept("M16-M18 search");

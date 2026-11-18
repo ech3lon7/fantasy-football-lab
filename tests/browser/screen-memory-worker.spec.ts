@@ -54,7 +54,7 @@ for (const width of [1320, 390]) test(`find results survive inner tabs at ${widt
   const rows = page.locator(".gd-find .gd-res-row");
   await expect(rows.first()).toBeVisible({ timeout: 30000 });
   // Results stream in; count them once the search has finished.
-  await expect(page.getByText(/one-for-ones checked/)).toBeVisible({ timeout: 60000 });
+  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 60000 });
   const count = await rows.count();
   await page.getByRole("tab", { name: "Chain planner", exact: true }).click();
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();

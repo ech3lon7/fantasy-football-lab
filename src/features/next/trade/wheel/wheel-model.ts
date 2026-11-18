@@ -52,7 +52,7 @@ const findCategories: WheelCategory[] = [
         id: "yourGain",
         label: "Your EPPG",
         kind: "range",
-        min: -3,
+        min: 0,
         max: 10,
         step: 0.5,
         hubLine: "your gain between",
@@ -88,6 +88,12 @@ const findCategories: WheelCategory[] = [
         hubLine: "their lineup's MPPG change this week",
         hides: "otherWeek",
       },
+      {
+        id: "looksBetter",
+        label: "Looks better to them",
+        kind: "toggles",
+        hides: "looksBetter",
+      },
     ],
   },
   {
@@ -110,6 +116,7 @@ const findCategories: WheelCategory[] = [
     options: [
       { id: "mustGet", label: "I get", kind: "players" },
       { id: "mustGive", label: "I give", kind: "players" },
+      { id: "listRules", label: "List rules", kind: "toggles" },
       { id: "exclude", label: "Exclude", kind: "players", hides: "exclude" },
       { id: "roles", label: "Roles", kind: "toggles" },
     ],
@@ -234,15 +241,16 @@ export const formatGain = (value: number) =>
 const isRangeSet = (r: { minimum: number | null; maximum: number | null }) =>
   r.minimum !== null || r.maximum !== null;
 
-// How many filters of a category differ from their defaults. The defaults are your gain at least 0 and their gain at least +1.
+// How many filters of a category differ from their defaults. The defaults are your gain at least 0 and their gain at least -2.
 export function categoryActive(f: TradeFilters, id: CategoryId): number {
   switch (id) {
     case "gains":
       return (
         Number(f.yourGain.minimum !== 0 || f.yourGain.maximum !== null) +
-        Number(f.theirGain !== 1) +
+        Number(f.theirGain !== -2) +
         Number(isRangeSet(f.ownWeek)) +
-        Number(isRangeSet(f.otherWeek))
+        Number(isRangeSet(f.otherWeek)) +
+        Number(f.looksBetter)
       );
     case "grades":
       return Number(f.gradeGoals.length > 0);
@@ -252,7 +260,11 @@ export function categoryActive(f: TradeFilters, id: CategoryId): number {
         Number(f.mustGive.length > 0) +
         Number(f.exclude.length > 0) +
         Number(f.receiveStarts) +
-        Number(f.giveStarts)
+        Number(f.giveStarts) +
+        Number(f.giveOnly) +
+        Number(f.getOnly) +
+        Number(f.mustGiveStarts) +
+        Number(f.mustGetStarts)
       );
     case "positions":
       return (
