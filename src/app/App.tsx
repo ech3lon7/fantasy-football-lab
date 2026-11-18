@@ -45,10 +45,7 @@ import { usePlayerRowKeys } from "../ui/popover/rowNavigation";
 import { labTabForRoute, pageForRoute } from "../domain/view/shell";
 import { readThemePref, themeKey, useGamedayRoot } from "../ui/feel/theme";
 import { reconcileSavedTrades } from "../domain/saved-trades";
-import {
-  mppgSnapshotsKey,
-  recordMppgSnapshot,
-} from "../domain/mppg-tuning";
+import { withoutMppgSnapshots } from "../domain/mppg-tuning";
 import { errorMessage } from "../domain/error";
 import { Activity, useState, useEffect, useRef, useMemo } from "react";
 import { X } from "lucide-react";
@@ -273,6 +270,7 @@ export default function App() {
   function commit(next: Workspace | null) {
     // Ownership cleanup runs for local loads, imports and cloud adoption, including outside Trade Analyzer.
     next = reconcileSavedTrades(next);
+    if (next) next = { ...next, state: withoutMppgSnapshots(next.state) };
     // A remembered My Team is authoritative on load/import; an unrelated roster browser or legacy draft cannot replace it.
     if (next?.dataset) {
       const selected = next.dataset.tables.ModelTeams.some(
@@ -1070,15 +1068,6 @@ export default function App() {
       : { data: { session: null } };
     const owner = data.session?.user.id ?? current?.owner ?? "local";
     feedback(importCue(preview.dataset.issues.length), feel);
-
-    // 4.1 Snapshot current week's ESPN weekly projections in filters
-    if (realModel) {
-      const updatedSnapshots = recordMppgSnapshot(
-        realModel,
-        state.filters[mppgSnapshotsKey],
-      );
-      state.filters[mppgSnapshotsKey] = updatedSnapshots;
-    }
 
     // Keep a small summary of the dataset being replaced so the next screen can show what changed; it is not the workbook.
     if (

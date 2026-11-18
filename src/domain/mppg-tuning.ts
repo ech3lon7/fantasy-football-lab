@@ -6,6 +6,16 @@ import { computeDefenseStats } from "./matchups";
 
 export const mppgSnapshotsKey = "mppg_weekly_snapshots";
 
+// The automatic import snapshot is retired: it was never read and can exceed the synced state limit.
+export function withoutMppgSnapshots<
+  T extends { filters: Record<string, unknown> },
+>(state: T): T {
+  if (!(mppgSnapshotsKey in state.filters)) return state;
+  const filters = { ...state.filters };
+  delete filters[mppgSnapshotsKey];
+  return { ...state, filters };
+}
+
 export const mppgSnapshotItemSchema = z.object({
   playerId: z.string(),
   week: z.number(),
