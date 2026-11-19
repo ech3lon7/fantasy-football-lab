@@ -1,3 +1,4 @@
+import { waitForFindResults } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { seedTradeLeague } from "./trade-seed";
 
@@ -36,7 +37,10 @@ async function runSearch(page: Page, timeout = 240000) {
   await wheel(page)
     .getByRole("button", { name: "Search", exact: true })
     .click();
-  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout });
+  // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+  await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({ timeout });
+  // Wait for worker completion and the deferred list to match the live wheel counts.
+  await waitForFindResults(page);
 }
 
 async function searchFind(
@@ -153,12 +157,13 @@ test.describe("filter wheel behaviour (motion off)", () => {
     await expect(handle).toHaveCount(1);
     await expect(handle).toHaveAttribute("aria-valuemin", "-2");
     await expect(handle).toHaveAttribute("aria-valuemax", "1");
-    await expect(handle).toHaveAttribute("aria-valuenow", "1");
+    await expect(handle).toHaveAttribute("aria-valuenow", "-2");
     await expect(handle).toHaveAttribute(
       "aria-valuetext",
-      "Their EPPG at least +1",
+      "Their EPPG at least -2",
     );
     await handle.focus();
+    await page.keyboard.press("End");
     await page.keyboard.press("ArrowLeft");
     await expect(handle).toHaveAttribute("aria-valuenow", "0.5");
     await expect(wheel(page).locator(".gd-zh-value")).toHaveText("+0.5");
@@ -310,7 +315,7 @@ test.describe("filter wheel behaviour (motion off)", () => {
     ).toBeVisible();
   });
 
-  test("R7: Reset to defaults restores your gain 0 and their gain +1", async ({
+  test("R7: Reset to defaults restores your gain 0 and their gain -2", async ({
     page,
   }) => {
     await openFind(page);
@@ -320,7 +325,7 @@ test.describe("filter wheel behaviour (motion off)", () => {
       .click();
     await wheel(page)
       .getByRole("slider", { name: "Their EPPG at least" })
-      .press("Home");
+      .press("End");
     await done(page);
     await done(page);
     await wheel(page)
@@ -333,7 +338,7 @@ test.describe("filter wheel behaviour (motion off)", () => {
       .click();
     await expect(
       wheel(page).getByRole("slider", { name: "Their EPPG at least" }),
-    ).toHaveAttribute("aria-valuenow", "1");
+    ).toHaveAttribute("aria-valuenow", "-2");
     await wheel(page)
       .getByRole("menuitem", { name: "Your EPPG", exact: true })
       .click();
@@ -525,12 +530,12 @@ test.describe("filter wheel motion levels", () => {
       .click();
     await wheel(page)
       .getByRole("slider", { name: "Their EPPG at least" })
-      .press("ArrowLeft");
+      .press("ArrowRight");
     expect(await running(page)).toEqual([]);
     await expect(page.locator(".chalk-particle")).toHaveCount(0);
     await expect(
       wheel(page).getByRole("slider", { name: "Their EPPG at least" }),
-    ).toHaveAttribute("aria-valuenow", "0.5");
+    ).toHaveAttribute("aria-valuenow", "-1.5");
     await done(page);
     await done(page);
     await expect(wheel(page)).toBeVisible();
@@ -580,16 +585,31 @@ test.describe("results move when filters change (A11, A13)", () => {
     page,
   }) => {
     await searchFind(page, "search", { feelAnimation: "full" });
+    const initial = await shownCount(page);
+    await setYourGain(page, "End");
+    // Wait for the narrower worker result before measuring the expansion back to the full result set.
+    await expect.poll(() => shownCount(page)).toBeLessThan(initial);
     const before = await shownCount(page);
+    expect(before).toBeGreaterThan(0);
     // Let the search's own streaming animations finish so only the filter change is measured.
     await page.evaluate(() => Promise.all(document.getAnimations().filter((x) => Number.isFinite(Number(x.effect?.getComputedTiming().endTime))).map((x) => x.finished.catch(() => undefined))));
-    // Your gain at −3 is no limit: rows come back instantly, without a new search.
+    // Capture real row animations when they start so a slow CI click cannot miss their short lifetime.
+    await page.evaluate(() => {
+      const win = window as typeof window & { rowAnimationDurations: number[] };
+      win.rowAnimationDurations = [];
+      const animate = Element.prototype.animate;
+      Element.prototype.animate = function (...args: Parameters<Element["animate"]>) {
+        const animation = animate.apply(this, args);
+        if (this.closest(".gd-res [data-key]")) win.rowAnimationDurations.push(Number(animation.effect?.getComputedTiming().duration));
+        return animation;
+      };
+    });
     let durations: number[] = [];
     await setYourGain(page, "Home", async () => {
       await expect
         .poll(
           async () => {
-            const current = await rowAnimations(page);
+            const current = await page.evaluate(() => (window as typeof window & { rowAnimationDurations: number[] }).rowAnimationDurations);
             if (current.length > 0) durations = current;
             return durations.length;
           },
@@ -705,9 +725,11 @@ test.describe("the play-call scene while a search runs (A12)", () => {
         .first(),
     ).toBeVisible();
     // It ends by folding into the coverage line.
-    await expect(page.getByText(/possible trades/)).toBeVisible({
+    await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({
       timeout: 240000,
     });
+    // Wait for worker completion and the deferred list to match the live wheel counts.
+    await waitForFindResults(page);
     await expect(scene).toHaveCount(0, { timeout: 3000 });
   });
 
@@ -751,9 +773,12 @@ test.describe("the play-call scene while a search runs (A12)", () => {
     await expect(
       scene.locator(".gd-pc-x, .gd-pc-route, .gd-pc-circle"),
     ).toHaveCount(0);
-    await expect(page.getByText(/possible trades/)).toBeVisible({
+    // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+    await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({
       timeout: 240000,
     });
+    // Wait for worker completion and the deferred list to match the live wheel counts.
+    await waitForFindResults(page);
     await expect(scene).toHaveCount(0, { timeout: 3000 });
   });
 
@@ -763,9 +788,12 @@ test.describe("the play-call scene while a search runs (A12)", () => {
     test.setTimeout(420000);
     await startSearch(page, "off");
     await expect(page.locator(".gd-playcall")).toHaveCount(0);
-    await expect(page.getByText(/possible trades/)).toBeVisible({
+    // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+    await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({
       timeout: 240000,
     });
+    // Wait for worker completion and the deferred list to match the live wheel counts.
+    await waitForFindResults(page);
     await expect(page.locator(".gd-playcall")).toHaveCount(0);
   });
 });
@@ -818,10 +846,10 @@ test.describe("inline wheel on a phone (390px)", () => {
     const slider = wheel(page).getByRole("slider", {
       name: "Their EPPG at least",
     });
-    await expect(slider).toHaveAttribute("aria-valuenow", "1");
-    await wheel(page).getByRole("button", { name: "Lower" }).tap();
-    await expect(slider).toHaveAttribute("aria-valuenow", "0.5");
-    await expect(hub(page)).toContainText("+0.5");
+    await expect(slider).toHaveAttribute("aria-valuenow", "-2");
+    await wheel(page).getByRole("button", { name: "Raise" }).tap();
+    await expect(slider).toHaveAttribute("aria-valuenow", "-1.5");
+    await expect(hub(page)).toContainText("-1.5");
     await done(page);
     await done(page);
     await expect(rail(page)).toContainText("1 filters on");

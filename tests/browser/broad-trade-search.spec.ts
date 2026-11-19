@@ -1,3 +1,4 @@
+import { waitForFindResults } from "./trade-workspace-helpers";
 import { expect, test, type Page } from "@playwright/test";
 import { seedTradeLeague } from "./trade-seed";
 
@@ -17,21 +18,24 @@ for (const width of [1320, 1000, 390]) test(`broad search filters retained resul
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
   await expect(wheel(page).getByRole("button", { name: "Search", exact: true })).toBeVisible();
   await wheel(page).getByRole("button", { name: "Search", exact: true }).click();
-  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 30000 });
+  // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+  await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({ timeout: 30000 });
+  // Wait for worker completion and the deferred list to match the live wheel counts.
+  await waitForFindResults(page);
   await expect(page.locator("[aria-label=\"Trade search results\"] article").first()).toBeVisible();
-  // Their EPPG gain starts at +1 wherever the wheel is, and the arc sets it without a new search.
+  // Their EPPG gain starts at -2 wherever the wheel is, and the arc sets it without a new search.
   await segment(page, /^Gains/).click();
   await wheel(page).getByRole("menuitem", { name: "Their EPPG", exact: true }).click();
   const slider = wheel(page).getByRole("slider", { name: "Their EPPG at least" });
-  await expect(slider).toHaveAttribute("aria-valuenow", "1");
-  await slider.press("ArrowLeft");
-  await slider.press("ArrowLeft");
-  await expect(slider).toHaveAttribute("aria-valuenow", "0");
-  // Reset to defaults restores +1.
+  await expect(slider).toHaveAttribute("aria-valuenow", "-2");
+  await slider.press("ArrowRight");
+  await slider.press("ArrowRight");
+  await expect(slider).toHaveAttribute("aria-valuenow", "-1");
+  // Reset to defaults restores -2.
   await done(page);
   await done(page);
   await wheel(page).getByRole("button", { name: "Reset to defaults", exact: true }).click();
   await segment(page, /^Gains/).click();
   await wheel(page).getByRole("menuitem", { name: "Their EPPG", exact: true }).click();
-  await expect(wheel(page).getByRole("slider", { name: "Their EPPG at least" })).toHaveAttribute("aria-valuenow", "1");
+  await expect(wheel(page).getByRole("slider", { name: "Their EPPG at least" })).toHaveAttribute("aria-valuenow", "-2");
 });

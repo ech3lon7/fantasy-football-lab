@@ -6,7 +6,7 @@ import {
   type Dataset,
   type Workspace,
 } from "../../src/domain/contracts";
-import { openTradeDetails, openTradeFilters, openLegacyTrades } from "./trade-workspace-helpers";
+import { openTradeDetails, openTradeFilters, openLegacyTrades, waitForFindResults } from "./trade-workspace-helpers";
 
 // Capture a screenshot into test-results/ and copy it into the visual artifact directory
 async function captureScreenshot(page: Page, filename: string) {
@@ -113,7 +113,10 @@ test.describe("Positional Grade Search E2E", () => {
     await seedWorkspace(page, "starter");
     await expect(page.locator(".gd-find")).toBeVisible();
     await page.getByRole("dialog", { name: "Trade filters" }).getByRole("button", { name: "Search", exact: true }).click();
-    await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 60000 });
+    // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+    await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({ timeout: 60000 });
+    // Wait for worker completion and the deferred list to match the live wheel counts.
+    await waitForFindResults(page);
     const topRows = page.locator(".gd-res > .gd-res-group > .gd-res-row");
     await expect(topRows.first()).toBeVisible();
     // Let the streamed list settle before measuring it.
@@ -129,23 +132,23 @@ test.describe("Positional Grade Search E2E", () => {
     await expect(goals).toContainText("No positional grade goals configured.");
     await goals.getByRole("button", { name: "+ Add goal", exact: true }).click();
 
-    // Configure the rule: Your team -> WR -> Upgrade >= 1 step
+    // Configure the rule: Your team -> FLEX -> Upgrade >= 1 step
     const team = goals.getByRole("combobox", { name: "Team", exact: true });
     const position = goals.getByRole("combobox", { name: "Position", exact: true });
     const steps = goals.getByRole("combobox", { name: "Grade steps", exact: true });
     await team.selectOption("own");
     await expect(position.locator('option[value="OVERALL"]')).toHaveText("Overall (net steps)");
-    await position.selectOption("WR");
+    await position.selectOption("FLEX");
     await steps.selectOption("1");
-    await expect(goals.locator(".gd-goal-line")).toContainText(/^Your WR/);
+    await expect(goals.locator(".gd-goal-line")).toContainText(/^Your FLEX/);
 
-    // The list narrows at once: no new search ran, and every row left shows the WR upgrade as a grade-step chip.
+    // The list narrows at once: no new search ran, and every row left shows the FLEX upgrade as a grade-step chip.
     await expect(page.getByText(/possible trades/)).toHaveCount(1);
     await expect.poll(() => tradeCount(page).then((n) => (Number.isNaN(n) ? Infinity : n))).toBeLessThanOrEqual(before);
     await expect(topRows.first()).toBeVisible();
     const rows = await topRows.count();
     for (let i = 0; i < rows; i++) {
-      const chip = topRows.nth(i).locator('.gd-chipg[data-tone="positive"]').filter({ hasText: "WR" }).first();
+      const chip = topRows.nth(i).locator('.gd-chipg[data-tone="positive"]').filter({ hasText: "FLEX" }).first();
       await expect(chip).toBeVisible();
       await expect(chip).toContainText("→");
     }

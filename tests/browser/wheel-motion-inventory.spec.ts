@@ -1,3 +1,4 @@
+import { waitForFindResults } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { seedTradeLeague } from "./trade-seed";
 
@@ -112,7 +113,7 @@ test.describe("Full: every interaction animates", () => {
     await page.waitForTimeout(900);
     const slider = board(page).getByRole("slider", { name: "Their EPPG at least" });
     await slider.focus();
-    await expectMotion(page, "M7", () => slider.press("ArrowLeft"));
+    await expectMotion(page, "M7", () => slider.press("ArrowRight"));
     await expectMotion(page, "M7", () => slider.press("Home"));
     const ends = withId(await seen(page), "M7").map((s) => s.dur);
     expect(ends).toContain(100);
@@ -199,7 +200,9 @@ test.describe("Full: every interaction animates", () => {
     await rail(page).getByRole("button", { name: "Search", exact: true }).click();
     await expect.poll(async () => withId(await seen(page), "M16").length).toBeGreaterThan(1);
     await expect.poll(async () => withId(await seen(page), "M17").length, { timeout: 60000 }).toBeGreaterThan(2);
-    await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 240000 });
+    await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({ timeout: 240000 });
+    // Wait for worker completion and the deferred list to match the live wheel counts.
+    await waitForFindResults(page);
     await expect.poll(async () => withId(await seen(page), "M18").length, { timeout: 5000 }).toBeGreaterThan(0);
     await expect.poll(async () => withId(await seen(page), "M22").length).toBeGreaterThan(0);
   });
@@ -222,7 +225,10 @@ test.describe("Full: every interaction animates", () => {
   test("M21 and M22: counts roll, and the results move when a filter changes", async ({ page }) => {
     await open(page, "full");
     await rail(page).getByRole("button", { name: "Search", exact: true }).click();
-    await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 90000 });
+    // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+    await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({ timeout: 90000 });
+    // Wait for worker completion and the deferred list to match the live wheel counts.
+    await waitForFindResults(page);
     await page.waitForTimeout(1500);
     await clear(page);
     await rail(page).getByRole("button", { name: "Show all", exact: true }).click();
@@ -267,7 +273,10 @@ test.describe("Reduced: every animation is a fade of 150 ms or less", () => {
     await board(page).getByRole("slider", { name: "Their EPPG at least" }).press("ArrowLeft");
     await page.mouse.click(2, 300);
     await rail(page).getByRole("button", { name: "Search", exact: true }).click();
-    await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 90000 });
+    // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+    await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({ timeout: 90000 });
+    // Wait for worker completion and the deferred list to match the live wheel counts.
+    await waitForFindResults(page);
     await rail(page).getByRole("button", { name: "Reset to defaults", exact: true }).click();
     const list = (await seen(page)).filter((s) => s.ids);
     expect(list.length).toBeGreaterThan(0);
@@ -290,7 +299,10 @@ test.describe("Off: nothing animates", () => {
     await board(page).getByRole("slider", { name: "Their EPPG at least" }).press("ArrowLeft");
     await page.mouse.click(2, 300);
     await rail(page).getByRole("button", { name: "Search", exact: true }).click();
-    await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 90000 });
+    // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+    await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({ timeout: 90000 });
+    // Wait for worker completion and the deferred list to match the live wheel counts.
+    await waitForFindResults(page);
     await rail(page).getByRole("button", { name: "Reset to defaults", exact: true }).click();
     expect((await seen(page)).filter((s) => s.ids)).toEqual([]);
     expect(await page.evaluate(() => document.getAnimations().filter((a) => a.effect && (a.effect as KeyframeEffect).target?.closest?.("[data-motion]")).length)).toBe(0);

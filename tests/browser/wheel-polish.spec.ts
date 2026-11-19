@@ -1,3 +1,4 @@
+import { waitForFindResults } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { seedTradeLeague } from "./trade-seed";
 
@@ -21,7 +22,10 @@ async function open(page: Page, width = 1320, height = 1000, feel: Record<string
 }
 const search = async (page: Page) => {
   await rail(page).getByRole("button", { name: "Search", exact: true }).click();
-  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 90000 });
+  // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+  await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({ timeout: 90000 });
+  // Wait for worker completion and the deferred list to match the live wheel counts.
+  await waitForFindResults(page);
 };
 const boxOf = async (page: Page, selector: string) =>
   page.evaluate((s) => [...document.querySelectorAll(s)].map((el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }), selector);
@@ -61,7 +65,10 @@ test.describe("R1: the left rail", () => {
     await button.click();
     await expect(rail(page).getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
     await expect(rail(page).getByText(/searching… \d+ \/ \d+ teams/)).toBeVisible();
-    await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 240000 });
+    // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+    await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({ timeout: 240000 });
+    // Wait for worker completion and the deferred list to match the live wheel counts.
+    await waitForFindResults(page);
     await expect(rail(page).getByRole("button", { name: "Search", exact: true })).toBeVisible();
   });
 
@@ -179,8 +186,8 @@ test.describe("R3 and R4: the right zone and the chalk look", () => {
       expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
     }
     await expect(card.getByRole("button", { name: /^MIN$|^MAX$/ })).toHaveCount(0);
-    await lower.click();
-    await expect(board(page).getByRole("slider", { name: "Their EPPG at least" })).toHaveAttribute("aria-valuenow", "0.5");
+    await raise.click();
+    await expect(board(page).getByRole("slider", { name: "Their EPPG at least" })).toHaveAttribute("aria-valuenow", "-1.5");
     await card.getByRole("button", { name: /Their EPPG value/ }).click();
     const input = card.getByRole("spinbutton", { name: "Exact value" });
     await input.fill("-1");
@@ -336,7 +343,7 @@ test.describe("R8: labels, count and empty text", () => {
     await open(page);
     await segment(page, /^Gains/).click();
     const menu = right(page).getByRole("menu", { name: "Gains settings" });
-    await expect(menu.getByRole("menuitem")).toHaveText(["Your EPPG", "Their EPPG", "Your MPPG", "Their MPPG"]);
+    await expect(menu.getByRole("menuitem")).toHaveText(["Your EPPG", "Their EPPG", "Your MPPG", "Their MPPG", "Looks better to them"]);
     await menu.getByRole("menuitem", { name: "Your MPPG" }).click();
     await expect(ringZone(page).locator(".gd-zb-hub")).toContainText("your lineup's MPPG change this week");
     await expect(board(page).getByText(/Your week|Their week/)).toHaveCount(0);

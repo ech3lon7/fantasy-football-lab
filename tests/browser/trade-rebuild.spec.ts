@@ -1,3 +1,4 @@
+import { waitForFindResults } from "./trade-workspace-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { seedTradeLeague } from "./trade-seed";
 
@@ -35,7 +36,10 @@ async function openFind(page: Page) {
 }
 async function runSearch(page: Page) {
   await wheel(page).getByRole("button", { name: "Search", exact: true }).click();
-  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 60000 });
+  // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+  await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({ timeout: 60000 });
+  // Wait for worker completion and the deferred list to match the live wheel counts.
+  await waitForFindResults(page);
 }
 // "212 ideas · 188 trades of 221 found" → { shown: 188, total: 221 }
 async function counts(page: Page) {
@@ -106,14 +110,14 @@ test.describe("Find trades: one search", () => {
     expect(shown).toBeLessThanOrEqual(total);
   });
 
-  test("Their EPPG gain defaults to +1, accepts only -2 to +1 in half steps, and Reset to defaults restores it (R6b)", async ({ page }) => {
+  test("Their EPPG gain defaults to -2, accepts only -2 to +1 in half steps, and Reset to defaults restores it (R6b)", async ({ page }) => {
     await openFind(page);
     await runSearch(page);
     const handle = await openTheirGain(page);
-    await expect(handle).toHaveAttribute("aria-valuenow", "1");
+    await expect(handle).toHaveAttribute("aria-valuenow", "-2");
     await expect(handle).toHaveAttribute("aria-valuemin", "-2");
     await expect(handle).toHaveAttribute("aria-valuemax", "1");
-    await expect(handle).toHaveAttribute("aria-valuetext", "Their EPPG at least +1");
+    await expect(handle).toHaveAttribute("aria-valuetext", "Their EPPG at least -2");
     // There is no maximum for their gain: one handle only.
     await expect(wheel(page).getByRole("slider")).toHaveCount(1);
     await handle.press("End");
@@ -128,10 +132,10 @@ test.describe("Find trades: one search", () => {
     await done(page);
     await expect(handle).toHaveCount(0);
     await expect(wheel(page).locator('[data-zone="rail"]')).toContainText("1 filters on");
-    // Reset to defaults puts their gain back to +1 and your gain back to 0.
+    // Reset to defaults puts their gain back to -2 and your gain back to 0.
     await wheel(page).getByRole("button", { name: "Reset to defaults", exact: true }).click();
     await expect(wheel(page).locator('[data-zone="rail"]')).toContainText("0 filters on");
-    await expect(await openTheirGain(page)).toHaveAttribute("aria-valuenow", "1");
+    await expect(await openTheirGain(page)).toHaveAttribute("aria-valuenow", "-2");
     await expect(await openYourGain(page)).toHaveAttribute("aria-valuenow", "0");
   });
 
@@ -139,20 +143,21 @@ test.describe("Find trades: one search", () => {
     await openFind(page);
     await runSearch(page);
     const before = await counts(page);
-    // On this league the default Your EPPG gain minimum of 0 hides trades by itself.
     const handle = await openYourGain(page);
+    // Tighten the filter first to hide trades.
+    for (let i = 0; i < 4; i++) await handle.press("ArrowRight");
     // "hides N" is counted from the search results after the option opens, so wait for the count to land.
     await expect.poll(async () => hides(page)).toBeGreaterThan(0);
     const n = await hides(page);
+    const tightened = await counts(page);
     await handle.press("Home");
-    await expect.poll(async () => (await counts(page)).shown).toBe(before.shown + n);
+    await expect.poll(async () => (await counts(page)).shown).toBe(tightened.shown + n);
     expect((await counts(page)).total).toBe(before.total);
     // No new search ran: there is still one coverage line, from the first search.
     await expect(page.getByText(/possible trades/)).toHaveCount(1);
-    // Putting the default back hides them again.
-    for (let i = 0; i < 6; i++) await handle.press("ArrowRight");
-    await expect(handle).toHaveAttribute("aria-valuenow", "0");
-    await expect.poll(async () => (await counts(page)).shown).toBe(before.shown);
+    // Putting the filter back hides them again.
+    for (let i = 0; i < 4; i++) await handle.press("ArrowRight");
+    await expect.poll(async () => (await counts(page)).shown).toBe(tightened.shown);
   });
 
   test("Sort changes the order and never the count; Show hidden lists the removed trades with their reasons (R7, R8)", async ({ page }) => {
@@ -164,11 +169,24 @@ test.describe("Find trades: one search", () => {
       await sort.selectOption(value);
       await expect.poll(async () => (await counts(page)).shown).toBe(before.shown);
     }
+    // This fixture's trades all improve the opponent; use a restrictive own-gain bound to create genuine hidden rows.
+    const handle = await openYourGain(page);
+    await handle.press("End");
+    await done(page);
+    await done(page);
+    // Filtering runs in the worker; wait for the new hidden count before reading the settled totals.
+    await expect.poll(async () => { const n = await counts(page); return n.total - n.shown; }).toBeGreaterThan(0);
+    const filtered = await counts(page);
+    expect(filtered.total - filtered.shown).toBeGreaterThan(0);
     await page.getByRole("checkbox", { name: "Show hidden" }).check();
     const hidden = page.getByText(/· Hidden:/);
     await expect(hidden.first()).toBeVisible();
     await expect(hidden.first()).toContainText(/Your EPPG gain|Their EPPG gain/);
-    expect(await hidden.count()).toBe(before.total - before.shown);
+    // Hidden rows use the same initial 50-row page limit; the heading must still account for every excluded trade.
+    const hiddenTotal = filtered.total - filtered.shown;
+    const loaded = Math.min(50, hiddenTotal);
+    await expect(hidden).toHaveCount(loaded);
+    await expect(page.getByRole("heading", { name: `Showing ${loaded} of ${hiddenTotal.toLocaleString()} hidden trades` })).toBeVisible();
   });
 
   test("a player on the Never trade list never appears in what you give (R9)", async ({ page }) => {

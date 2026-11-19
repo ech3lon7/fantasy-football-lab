@@ -1,3 +1,4 @@
+import { waitForFindResults } from "./trade-workspace-helpers";
 import { expect, test, type Page } from "@playwright/test";
 import { seedTradeLeague } from "./trade-seed";
 
@@ -46,9 +47,13 @@ async function allVisibleKeys(page: Page) {
     await more.click();
     await expect.poll(() => page.locator(".gd-res-group[data-key]").count(), { timeout: 30000 }).toBeGreaterThan(before);
   }
-  for (const summary of await results(page).locator("details > summary").all()) {
-    if (/similar trade|variants|trades for this swap/i.test(await summary.innerText())) await summary.click();
-  }
+  // Open only package groups in one batch: expanding lazy children must not invalidate indexed summary locators.
+  await results(page).locator("details.gd-variants").evaluateAll((groups) => {
+    groups.forEach((group) => { (group as HTMLDetailsElement).open = true; });
+  });
+  // Toggle events mount the lazy children asynchronously; verify every counted trade is present before comparing keys.
+  const expected = (await counts(page)).shown;
+  await expect.poll(() => results(page).locator(".gd-res-group[data-key]").count(), { timeout: 30000 }).toBe(expected);
   return page.locator(".gd-res-group[data-key]").evaluateAll((nodes) => nodes.map((node) => (node as HTMLElement).dataset.key!));
 }
 
@@ -75,7 +80,10 @@ test("full league keeps streamed trades and explains filter totals", async ({ pa
   await openFind(page);
   await recordStream(page);
   await page.getByRole("button", { name: /^(Search|Search all trades)$/ }).click();
-  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 360000 });
+  // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+  await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({ timeout: 360000 });
+  // Wait for worker completion and the deferred list to match the live wheel counts.
+  await waitForFindResults(page);
   const before = await counts(page);
   expect(before.total).toBeGreaterThan(0);
   if (before.shown === 0) {
@@ -109,11 +117,14 @@ test("old offered-player settings start at defaults", async ({ page }) => {
   await openFind(page, { tradeSearchSettings: old });
   await expect(page.getByText("Your old Find trades settings don't apply to the new search, so filters start at the defaults.")).toBeVisible();
   await page.getByRole("button", { name: /^(Search|Search all trades)$/ }).click();
-  await expect(page.getByText(/possible trades/)).toBeVisible({ timeout: 360000 });
+  // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+  await expect(page.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({ timeout: 360000 });
+  // Wait for worker completion and the deferred list to match the live wheel counts.
+  await waitForFindResults(page);
   expect((await counts(page)).shown).toBeGreaterThan(0);
   await wheel(page).getByRole("menuitem", { name: /^Gains/ }).click();
   await wheel(page).getByRole("menuitem", { name: /^Their EPPG/ }).click();
-  await expect(wheel(page).getByRole("slider", { name: /Their EPPG/i })).toHaveAttribute("aria-valuenow", "1");
+  await expect(wheel(page).getByRole("slider", { name: /Their EPPG/i })).toHaveAttribute("aria-valuenow", "-2");
 });
 
 // The saved workspace, read through the app's own IndexedDB store so the reload checks persistence, not a race with the save queue.

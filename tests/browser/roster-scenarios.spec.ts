@@ -1,5 +1,5 @@
 import { openRosterTools } from "./roster-workspace-helpers";
-import { openTradeDetails, openSavedTrades, openManualPlayers } from "./trade-workspace-helpers";
+import { openTradeDetails, openSavedTrades, openManualPlayers, waitForFindResults } from "./trade-workspace-helpers";
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import {
@@ -114,7 +114,10 @@ const wheel = (page: Page) =>
 // Run the broad search from the inline wheel and wait for its coverage line.
 async function searchAll(page: Page, search: Locator) {
   await wheel(page).getByRole("button", { name: "Search", exact: true }).click();
-  await expect(search.getByText(/possible trades/)).toBeVisible({ timeout: 60000 });
+  // Progress also mentions possible trades; only the final coverage line means filtering and animations have settled.
+  await expect(search.getByText(/^Checked all [\d,]+ possible trades/)).toBeVisible({ timeout: 60000 });
+  // Wait for worker completion and the deferred list to match the live wheel counts.
+  await waitForFindResults(page);
 }
 
 // Run the broad search, then narrow the retained results (instantly, with no new search) to what the test inspects:
@@ -735,13 +738,24 @@ test("forced trades update both simulated rosters and later searches and undo to
     await sendable(page, "Incoming QB").click();
   await page.getByRole("tab", { name: "Find trades", exact: true }).click();
   const search = page.locator(".gd-find");
-  await searchAll(page, search);
-  // After the forced trade Incoming QB is on your roster, so the search offers him on your side of the trade. Bench QB moved to the
-  // other team, whose loss of a 30-point quarterback is past the approved search floor, so no trade for him is kept.
+  await broadSearch(page, search, { give: "Incoming QB" });
+  // This unfavorable forced swap has no positive-gain follow-up in the tiny fixture. Inspect the completed search's model instead
+  // of requiring a trade that the approved positive-gain rule correctly excludes.
   const results = search.getByRole("region", { name: "Trade search results" });
-  await results.getByRole("checkbox", { name: "Show hidden" }).check();
-  await expect(results.getByRole("link", { name: "Incoming QB", exact: true }).first()).toBeVisible();
+  await expect(results.getByText("No trade with any team raises your EPPG.", { exact: true })).toBeVisible();
   await expect(results.getByRole("link", { name: "Bench QB", exact: true })).toHaveCount(0);
+  // Verify both new owners in the actual search snapshot, alongside a completed worker status and the applied outgoing filter.
+  await search.locator("details.gd-diag > summary").click();
+  const downloading = page.waitForEvent("download");
+  await search.getByRole("button", { name: "Download search debug", exact: true }).click();
+  const stream = await (await downloading).createReadStream();
+  let contents = "";
+  for await (const chunk of stream!) contents += chunk.toString();
+  const report = JSON.parse(contents);
+  expect(report.searchStatus.status).toBe("complete");
+  expect(report.filters.mustGive).toContain("200");
+  expect(report.players.find((p: { id: string }) => p.id === "200").owner).toBe("1");
+  expect(report.players.find((p: { id: string }) => p.id === "101").owner).toBe("2");
   await page.goto("./#/roster");
   await openRosterTools(page);
   await expect(

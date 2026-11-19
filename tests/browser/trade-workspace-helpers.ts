@@ -1,5 +1,16 @@
 import { expect, type Page } from "@playwright/test";
 
+// The wheel reads live worker state while results render a deferred copy; both must agree before inspecting a completed search.
+export async function waitForFindResults(page: Page) {
+  const find = page.locator(".gd-find");
+  await expect(find.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0, { timeout: 360000 });
+  await expect.poll(() => find.evaluate((root) => {
+    const live = root.querySelector(".gd-wheel-count")?.textContent?.replace(/[\s,]/g, "");
+    const rendered = root.querySelector('[aria-label="Trade search results"] .gd-chips b')?.textContent?.match(/([\d,]+) trades of ([\d,]+) found/);
+    return !!rendered && live === `${rendered[1]}/${rendered[2]}`.replace(/,/g, "");
+  }), { timeout: 30000 }).toBe(true);
+}
+
 // Open the current manual disclosures and saved drawer through their visible controls.
 export async function openTradeDetails(page: Page) {
   const groups = page.locator(".gd-manual:visible > div > details.gd-disclosure");
