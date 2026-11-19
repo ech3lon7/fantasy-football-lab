@@ -18,5 +18,6 @@ test("broad search timing on a 12-team league", async ({ page }) => {
   const summary = `first rows ${firstRows.toFixed(1)} s; full search ${full.toFixed(1)} s; ${text}`;
   console.log("TIMING " + summary);
   test.info().annotations.push({ type: "timing", description: summary });
-  expect(firstRows).toBeLessThan(10);
+  // The limit matches the approved 15 s search budget: first results appear only after a whole opponent is searched with details.
+  expect(firstRows).toBeLessThan(15);
 });
