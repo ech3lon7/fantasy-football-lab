@@ -8,12 +8,12 @@ import type { DefensePositionStat } from "../src/domain/matchups";
 // Exercise the approved multiplier against unrounded, explicitly supplied defense data.
 describe("matchup-adjusted MPPG", () => {
   it.each([
-    [25, 0.6, 9, 15, "EPPG 25.0 × (1 − 40%) · MIN allows 40% fewer points to QBs than average (9 games)"],
-    [14.6, 1.47, 9, 21.5, "EPPG 14.6 × (1 + 47%) · MIN allows 47% more points to QBs than average (9 games)"],
-    [10, 1.8, 9, 15, "EPPG 10.0 × (1 + 50%, capped) · MIN allows 80% more points to QBs than average (9 games)"],
-    [10, 0.3, 9, 5, "EPPG 10.0 × (1 − 50%, capped) · MIN allows 70% fewer points to QBs than average (9 games)"],
-    [14.6, 1.2, 2, 16.1, "EPPG 14.6 × (1 + 10%) · MIN allows 20% more points to QBs than average (2 games, counted at 50%)"],
-    [10, 1.02, 9, 10.2, "EPPG 10.0 × (1 + 2%) · MIN allows 2% more points to QBs than average (9 games)"],
+    [25, 0.6, 9, 17.5, "Base 25.0 = EPPG 25.0 (no ESPN projection) · × (1 − 30%) · MIN allows 40% fewer points to QBs than average (9 games)"],
+    [14.6, 1.47, 9, 19.7, "Base 14.6 = EPPG 14.6 (no ESPN projection) · × (1 + 35%) · MIN allows 47% more points to QBs than average (9 games)"],
+    [10, 1.8, 9, 11.5, "Base 10.0 = EPPG 10.0 (no ESPN projection) · × (1 + 15%) · MIN allows 80% more points to QBs than average (9 games, capped)"],
+    [10, 0.3, 9, 8.5, "Base 10.0 = EPPG 10.0 (no ESPN projection) · × (1 − 15%) · MIN allows 70% fewer points to QBs than average (9 games, capped)"],
+    [14.6, 1.2, 2, 14.6, "Base 14.6 = EPPG 14.6 (no ESPN projection) · MIN matchup +10% ignored (under 12%)"],
+    [10, 1.02, 9, 10, "Base 10.0 = EPPG 10.0 (no ESPN projection) · MIN matchup +2% ignored (under 12%)"],
   ])("uses EPPG %s and opponent ratio %s", async (eppg, ratio, games, expected, line) => {
     const d = await fixture([20, 20, 20]);
     const m = evaluate(d, defaults);
@@ -34,7 +34,7 @@ describe("matchup-adjusted MPPG", () => {
     const unavailable = calculateMppg(m, p, m.current, new Map());
     expect(unavailable.value).toBe(12.1);
     expect(unavailable.reason).toBe("Matchup data unavailable");
-    expect(unavailable.buildLine).toBe("EPPG 12.1 · matchup data unavailable");
+    expect(unavailable.buildLine).toBe("Base 12.1 = EPPG 12.1 (no ESPN projection) · matchup data unavailable");
     p.blendedExpected = null; p.weekly = 20;
     expect(calculateMppg(m, p).reason).toBe("No Expected PPG");
     expect(calculateMppg(m, p).value).toBeNull();
@@ -43,7 +43,7 @@ describe("matchup-adjusted MPPG", () => {
   // Each unavailable matchup condition must retain the player's expected scoring forecast.
   it.each(["no schedule", "no opponent", "no defense games", "zero league average"])("falls back for %s", async (condition) => {
     const m = evaluate(await fixture([20, 20]), defaults);
-    const p = m.players[0]; p.pos = "QB"; p.blendedExpected = 12.1;
+    const p = m.players[0]; p.pos = "QB"; p.blendedExpected = 12.1; p.weekly = null;
     const schedule = m.dataset.tables.ModelSchedule.find((s) => String(s.ProTeamID) === p.nflId && Number(s.Week) === m.current)!;
     schedule.Opponent = condition === "no opponent" ? "" : "MIN";
     schedule.OpponentID = "";

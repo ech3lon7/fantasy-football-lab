@@ -976,10 +976,14 @@ export function weeklyLineup(m: Model, team: string): WeeklyLineup {
     const currMatchup = matchupList.find((mu) => mu.week === week);
     const chipText = currMatchup ? currMatchup.text : "";
 
-    // Explain each available player's applied opponent adjustment without ESPN projections.
-    const matchupReason = (result: MppgResult, player: Player) => result.matchupPct === null
-      ? "matchup data unavailable"
-      : `vs ${result.opponent} ${result.matchupPct >= 0 ? "+" : "−"}${Math.round(Math.abs(result.matchupPct) * 100)}% to ${{ QB: "QBs", RB: "RBs", WR: "WRs", TE: "TEs", K: "kickers", "D/ST": "defences" }[player.pos] ?? player.pos}`;
+    // Explain each available player's MPPG matchup as Design T used it: ESPN zero, no data, ignored under 12%, or the effect applied.
+    const matchupReason = (result: MppgResult, player: Player) => result.espnZero
+      ? "ESPN projects 0"
+      : result.matchupPct === null
+        ? "matchup data unavailable"
+        : result.matchupIgnored
+          ? `vs ${result.opponent} matchup ignored (under 12%)`
+          : `vs ${result.opponent} ${(result.matchupEffect ?? 0) < 0 ? "−" : "+"}${Math.round(Math.abs(result.matchupEffect ?? 0) * 100)}% to ${{ QB: "QBs", RB: "RBs", WR: "WRs", TE: "TEs", K: "kickers", "D/ST": "defences" }[player.pos] ?? player.pos}`;
     const reason =
       pout.mppg.value === null
         ? `${pout.player.name} is ${pout.mppg.reason.toLowerCase()} · ${chipText}`

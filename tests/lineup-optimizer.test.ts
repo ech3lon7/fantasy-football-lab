@@ -48,16 +48,16 @@ describe("optimizer: maximum-MPPG lineup", () => {
     expect(change).toMatchObject({
       slot: "RB",
       inId: "10",
-      outId: "3",
-      gain: 7,
+      outId: "7",
+      gain: 2.6,
       pinned: false,
     });
     expect(
       result.slots.find((slot) => slot.index === change.slotIndex)?.playerId,
     ).toBe("10");
-    expect(result.currentTotal).toBe(120.4);
-    expect(result.optimizedTotal).toBe(127.4);
-    expect(result.gain).toBe(7);
+    expect(result.currentTotal).toBe(115.9);
+    expect(result.optimizedTotal).toBe(118.5);
+    expect(result.gain).toBe(2.6);
     expect(result.pinCost).toBeNull();
   });
 });
@@ -67,7 +67,7 @@ describe("optimizer: slot stability", () => {
     const { m, team, current } = await setup();
     const first = optimizeLineup(m, team, { current, pins: [] });
     const result = optimizeLineup(m, team, { current: first.slots, pins: ["10", "11"] });
-    expect(result.slots.find((entry) => entry.slot === "FLEX")?.playerId).toBe("7");
+    expect(result.slots.find((entry) => entry.slot === "FLEX")?.playerId).toBe("3");
   });
   it("describes each replacement against the player leaving that slot", async () => {
     const { m, team, current } = await setup();
@@ -77,7 +77,7 @@ describe("optimizer: slot stability", () => {
     }));
     const result = optimizeLineup(m, team, { current: changed, pins: [] });
     expect(result.changes.find((entry) => entry.inId === "1")?.outId).toBe("15");
-    expect(result.changes.find((entry) => entry.inId === "2")?.outId).toBe("3");
+    expect(result.changes.find((entry) => entry.inId === "2")?.outId).toBe("7");
     expect(result.changes.find((entry) => entry.inId === "10")?.outId).toBe("13");
   });
   it("keeps unchanged starters in their indices and treats a same-position swap as no change", async () => {
@@ -99,7 +99,7 @@ describe("optimizer: slot stability", () => {
     // The same lower-value starter leaves despite having moved to the other RB slot.
     expect(result.changes.map(({ inId, outId }) => ({ inId, outId }))).toEqual(fixed.changes.map(({ inId, outId }) => ({ inId, outId })));
     expect(result.changes.map((c) => c.slot)).toEqual(["RB"]);
-    expect(result.gain).toBe(7);
+    expect(result.gain).toBe(2.6);
     expect(result.slots.find((slot) => slot.playerId === "2")?.index).toBe(swapped.find((slot) => slot.playerId === "2")?.index);
   });
 });
@@ -131,8 +131,8 @@ describe("optimizer: pins", () => {
     expect(
       result.slots.find((slot) => slot.slot === "WR" && slot.playerId === "11"),
     ).toBeTruthy();
-    // Matchups place Dunn at RB, Osei at WR and retain Brannigan at FLEX.
-    expect(result.optimizedTotal).toBe(124.2);
+    // Under Design T the best lineup that contains Osei starts Dunn at RB and Osei at WR.
+    expect(result.optimizedTotal).toBe(115.2);
     expect(result.changes.map((c) => c.inId)).toContain("11");
   });
 
@@ -141,7 +141,7 @@ describe("optimizer: pins", () => {
     const result = optimizeLineup(m, team, { current, pins: ["11"] });
     const unpinned = optimizeLineup(m, team, { current, pins: [] });
     expect(result.pinCost).toBe(round(unpinned.optimizedTotal - result.optimizedTotal));
-    expect(result.pinCost).toBe(3.2);
+    expect(result.pinCost).toBe(3.3);
   });
 
   it("reports conflicting pins and leaves the lineup unchanged", async () => {
@@ -208,6 +208,6 @@ describe("optimizer: rounding", () => {
     expect(result.currentTotal).toBe(round(result.currentTotal));
     expect(result.optimizedTotal).toBe(round(result.optimizedTotal));
     expect(result.gain).toBe(round(result.optimizedTotal - result.currentTotal));
-    expect(result.gain).toBe(7);
+    expect(result.gain).toBe(2.6);
   });
 });

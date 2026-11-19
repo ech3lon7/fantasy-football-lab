@@ -11,7 +11,7 @@ test("formation optimize, copy and undo", async ({ page }) => {
     "Your ESPN lineup · MPPG",
   );
   await expect(bar.locator(".gd-fm-hint")).toHaveText(
-    "Optimizing gains +7.0 MPPG with 1 change.",
+    "Optimizing gains +2.6 MPPG with 1 change.",
   );
   const optimize = bar.getByRole("button", { name: /Optimize lineup/ });
   await expect(optimize).toBeEnabled();
@@ -25,7 +25,7 @@ test("formation optimize, copy and undo", async ({ page }) => {
   );
   console.log("result:", await bar.locator(".gd-fm-res").innerText());
   await expect(bar.locator(".gd-fm-res b")).toContainText(
-    "+7.0 MPPG this week · 120.4 → 127.4",
+    "+2.6 MPPG this week · 115.9 → 118.5",
   );
   // The displayed gain must equal the difference between the displayed rounded totals.
   const line = await bar.locator(".gd-fm-res b").innerText();
@@ -83,9 +83,9 @@ test("formation optimize phone", async ({ page }) => {
   console.log("phone tag", JSON.stringify(boxes));
   expect(boxes.overlap).toBe(false);
   // The new matchup forecast leaves Whitfield as the backup after optimization.
-  const backup = page.locator(".gd-fc-bkn-last").filter({ hasText: "WHITFIELD" }).first();
+  const backup = page.locator(".gd-fc-bkn-last").filter({ hasText: "BOYD" }).first();
   await expect(backup).toBeVisible();
-  await expect(backup).toHaveText("WHITFIELD");
+  await expect(backup).toHaveText("BOYD");
   expect(await backup.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   await page.locator(".gd-fm").screenshot({
     path: "test-results/fm-check/after-390.png",

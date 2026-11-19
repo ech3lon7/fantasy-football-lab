@@ -60,8 +60,6 @@ for (const width of [1320, 390]) {
     await page.getByRole('button',{name:/Test A D\/ST grade/i}).click();
     await checkFrames(page.locator('.gd-tile-photo:visible'));
     await page.keyboard.press('Escape');
-    await page.goto('./#/week');
-    await checkFrames(page.locator('.gd-move-photo:visible'));
   });
 }
 

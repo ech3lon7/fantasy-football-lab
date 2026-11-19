@@ -3,6 +3,7 @@ import { num, str } from "./contracts";
 import type { Model } from "./valuation";
 import { playedHistory } from "./opportunity";
 import { computeDefenseStats } from "./matchups";
+import { MPPG_CAP, MPPG_MATCHUP_THRESHOLD, MPPG_MATCHUP_WEIGHT, MPPG_SCORING_LEVEL_BASE, MPPG_SCORING_LEVEL_POWER, MPPG_STREAK_FADE, MPPG_STREAK_THRESHOLD } from "./mppg";
 
 export const mppgSnapshotsKey = "mppg_weekly_snapshots";
 
@@ -168,6 +169,8 @@ export function pairAccuracy(rows: PairForecast[]): number | null {
   return count ? correct / count : null;
 }
 
+const DESIGN_T_LABEL = "Design T (past ESPN projections unavailable, so EPPG part only)";
+
 export interface MatchupBacktest {
   ready: boolean; message: string; weeks: number; playerWeeks: number;
   results: { label: string; averageMiss: number; hitRate: number | null; best: boolean }[];
@@ -176,7 +179,7 @@ export interface MatchupBacktest {
 // Backtest each historical week using only earlier scoring and earlier defense records.
 export function backtestMatchup(m: Model): MatchupBacktest {
   const histories = playedHistory(m.dataset);
-  const records: { week: number; pos: string; actual: number; baseline: number; raw: number | null; games: number }[] = [];
+  const records: { week: number; pos: string; actual: number; baseline: number; recent: number; raw: number | null; games: number }[] = [];
   const weeks = new Set<number>();
   for (let week = 4; week < m.current; week++) {
     const stats = computeDefenseStats(m, week);
@@ -189,15 +192,28 @@ export function backtestMatchup(m: Model): MatchupBacktest {
       const opponent = schedule ? str(schedule.Opponent || schedule.OpponentID || "") : "";
       const defense = stats.get(`${opponent}/${player.pos}`);
       const raw = defense && defense.gamesPlayed > 0 && defense.leagueAverageRaw > 0 ? defense.allowedPerGameRaw / defense.leagueAverageRaw - 1 : null;
-      records.push({ week, pos: player.pos, actual: num(actual.Points), baseline: before.reduce((sum, h) => sum + num(h.Points), 0) / before.length, raw, games: defense?.gamesPlayed ?? 0 });
+      // The last-3 average comes from the same earlier games (all of them when there are fewer than three).
+      const lastThree = [...before].sort((a, b) => num(a.Week) - num(b.Week)).slice(-3);
+      records.push({ week, pos: player.pos, actual: num(actual.Points), baseline: before.reduce((sum, h) => sum + num(h.Points), 0) / before.length,
+        recent: lastThree.reduce((sum, h) => sum + num(h.Points), 0) / lastThree.length, raw, games: defense?.gamesPlayed ?? 0 });
       weeks.add(week);
     }
   }
   if (weeks.size < 3) return { ready: false, message: `At least 3 qualifying weeks are required (currently ${weeks.size}).`, weeks: weeks.size, playerWeeks: records.length, results: [] };
-  const variants = ["No matchup", "Approved", "Cautious", "Uncapped", "Half strength"];
+  const variants = [DESIGN_T_LABEL, "No matchup", "Approved", "Cautious", "Uncapped", "Half strength"];
   const results = variants.map((label) => {
     const forecasts = records.map((r): PairForecast => {
       const reliability = r.games <= 3 ? 0.5 : 1;
+      if (label === DESIGN_T_LABEL) {
+        // Design T steps 4 to 8 with the ESPN share 0 and no ESPN rule: the backtest's own baseline stands in for EPPG, and the streak
+        // term uses the prior-games average and the last-3 average from the same history.
+        const fade = MPPG_STREAK_FADE * Math.max(0, r.recent - r.baseline - MPPG_STREAK_THRESHOLD);
+        const applied = r.raw === null ? 0 : Math.max(-MPPG_CAP, Math.min(MPPG_CAP, r.raw * reliability));
+        const used = Math.abs(applied) >= MPPG_MATCHUP_THRESHOLD ? applied : 0;
+        const level = r.baseline <= 0 ? 0 : Math.min(1, Math.pow(r.baseline / MPPG_SCORING_LEVEL_BASE, MPPG_SCORING_LEVEL_POWER));
+        const effect = r.raw === null ? 0 : (MPPG_MATCHUP_WEIGHT[r.pos] ?? 0) * used * level;
+        return { week: r.week, position: r.pos, predicted: Math.max(0, Math.round((r.baseline - fade) * (1 + effect) * 10) / 10), actual: r.actual };
+      }
       const raw = r.raw ?? 0;
       const adjusted = label === "No matchup" ? 0 : label === "Cautious" ? Math.max(-0.25, Math.min(0.25, raw * r.games / (r.games + 8))) : label === "Uncapped" ? raw * reliability : Math.max(-0.5, Math.min(0.5, raw * reliability)) * (label === "Half strength" ? 0.5 : 1);
       return { week: r.week, position: r.pos, predicted: Math.max(0, Math.round(r.baseline * (1 + adjusted) * 10) / 10), actual: r.actual };
