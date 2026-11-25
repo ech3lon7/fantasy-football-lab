@@ -40,6 +40,14 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      - name: Speed checks (report only)
+        run: npm run test:speed
+        continue-on-error: true
+        env:
+          CI: 'true'
+          GITHUB_ACTIONS: 'true'
+          RELEASE_VERIFY: 'true'
+          APP_URL: http://127.0.0.1:4173/fantasy-football-lab/
       # Retain browser traces and error context when the gate fails; never deploy failed checks.
       - uses: actions/upload-artifact@v4
         if: failure()

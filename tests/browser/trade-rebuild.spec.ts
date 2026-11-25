@@ -171,7 +171,7 @@ test.describe("Find trades: one search", () => {
     }
     // This fixture's trades all improve the opponent; use a restrictive own-gain bound to create genuine hidden rows.
     const handle = await openYourGain(page);
-    await handle.press("End");
+    for (let i = 0; i < 4; i++) await handle.press("ArrowRight");
     await done(page);
     await done(page);
     // Filtering runs in the worker; wait for the new hidden count before reading the settled totals.

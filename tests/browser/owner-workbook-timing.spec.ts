@@ -9,7 +9,7 @@ test.describe("Owner workbook trade search timing", () => {
   });
 
   // T8.3: Run 3 times, median must be <= 15 s
-  test("owner workbook search timing (3 runs, median <= 15s)", async ({ page }) => {
+  test("owner workbook search timing (3 runs, median <= 15s) @speed", async ({ page }) => {
     test.setTimeout(180000);
 
     const times: number[] = [];
@@ -56,7 +56,7 @@ test.describe("Owner workbook trade search timing", () => {
   });
 
   // T8.4: Marked starters setting run
-  test("owner workbook search with Marked starters lineup basis", async ({ page }) => {
+  test("owner workbook search with Marked starters lineup basis @speed", async ({ page }) => {
     test.setTimeout(120000);
 
     await page.goto("./");

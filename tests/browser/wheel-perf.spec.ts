@@ -100,7 +100,7 @@ const accept = (name: string) => {
 test.skip(!process.env.PERF, "set PERF=1 to measure frame times");
 test.describe.configure({ mode: "serial" });
 
-test("M1: the tab shows and the board draws in", async ({ page }) => {
+test("M1: the tab shows and the board draws in @speed", async ({ page }) => {
   await page.addInitScript(hookAnimate);
   await page.setViewportSize({ width: 1320, height: 1000 });
   await seedTradeLeague(page, "search", draft, { feelAnimation: "full" });
@@ -111,7 +111,7 @@ test("M1: the tab shows and the board draws in", async ({ page }) => {
   accept("M1 open");
 });
 
-test("M3, M9, M14: choose a category, open a panel, go back", async ({ page }) => {
+test("M3, M9, M14: choose a category, open a panel, go back @speed", async ({ page }) => {
   await prepare(page);
   await measure(page, "M3 choose", () => segment(page, /^Players/).click());
   accept("M3 choose");
@@ -121,7 +121,7 @@ test("M3, M9, M14: choose a category, open a panel, go back", async ({ page }) =
   accept("M14 back");
 });
 
-test("M7: stepping a slider", async ({ page }) => {
+test("M7: stepping a slider @speed", async ({ page }) => {
   await prepare(page);
   await segment(page, /^Gains/).click();
   await board(page).getByRole("menuitem", { name: "Their EPPG", exact: true }).click();
@@ -137,7 +137,7 @@ test("M7: stepping a slider", async ({ page }) => {
   accept("M7 slider");
 });
 
-test("M16 to M18 and M22: search, play call, results, a filter change", async ({ page }) => {
+test("M16 to M18 and M22: search, play call, results, a filter change @speed", async ({ page }) => {
   await prepare(page);
   await measure(page, "M16-M18 search", async () => {
     await board(page).getByRole("button", { name: "Search", exact: true }).click();

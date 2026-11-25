@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { seedTradeLeague } from "./trade-seed";
 
 // T0 in the browser: the broad search on a 12-team league through the real worker and its helper pool.
-test("broad search timing on a 12-team league", async ({ page }) => {
+test("broad search timing on a 12-team league @speed", async ({ page }) => {
   test.setTimeout(600000);
   await seedTradeLeague(page, "big", { teamA: "1", teamB: "2", give: [], get: [] }, { feelAnimation: "off" });
   await page.goto("./#/trade");

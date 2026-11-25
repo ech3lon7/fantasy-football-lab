@@ -7,3 +7,4 @@ Preserve null versus zero and source timestamps. Keep surplus exchange, lineup i
 Run npm run check and npm run build for changes affecting the application; run relevant browser and Excel parity checks for affected workflows.
 Do not publish secrets or real test data. Supabase changes must remain isolated from Trainwise tables.
 App versions follow the user's major.moderate.minor convention: first number for major app changes, second for moderate changes, third for minor changes. Player popovers are a minor app change, version 0.2.1. Map these change sizes to npm major, minor, and patch respectively.
+Tests must keep 2× headroom: a test's local duration may be at most 50% of its time limit. Pure speed checks are tagged @speed and never block deploys. Report test durations when you change slow tests.
