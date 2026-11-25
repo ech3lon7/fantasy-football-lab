@@ -983,7 +983,9 @@ export function weeklyLineup(m: Model, team: string): WeeklyLineup {
         ? "matchup data unavailable"
         : result.matchupIgnored
           ? `vs ${result.opponent} matchup ignored (under 12%)`
-          : `vs ${result.opponent} ${(result.matchupEffect ?? 0) < 0 ? "−" : "+"}${Math.round(Math.abs(result.matchupEffect ?? 0) * 100)}% to ${{ QB: "QBs", RB: "RBs", WR: "WRs", TE: "TEs", K: "kickers", "D/ST": "defences" }[player.pos] ?? player.pos}`;
+          : result.matchupUnweighted
+            ? `matchup not used for ${{ QB: "QBs", RB: "RBs", WR: "WRs", TE: "TEs", K: "kickers", "D/ST": "defences" }[player.pos] ?? player.pos}`
+            : `vs ${result.opponent} ${(result.matchupEffect ?? 0) < 0 ? "−" : "+"}${Math.round(Math.abs(result.matchupEffect ?? 0) * 100)}% to ${{ QB: "QBs", RB: "RBs", WR: "WRs", TE: "TEs", K: "kickers", "D/ST": "defences" }[player.pos] ?? player.pos}`;
     const reason =
       pout.mppg.value === null
         ? `${pout.player.name} is ${pout.mppg.reason.toLowerCase()} · ${chipText}`

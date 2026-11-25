@@ -3,7 +3,7 @@ import { num, str } from "./contracts";
 import type { Model } from "./valuation";
 import { playedHistory } from "./opportunity";
 import { computeDefenseStats } from "./matchups";
-import { MPPG_CAP, MPPG_MATCHUP_THRESHOLD, MPPG_MATCHUP_WEIGHT, MPPG_SCORING_LEVEL_BASE, MPPG_SCORING_LEVEL_POWER, MPPG_STREAK_FADE, MPPG_STREAK_THRESHOLD } from "./mppg";
+import { MPPG_CAP, MPPG_EFFECT_CAP, MPPG_MATCHUP_THRESHOLD, MPPG_MATCHUP_WEIGHT, MPPG_SCORING_LEVEL_BASE, MPPG_SCORING_LEVEL_POWER, MPPG_STREAK_FADE, MPPG_STREAK_THRESHOLD } from "./mppg";
 
 export const mppgSnapshotsKey = "mppg_weekly_snapshots";
 
@@ -211,7 +211,7 @@ export function backtestMatchup(m: Model): MatchupBacktest {
         const applied = r.raw === null ? 0 : Math.max(-MPPG_CAP, Math.min(MPPG_CAP, r.raw * reliability));
         const used = Math.abs(applied) >= MPPG_MATCHUP_THRESHOLD ? applied : 0;
         const level = r.baseline <= 0 ? 0 : Math.min(1, Math.pow(r.baseline / MPPG_SCORING_LEVEL_BASE, MPPG_SCORING_LEVEL_POWER));
-        const effect = r.raw === null ? 0 : (MPPG_MATCHUP_WEIGHT[r.pos] ?? 0) * used * level;
+        const effect = r.raw === null ? 0 : Math.max(-MPPG_EFFECT_CAP, Math.min(MPPG_EFFECT_CAP, (MPPG_MATCHUP_WEIGHT[r.pos] ?? 0) * used * level));
         return { week: r.week, position: r.pos, predicted: Math.max(0, Math.round((r.baseline - fade) * (1 + effect) * 10) / 10), actual: r.actual };
       }
       const raw = r.raw ?? 0;

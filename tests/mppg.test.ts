@@ -7,6 +7,7 @@ import {
   calculateMppg,
   MPPG_CAP,
   MPPG_EARLY_GAMES,
+  MPPG_EFFECT_CAP,
   MPPG_EARLY_RELIABILITY,
   MPPG_ESPN_SHARE,
   MPPG_MATCHUP_THRESHOLD,
@@ -37,7 +38,8 @@ describe("MPPG formula (Design T)", () => {
   it("uses the approved named constants", () => {
     expect([MPPG_CAP, MPPG_EARLY_GAMES, MPPG_EARLY_RELIABILITY]).toEqual([0.5, 3, 0.5]);
     expect(MPPG_ESPN_SHARE).toEqual({ QB: 0.75, RB: 0.45, WR: 0.55, TE: 0, K: 1, "D/ST": 0.6 });
-    expect(MPPG_MATCHUP_WEIGHT).toEqual({ QB: 0.75, RB: 0.35, WR: 0.7, TE: 1.85, K: 2.0, "D/ST": 2.35 });
+    expect(MPPG_MATCHUP_WEIGHT).toEqual({ QB: 0.75, RB: 0.35, WR: 0.7, TE: 1.85, K: 0, "D/ST": 2.35 });
+    expect(MPPG_EFFECT_CAP).toBe(0.5);
     expect([MPPG_MATCHUP_THRESHOLD, MPPG_STREAK_THRESHOLD, MPPG_STREAK_FADE, MPPG_SCORING_LEVEL_BASE, MPPG_SCORING_LEVEL_POWER]).toEqual([0.12, 2, 0.55, 12, 5]);
   });
 
@@ -115,22 +117,34 @@ describe("MPPG formula (Design T)", () => {
     expect(calculateMppg(high.m, high.p, high.m.current, defence("TE", 0.3)).scoringLevel).toBe(1);
   });
 
-  // f. The weights, with the Week 10 Isaiah Likely inputs.
-  it("weights a tight end's matchup by 1.85: EPPG 14.59, a +37.58% matchup and ESPN 12.45 give 24.7", async () => {
+  // f. The weights, with the Week 10 Isaiah Likely inputs: 1.85 x 37.58% = 69.5%, limited to 50% since 2026-11-25.
+  it("weights a tight end's matchup by 1.85 and limits the effect to 50%: EPPG 14.59, a +37.58% matchup and ESPN 12.45 give 21.9", async () => {
     const { m, p } = await setup({ pos: "TE", eppg: 14.59, weekly: 12.45 });
     const result = calculateMppg(m, p, m.current, defence("TE", 0.3758));
-    expect(result.value).toBeCloseTo(24.7, 1);
-    expect(result.value).toBe(24.7);
-    expect(result.matchupEffect).toBeCloseTo(1.85 * 0.3758, 4);
-    expect(result.buildLine).toMatch(/^Base 14\.6 = EPPG 14\.6 · × \(1 \+ 70%\) · OTHER allows 38% more points to TEs than average \(8 games\)$/);
+    expect(result.value).toBe(21.9);
+    expect(result).toMatchObject({ matchupEffect: 0.5, effectCapped: true, matchupUnweighted: false });
+    expect(result.buildLine).toMatch(/^Base 14\.6 = EPPG 14\.6 · × \(1 \+ 50%, limited\) · OTHER allows 38% more points to TEs than average \(8 games\)$/);
+    const small = calculateMppg(m, p, m.current, defence("TE", 0.2));
+    expect(small.matchupEffect).toBeCloseTo(1.85 * 0.2, 6);
+    expect(small.effectCapped).toBe(false);
+    expect(small.buildLine).not.toContain("limited");
   });
 
-  // g. No final cap.
-  it("does not cap the weighted adjustment: a defence with a -50% matchup floors at 0", async () => {
+  // g. The final ±50% limit.
+  it("limits the weighted adjustment to -50%: a defence with a -50% matchup halves its base", async () => {
     const { m, p } = await setup({ pos: "D/ST", eppg: 12, weekly: 6 });
     const result = calculateMppg(m, p, m.current, defence("D/ST", -0.5));
-    expect(result.matchupEffect).toBeCloseTo(2.35 * -0.5, 6);
-    expect(result.value).toBe(0);
+    expect(result).toMatchObject({ matchupEffect: -0.5, effectCapped: true });
+    expect(result.value).toBeCloseTo(round1((0.4 * 12 + 0.6 * 6) * 0.5), 5);
+  });
+
+  // h. Kickers get no matchup adjustment.
+  it("does not apply a kicker's matchup and says so", async () => {
+    const { m, p } = await setup({ pos: "K", eppg: 9, weekly: 10.9 });
+    const result = calculateMppg(m, p, m.current, defence("K", -0.4));
+    expect(result).toMatchObject({ matchupEffect: 0, matchupUnweighted: true, matchupIgnored: false, effectCapped: false, source: "matchup", value: 10.9 });
+    expect(result.buildLine).toBe("Base 10.9 = ESPN 10.9 · matchup not used for kickers");
+    expect(calculateMppg(m, p, m.current, defence("K", 0.05)).matchupIgnored).toBe(true);
   });
 
   // The explanation lines.

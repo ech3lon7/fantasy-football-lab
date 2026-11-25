@@ -6,11 +6,13 @@ import { computeDefenseStats, type DefensePositionStat } from "./matchups";
 export const MPPG_EARLY_GAMES = 3;
 export const MPPG_EARLY_RELIABILITY = 0.5;
 export const MPPG_CAP = 0.5;
-export const MPPG_METHOD_NOTE = "MPPG is this week's starter forecast. It starts from a mix of your Expected PPG and ESPN's weekly projection (the mix depends on position), trims part of any hot streak more than 2 points above the season average, and then applies this week's opponent adjustment: how many more or fewer points that defence allows to the position than the league average, counted only when it is 12% or more, weighted by position, and scaled down for lower-scoring players. If ESPN projects 0, MPPG is 0. It exists only for the imported week and only picks weekly starters; trades and grades use Expected PPG.";
+export const MPPG_METHOD_NOTE = "MPPG is this week's starter forecast. It starts from a mix of your Expected PPG and ESPN's weekly projection (the mix depends on position), trims part of any hot streak more than 2 points above the season average, and then applies this week's opponent adjustment: how many more or fewer points that defence allows to the position than the league average, counted only when it is 12% or more, weighted by position (kickers are not adjusted), scaled down for lower-scoring players, and limited to 50% either way. If ESPN projects 0, MPPG is 0. It exists only for the imported week and only picks weekly starters; trades and grades use Expected PPG.";
 
-// Design T (docs/mppg-threshold-proposal.md): fixed by owner approval, never retuned here.
+// Design T (docs/mppg-threshold-proposal.md), retuned by the owner on 2026-11-25 after week 11 results: kickers get no matchup
+// adjustment, and the final matchup effect is limited to ±50%.
 export const MPPG_ESPN_SHARE: Record<string, number> = { QB: 0.75, RB: 0.45, WR: 0.55, TE: 0, K: 1, "D/ST": 0.6 };
-export const MPPG_MATCHUP_WEIGHT: Record<string, number> = { QB: 0.75, RB: 0.35, WR: 0.7, TE: 1.85, K: 2.0, "D/ST": 2.35 };
+export const MPPG_MATCHUP_WEIGHT: Record<string, number> = { QB: 0.75, RB: 0.35, WR: 0.7, TE: 1.85, K: 0, "D/ST": 2.35 };
+export const MPPG_EFFECT_CAP = 0.5;
 export const MPPG_MATCHUP_THRESHOLD = 0.12;
 export const MPPG_STREAK_THRESHOLD = 2;
 export const MPPG_STREAK_FADE = 0.55;
@@ -32,8 +34,13 @@ export interface MppgResult {
   // EPPG and ESPN mixed, minus the streak fade, before the matchup; unrounded.
   base: number;
   scoringLevel: number;
-  // The matchup effect actually applied: 0 when ignored or ESPN is zero, null when matchup data is unavailable.
+  // The matchup effect actually applied: 0 when ignored, unweighted for the position, or ESPN is zero; null when matchup data is
+  // unavailable. Never beyond ±MPPG_EFFECT_CAP.
   matchupEffect: number | null;
+  // True when the weighted effect was limited to ±MPPG_EFFECT_CAP.
+  effectCapped: boolean;
+  // True when the position's matchup weight is 0 (kickers), so a usable matchup is not applied.
+  matchupUnweighted: boolean;
   matchupIgnored: boolean;
   espnZero: boolean;
 }
@@ -46,7 +53,7 @@ export function calculateMppg(m: Model, p: Player, targetWeek = m.current, defen
   const importedAt = m.dataset.sourceUTC ?? null;
   const espn = p.weekly ?? null;
   const empty = (reason: string): MppgResult => ({ value: null, spread: null, floor: null, ceiling: null, eppg, source: "unavailable", reason, importedAt, buildLine: "", matchupPct: null, rawMatchupPct: null, opponent: null, defenseGames: null, capped: false,
-    espnWeekly: espn, espnShare: 0, streakFade: 0, base: 0, scoringLevel: 0, matchupEffect: null, matchupIgnored: false, espnZero: false });
+    espnWeekly: espn, espnShare: 0, streakFade: 0, base: 0, scoringLevel: 0, matchupEffect: null, effectCapped: false, matchupUnweighted: false, matchupIgnored: false, espnZero: false });
   if (targetWeek !== m.current) return empty(`MPPG is available only for the imported week (Week ${m.current})`);
   const scheduled = m.dataset.tables.ModelSchedule.find((r) => (str(r.ProTeamID) === p.nflId || str(r.NFLTeam) === p.nfl) && num(r.Week) === targetWeek);
   if (p.bye === targetWeek || (scheduled && (num(scheduled.HasGame) === 0 || num(scheduled.ByeWeek) === 1))) return empty("Bye week");
@@ -70,7 +77,12 @@ export function calculateMppg(m: Model, p: Player, targetWeek = m.current, defen
   const ignored = usable && Math.abs(applied) < MPPG_MATCHUP_THRESHOLD;
   const used = usable && !ignored ? applied : 0;
   const level = eppg <= 0 ? 0 : Math.min(1, Math.pow(eppg / MPPG_SCORING_LEVEL_BASE, MPPG_SCORING_LEVEL_POWER));
-  const effect: number | null = !usable ? null : espnZero ? 0 : (MPPG_MATCHUP_WEIGHT[p.pos] ?? 0) * used * level;
+  const weight = MPPG_MATCHUP_WEIGHT[p.pos] ?? 0;
+  const unweighted = usable && !ignored && weight === 0;
+  // A zero weight or an ignored matchup gives exactly 0, never -0.
+  const weighted = weight === 0 || used === 0 ? 0 : weight * used * level;
+  const effectCapped = usable && !espnZero && Math.abs(weighted) > MPPG_EFFECT_CAP;
+  const effect: number | null = !usable ? null : espnZero ? 0 : Math.max(-MPPG_EFFECT_CAP, Math.min(MPPG_EFFECT_CAP, weighted));
   const value = espnZero ? 0 : Math.max(0, round1(base * (1 + (effect ?? 0))));
 
   const refresh = nextRefreshDefaults(m, p);
@@ -93,12 +105,13 @@ export function calculateMppg(m: Model, p: Player, targetWeek = m.current, defen
     let matchupPart: string;
     if (!usable) matchupPart = "matchup data unavailable";
     else if (ignored) matchupPart = `${opponent} matchup ${signed(applied)} ignored (under 12%)`;
+    else if (unweighted) matchupPart = `matchup not used for ${words[p.pos] ?? p.pos}`;
     else {
       const count = `${stat!.gamesPlayed} ${stat!.gamesPlayed === 1 ? "game" : "games"}${reliability < 1 ? ", counted at 50%" : ""}${capped ? ", capped" : ""}`;
-      matchupPart = `× (1 ${(effect ?? 0) < 0 ? "−" : "+"} ${Math.round(Math.abs(effect ?? 0) * 100)}%) · ${opponent} allows ${Math.round(Math.abs(raw ?? 0) * 100)}% ${(raw ?? 0) < 0 ? "fewer" : "more"} points to ${words[p.pos] ?? p.pos} than average (${count})`;
+      matchupPart = `× (1 ${(effect ?? 0) < 0 ? "−" : "+"} ${Math.round(Math.abs(effect ?? 0) * 100)}%${effectCapped ? ", limited" : ""}) · ${opponent} allows ${Math.round(Math.abs(raw ?? 0) * 100)}% ${(raw ?? 0) < 0 ? "fewer" : "more"} points to ${words[p.pos] ?? p.pos} than average (${count})`;
     }
     buildLine = `${basePart} · ${matchupPart}`;
   }
   return { value, spread, floor, ceiling, eppg, source: usable ? "matchup" : "eppg-only", reason: usable ? "" : "Matchup data unavailable", importedAt, buildLine, matchupPct: usable ? applied : null, rawMatchupPct: raw, opponent: opponent || null, defenseGames: usable ? stat!.gamesPlayed : null, capped,
-    espnWeekly: espn, espnShare: share, streakFade: fade, base, scoringLevel: level, matchupEffect: effect, matchupIgnored: ignored, espnZero };
+    espnWeekly: espn, espnShare: share, streakFade: fade, base, scoringLevel: level, matchupEffect: effect, effectCapped, matchupUnweighted: unweighted, matchupIgnored: ignored, espnZero };
 }
